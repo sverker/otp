@@ -65,6 +65,12 @@ static void add_readonly_check(ErlNifEnv*, unsigned char* ptr, unsigned sz);
 static int is_offheap(const ErlOffHeap* off_heap);
 #endif
 
+/* Type cast helper
+*/
+static ERTS_INLINE ERL_NIF_TERM nif_term(Eterm eterm)
+{
+    return *((ERL_NIF_TERM*) &eterm);
+}
 
 #define MIN_HEAP_FRAG_SZ 200
 static Eterm* alloc_heap_heavy(ErlNifEnv* env, unsigned need, Eterm* hp);
@@ -292,7 +298,7 @@ int enif_send(ErlNifEnv* env, const ErlNifPid* to_pid,
 #if defined(ERTS_ENABLE_LOCK_CHECK) && defined(ERTS_SMP)
     ErtsProcLocks rp_had_locks;
 #endif
-    Eterm receiver = to_pid->pid;
+    Eterm receiver = to_pid->pid.v;
     int flush_me = 0;
 
     if (env != NULL) {
@@ -336,7 +342,7 @@ int enif_send(ErlNifEnv* env, const ErlNifPid* to_pid,
     if (flush_me) {	
 	flush_env(env); /* Needed for ERTS_HOLE_CHECK */ 
     }
-    erts_queue_message(rp, &rp_locks, frags, msg, am_undefined);
+    erts_queue_message(rp, &rp_locks, frags, msg.v, am_undefined);
     if (rp_locks) {	
 	ERTS_SMP_LC_ASSERT(rp_locks == (rp_had_locks | (ERTS_PROC_LOCK_MSGQ | 
 							ERTS_PROC_LOCK_STATUS)));
@@ -353,9 +359,9 @@ ERL_NIF_TERM enif_make_copy(ErlNifEnv* dst_env, ERL_NIF_TERM src_term)
 {
     Uint sz;
     Eterm* hp;
-    sz = size_object(src_term);
+    sz = size_object(src_term.v);
     hp = alloc_heap(dst_env, sz);
-    return copy_struct(src_term, sz, &hp, &MSO(dst_env->proc));
+    return nif_term(copy_struct(src_term.v, sz, &hp, &MSO(dst_env->proc)));
 }
 
 
@@ -368,57 +374,57 @@ static int is_offheap(const ErlOffHeap* oh)
 
 ErlNifPid* enif_self(ErlNifEnv* caller_env, ErlNifPid* pid)
 {
-    pid->pid = caller_env->proc->id;
+    pid->pid.v = caller_env->proc->id;
     return pid;
 }
 int enif_get_local_pid(ErlNifEnv* env, ERL_NIF_TERM term, ErlNifPid* pid)
 {
-    return is_internal_pid(term) ? (pid->pid=term, 1) : 0;
+    return is_internal_pid(term.v) ? (pid->pid=term, 1) : 0;
 }
 
 int enif_is_atom(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_atom(term);
+    return is_atom(term.v);
 }
 
 int enif_is_binary(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_binary(term) && (binary_bitsize(term) % 8 == 0);
+    return is_binary(term.v) && (binary_bitsize(term.v) % 8 == 0);
 }
 
 int enif_is_empty_list(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_nil(term);
+    return is_nil(term.v);
 }
 
 int enif_is_fun(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_fun(term);
+    return is_fun(term.v);
 }
 
 int enif_is_pid(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_pid(term);
+    return is_pid(term.v);
 }
 
 int enif_is_port(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_port(term);
+    return is_port(term.v);
 }
 
 int enif_is_ref(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_ref(term);
+    return is_ref(term.v);
 }
 
 int enif_is_tuple(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_tuple(term);
+    return is_tuple(term.v);
 }
 
 int enif_is_list(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    return is_list(term) || is_nil(term);
+    return is_list(term.v) || is_nil(term.v);
 }
 
 static void aligned_binary_dtor(struct enif_tmp_obj_t* obj)
@@ -426,14 +432,14 @@ static void aligned_binary_dtor(struct enif_tmp_obj_t* obj)
     erts_free_aligned_binary_bytes_extra((byte*)obj,ERTS_ALC_T_TMP);
 }
 
-int enif_inspect_binary(ErlNifEnv* env, Eterm bin_term, ErlNifBinary* bin)
+int enif_inspect_binary(ErlNifEnv* env, ERL_NIF_TERM bin_term, ErlNifBinary* bin)
 {
     union {
 	struct enif_tmp_obj_t* tmp;
 	byte* raw_ptr;
     }u;
     u.tmp = NULL;
-    bin->data = erts_get_aligned_binary_bytes_extra(bin_term, &u.raw_ptr, ERTS_ALC_T_TMP,
+    bin->data = erts_get_aligned_binary_bytes_extra(bin_term.v, &u.raw_ptr, ERTS_ALC_T_TMP,
 						    sizeof(struct enif_tmp_obj_t));
     if (bin->data == NULL) {
 	return 0;
@@ -444,7 +450,7 @@ int enif_inspect_binary(ErlNifEnv* env, Eterm bin_term, ErlNifBinary* bin)
 	env->tmp_obj_list = u.tmp;
     }
     bin->bin_term = bin_term;
-    bin->size = binary_size(bin_term);
+    bin->size = binary_size(bin_term.v);
     bin->ref_bin = NULL;
     ADD_READONLY_CHECK(env, bin->data, bin->size); 
     return 1;
@@ -455,21 +461,21 @@ static void tmp_alloc_dtor(struct enif_tmp_obj_t* obj)
     erts_free(ERTS_ALC_T_TMP,  obj);
 }
 
-int enif_inspect_iolist_as_binary(ErlNifEnv* env, Eterm term, ErlNifBinary* bin)
+int enif_inspect_iolist_as_binary(ErlNifEnv* env, ERL_NIF_TERM term, ErlNifBinary* bin)
 {
     struct enif_tmp_obj_t* tobj;
     int sz;
-    if (is_binary(term)) {
+    if (is_binary(term.v)) {
 	return enif_inspect_binary(env,term,bin);
     }
-    if (is_nil(term)) {
+    if (is_nil(term.v)) {
 	bin->data = (unsigned char*) &bin->data; /* dummy non-NULL */
 	bin->size = 0;
-	bin->bin_term = THE_NON_VALUE;
+	bin->bin_term.v = THE_NON_VALUE;
 	bin->ref_bin = NULL;
 	return 1;
     }
-    if ((sz = io_list_len(term)) < 0) {
+    if ((sz = io_list_len(term.v)) < 0) {
 	return 0;
     }
     
@@ -480,9 +486,9 @@ int enif_inspect_iolist_as_binary(ErlNifEnv* env, Eterm term, ErlNifBinary* bin)
 
     bin->data = (unsigned char*) &tobj[1]; 
     bin->size = sz;
-    bin->bin_term = THE_NON_VALUE;
+    bin->bin_term.v = THE_NON_VALUE;
     bin->ref_bin = NULL;
-    io_list_to_buf(term, (char*) bin->data, sz);
+    io_list_to_buf(term.v, (char*) bin->data, sz);
     ADD_READONLY_CHECK(env, bin->data, bin->size); 
     return 1;
 }
@@ -501,7 +507,7 @@ int enif_alloc_binary(size_t size, ErlNifBinary* bin)
 
     bin->size = size;
     bin->data = (unsigned char*) refbin->orig_bytes;
-    bin->bin_term = THE_NON_VALUE;
+    bin->bin_term.v = THE_NON_VALUE;
     bin->ref_bin = refbin;
     return 1;
 }
@@ -536,14 +542,14 @@ void enif_release_binary(ErlNifBinary* bin)
 {
     if (bin->ref_bin != NULL) {
 	Binary* refbin = bin->ref_bin;
-	ASSERT(bin->bin_term == THE_NON_VALUE);
+	ASSERT(bin->bin_term.v == THE_NON_VALUE);
 	if (erts_refc_dectest(&refbin->refc, 0) == 0) {
 	    erts_bin_free(refbin);
 	}
     }
 #ifdef DEBUG
     bin->data = NULL;
-    bin->bin_term = THE_NON_VALUE;
+    bin->bin_term.v = THE_NON_VALUE;
     bin->ref_bin = NULL;
 #endif
 }
@@ -552,30 +558,30 @@ unsigned char* enif_make_new_binary(ErlNifEnv* env, size_t size,
 				    ERL_NIF_TERM* termp)
 {
     flush_env(env);
-    *termp = new_binary(env->proc, NULL, size);
+    termp->v = new_binary(env->proc, NULL, size);
     cache_env(env);
-    return binary_bytes(*termp);
+    return binary_bytes(termp->v);
 }
 
-int enif_is_identical(Eterm lhs, Eterm rhs)
+int enif_is_identical(ERL_NIF_TERM lhs, ERL_NIF_TERM rhs)
 {
-    return EQ(lhs,rhs);
+    return EQ(lhs.v,rhs.v);
 }
 
-int enif_compare(Eterm lhs, Eterm rhs)
+int enif_compare(ERL_NIF_TERM lhs, ERL_NIF_TERM rhs)
 {
-    return cmp(lhs,rhs);
+    return cmp(lhs.v,rhs.v);
 }
 
-int enif_get_tuple(ErlNifEnv* env, Eterm tpl, int* arity, const Eterm** array)
+int enif_get_tuple(ErlNifEnv* env, ERL_NIF_TERM tpl, int* arity, const ERL_NIF_TERM** array)
 {
     Eterm* ptr;
-    if (is_not_tuple(tpl)) {
+    if (is_not_tuple(tpl.v)) {
 	return 0;
     }
-    ptr = tuple_val(tpl);
+    ptr = tuple_val(tpl.v);
     *arity = arityval(*ptr);
-    *array = ptr+1;
+    *array = (ERL_NIF_TERM*) (ptr+1);
     return 1;
 }
 
@@ -589,12 +595,12 @@ int enif_get_string(ErlNifEnv *env, ERL_NIF_TERM list, char* buf, unsigned len,
     if (len < 1) {
 	return 0;
     }
-    while (is_not_nil(list)) { 	    
-	if (is_not_list(list)) {
+    while (is_not_nil(list.v)) { 	    
+	if (is_not_list(list.v)) {
 	    buf[n] = '\0';
 	    return 0;
 	}
-	listptr = list_val(list);
+	listptr = list_val(list.v);
     
 	if (!is_byte(*listptr)) {
 	    buf[n] = '\0';
@@ -605,21 +611,21 @@ int enif_get_string(ErlNifEnv *env, ERL_NIF_TERM list, char* buf, unsigned len,
 	    buf[n-1] = '\0'; /* truncate */
 	    return -len;
 	}
-	list = CDR(listptr);
+	list.v = CDR(listptr);
     }
     buf[n] = '\0';
     return n + 1;
 }
 
-Eterm enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin)
+ERL_NIF_TERM enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin)
 {
-    if (bin->bin_term != THE_NON_VALUE) {
+    if (bin->bin_term.v != THE_NON_VALUE) {
 	return bin->bin_term;
     }
     else if (bin->ref_bin != NULL) {
 	Binary* bptr = bin->ref_bin;
 	ProcBin* pb;
-	Eterm bin_term;
+	ERL_NIF_TERM bin_term;
 	
 	/* !! Copy-paste from new_binary() !! */
 	pb = (ProcBin *) alloc_heap(env, PROC_BIN_SIZE);
@@ -632,7 +638,7 @@ Eterm enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin)
 	pb->flags = 0;
 	
 	MSO(env->proc).overhead += pb->size / sizeof(Eterm);
-	bin_term = make_binary(pb);	
+	bin_term.v = make_binary(pb);	
 	if (erts_refc_read(&bptr->refc, 1) == 1) {
 	    /* Total ownership transfer */
 	    bin->ref_bin = NULL;
@@ -642,13 +648,13 @@ Eterm enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin)
     }
     else {
 	flush_env(env);
-	bin->bin_term = new_binary(env->proc, bin->data, bin->size);
+	bin->bin_term.v = new_binary(env->proc, bin->data, bin->size);
 	cache_env(env);
 	return bin->bin_term;
     }
 }
 
-Eterm enif_make_sub_binary(ErlNifEnv* env, ERL_NIF_TERM bin_term,
+ERL_NIF_TERM enif_make_sub_binary(ErlNifEnv* env, ERL_NIF_TERM bin_term,
 			   size_t pos, size_t size)
 {
     ErlSubBin* sb;
@@ -656,13 +662,13 @@ Eterm enif_make_sub_binary(ErlNifEnv* env, ERL_NIF_TERM bin_term,
     Uint offset, bit_offset, bit_size; 
     unsigned src_size;
 
-    ASSERT(is_binary(bin_term));
-    src_size = binary_size(bin_term);
+    ASSERT(is_binary(bin_term.v));
+    src_size = binary_size(bin_term.v);
     ASSERT(pos <= src_size);
     ASSERT(size <= src_size);
     ASSERT(pos + size <= src_size);   
     sb = (ErlSubBin*) alloc_heap(env, ERL_SUB_BIN_SIZE);
-    ERTS_GET_REAL_BIN(bin_term, orig, offset, bit_offset, bit_size);
+    ERTS_GET_REAL_BIN(bin_term.v, orig, offset, bit_offset, bit_size);
     sb->thing_word = HEADER_SUB_BIN;
     sb->size = size;
     sb->offs = offset + pos;
@@ -670,24 +676,26 @@ Eterm enif_make_sub_binary(ErlNifEnv* env, ERL_NIF_TERM bin_term,
     sb->bitoffs = bit_offset;
     sb->bitsize = 0;
     sb->is_writable = 0;
-    return make_binary(sb);
+    return nif_term(make_binary(sb));
 }
 
 
-Eterm enif_make_badarg(ErlNifEnv* env)
+ERL_NIF_TERM enif_make_badarg(ErlNifEnv* env)
 {
-    BIF_ERROR(env->proc, BADARG);
+    ERL_NIF_TERM ret;
+    ERTS_BIF_PREP_ERROR(ret.v, env->proc, BADARG);
+    return ret;
 }
 
-int enif_get_atom(ErlNifEnv* env, Eterm atom, char* buf, unsigned len,
+int enif_get_atom(ErlNifEnv* env, ERL_NIF_TERM atom, char* buf, unsigned len,
 		  ErlNifCharEncoding encoding)
 {
     Atom* ap;
     ASSERT(encoding == ERL_NIF_LATIN1);
-    if (is_not_atom(atom)) {
+    if (is_not_atom(atom.v)) {
 	return 0;
     }
-    ap = atom_tab(atom_val(atom));
+    ap = atom_tab(atom_val(atom.v));
     if (ap->len+1 > len) {
 	return 0;
     }
@@ -696,13 +704,13 @@ int enif_get_atom(ErlNifEnv* env, Eterm atom, char* buf, unsigned len,
     return ap->len + 1;
 }
 
-int enif_get_int(ErlNifEnv* env, Eterm term, int* ip)
+int enif_get_int(ErlNifEnv* env, ERL_NIF_TERM term, int* ip)
 {
 #if SIZEOF_INT ==  ERTS_SIZEOF_ETERM
-    return term_to_Sint(term, (Sint*)ip);
+    return term_to_Sint(term.v, (Sint*)ip);
 #elif SIZEOF_LONG ==  ERTS_SIZEOF_ETERM
     Sint i;
-    if (!term_to_Sint(term, &i) || i < INT_MIN || i > INT_MAX) {
+    if (!term_to_Sint(term.v, &i) || i < INT_MIN || i > INT_MAX) {
 	return 0;
     }
     *ip = (int) i;
@@ -712,13 +720,13 @@ int enif_get_int(ErlNifEnv* env, Eterm term, int* ip)
 #endif     
 }
 
-int enif_get_uint(ErlNifEnv* env, Eterm term, unsigned* ip)
+int enif_get_uint(ErlNifEnv* env, ERL_NIF_TERM term, unsigned* ip)
 {
 #if SIZEOF_INT == ERTS_SIZEOF_ETERM
-    return term_to_Uint(term, (Uint*)ip);
+    return term_to_Uint(term.v, (Uint*)ip);
 #elif SIZEOF_LONG == ERTS_SIZEOF_ETERM
     Uint i;
-    if (!term_to_Uint(term, &i) || i > UINT_MAX) {
+    if (!term_to_Uint(term.v, &i) || i > UINT_MAX) {
 	return 0;
     }
     *ip = (unsigned) i;
@@ -726,25 +734,25 @@ int enif_get_uint(ErlNifEnv* env, Eterm term, unsigned* ip)
 #endif     
 }
 
-int enif_get_long(ErlNifEnv* env, Eterm term, long* ip)
+int enif_get_long(ErlNifEnv* env, ERL_NIF_TERM term, long* ip)
 {
 #if SIZEOF_LONG == ERTS_SIZEOF_ETERM
-    return term_to_Sint(term, ip);
+    return term_to_Sint(term.v, ip);
 #elif SIZEOF_INT == ERTS_SIZEOF_ETERM
     Sint i;
-    return term_to_Sint(term, &i) ? (*ip = (long) i, 1) : 0;
+    return term_to_Sint(term.v, &i) ? (*ip = (long) i, 1) : 0;
 #else
 #  error Unknown long word size 
 #endif     
 }
 
-int enif_get_ulong(ErlNifEnv* env, Eterm term, unsigned long* ip)
+int enif_get_ulong(ErlNifEnv* env, ERL_NIF_TERM term, unsigned long* ip)
 {
 #if SIZEOF_LONG == ERTS_SIZEOF_ETERM
-    return term_to_Uint(term, ip);
+    return term_to_Uint(term.v, ip);
 #elif SIZEOF_INT == ERTS_SIZEOF_ETERM
     Uint u;
-    return term_to_Uint(term, &u) ? (*ip = (unsigned long) u, 1) : 0;
+    return term_to_Uint(term.v, &u) ? (*ip = (unsigned long) u, 1) : 0;
 #else
 #  error Unknown long word size 
 #endif     
@@ -753,80 +761,80 @@ int enif_get_ulong(ErlNifEnv* env, Eterm term, unsigned long* ip)
 #if HAVE_INT64 && SIZEOF_LONG != 8
 int enif_get_int64(ErlNifEnv* env, ERL_NIF_TERM term, ErlNifSInt64* ip)
 {
-    return term_to_Sint64(term, ip);
+    return term_to_Sint64(term.v, ip);
 }
 
 int enif_get_uint64(ErlNifEnv* env, ERL_NIF_TERM term, ErlNifUInt64* ip)
 {
-    return term_to_Uint64(term, ip);
+    return term_to_Uint64(term.v, ip);
 }
 #endif /* HAVE_INT64 && SIZEOF_LONG != 8 */
 
 int enif_get_double(ErlNifEnv* env, ERL_NIF_TERM term, double* dp)
 {
     FloatDef f;
-    if (is_not_float(term)) {
+    if (is_not_float(term.v)) {
 	return 0;
     }
-    GET_DOUBLE(term, f);
+    GET_DOUBLE(term.v, f);
     *dp = f.fd;
     return 1;
 }
 
-int enif_get_atom_length(ErlNifEnv* env, Eterm atom, unsigned* len,
+int enif_get_atom_length(ErlNifEnv* env, ERL_NIF_TERM atom, unsigned* len,
 			 ErlNifCharEncoding enc)
 {
     Atom* ap;
     ASSERT(enc == ERL_NIF_LATIN1);
-    if (is_not_atom(atom)) return 0;
-    ap = atom_tab(atom_val(atom));
+    if (is_not_atom(atom.v)) return 0;
+    ap = atom_tab(atom_val(atom.v));
     *len = ap->len;
     return 1;
 }
 
-int enif_get_list_cell(ErlNifEnv* env, Eterm term, Eterm* head, Eterm* tail)
+int enif_get_list_cell(ErlNifEnv* env, ERL_NIF_TERM term, ERL_NIF_TERM* head, ERL_NIF_TERM* tail)
 {
     Eterm* val;
-    if (is_not_list(term)) return 0;
-    val = list_val(term);
-    *head = CAR(val);
-    *tail = CDR(val);
+    if (is_not_list(term.v)) return 0;
+    val = list_val(term.v);
+    head->v = CAR(val);
+    tail->v = CDR(val);
     return 1;
 }
 
-int enif_get_list_length(ErlNifEnv* env, Eterm term, unsigned* len)
+int enif_get_list_length(ErlNifEnv* env, ERL_NIF_TERM term, unsigned* len)
 {
-    if (is_not_list(term) && is_not_nil(term)) return 0;
-    *len = list_length(term);
+    if (is_not_list(term.v) && is_not_nil(term.v)) return 0;
+    *len = list_length(term.v);
     return 1;
 }
 
 ERL_NIF_TERM enif_make_int(ErlNifEnv* env, int i)
 {
 #if SIZEOF_INT == ERTS_SIZEOF_ETERM
-    return IS_SSMALL(i) ? make_small(i) : small_to_big(i,alloc_heap(env,2));
+    return nif_term(IS_SSMALL(i) ? make_small(i) : small_to_big(i,alloc_heap(env,2)));
 #elif SIZEOF_LONG == ERTS_SIZEOF_ETERM
-    return make_small(i);
+    return nif_term(make_small(i));
 #endif
 }
 
 ERL_NIF_TERM enif_make_uint(ErlNifEnv* env, unsigned i)
 {
 #if SIZEOF_INT == ERTS_SIZEOF_ETERM
-    return IS_USMALL(0,i) ? make_small(i) : uint_to_big(i,alloc_heap(env,2));
+    return nif_term(IS_USMALL(0,i) ? make_small(i) : uint_to_big(i,alloc_heap(env,2)));
 #elif SIZEOF_LONG == ERTS_SIZEOF_ETERM
-    return make_small(i);
+    return nif_term(make_small(i));
 #endif
 }
 
 ERL_NIF_TERM enif_make_long(ErlNifEnv* env, long i)
 {
-    return IS_SSMALL(i) ? make_small(i) : small_to_big(i, alloc_heap(env,2));
+    return nif_term(IS_SSMALL(i) ? make_small(i) : small_to_big(i, alloc_heap(env,2)));
 }
 
 ERL_NIF_TERM enif_make_ulong(ErlNifEnv* env, unsigned long i)
 {
-    return IS_USMALL(0,i) ? make_small(i) : uint_to_big(i,alloc_heap(env,2));
+    return nif_term(IS_USMALL(0,i) ? make_small(i) : uint_to_big(i,alloc_heap(env,2)));
 }
 
 #if HAVE_INT64 && SIZEOF_LONG != 8
@@ -836,7 +844,7 @@ ERL_NIF_TERM enif_make_int64(ErlNifEnv* env, ErlNifSInt64 i)
     Uint need = 0;
     erts_bld_sint64(NULL, &need, i);
     hp = alloc_heap(env, need);
-    return erts_bld_sint64(&hp, NULL, i);
+    return nif_term(erts_bld_sint64(&hp, NULL, i));
 }
 
 ERL_NIF_TERM enif_make_uint64(ErlNifEnv* env, ErlNifUInt64 i)
@@ -845,7 +853,7 @@ ERL_NIF_TERM enif_make_uint64(ErlNifEnv* env, ErlNifUInt64 i)
     Uint need = 0;
     erts_bld_uint64(NULL, &need, i);
     hp = alloc_heap(env, need);
-    return erts_bld_uint64(&hp, NULL, i);
+    return nif_term(erts_bld_uint64(&hp, NULL, i));
 }
 #endif /* HAVE_INT64 && SIZEOF_LONG != 8 */
 
@@ -855,7 +863,7 @@ ERL_NIF_TERM enif_make_double(ErlNifEnv* env, double d)
     FloatDef f;
     f.fd = d;
     PUT_DOUBLE(f, hp);
-    return make_float(hp);
+    return nif_term(make_float(hp));
 }
 
 ERL_NIF_TERM enif_make_atom(ErlNifEnv* env, const char* name)
@@ -865,7 +873,7 @@ ERL_NIF_TERM enif_make_atom(ErlNifEnv* env, const char* name)
 
 ERL_NIF_TERM enif_make_atom_len(ErlNifEnv* env, const char* name, size_t len)
 {
-    return am_atom_put(name, len);
+    return nif_term(am_atom_put(name, len));
 }
 
 int enif_make_existing_atom(ErlNifEnv* env, const char* name, ERL_NIF_TERM* atom,
@@ -878,7 +886,7 @@ int enif_make_existing_atom_len(ErlNifEnv* env, const char* name, size_t len,
 				ERL_NIF_TERM* atom, ErlNifCharEncoding encoding)
 {
     ASSERT(encoding == ERL_NIF_LATIN1);
-    return erts_atom_get(name, len, atom);
+    return erts_atom_get(name, len, (Eterm*)atom);
 }
 
 ERL_NIF_TERM enif_make_tuple(ErlNifEnv* env, unsigned cnt, ...)
@@ -893,30 +901,30 @@ ERL_NIF_TERM enif_make_tuple(ErlNifEnv* env, unsigned cnt, ...)
 	*hp++ = va_arg(ap,Eterm);	   
     }
     va_end(ap);
-    return ret;
+    return nif_term(ret);
 }
 
 ERL_NIF_TERM enif_make_tuple_from_array(ErlNifEnv* env, const ERL_NIF_TERM arr[], unsigned cnt)
 {
     Eterm* hp = alloc_heap(env,cnt+1);
     Eterm ret = make_tuple(hp);
-    const Eterm* src = arr;
+    const Eterm* src = &arr->v;
 
     *hp++ = make_arityval(cnt);
     while (cnt--) {
 	*hp++ = *src++;	   
     }
-    return ret;
+    return nif_term(ret);
 }
 
-ERL_NIF_TERM enif_make_list_cell(ErlNifEnv* env, Eterm car, Eterm cdr)
+ERL_NIF_TERM enif_make_list_cell(ErlNifEnv* env, ERL_NIF_TERM car, ERL_NIF_TERM cdr)
 {
     Eterm* hp = alloc_heap(env,2);
     Eterm ret = make_list(hp);
 
-    CAR(hp) = car;
-    CDR(hp) = cdr;
-    return ret;
+    CAR(hp) = car.v;
+    CDR(hp) = cdr.v;
+    return nif_term(ret);
 }
 
 ERL_NIF_TERM enif_make_list(ErlNifEnv* env, unsigned cnt, ...)
@@ -935,7 +943,7 @@ ERL_NIF_TERM enif_make_list(ErlNifEnv* env, unsigned cnt, ...)
     }
     va_end(ap);
     *last = NIL;
-    return ret;
+    return nif_term(ret);
 }
 
 ERL_NIF_TERM enif_make_list_from_array(ErlNifEnv* env, const ERL_NIF_TERM arr[], unsigned cnt)
@@ -943,7 +951,7 @@ ERL_NIF_TERM enif_make_list_from_array(ErlNifEnv* env, const ERL_NIF_TERM arr[],
     Eterm* hp = alloc_heap(env,cnt*2);
     Eterm ret = make_list(hp);
     Eterm* last = &ret;
-    const Eterm* src = arr;
+    const Eterm* src = &arr->v;
 
     while (cnt--) {
 	*last = make_list(hp);
@@ -952,7 +960,7 @@ ERL_NIF_TERM enif_make_list_from_array(ErlNifEnv* env, const ERL_NIF_TERM arr[],
 	++hp;
     }
     *last = NIL;
-    return ret;
+    return nif_term(ret);
 }
 
 ERL_NIF_TERM enif_make_string(ErlNifEnv* env, const char* string,
@@ -966,13 +974,13 @@ ERL_NIF_TERM enif_make_string_len(ErlNifEnv* env, const char* string,
 {
     Eterm* hp = alloc_heap(env,len*2);
     ASSERT(encoding == ERL_NIF_LATIN1);
-    return erts_bld_string_n(&hp,NULL,string,len);
+    return nif_term(erts_bld_string_n(&hp,NULL,string,len));
 }
 
 ERL_NIF_TERM enif_make_ref(ErlNifEnv* env)
 {
     Eterm* hp = alloc_heap(env, REF_THING_SIZE);
-    return erts_make_ref_in_buffer(hp);
+    return nif_term(erts_make_ref_in_buffer(hp));
 }
 
 void enif_system_info(ErlNifSysInfo *sip, size_t si_size)
@@ -1122,7 +1130,7 @@ enif_open_resource_type(ErlNifEnv* env,
     ASSERT(erts_smp_is_system_blocked(0));
     ASSERT(module_str == NULL); /* for now... */
     module_am = make_atom(env->mod_nif->mod->module);
-    name_am = enif_make_atom(env, name_str);
+    name_am = enif_make_atom(env, name_str).v;
 
     type = find_resource_type(module_am, name_am);
     if (type == NULL) {
@@ -1229,14 +1237,14 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv* env, void* obj)
     ErlNifResource* resource = DATA_TO_RESOURCE(obj);
     ErtsBinary* bin = ERTS_MAGIC_BIN_FROM_DATA(resource);
     Eterm* hp = alloc_heap(env,PROC_BIN_SIZE);
-    return erts_mk_magic_binary_term(&hp, &MSO(env->proc), &bin->binary);
+    return nif_term(erts_mk_magic_binary_term(&hp, &MSO(env->proc), &bin->binary));
 }
 
 ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv* env, void* obj,
 				       const void* data, size_t size)
 {
-    Eterm bin = enif_make_resource(env, obj);
-    ProcBin* pb = (ProcBin*) binary_val(bin);
+    ERL_NIF_TERM bin = enif_make_resource(env, obj);
+    ProcBin* pb = (ProcBin*) binary_val(bin.v);
     pb->bytes = (byte*) data;
     pb->size = size;
     return bin;
@@ -1248,10 +1256,10 @@ int enif_get_resource(ErlNifEnv* env, ERL_NIF_TERM term, ErlNifResourceType* typ
     ProcBin* pb;
     Binary* mbin;
     ErlNifResource* resource;
-    if (!ERTS_TERM_IS_MAGIC_BINARY(term)) {
+    if (!ERTS_TERM_IS_MAGIC_BINARY(term.v)) {
 	return 0;
     }
-    pb = (ProcBin*) binary_val(term);
+    pb = (ProcBin*) binary_val(term.v);
     /*if (pb->size != 0) {	
 	return 0; / * Or should we allow "resource binaries" as handles? * /
     }*/
@@ -1523,7 +1531,7 @@ BIF_RETTYPE load_nif_2(BIF_ALIST_2)
 	    }
 	}       
 	erts_pre_nif(&env, BIF_P, lib);
-	veto = entry->reload(&env, &lib->priv_data, BIF_ARG_2);
+	veto = entry->reload(&env, &lib->priv_data, nif_term(BIF_ARG_2));
 	erts_post_nif(&env);
 	if (veto) {
 	    ret = load_nif_error(BIF_P, reload, "Library reload-call unsuccessful.");
@@ -1542,7 +1550,8 @@ BIF_RETTYPE load_nif_2(BIF_ALIST_2)
 		goto error;
 	    }
 	    erts_pre_nif(&env, BIF_P, lib);
-	    veto = entry->upgrade(&env, &lib->priv_data, &mod->old_nif->priv_data, BIF_ARG_2);
+	    veto = entry->upgrade(&env, &lib->priv_data, &mod->old_nif->priv_data,
+				  nif_term(BIF_ARG_2));
 	    erts_post_nif(&env);
 	    if (veto) {
 		mod->old_nif->priv_data = prev_old_data;
@@ -1554,7 +1563,7 @@ BIF_RETTYPE load_nif_2(BIF_ALIST_2)
 	}
 	else if (entry->load != NULL) { /* Initial load */
 	    erts_pre_nif(&env, BIF_P, lib);
-	    veto = entry->load(&env, &lib->priv_data, BIF_ARG_2);
+	    veto = entry->load(&env, &lib->priv_data, nif_term(BIF_ARG_2));
 	    erts_post_nif(&env);
 	    if (veto) {
 		ret = load_nif_error(BIF_P, "load", "Library load-call unsuccessful.");

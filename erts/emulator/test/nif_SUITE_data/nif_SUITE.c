@@ -882,7 +882,7 @@ static ERL_NIF_TERM send_list_seq(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
     if (!enif_get_int(env, argv[0], &i)) {
 	return enif_make_badarg(env);
     }
-    if (argv[1] == atom_self) {
+    if (enif_is_identical(argv[1], atom_self)) {
 	enif_self(env, &to);
     }
     else if (!enif_get_local_pid(env, argv[1], &to)) {

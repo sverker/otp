@@ -30,8 +30,9 @@
 ** 0.1: R13B03
 ** 1.0: R13B04
 ** 2.0: R14A
+** 3.0: R14B
 */
-#define ERL_NIF_MAJOR_VERSION 2
+#define ERL_NIF_MAJOR_VERSION 3
 #define ERL_NIF_MINOR_VERSION 0
 
 #include <stdlib.h>
@@ -79,11 +80,13 @@ typedef long long ErlNifSInt64;
 #error No 64-bit integer type
 #endif
 
+typedef struct {
 #ifdef HALFWORD_HEAP_EMULATOR
-typedef unsigned int ERL_NIF_TERM;
+    unsigned int v
 #else
-typedef unsigned long ERL_NIF_TERM;
+    unsigned long v;
 #endif
+}ERL_NIF_TERM;
 
 struct enif_environment_t;
 typedef struct enif_environment_t ErlNifEnv;

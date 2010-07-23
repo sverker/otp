@@ -257,6 +257,9 @@ static ERL_NIF_TERM atom_check_failed;
 static ERL_NIF_TERM atom_unknown;
 static ERL_NIF_TERM atom_none;
 
+/* Yes, we break the API here for speed */
+#define IS_ATOM(TERM,ATOM) ((TERM).v == (ATOM).v)
+
 
 static int is_ok_load_info(ErlNifEnv* env, ERL_NIF_TERM load_info)
 {
@@ -584,7 +587,7 @@ static ERL_NIF_TERM des_cbc_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
     memcpy(&ivec_clone, ivec.data, 8);
     DES_set_key((const_DES_cblock*)key.data, &schedule);
     DES_ncbc_encrypt(text.data, enif_make_new_binary(env, text.size, &ret),
-		     text.size, &schedule, &ivec_clone, (argv[3] == atom_true));
+		     text.size, &schedule, &ivec_clone, IS_ATOM(argv[3],atom_true));
     return ret;
 }
 
@@ -600,7 +603,7 @@ static ERL_NIF_TERM des_ecb_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
     DES_set_key((const_DES_cblock*)key.data, &schedule);
     DES_ecb_encrypt((const_DES_cblock*)text.data,
 		    (DES_cblock*)enif_make_new_binary(env, 8, &ret),
-		    &schedule, (argv[2] == atom_true));
+		    &schedule, IS_ATOM(argv[2],atom_true));
     return ret;
 }
 
@@ -626,7 +629,7 @@ static ERL_NIF_TERM des_ede3_cbc_crypt(ErlNifEnv* env, int argc, const ERL_NIF_T
     DES_set_key((const_DES_cblock*)key3.data, &schedule3);
     DES_ede3_cbc_encrypt(text.data, enif_make_new_binary(env,text.size,&ret), 
 			 text.size, &schedule1, &schedule2, &schedule3,
-			 &ivec_clone, (argv[5] == atom_true));
+			 &ivec_clone, IS_ATOM(argv[5],atom_true));
     return ret;
 }
 
@@ -650,7 +653,7 @@ static ERL_NIF_TERM aes_cfb_128_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TE
     AES_cfb128_encrypt((unsigned char *) text.data,
 		       enif_make_new_binary(env, text.size, &ret), 
 		       text.size, &aes_key, ivec_clone, &new_ivlen,
-		       (argv[3] == atom_true));
+		       IS_ATOM(argv[3],atom_true));
     return ret;
 }
 
@@ -788,10 +791,10 @@ static ERL_NIF_TERM dss_verify(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
 	|| !enif_is_empty_list(env,tail)) {
 	return enif_make_badarg(env);
     }
-    if (argv[0] == atom_sha && inspect_mpint(env, argv[1], &data_bin)) {
+    if (IS_ATOM(argv[0],atom_sha) && inspect_mpint(env, argv[1], &data_bin)) {
 	SHA1(data_bin.data+4, data_bin.size-4, hmacbuf);
     }
-    else if (argv[0] == atom_none && enif_inspect_binary(env, argv[1], &data_bin)
+    else if (IS_ATOM(argv[0],atom_none) && enif_inspect_binary(env, argv[1], &data_bin)
 	     && data_bin.size == SHA_DIGEST_LENGTH) {
 	memcpy(hmacbuf, data_bin.data, SHA_DIGEST_LENGTH);
     }
@@ -819,8 +822,8 @@ static ERL_NIF_TERM rsa_verify(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
     int i, is_sha;
     RSA* rsa = RSA_new();
 
-    if (argv[0] == atom_sha) is_sha = 1;
-    else if (argv[0] == atom_md5) is_sha = 0;
+    if (IS_ATOM(argv[0],atom_sha)) is_sha = 1;
+    else if (IS_ATOM(argv[0],atom_md5)) is_sha = 0;
     else goto badarg;
 
     if (!inspect_mpint(env, argv[1], &data_bin)
@@ -869,7 +872,7 @@ static ERL_NIF_TERM aes_cbc_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TERM a
 	return enif_make_badarg(env);
     }
 
-    if (argv[3] == atom_true) {
+    if (IS_ATOM(argv[3],atom_true)) {
 	i = AES_ENCRYPT;
 	AES_set_encrypt_key(key_bin.data, key_bin.size*8, &aes_key);
     }
@@ -973,7 +976,7 @@ static ERL_NIF_TERM rc2_40_cbc_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TER
 		    enif_make_new_binary(env, data_bin.size, &ret), 
 		    data_bin.size, &rc2_key,
 		    ivec_bin.data,
-		    (argv[3] == atom_true));
+		    IS_ATOM(argv[3],atom_true));
 
     return ret;
 }   
@@ -987,8 +990,8 @@ static ERL_NIF_TERM rsa_sign_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
     RSA *rsa = RSA_new();
     int i, is_sha;
 
-    if (argv[0] == atom_sha) is_sha = 1;
-    else if (argv[0] == atom_md5) is_sha = 0;
+    if (IS_ATOM(argv[0],atom_sha)) is_sha = 1;
+    else if (IS_ATOM(argv[0],atom_md5)) is_sha = 0;
     else goto badarg;
 
     if (!inspect_mpint(env,argv[1],&data_bin)
@@ -1052,10 +1055,10 @@ static ERL_NIF_TERM dss_sign_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
 	|| !enif_is_empty_list(env,tail)) {
 	goto badarg;	
     }
-    if (argv[0] == atom_sha && inspect_mpint(env, argv[1], &data_bin)) {
+    if (IS_ATOM(argv[0],atom_sha) && inspect_mpint(env, argv[1], &data_bin)) {
 	SHA1(data_bin.data+4, data_bin.size-4, hmacbuf);
     }
-    else if (argv[0] == atom_none && enif_inspect_binary(env,argv[1],&data_bin) 
+    else if (IS_ATOM(argv[0],atom_none) && enif_inspect_binary(env,argv[1],&data_bin) 
 	     && data_bin.size == SHA_DIGEST_LENGTH) {
 	memcpy(hmacbuf, data_bin.data, SHA_DIGEST_LENGTH);
     }
@@ -1082,13 +1085,13 @@ static ERL_NIF_TERM dss_sign_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
 
 static int rsa_pad(ERL_NIF_TERM term, int* padding)
 {
-    if (term == atom_rsa_pkcs1_padding) {
+    if (IS_ATOM(term,atom_rsa_pkcs1_padding)) {
 	*padding = RSA_PKCS1_PADDING;
     }
-    else if (term == atom_rsa_pkcs1_oaep_padding) {
+    else if (IS_ATOM(term,atom_rsa_pkcs1_oaep_padding)) {
 	*padding = RSA_PKCS1_OAEP_PADDING;
     }
-    else if (term == atom_rsa_no_padding) {
+    else if (IS_ATOM(term,atom_rsa_no_padding)) {
 	*padding = RSA_NO_PADDING;
     }
     else {
@@ -1118,7 +1121,7 @@ static ERL_NIF_TERM rsa_public_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TER
 
     enif_alloc_binary(RSA_size(rsa), &ret_bin); 
 
-    if (argv[3] == atom_true) {
+    if (IS_ATOM(argv[3],atom_true)) {
 	ERL_VALGRIND_ASSERT_MEM_DEFINED(buf+i,data_len);
 	i = RSA_public_encrypt(data_bin.size, data_bin.data,
 			       ret_bin.data, rsa, padding);
@@ -1166,7 +1169,7 @@ static ERL_NIF_TERM rsa_private_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TE
 
     enif_alloc_binary(RSA_size(rsa), &ret_bin); 
 
-    if (argv[3] == atom_true) {
+    if (IS_ATOM(argv[3],atom_true)) {
 	ERL_VALGRIND_ASSERT_MEM_DEFINED(buf+i,data_len);
 	i = RSA_private_encrypt(data_bin.size, data_bin.data,
 				ret_bin.data, rsa, padding);
@@ -1260,7 +1263,7 @@ static ERL_NIF_TERM dh_generate_key_nif(ErlNifEnv* env, int argc, const ERL_NIF_
     ERL_NIF_TERM ret, ret_pub, ret_prv, head, tail;
 
     if (!(get_bn_from_mpint(env, argv[0], &dh_params->priv_key)
-	  || argv[0] == atom_undefined)
+	  || IS_ATOM(argv[0],atom_undefined))
 	|| !enif_get_list_cell(env, argv[1], &head, &tail)
 	|| !get_bn_from_mpint(env, head, &dh_params->p)
 	|| !enif_get_list_cell(env, tail, &head, &tail)
@@ -1344,7 +1347,7 @@ static ERL_NIF_TERM bf_cfb64_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
     memcpy(bf_tkey, ivec_bin.data, 8);
     BF_cfb64_encrypt(data_bin.data, enif_make_new_binary(env,data_bin.size,&ret),
 		     data_bin.size, &bf_key, bf_tkey, &bf_n,
-		     (argv[3] == atom_true ? BF_ENCRYPT : BF_DECRYPT));
+		     (IS_ATOM(argv[3],atom_true) ? BF_ENCRYPT : BF_DECRYPT));
     return ret;
 }
 
@@ -1367,7 +1370,7 @@ static ERL_NIF_TERM bf_cbc_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
     memcpy(bf_tkey, ivec_bin.data, 8);
     BF_cbc_encrypt(data_bin.data, enif_make_new_binary(env,data_bin.size,&ret),
 		   data_bin.size, &bf_key, bf_tkey,
-		   (argv[3] == atom_true ? BF_ENCRYPT : BF_DECRYPT));
+		   (IS_ATOM(argv[3],atom_true) ? BF_ENCRYPT : BF_DECRYPT));
     return ret;
 }
 
@@ -1384,7 +1387,7 @@ static ERL_NIF_TERM bf_ecb_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
     }
     BF_set_key(&bf_key, key_bin.size, key_bin.data);
     BF_ecb_encrypt(data_bin.data, enif_make_new_binary(env,data_bin.size,&ret),
-		   &bf_key, (argv[2] == atom_true ? BF_ENCRYPT : BF_DECRYPT));
+		   &bf_key, (IS_ATOM(argv[2],atom_true) ? BF_ENCRYPT : BF_DECRYPT));
     return ret;
 }
 

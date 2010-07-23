@@ -36,6 +36,7 @@
 #include "dist.h"
 #include "beam_bp.h"
 #include "beam_catches.h"
+#include "erl_nif.h"
 #ifdef HIPE
 #include "hipe_mode_switch.h"
 #include "hipe_bif1.h"
@@ -3107,12 +3108,12 @@ void process_main(void)
 
 	 ASSERT(!ERTS_PROC_IS_EXITING(c_p));
 	 {
-	     typedef Eterm NifF(struct enif_environment_t*, int argc, Eterm argv[]);
+	     typedef ERL_NIF_TERM NifF(struct enif_environment_t*, int argc, Eterm argv[]);
 	     NifF* fp = vbf = (NifF*) I[1];
 	     struct enif_environment_t env;
 	     erts_pre_nif(&env, c_p, (struct erl_module_nif*)I[2]);
 	     reg[0] = r(0);
-	     tmp_arg1 = (*fp)(&env, tmp_arg2, reg);
+	     tmp_arg1 = ((*fp)(&env, tmp_arg2, reg)).v;
 	     erts_post_nif(&env);
 	 }
 	 ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(tmp_arg1));
