@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1999-2010. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2011. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -3132,6 +3132,12 @@ BIF_RETTYPE erts_debug_get_internal_state_1(BIF_ALIST_1)
     /*
      * NOTE: Only supposed to be used for testing, and debugging.
      */
+
+    if (ERTS_IS_ATOM_STR("heap_consistency_check", BIF_ARG_1)) {
+	extern void heap_consistency_check(Process*);
+	heap_consistency_check(BIF_P);
+	BIF_RET(am_ok);
+    }
 
     if (!erts_smp_atomic_read(&available_internal_state)) {
 	BIF_ERROR(BIF_P, EXC_UNDEF);

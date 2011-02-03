@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2002-2010. All Rights Reserved.
+ * Copyright Ericsson AB 2002-2011. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -2515,3 +2515,133 @@ erts_check_off_heap(Process *p)
 }
 
 #endif
+
+#ifdef DEBUG
+
+static void heap_consistency_check_fail(Eterm term)
+{
+    erts_fprintf(stderr, "heap_consistency_check FAILED: %T\r\n", term);
+    //abort();
+}
+
+
+static void heap_consistency_check_ptr_old(Process* p, Eterm* ptr, Eterm term)
+{
+    unsigned i;
+    if (in_area(ptr, p->old_heap, (p->old_htop - p->old_heap)*sizeof(Eterm))) {
+	return;
+    }
+
+    for (i = 0; i < module_code_size(); i++) {
+	Module* mod = module_code(i);
+	if (mod != NULL) {
+	    Eterm* literals;
+	    Uint lit_sz;
+
+	    if (mod->code_length != 0) {
+		literals = (Eterm *) mod->code[MI_LITERALS_START];
+		lit_sz = (Eterm *) mod->code[MI_LITERALS_END] - literals;
+		if (in_area(ptr, literals, lit_sz*sizeof(Eterm))) return;
+	    }
+	    if (mod->old_code_length != 0) {
+		literals = (Eterm *) mod->old_code[MI_LITERALS_START];
+		lit_sz = (Eterm *) mod->old_code[MI_LITERALS_END] - literals;
+		if (in_area(ptr, literals, lit_sz*sizeof(Eterm))) return;
+	    }
+	}
+    }
+    heap_consistency_check_fail(term);
+}
+
+static void heap_consistency_check_ptr_new(Process* p, Eterm* ptr, Eterm term)
+{
+    if (in_area(ptr, p->heap, (p->htop - p->heap)*sizeof(Eterm))) {
+	return;
+    }
+    heap_consistency_check_ptr_old(p, ptr, term);
+}
+
+void heap_consistency_check(Process* p);  // SVERK
+
+void heap_consistency_check(Process* p)
+{
+    Eterm* hp;
+    Eterm* htop;
+    const unsigned hist_len = 16;
+    Eterm* hp_hist[hist_len];
+    unsigned ix = 0;
+
+    ErtsGcQuickSanityCheck(p);
+
+    /* New heap */
+    htop = p->htop;
+    hp = p->heap;
+    while (hp < htop) {
+	Eterm* ptr;
+	Eterm val;
+
+	hp_hist[(ix++) % hist_len] = hp;
+	val = *hp;
+	switch (primary_tag(val)) {
+	case TAG_PRIMARY_BOXED:
+	    ptr = boxed_val(val);
+	    heap_consistency_check_ptr_new(p, ptr, val);
+	    hp++;
+	    break;
+	case TAG_PRIMARY_LIST:
+	    ptr = list_val(val);
+	    heap_consistency_check_ptr_new(p, ptr, val);
+	    hp++;
+	    break;
+	case TAG_PRIMARY_HEADER:
+	    if (header_is_thing(val)) {
+		Eterm* next_hp = hp + 1 + thing_arityval(val);
+		if (next_hp > htop) {
+		    heap_consistency_check_fail(am_atom_put("thingy_new",10));
+		}
+		hp = next_hp;
+	    }
+	    else hp++;
+	    break;
+	default:
+	    hp++;
+	}
+    }
+
+    /* Old heap */
+    htop = p->old_htop;
+    hp = p->old_heap;
+    ix = 0;
+    while (hp < htop) {
+	Eterm* ptr;
+	Eterm val;
+
+	hp_hist[(ix++) % hist_len] = hp;
+	val = *hp;
+	switch (primary_tag(val)) {
+	case TAG_PRIMARY_BOXED:
+	    ptr = boxed_val(val);
+	    heap_consistency_check_ptr_old(p, ptr, val);
+	    hp++;
+	    break;
+	case TAG_PRIMARY_LIST:
+	    ptr = list_val(val);
+	    heap_consistency_check_ptr_old(p, ptr, val);
+	    hp++;
+	    break;
+	case TAG_PRIMARY_HEADER:
+	    if (header_is_thing(val)) {
+		Eterm* next_hp = hp + 1 + thing_arityval(val);
+		if (next_hp > htop) {
+		    heap_consistency_check_fail(am_atom_put("thingy_old",10));
+		}
+		hp = next_hp;
+	    }
+	    else hp++;
+	    break;
+	default:
+	    hp++;
+	}
+    }
+}
+#endif /* DEBUG */
