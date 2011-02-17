@@ -1140,7 +1140,7 @@ BIF_RETTYPE hipe_bifs_make_fe_3(BIF_ALIST_3)
 	BIF_ERROR(BIF_P, BADARG);
     }
     fe->native_address = native_address;
-    if (erts_refc_dectest(&fe->refc, 0) == 0)
+    if (erts_refc_dectest_fe(&fe->refc, 0) == 0)
 	erts_erase_fun_entry(fe);
     BIF_RET(address_to_term((void *)fe, BIF_P));
 }

@@ -2148,7 +2148,7 @@ sweep_off_heap(Process *p, int fullsweep)
 	    case FUN_SUBTAG:
 		{
 		    ErlFunEntry* fe = ((ErlFunThing*)ptr)->fe;
-		    if (erts_refc_dectest(&fe->refc, 0) == 0) {
+		    if (erts_refc_dectest_fe(&fe->refc, 0) == 0) {
 			erts_erase_fun_entry(fe);
 		    }
 		    break;

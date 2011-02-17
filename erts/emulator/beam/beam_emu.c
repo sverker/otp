@@ -6501,7 +6501,9 @@ new_fun(Process* p, Eterm* reg, ErlFunEntry* fe, int num_free)
     p->htop = hp + needed;
     funp = (ErlFunThing *) hp;
     hp = funp->env;
-    erts_refc_inc(&fe->refc, 2);
+    ASSERT_FE(fe);
+    erts_refc_inc_fe(&fe->refc, 2);
+    UPDATE_FE(fe);
     funp->thing_word = HEADER_FUN;
 #ifndef HYBRID /* FIND ME! */
     funp->next = MSO(p).first;

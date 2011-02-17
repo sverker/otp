@@ -2780,7 +2780,7 @@ void db_cleanup_offheap_comp(DbTerm* obj)
 	    break;
 	case FUN_SUBTAG:
 	    ASSERT(u.pb != &tmp);
-	    if (erts_refc_dectest(&u.fun->fe->refc, 0) == 0) {
+	    if (erts_refc_dectest_fe(&u.fun->fe->refc, 0) == 0) {
 		erts_erase_fun_entry(u.fun->fe);
 	    }
 	    break;

@@ -398,7 +398,7 @@ copy_struct(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap)
 		    funp = (ErlFunThing *) tp;
 		    funp->next = off_heap->first;
 		    off_heap->first = (struct erl_off_heap_header*) funp;
-		    erts_refc_inc(&funp->fe->refc, 2);
+		    erts_refc_inc_fe(&funp->fe->refc, 2);
 #endif
 		    *argp = make_fun(tp);
 		}
@@ -675,7 +675,7 @@ Eterm copy_struct_lazy(Process *from, Eterm orig, Uint offs)
 #ifndef HYBRID /* FIND ME! */
                 funp->next = erts_global_offheap.first;
                 erts_global_offheap.first = funp;
-                erts_refc_inc(&funp->fe->refc, 2);
+                erts_refc_inc_fe(&funp->fe->refc, 2);
 #endif
                 for (i = k; i < j; i++) {
                     switch (primary_tag(*objp)) {
@@ -919,7 +919,7 @@ copy_shallow(Eterm* ptr, Uint sz, Eterm** hpp, ErlOffHeap* off_heap)
 	    case FUN_SUBTAG:
 		{
 		    ErlFunThing* funp = (ErlFunThing *) (tp-1);
-		    erts_refc_inc(&funp->fe->refc, 2);
+		    erts_refc_inc_fe(&funp->fe->refc, 2);
 		}
 		goto off_heap_common;
 

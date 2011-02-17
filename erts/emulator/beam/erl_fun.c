@@ -40,7 +40,7 @@ static erts_smp_rwmtx_t erts_fun_table_lock;
 
 static HashValue fun_hash(ErlFunEntry* obj);
 static int fun_cmp(ErlFunEntry* obj1, ErlFunEntry* obj2);
-static ErlFunEntry* fun_alloc(ErlFunEntry* template);
+static ErlFunEntry* fun_alloc(ErlFunEntry* templ);
 static void fun_free(ErlFunEntry* obj);
 
 /*
@@ -95,20 +95,20 @@ int erts_fun_table_sz(void)
 ErlFunEntry*
 erts_put_fun_entry(Eterm mod, int uniq, int index)
 {
-    ErlFunEntry template;
+    ErlFunEntry templ;
     ErlFunEntry* fe;
     erts_aint_t refc;
     ASSERT(is_atom(mod));
-    template.old_uniq = uniq;
-    template.old_index = index;
-    template.module = mod;
+    templ.old_uniq = uniq;
+    templ.old_index = index;
+    templ.module = mod;
     erts_fun_write_lock();
-    fe = (ErlFunEntry *) hash_put(&erts_fun_table, (void*) &template);
+    fe = (ErlFunEntry *) hash_put(&erts_fun_table, (void*) &templ);
     sys_memset(fe->uniq, 0, sizeof(fe->uniq));
     fe->index = 0;
-    refc = erts_refc_inctest(&fe->refc, 0);
+    refc = erts_refc_inctest_fe(&fe->refc, 0);
     if (refc < 2) /* New or pending delete */
-	erts_refc_inc(&fe->refc, 1);
+	erts_refc_inc_fe(&fe->refc, 1);
     erts_fun_write_unlock();
     return fe;
 }
@@ -117,22 +117,22 @@ ErlFunEntry*
 erts_put_fun_entry2(Eterm mod, int old_uniq, int old_index,
 		    byte* uniq, int index, int arity)
 {
-    ErlFunEntry template;
+    ErlFunEntry templ;
     ErlFunEntry* fe;
     erts_aint_t refc;
 
     ASSERT(is_atom(mod));
-    template.old_uniq = old_uniq;
-    template.old_index = old_index;
-    template.module = mod;
+    templ.old_uniq = old_uniq;
+    templ.old_index = old_index;
+    templ.module = mod;
     erts_fun_write_lock();
-    fe = (ErlFunEntry *) hash_put(&erts_fun_table, (void*) &template);
+    fe = (ErlFunEntry *) hash_put(&erts_fun_table, (void*) &templ);
     sys_memcpy(fe->uniq, uniq, sizeof(fe->uniq));
     fe->index = index;
     fe->arity = arity;
-    refc = erts_refc_inctest(&fe->refc, 0);
+    refc = erts_refc_inctest_fe(&fe->refc, 0);
     if (refc < 2) /* New or pending delete */
-	erts_refc_inc(&fe->refc, 1);
+	erts_refc_inc_fe(&fe->refc, 1);
     erts_fun_write_unlock();
     return fe;
 }
@@ -147,19 +147,19 @@ struct my_key {
 ErlFunEntry*
 erts_get_fun_entry(Eterm mod, int uniq, int index)
 {
-    ErlFunEntry template;
+    ErlFunEntry templ;
     ErlFunEntry *ret;
 
     ASSERT(is_atom(mod));
-    template.old_uniq = uniq;
-    template.old_index = index;
-    template.module = mod;
+    templ.old_uniq = uniq;
+    templ.old_index = index;
+    templ.module = mod;
     erts_fun_read_lock();
-    ret = (ErlFunEntry *) hash_get(&erts_fun_table, (void*) &template);
+    ret = (ErlFunEntry *) hash_get(&erts_fun_table, (void*) &templ);
     if (ret) {
-	erts_aint_t refc = erts_refc_inctest(&ret->refc, 1);
+	erts_aint_t refc = erts_refc_inctest_fe(&ret->refc, 1);
 	if (refc < 2) /* Pending delete */
-	    erts_refc_inc(&ret->refc, 1);
+	    erts_refc_inc_fe(&ret->refc, 1);
     }
     erts_fun_read_unlock();
     return ret;
@@ -180,16 +180,21 @@ erts_erase_fun_entry(ErlFunEntry* fe)
      * We have to check refc again since someone might have looked up
      * the fun entry and incremented refc after last check.
      */
-    if (erts_refc_dectest(&fe->refc, -1) <= 0)
+    if (erts_refc_dectest_fe(&fe->refc, -1) <= 0)
 #endif
     {
-	if (fe->address != unloaded_fun)
+	if (fe->address != unloaded_fun) {
+//          fprintf(stderr, "SVERK: Keeping fun entry %p (address==%p)\r\n",
+//      	    fe, fe->address);
 	    erl_exit(1,
-		     "Internal error: "
-		     "Invalid reference count found on #Fun<%T.%d.%d>: "
-		     " About to erase fun still referred by code.\n",
-		     fe->module, fe->old_index, fe->old_uniq);
-	erts_erase_fun_entry_unlocked(fe);
+	       "Internal error: "
+	       "Invalid reference count found on #Fun<%T.%d.%d>: "
+	       " About to erase fun still referred by code.\n",
+	       fe->module, fe->old_index, fe->old_uniq);
+	}
+	else {
+	    erts_erase_fun_entry_unlocked(fe);
+	}
     }
     erts_fun_write_unlock();
 }
@@ -213,11 +218,15 @@ erts_cleanup_funs_on_purge(BeamInstr* start, BeamInstr* end)
 	    BeamInstr* addr = fe->address;
 
 	    if (start <= addr && addr < end) {
+		ASSERT_FE(fe);
 		fe->address = unloaded_fun;
+		fe->is_unloaded = 1;
 		if (erts_refc_dectest(&fe->refc, 0) == 0) {
 		    fe->address = (void *) to_delete;
-		    to_delete = fe;
+		    fe->is_unloaded = 2;
+		    to_delete = fe;		    
 		}
+		UPDATE_FE(fe);
 	    }
 	    b = b->next;
 	}
@@ -280,19 +289,21 @@ fun_cmp(ErlFunEntry* obj1, ErlFunEntry* obj2)
 }
 
 static ErlFunEntry*
-fun_alloc(ErlFunEntry* template)
+fun_alloc(ErlFunEntry* templ)
 {
     ErlFunEntry* obj = (ErlFunEntry *) erts_alloc(ERTS_ALC_T_FUN_ENTRY,
 						  sizeof(ErlFunEntry));
 
-    obj->old_uniq = template->old_uniq;
-    obj->old_index = template->old_index;
-    obj->module = template->module;
+    obj->old_uniq = templ->old_uniq;
+    obj->old_index = templ->old_index;
+    obj->module = templ->module;
     erts_refc_init(&obj->refc, -1);
     obj->address = unloaded_fun;
 #ifdef HIPE
     obj->native_address = NULL;
 #endif
+    obj->is_unloaded= 0;
+    UPDATE_FE(obj);
     return obj;
 }
 

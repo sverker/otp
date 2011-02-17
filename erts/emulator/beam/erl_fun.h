@@ -20,11 +20,14 @@
 #ifndef __ERLFUNTABLE_H__
 #define __ERLFUNTABLE_H__
 
+#include "sys.h"  // SVERK
+
 #include "erl_smp.h"
 
 /*
  * Fun entry.
  */
+
 
 typedef struct erl_fun_entry {
     HashBucket bucket;		/* MUST BE LOCATED AT TOP OF STRUCT!!! */
@@ -43,7 +46,42 @@ typedef struct erl_fun_entry {
     Eterm module;		/* Tagged atom for module. */
     erts_refc_t refc;		/* Reference count: One for code + one for each
 				   fun object in each process. */
+    // SVERK:
+    BeamInstr* address_copy;
+    erts_refc_t refc_copy;
+    int is_unloaded;
 } ErlFunEntry;
+
+#define UPDATE_FE(FE) ((FE)->address_copy = (FE)->address) 
+//((FE)->refc_copy = (FE)->refc)) 
+#define ASSERT_FE(FE) ((FE)->address == (FE)->address_copy ? 1 : abort())
+//(FE)->refc.counter == (FE)->refc_copy.counter 
+#define REFC_TO_FE(REFC) ((ErlFunEntry*)((char*)(REFC) - offsetof(ErlFunEntry,refc)))
+#define UPDATE_FE_REFC(FE_REFC, MIN, FUNC) (ASSERT_FE(REFC_TO_FE(FE_REFC)),\
+					    FUNC(FE_REFC, MIN),\
+					    UPDATE_FE(REFC_TO_FE(FE_REFC)))
+#define erts_refc_inc_fe(FE_REFC, MIN) UPDATE_FE_REFC(FE_REFC, MIN, erts_refc_inc)
+//#define erts_refc_inctest_fe(FE_REFC, MIN) UPDATE_FE_REFC(FE_REFC, MIN, erts_refc_inctest)
+#define erts_refc_dec_fe(FE_REFC, MIN) UPDATE_FE_REFC(FE_REFC, MIN, erts_refc_dec)
+//#define erts_refc_dectest_fe(FE_REFC, MIN) UPDATE_FE_REFC(FE_REFC, MIN, erts_refc_dectest)
+
+static erts_aint_t erts_refc_inctest_fe(erts_refc_t *refcp, erts_aint_t min_val)
+{
+    erts_aint_t ret;
+    ASSERT_FE(REFC_TO_FE(refcp));
+    ret = erts_refc_inctest(refcp, min_val);
+    UPDATE_FE(REFC_TO_FE(refcp));
+    return ret;
+}
+static erts_aint_t erts_refc_dectest_fe(erts_refc_t *refcp, erts_aint_t min_val)
+{
+    erts_aint_t ret;
+    ASSERT_FE(REFC_TO_FE(refcp));
+    ret = erts_refc_dectest(refcp, min_val);
+    UPDATE_FE(REFC_TO_FE(refcp));
+    return ret;
+}
+
 
 /*
  * This structure represents a 'fun' (lambda). It is stored on

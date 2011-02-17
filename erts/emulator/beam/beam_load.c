@@ -3937,6 +3937,7 @@ final_touch(LoaderState* stp)
 	    ErlFunEntry* fe = stp->lambdas[i].fe;
 	    BeamInstr* code_ptr = (BeamInstr *) (stp->code + stp->labels[entry_label].value);
 
+	    ASSERT_FE(fe);
 	    if (fe->address[0] != 0) {
 		/*
 		 * We are hiding a pointer into older code.
@@ -3944,6 +3945,7 @@ final_touch(LoaderState* stp)
 		erts_refc_dec(&fe->refc, 1);
 	    }
 	    fe->address = code_ptr;
+	    UPDATE_FE(fe);
 #ifdef HIPE
 	    hipe_set_closure_stub(fe, stp->lambdas[i].num_free);
 #endif
@@ -5100,7 +5102,9 @@ stub_final_touch(LoaderState* stp, BeamInstr* fp)
         ErlFunEntry* fe = stp->lambdas[i].fe;
 	if (lp->function == function && lp->arity == arity) {
 	    fp[5] = (Eterm) BeamOpCode(op_hipe_trap_call_closure);
+	    ASSERT_FE(fe);
             fe->address = &(fp[5]);
+	    UPDATE_FE(fe);
 	}
     }
 #endif
@@ -5232,7 +5236,7 @@ patch_funentries(Eterm Patchlist)
 
     fe = erts_get_fun_entry(Mod, uniq, index);
     fe->native_address = (Uint *)native_address;
-    erts_refc_dec(&fe->refc, 1);
+    erts_refc_dec_fe(&fe->refc, 1);
 
     if (!patch(Addresses, (Uint) fe))
       return 0;
