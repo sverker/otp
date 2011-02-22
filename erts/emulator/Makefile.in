@@ -107,7 +107,11 @@ else
 override TYPE=opt
 PURIFY =
 TYPEMARKER =
-TYPE_FLAGS = @CFLAGS@
+###TYPE_FLAGS = @CFLAGS@
+
+TYPE_FLAGS = @DEBUG_CFLAGS@ -DDEBUG
+ENABLE_ALLOC_TYPE_VARS += debug
+
 endif
 endif
 endif

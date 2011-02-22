@@ -4234,7 +4234,7 @@ AH_BOTTOM([
 #endif
 
 #if defined(DEBUG) && defined(USE_THREADS) && !defined(ERTS_ENABLE_LOCK_CHECK)
-#define ERTS_ENABLE_LOCK_CHECK 1
+/* SVERK #define ERTS_ENABLE_LOCK_CHECK 1 */
 #endif
 ])
 
