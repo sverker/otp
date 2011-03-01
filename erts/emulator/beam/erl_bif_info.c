@@ -3133,12 +3133,34 @@ BIF_RETTYPE error_logger_warning_map_0(BIF_ALIST_0)
 
 static erts_smp_atomic_t available_internal_state;
 
+static void sverk_break(void)
+{
+}
+
 BIF_RETTYPE erts_debug_get_internal_state_1(BIF_ALIST_1)
 {
     /*
      * NOTE: Only supposed to be used for testing, and debugging.
      */
+    Eterm sverk = BIF_ARG_1, sverk_tail;
+    if (is_list(BIF_ARG_1)) {
+	sverk = CAR(list_val(BIF_ARG_1));
+	sverk_tail = CDR(list_val(BIF_ARG_1));
+    }
+    if (ERTS_IS_ATOM_STR("heap_consistency_check", sverk)) {
+	extern void heap_consistency_check(Process*);
+	if (is_list(BIF_ARG_1)) {
+	    erts_fprintf(stderr, "SVERK: %T\r\n", BIF_ARG_1);
+	}
+	heap_consistency_check(BIF_P);
+	if (is_list(BIF_ARG_1) && is_list(sverk_tail) 
+	    && ERTS_IS_ATOM_STR("break",CAR(list_val(sverk_tail)))) {
+	    erts_fprintf(stderr, "SVERK: calling break point\r\n");
+	    sverk_break();
+	}
 
+	BIF_RET(am_ok);
+    }
     if (!erts_smp_atomic_read(&available_internal_state)) {
 	BIF_ERROR(BIF_P, EXC_UNDEF);
     }

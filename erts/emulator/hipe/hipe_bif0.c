@@ -292,7 +292,7 @@ BIF_RETTYPE hipe_bifs_bitarray_sub_2(BIF_ALIST_2)
  * BIFs for SML-like mutable arrays and reference cells.
  * For now, limited to containing immediate data.
  */
-#if 1	/* use bignums as carriers, easier on the gc */
+#if 1
 #define make_array_header(sz)	make_pos_bignum_header((sz))
 #define array_header_arity(h)	header_arity((h))
 #define make_array(hp)		make_big((hp))
@@ -466,6 +466,9 @@ BIF_RETTYPE hipe_bifs_constants_size_0(BIF_ALIST_0)
  */
 struct const_term {
     HashBucket bucket;
+//#ifdef DEBUG
+    Eterm* mem_end;
+//#endif
     Eterm val;		/* tagged pointer to mem[0] */
     Eterm mem[1];	/* variable size */
 };
@@ -498,6 +501,9 @@ static void *const_term_alloc(void *tmpl)
     hipe_constants_size += alloc_size;
 
     p = (struct const_term*)erts_alloc(ERTS_ALC_T_HIPE, alloc_size * sizeof(Eterm));
+//#ifdef DEBUG
+    p->mem_end = p->mem + size;
+//#endif
 
     /* I have absolutely no idea if having a private 'off_heap'
        works or not. _Some_ off_heap object is required for
@@ -536,6 +542,32 @@ BIF_RETTYPE hipe_bifs_merge_term_1(BIF_ALIST_1)
     }
     BIF_RET(val);
 }
+
+//#ifdef DEBUG
+struct hipe_is_constant_iter
+{
+    Eterm* termp;
+    int was_found;
+};
+
+static void hipe_is_constant_callback(void* bucket, void* arg)
+{
+    struct const_term* ct = (struct const_term*)bucket;
+    struct hipe_is_constant_iter* iter = (struct hipe_is_constant_iter*)arg;
+    if (ct->mem <= iter->termp && iter->termp < ct->mem_end) {
+	iter->was_found = 1;
+    }
+}
+
+int hipe_is_constant(Eterm* termp)
+{
+    struct hipe_is_constant_iter iter;
+    iter.termp = termp;
+    iter.was_found = 0;
+    hash_foreach(&const_term_table, hipe_is_constant_callback, &iter);
+    return iter.was_found;
+}
+//#endif /* DEBUG */
 
 struct mfa {
     Eterm mod;
@@ -1813,8 +1845,10 @@ BIF_RETTYPE hipe_bifs_check_crc_1(BIF_ALIST_1)
 
     if (!term_to_Uint(BIF_ARG_1, &crc))
 	BIF_ERROR(BIF_P, BADARG);
+
     if (crc == HIPE_SYSTEM_CRC)
 	BIF_RET(am_true);
+
     BIF_RET(am_false);
 }
 
@@ -1825,6 +1859,7 @@ BIF_RETTYPE hipe_bifs_system_crc_1(BIF_ALIST_1)
     if (!term_to_Uint(BIF_ARG_1, &crc))
 	BIF_ERROR(BIF_P, BADARG);
     crc ^= (HIPE_SYSTEM_CRC ^ HIPE_LITERALS_CRC);
+
     BIF_RET(Uint_to_term(crc, BIF_P));
 }
 
