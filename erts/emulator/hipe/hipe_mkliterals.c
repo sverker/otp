@@ -1,9 +1,8 @@
 /*
  * %CopyrightBegin%
-
- *
+ * 
  * Copyright Ericsson AB 2001-2011. All Rights Reserved.
- *
+ * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
  * compliance with the License. You should have received a copy of the
@@ -579,7 +578,12 @@ static void c_case_param(FILE *fp, const struct rts_param *param)
 
 static void e_define_param(FILE *fp, const struct rts_param *param)
 {
-    fprintf(fp, "-define(%s, hipe_bifs:get_rts_param(%u)).\n", param->name, param->nr);
+    //fprintf(fp, "-define(%s, hipe_bifs:get_rts_param(%u)).\n", param->name, param->nr);
+    
+    if (param->is_defined)
+	fprintf(fp, "-define(%s, %u).\n", param->name, param->value);
+    else
+	fprintf(fp, "-define(%s, []).\n", param->name);
 }
 
 static void print_params(FILE *fp, void (*print_param)(FILE*,const struct rts_param*))
@@ -616,7 +620,8 @@ static int do_e(FILE *fp, const char* this_exe)
     fprintf(fp, "\n");
     print_params(fp, e_define_param);
     fprintf(fp, "\n");
-    fprintf(fp, "-define(HIPE_SYSTEM_CRC, hipe_bifs:system_crc(%u)).\n", literals_crc);
+    //fprintf(fp, "-define(HIPE_SYSTEM_CRC, hipe_bifs:system_crc(%u)).\n", literals_crc);
+    fprintf(fp, "-define(HIPE_SYSTEM_CRC, %u).\n", system_crc);
     return 0;
 }
 
