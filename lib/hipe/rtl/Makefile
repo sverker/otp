@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2001-2010. All Rights Reserved.
+# Copyright Ericsson AB 2001-2011. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -108,7 +108,20 @@ release_spec: opt
 release_docs_spec:
 
 
-HIPE_MKLITERALS=$(ERL_TOP)/bin/$(TARGET)/hipe_mkliterals
+ifeq ($(TYPE),debug)
+TYPE_STR=.debug
+else
+TYPE_STR=
+endif
+
+ifeq ($(FLAVOR),smp)
+FLAVOR_STR=.smp
+else
+FLAVOR_STR=
+endif
+
+HIPE_MKLITERALS=$(ERL_TOP)/bin/$(TARGET)/hipe_mkliterals$(TYPE_STR)$(FLAVOR_STR)
+
 
 hipe_literals.hrl: $(HIPE_MKLITERALS)
 	$(HIPE_MKLITERALS) -e > hipe_literals.hrl
