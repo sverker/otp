@@ -28,7 +28,23 @@ include(`hipe/hipe_amd64_asm.m4')
 #define TEST_GOT_EXN	cmpq	$THE_NON_VALUE, %rax
 #endif'
 
-`#define TEST_GOT_MBUF		movq P_MBUF(P), %rdx; testq %rdx, %rdx; jnz 3f; 2:
+`#if defined(DEBUG) && defined(USE_THREADS) && !defined(ERTS_ENABLE_LOCK_CHECK)
+#  define ERTS_ENABLE_LOCK_CHECK
+#endif
+#if defined(ERTS_ENABLE_LOCK_CHECK) && defined(ERTS_SMP)
+#  define CALL_BIF_0(F)	movq $F, P_BIF_CALLEE(P); call CSYM(hipe_debug_bif_wrapper_0) 
+#  define CALL_BIF_1(F)	movq $F, P_BIF_CALLEE(P); call CSYM(hipe_debug_bif_wrapper_1) 
+#  define CALL_BIF_2(F)	movq $F, P_BIF_CALLEE(P); call CSYM(hipe_debug_bif_wrapper_2) 
+#  define CALL_BIF_3(F)	movq $F, P_BIF_CALLEE(P); call CSYM(hipe_debug_bif_wrapper_3) 
+#  define CALL_BIF_5(F)	movq $F, P_BIF_CALLEE(P); call CSYM(hipe_debug_bif_wrapper_5) 
+#else
+#  define CALL_BIF_0(F)	call	CSYM(F)
+#  define CALL_BIF_1(F)	call	CSYM(F)
+#  define CALL_BIF_2(F)	call	CSYM(F)
+#  define CALL_BIF_3(F)	call	CSYM(F)
+#  define CALL_BIF_5(F)	call	CSYM(F)
+#endif
+#define TEST_GOT_MBUF		movq P_MBUF(P), %rdx; testq %rdx, %rdx; jnz 3f; 2:
 #define JOIN3(A,B,C)		A##B##C
 #define HANDLE_GOT_MBUF(ARITY)	3: call JOIN3(nbif_,ARITY,_gc_after_bif); jmp 2b'
 
@@ -54,7 +70,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C
-	call	CSYM($2)
+	CALL_BIF_1($2)
 	TEST_GOT_MBUF
 	SWITCH_C_TO_ERLANG
 
@@ -82,7 +98,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C
-	call	CSYM($2)
+	CALL_BIF_2($2)
 	TEST_GOT_MBUF
 	SWITCH_C_TO_ERLANG
 
@@ -111,7 +127,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C
-	call	CSYM($2)
+	CALL_BIF_3($2)
 	TEST_GOT_MBUF
 	SWITCH_C_TO_ERLANG
 
@@ -143,7 +159,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C
-	call	CSYM($2)
+	CALL_BIF_0($2)
 	TEST_GOT_MBUF
 	SWITCH_C_TO_ERLANG
 
@@ -179,7 +195,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C
-	call	CSYM($2)
+	CALL_BIF_0($2)
 	TEST_GOT_MBUF
 	SWITCH_C_TO_ERLANG
 
@@ -204,7 +220,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C
-	call	CSYM($2)
+	CALL_BIF_1($2)
 	TEST_GOT_MBUF
 	SWITCH_C_TO_ERLANG
 
@@ -230,7 +246,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C
-	call	CSYM($2)
+	CALL_BIF_2($2)
 	TEST_GOT_MBUF
 	SWITCH_C_TO_ERLANG
 
@@ -257,7 +273,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C
-	call	CSYM($2)
+	CALL_BIF_3($2)
 	TEST_GOT_MBUF
 	SWITCH_C_TO_ERLANG
 
@@ -292,7 +308,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C_QUICK
-	call	CSYM($2)
+	CALL_BIF_0($2)
 	SWITCH_C_TO_ERLANG_QUICK
 
 	/* return */
@@ -315,7 +331,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C_QUICK
-	call	CSYM($2)
+	CALL_BIF_1($2)
 	SWITCH_C_TO_ERLANG_QUICK
 
 	/* return */
@@ -339,7 +355,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C_QUICK
-	call	CSYM($2)
+	CALL_BIF_2($2)
 	SWITCH_C_TO_ERLANG_QUICK
 
 	/* return */
@@ -364,7 +380,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C_QUICK
-	call	CSYM($2)
+	CALL_BIF_3($2)
 	SWITCH_C_TO_ERLANG_QUICK
 
 	/* return */
@@ -391,7 +407,7 @@ ASYM($1):
 
 	/* make the call on the C stack */
 	SWITCH_ERLANG_TO_C_QUICK
-	call	CSYM($2)
+	CALL_BIF_5($2)
 	SWITCH_C_TO_ERLANG_QUICK
 
 	/* return */

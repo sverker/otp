@@ -334,3 +334,75 @@ void hipe_arch_print_pcb(struct hipe_process_state *p)
     U("narity     ", narity);
 #undef U
 }
+
+#if defined(ERTS_ENABLE_LOCK_CHECK) && defined(ERTS_SMP)
+
+BIF_RETTYPE hipe_debug_bif_wrapper_0(BIF_ALIST_0);
+BIF_RETTYPE hipe_debug_bif_wrapper_1(BIF_ALIST_1);
+BIF_RETTYPE hipe_debug_bif_wrapper_2(BIF_ALIST_2);
+BIF_RETTYPE hipe_debug_bif_wrapper_3(BIF_ALIST_3);
+BIF_RETTYPE hipe_debug_bif_wrapper_5(BIF_ALIST_3, Eterm, Eterm);
+
+#    define ERTS_SMP_REQ_PROC_MAIN_LOCK(P) \
+        if ((P)) erts_proc_lc_require_lock((P), ERTS_PROC_LOCK_MAIN)
+#    define ERTS_SMP_UNREQ_PROC_MAIN_LOCK(P) \
+        if ((P)) erts_proc_lc_unrequire_lock((P), ERTS_PROC_LOCK_MAIN)
+
+BIF_RETTYPE hipe_debug_bif_wrapper_0(BIF_ALIST_0)
+{
+    typedef BIF_RETTYPE Bif0(Process*);
+    Bif0* fp = (Bif0*) (BIF_P->hipe.bif_callee);
+    BIF_RETTYPE res;
+    ERTS_SMP_UNREQ_PROC_MAIN_LOCK(BIF_P);
+    res = (*fp)(BIF_P);
+    ERTS_SMP_REQ_PROC_MAIN_LOCK(BIF_P);
+    return res;
+}
+
+BIF_RETTYPE hipe_debug_bif_wrapper_1(BIF_ALIST_1)
+{
+    typedef BIF_RETTYPE Bif1(Process*, Eterm);
+    Bif1* fp = (Bif1*)BIF_P->hipe.bif_callee;
+    BIF_RETTYPE res;
+    ERTS_SMP_UNREQ_PROC_MAIN_LOCK(BIF_P);
+    res = (*fp)(BIF_P, BIF_ARG_1);
+    ERTS_SMP_REQ_PROC_MAIN_LOCK(BIF_P);
+    return res;
+}
+
+BIF_RETTYPE hipe_debug_bif_wrapper_2(BIF_ALIST_2)
+{
+    typedef BIF_RETTYPE Bif2(Process*, Eterm, Eterm);
+    Bif2* fp = (Bif2*) BIF_P->hipe.bif_callee;
+    BIF_RETTYPE res;
+    ERTS_SMP_UNREQ_PROC_MAIN_LOCK(BIF_P);
+    res = (*fp)(BIF_P, BIF_ARG_1, BIF_ARG_2);
+    ERTS_SMP_REQ_PROC_MAIN_LOCK(BIF_P);
+    return res;
+}
+    
+BIF_RETTYPE hipe_debug_bif_wrapper_3(BIF_ALIST_3)
+{
+    typedef BIF_RETTYPE Bif3(Process*, Eterm, Eterm, Eterm);
+    Bif3* fp = (Bif3*)BIF_P->hipe.bif_callee;
+    BIF_RETTYPE res;
+    ERTS_SMP_UNREQ_PROC_MAIN_LOCK(BIF_P);
+    res = (*fp)(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3);
+    ERTS_SMP_REQ_PROC_MAIN_LOCK(BIF_P);
+    return res;
+}
+
+BIF_RETTYPE hipe_debug_bif_wrapper_5(BIF_ALIST_3, Eterm a4, Eterm a5)
+{
+    typedef BIF_RETTYPE Bif5(Process*, Eterm, Eterm, Eterm, Eterm, Eterm);
+    Bif5* fp = (Bif5*)BIF_P->hipe.bif_callee;
+    BIF_RETTYPE res;
+    ERTS_SMP_UNREQ_PROC_MAIN_LOCK(BIF_P);
+    res = (*fp)(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3, a4, a5);
+    ERTS_SMP_REQ_PROC_MAIN_LOCK(BIF_P);
+    return res;
+}
+
+#endif /* ERTS_ENABLE_LOCK_CHECK && ERTS_SMP */
+
+
