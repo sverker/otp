@@ -246,7 +246,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% for the targets, so passing 'Addresses' is not needed.
       redirect(ReferencesToPatch),
       ?debug_msg("****************Loader Finished****************\n", []),
-      {module,Mod}  % for compatibility with code:load_file/1
+      {module,Mod,CodeAddress,CodeSize}
   end.
 
 %%----------------------------------------------------------------
