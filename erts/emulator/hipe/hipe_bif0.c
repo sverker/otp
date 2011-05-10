@@ -441,13 +441,11 @@ BIF_RETTYPE hipe_bifs_free_code_2(BIF_ALIST_2)
     size = unsigned_val(BIF_ARG_2);
     erts_fprintf(stderr, "freeing address %i size %i\n", address, size);
 #ifdef HIPE_DEALLOC_CODE
-    ret = HIPE_DEALLOC_CODE(address, size);
-    if (ret)
-	BIF_ERROR(BIF_P, BADARG);
+    HIPE_DEALLOC_CODE(address, size);
 #else
     if (is_not_nil(BIF_ARG_2))
 	BIF_ERROR(BIF_P, BADARG);
-    address = erts_alloc(ERTS_ALC_T_HIPE, nrbytes);
+    // TODO: free the erts_alloced code.
 #endif  
     BIF_RET(am_true);
 }
