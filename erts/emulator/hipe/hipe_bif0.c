@@ -428,6 +428,31 @@ BIF_RETTYPE hipe_bifs_enter_code_2(BIF_ALIST_2)
 }
 
 /*
+ * Free memory
+ */
+BIF_RETTYPE hipe_bifs_free_code_2(BIF_ALIST_2)
+{
+    int ret;
+    Uint address;
+    Uint size;
+    if (is_not_small(BIF_ARG_1) || is_not_small(BIF_ARG_2))
+	BIF_ERROR(BIF_P, BADARG);
+    address = unsigned_val(BIF_ARG_1);
+    size = unsigned_val(BIF_ARG_2);
+    erts_fprintf(stderr, "freeing address %i size %i\n", address, size);
+#ifdef HIPE_DEALLOC_CODE
+    ret = HIPE_DEALLOC_CODE(address, size);
+    if (ret)
+	BIF_ERROR(BIF_P, BADARG);
+#else
+    if (is_not_nil(BIF_ARG_2))
+	BIF_ERROR(BIF_P, BADARG);
+    address = erts_alloc(ERTS_ALC_T_HIPE, nrbytes);
+#endif  
+    BIF_RET(am_true);
+}
+
+/*
  * Allocate memory for arbitrary non-Erlang data.
  */
 BIF_RETTYPE hipe_bifs_alloc_data_2(BIF_ALIST_2)

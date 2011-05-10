@@ -44,6 +44,7 @@ bif hipe_bifs:ref_get/1
 bif hipe_bifs:ref_set/2
 
 bif hipe_bifs:enter_code/2
+bif hipe_bifs:free_code/2
 bif hipe_bifs:alloc_data/2
 bif hipe_bifs:constants_size/0
 bif hipe_bifs:merge_term/1
