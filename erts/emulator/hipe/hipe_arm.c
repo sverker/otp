@@ -199,6 +199,11 @@ void *hipe_alloc_code(Uint nrbytes, Eterm callees, Eterm *trampolines, Process *
     return address;
 }
 
+void hipe_dealloc_code(Uint address, Uint nrbytes)
+{
+
+}
+
 static unsigned int *alloc_stub(Uint nrwords, unsigned int **tramp_callemu)
 {
     unsigned int *address;

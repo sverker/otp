@@ -77,8 +77,8 @@ int hipe_patch_call(void *callAddress, void *destAddress, void *trampoline)
  * non-executable memory mappings, causing ordinary
  * malloc() memory to be non-executable.
  */
-static unsigned int code_bytes;
-static char *code_next;
+static unsigned int code_bytes = 0; /* The size of the previous allocation */
+static void *code_prev = 0; /* The address of the previous allocation */
 
 #if 0	/* change to non-zero to get allocation statistics at exit() */
 static unsigned int total_mapped, nr_joins, nr_splits, total_alloc, nr_allocs, nr_large, total_lost;
@@ -108,26 +108,27 @@ static void atexit_alloc_code_stats(void)
 #define MAP_ANONYMOUS MAP_ANON
 #endif
 
-static void morecore(unsigned int alloc_bytes)
+/* The system page size */
+static long page_size = 0;
+
+static void *alloc_code(unsigned int alloc_bytes)
 {
     unsigned int map_bytes;
-    char *map_hint, *map_start;
+    void *map_hint, *map_start;
+
+    /* Get the system page size. This will only happen once. */
+    if (page_size == 0) {
+	page_size = sysconf(_SC_PAGESIZE);
+    }
 
     /* Page-align the amount to allocate. */
-    map_bytes = (alloc_bytes + 4095) & ~4095;
-
-    /* Round up small allocations. */
-    if (map_bytes < 1024*1024)
-	map_bytes = 1024*1024;
-    else
-	ALLOC_CODE_STATS(++nr_large);
+    map_bytes = (alloc_bytes + page_size - 1) & ~page_size;
 
     /* Create a new memory mapping, ensuring it is executable
        and in the low 2GB of the address space. Also attempt
        to make it adjacent to the previous mapping. */
-    map_hint = code_next + code_bytes;
-    if ((unsigned long)map_hint & 4095)
-	abort();
+    map_hint = code_prev + code_bytes;
+
     map_start = mmap(map_hint, map_bytes,
 		     PROT_EXEC|PROT_READ|PROT_WRITE,
 		     MAP_PRIVATE|MAP_ANONYMOUS
@@ -142,36 +143,20 @@ static void morecore(unsigned int alloc_bytes)
     }
     ALLOC_CODE_STATS(total_mapped += map_bytes);
 
-    /* Merge adjacent mappings, so the trailing portion of the previous
-       mapping isn't lost. In practice this is quite successful. */
-    if (map_start == map_hint) {
+    if (map_start == code_prev + code_bytes)
 	ALLOC_CODE_STATS(++nr_joins);
-	code_bytes += map_bytes;
-    } else {
+    else
 	ALLOC_CODE_STATS(++nr_splits);
-	ALLOC_CODE_STATS(total_lost += code_bytes);
-	code_next = map_start;
-	code_bytes = map_bytes;
-    }
+
+    code_prev = map_start;
+    code_bytes = map_bytes;
 
     ALLOC_CODE_STATS(atexit_alloc_code_stats());
-}
-
-static void *alloc_code(unsigned int alloc_bytes)
-{
-    void *res;
-
-    /* Align function entries. */
-    alloc_bytes = (alloc_bytes + 3) & ~3;
-
-    if (code_bytes < alloc_bytes)
-	morecore(alloc_bytes);
     ALLOC_CODE_STATS(++nr_allocs);
     ALLOC_CODE_STATS(total_alloc += alloc_bytes);
-    res = code_next;
-    code_next += alloc_bytes;
-    code_bytes -= alloc_bytes;
-    return res;
+    ALLOC_CODE_STATS(total_lost += alloc_bytes - map_bytes);
+
+    return code_prev;
 }
 
 void *hipe_alloc_code(Uint nrbytes, Eterm callees, Eterm *trampolines, Process *p)
@@ -180,6 +165,20 @@ void *hipe_alloc_code(Uint nrbytes, Eterm callees, Eterm *trampolines, Process *
 	return NULL;
     *trampolines = NIL;
     return alloc_code(nrbytes);
+}
+
+void hipe_dealloc_code(Uint address, Uint nrbytes)
+{
+    /* Align size to the system page boundary */
+    Uint aligned_bytes = (nrbytes + page_size - 1) & ~page_size;
+
+    /* Unmap the memory */
+    if (munmap((void*)address, aligned_bytes) != 0) {
+	perror("munmap");
+	abort();
+    }
+
+    ALLOC_CODE_STATS(total_lost -= aligned_bytes - nrbytes);
 }
 
 /* called from hipe_bif0.c:hipe_bifs_make_native_stub_2()
@@ -197,7 +196,7 @@ void *hipe_make_native_stub(void *beamAddress, unsigned int beamArity)
      * and P_ARITY offsets fit in 8-bit signed displacements or not.
      * The rel32 offset in the final jmp depends on its actual location,
      * which also depends on the size of the previous instructions.
-     * Arity is stored with a movb because (a) Björn tells me arities
+     * Arity is stored with a movb because (a) Bjï¿½rn tells me arities
      * are <= 255, and (b) a movb is smaller and faster than a movl.
      */
     unsigned int codeSize;

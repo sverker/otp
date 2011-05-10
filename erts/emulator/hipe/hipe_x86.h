@@ -55,4 +55,6 @@ extern void nbif_handle_fp_exception(void);
 extern void *hipe_alloc_code(Uint nrbytes, Eterm callees, Eterm *trampolines, Process *p);
 #define HIPE_ALLOC_CODE(n,c,t,p) hipe_alloc_code((n),(c),(t),(p))
 
+extern void hipe_dealloc_code(Uint address, Uint nrbytes);
+
 #endif /* HIPE_X86_H */

@@ -68,6 +68,9 @@ extern void hipe_ppc_inc_stack(void); /* we don't have the AEXTERN() fallback :-
 extern void *hipe_alloc_code(Uint nrbytes, Eterm callees, Eterm *trampolines, Process *p);
 #define HIPE_ALLOC_CODE(n,c,t,p) hipe_alloc_code((n),(c),(t),(p))
 
+extern void hipe_dealloc_code(Uint address, Uint nrbytes);
+#define HIPE_DEALLOC_CODE(n,c) hipe_dealloc_code((n),(c))
+
 #if !defined(__powerpc64__)
 extern const unsigned int fconv_constant[];
 #endif
