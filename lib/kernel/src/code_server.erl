@@ -37,6 +37,7 @@
 		path,
 		moddb,
 		namedb,
+		nativedb,
 		cache = no_cache,
 		mode = interactive,
 		on_load = []}).
@@ -60,9 +61,10 @@ init(Ref, Parent, [Root,Mode0]) ->
     register(?MODULE, self()),
     process_flag(trap_exit, true),
 
-    Db = ets:new(code, [private]),
-    foreach(fun (M) -> ets:insert(Db, {M,preloaded}) end, erlang:pre_loaded()),
-    ets:insert(Db, init:fetch_loaded()),
+    ModDb = ets:new(code, [private]),
+    NativeDb = ets:new(native_code, [private]),
+    foreach(fun (M) -> ets:insert(ModDb, {M,preloaded}) end, erlang:pre_loaded()),
+    ets:insert(ModDb, init:fetch_loaded()),
 
     Mode = 
 	case Mode0 of
@@ -85,8 +87,9 @@ init(Ref, Parent, [Root,Mode0]) ->
     Path = add_loader_path(IPath, Mode),
     State0 = #state{root = Root,
 		    path = Path,
-		    moddb = Db,
+		    moddb = ModDb,
 		    namedb = init_namedb(Path),
+		    nativedb = NativeDb,
 		    mode = Mode},
 
     State =
@@ -353,7 +356,7 @@ handle_call({delete,Mod0}, {_From,_Tag}, S) ->
 
 handle_call({purge,Mod0}, {_From,_Tag}, St0) ->
     do_mod_call(fun (M, St) ->
-			{reply,do_purge(M),St}
+			{reply,do_purge(M, St),St}
 		end, Mod0, false, St0);
 
 handle_call({soft_purge,Mod0}, {_From,_Tag}, St0) ->
@@ -1196,7 +1199,7 @@ do_load_binary(Module, File, Binary, Caller, St) ->
     case modp(Module) andalso modp(File) andalso is_binary(Binary) of
 	true ->
 	    case erlang:module_loaded(to_atom(Module)) of
-		true -> do_purge(Module);
+		true -> do_purge(Module, St);
 		false -> ok
 	    end,
 	    try_load_module(File, Module, Binary, Caller, St);
@@ -1243,20 +1246,27 @@ try_load_module(File, Mod, Bin, {From,_}=Caller, St0) ->
 	    {noreply,St}
     end.
 
-try_load_module_1(File, Mod, Bin, Caller, #state{moddb=Db}=St) ->
-    case is_sticky(Mod, Db) of
+try_load_module_1(File, Mod, Bin, Caller, #state{moddb=ModDb,nativedb=NativeDb}=St) ->
+    case is_sticky(Mod, ModDb) of
 	true ->                         %% Sticky file reject the load
 	    error_msg("Can't load module that resides in sticky dir\n",[]),
 	    {reply,{error,sticky_directory},St};
 	false ->
 	    case catch load_native_code(Mod, Bin) of
-		{module,Mod} = Module ->
-		    ets:insert(Db, {Mod,File}),
+		{module,Mod,CodeAddress,CodeSize} = Module ->
+		    Code = {CodeAddress,CodeSize},
+		    case ets:lookup(NativeDb, Mod) of
+			[] ->
+			    ets:insert(NativeDb, {Mod, {Code, undefined}});
+			[{Mod, {undefined, OldCode}}] ->
+			    ets:insert(NativeDb, {Mod, {Code, OldCode}})
+		    end,
+		    ets:insert(ModDb, {Mod,File}),
 		    {reply,Module,St};
 		no_native ->
 		    case erlang:load_module(Mod, Bin) of
 			{module,Mod} = Module ->
-			    ets:insert(Db, {Mod,File}),
+			    ets:insert(ModDb, {Mod,File}),
 			    post_beam_load(Mod),
 			    {reply,Module,St};
 			{error,on_load} ->
@@ -1379,14 +1389,14 @@ absname_vr([[X, $:]|Name], _, _AbsBase) ->
 %%  Kill all processes running code from *old* Module, and then purge the
 %%  module. Return true if any processes killed, else false.
 
-do_purge(Mod0) ->
+do_purge(Mod0, St) ->
     Mod = to_atom(Mod0),
     case erlang:check_old_code(Mod) of
 	false -> false;
-	true -> do_purge(processes(), Mod, false)
+	true -> do_purge(processes(), Mod, false, St)
     end.
 
-do_purge([P|Ps], Mod, Purged) ->
+do_purge([P|Ps], Mod, Purged, St) ->
     case erlang:check_process_code(P, Mod) of
 	true ->
 	    Ref = erlang:monitor(process, P),
@@ -1394,11 +1404,20 @@ do_purge([P|Ps], Mod, Purged) ->
 	    receive
 		{'DOWN',Ref,process,_Pid,_} -> ok
 	    end,
-	    do_purge(Ps, Mod, true);
+	    do_purge(Ps, Mod, true, St);
 	false ->
-	    do_purge(Ps, Mod, Purged)
+	    do_purge(Ps, Mod, Purged, St)
     end;
-do_purge([], Mod, Purged) ->
+do_purge([], Mod, Purged, #state{nativedb=NativeDb} = St) ->
+    case ets:lookup(NativeDb, Mod) of
+	[] ->
+	    OldCode = undefined;
+	[{Mod,{undefined, OldCode}}] ->
+	    ets:delete(NativeDb, Mod);
+	[{Mod,{Code, OldCode}}] ->
+	    ets:insert(NativeDb, {Mod, {undefined, Code}}),
+	    OldCode
+    end,
     catch erlang:purge_module(Mod),
     Purged.
 
