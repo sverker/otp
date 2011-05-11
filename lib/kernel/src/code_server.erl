@@ -319,8 +319,20 @@ handle_call({load_abs,File,Mod}, Caller, S) ->
 handle_call({load_binary,Mod,File,Bin}, Caller, S) ->
     do_load_binary(Mod, File, Bin, Caller, S);
 
-handle_call({load_native_partial,Mod,Bin}, {_From,_Tag}, S) ->
+handle_call({load_native_partial,Mod,Bin}, {_From,_Tag}, #state{nativedb=NativeDb} = S) ->
     Result = (catch hipe_unified_loader:load(Mod, Bin)),
+    case Result of
+	{module,Mod,CodeAddress,CodeSize} ->
+	    NewCode = {CodeAddress,CodeSize},
+	    case ets:lookup(NativeDb, Mod) of
+		[] ->
+		    ets:insert(NativeDb, {Mod, {NewCode, undefined}});
+		[{Mod, {Code, OldCode}}] ->
+		    ets:insert(NativeDb, {Mod, {NewCode, OldCode}})
+	    end,
+	    {module,Mod};
+	_ -> {error,Result}
+    end,
     Status = hipe_result_to_status(Result),
     {reply,Status,S};
 
@@ -1294,7 +1306,7 @@ load_native_code(Mod, Bin) ->
 
 hipe_result_to_status(Result) ->
     case Result of
-	{module,_} -> Result;
+	{module,Mod,_CodeAddress,_CodeSize} -> {module,Mod};
 	_ -> {error,Result}
     end.
 
