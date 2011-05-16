@@ -354,6 +354,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	      is_recursive = hipe_call_from_native_is_recursive(p, reg);
 
 	      p->i = (Eterm *)(p->def_arg_reg[3]);
+	      ASSERT((Eterm*)p->i != 5);
 	      p->arity = callee_arity;
           }
 
