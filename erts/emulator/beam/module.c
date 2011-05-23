@@ -68,6 +68,10 @@ static Module* module_alloc(Module* tmpl)
     obj->slot.index = -1;
     obj->nif = NULL;
     obj->old_nif = NULL;
+#ifdef HIPE
+    obj->hipe_code = NULL;
+    obj->old_hipe_code = NULL;
+#endif
     return obj;
 }
 

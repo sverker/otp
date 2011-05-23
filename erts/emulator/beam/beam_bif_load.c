@@ -34,6 +34,8 @@
 #include "erl_binary.h"
 #include "erl_nif.h"
 
+#include "hipe_bif0.h" // SVERK
+
 static void set_default_trace_pattern(Eterm module);
 static Eterm check_process_code(Process* rp, Module* modp);
 static void delete_code(Process *c_p, ErtsProcLocks c_p_locks, Module* modp);
@@ -233,6 +235,10 @@ BIF_RETTYPE delete_module_1(BIF_ALIST_1)
 	else {
 	    delete_export_references(BIF_ARG_1);
 	    delete_code(BIF_P, 0, modp);
+	    {
+		extern void hipe_delete_code(Process*,Eterm mod); // SVERK
+		hipe_delete_code(BIF_P, BIF_ARG_1);
+	    }
 	    res = am_true;
 	}
     }
@@ -415,6 +421,9 @@ check_process_code(Process* rp, Module* modp)
     if (modp == NULL) {		/* Doesn't exist. */
 	return am_false;
     } else if (modp->old_code == NULL) { /* No old code. */
+#ifdef HIPE
+	ASSERT(modp->old_hipe_code == NULL);
+#endif
 	return am_false;
     }
 
@@ -469,6 +478,18 @@ check_process_code(Process* rp, Module* modp)
 	}
     }
 
+#ifdef HIPE
+    /*
+     * Check all return addresses on native stack 
+     */
+    if (modp->old_hipe_code && rp->hipe.nstack) {
+	extern int check_nstack_process_code(Process*, Module*); // SVERK
+
+	if (check_nstack_process_code(rp, modp))
+	    return am_true;
+    }
+#endif
+
     /*
      * See if there are funs that refer to the old version of the module.
      */
@@ -478,8 +499,16 @@ check_process_code(Process* rp, Module* modp)
     for (oh = MSO(rp).first; oh; oh = oh->next) {
 	if (thing_subtag(oh->thing_word) == FUN_SUBTAG) {
 	    ErlFunThing* funp = (ErlFunThing*) oh;
+	    #ifdef HIPE
+	    extern int hipe_is_old_code(void*, Module*); // SVERK
+	    #endif
 
-	    if (INSIDE((BeamInstr *) funp->fe->address)) {
+	    if (INSIDE((BeamInstr *) funp->fe->address)
+# ifdef HIPE
+		|| hipe_is_old_code(funp->fe->native_address, modp) 		
+# endif
+		) {
+
 		if (done_gc) {
 		    return am_true;
 		} else {
@@ -665,6 +694,23 @@ purge_module(int module)
     modp->old_code_length = 0;
     modp->old_catches = BEAM_CATCHES_NIL;
     remove_from_address_table(code);
+
+#ifdef HIPE
+    /*
+     * Remove hipe code
+     */
+    {
+	struct hipe_code_header* ch;
+
+	for (ch = modp->old_hipe_code; ch; ch = ch->next) {
+	    // SVERK: Fill with bad code
+	    fprintf(stderr, "SVERK: Kill hipe code at %p -> %p\r\n",
+		    &ch->code, (char*)&ch->code + ch->code_size);
+	    sys_memset(&ch->code, 0xff, ch->code_size);
+	    //hipe_flush_icache_range(&ch->code, ch->code_size);
+	}
+    }
+#endif
     return 0;
 }
 
@@ -725,6 +771,10 @@ delete_code(Process *c_p, ErtsProcLocks c_p_locks, Module* modp)
     modp->code_length = 0;
     modp->catches = BEAM_CATCHES_NIL;
     modp->nif = NULL;
+#ifdef HIPE
+    modp->old_hipe_code = modp->hipe_code;
+    modp->hipe_code = NULL;
+#endif
 }
 
 

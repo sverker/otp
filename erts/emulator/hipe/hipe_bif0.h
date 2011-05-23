@@ -25,6 +25,15 @@
 #ifndef HIPE_BIF0_H
 #define HIPE_BIF0_H
 
+/*
+** Header of allocated native code
+*/
+struct hipe_code_header {
+    struct hipe_code_header* next;       /* for same module instance */
+    Uint code_size;  /* in bytes */ 
+    UWord code[1];   /* The actual native machine code follows */ 
+};
+
 extern Uint *hipe_bifs_find_pc_from_mfa(Eterm mfa);
 
 extern void hipe_mfa_info_table_init(void);

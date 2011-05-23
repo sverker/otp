@@ -29,6 +29,53 @@
 #include "hipe_stack.h"
 #include "hipe_gc.h"
 
+// SVERK: Maybe not the right place
+#include "hipe_bif0.h"
+int hipe_is_old_code(void* code_addr, Module* modp)
+{
+    struct hipe_code_header* ch;
+    for (ch = modp->old_hipe_code; ch; ch = ch->next) {
+	if (in_area(code_addr, &ch->code, ch->code_size)) {
+	    erts_fprintf(stderr, "SVERK: Found old hipe code in %T\r\n",
+			 make_atom(modp->module));
+	    return 1;
+	}
+    }
+    return 0;
+}
+// SVERK: Maybe not the right place
+int check_nstack_process_code(Process *p, Module* modp)
+{
+    Eterm *nsp;
+    Eterm *nsp_end;
+    const struct sdesc *sdesc;
+    unsigned int sdesc_size;
+    void* ra;  /* return addr */
+    struct nstack_walk_state walk_state;
+
+    if (!nstack_walk_init_check(p))
+	return 0;
+
+    nsp = nstack_walk_nsp_begin(p);
+    nsp_end = nstack_walk_nsp_end(p);
+
+    sdesc = nstack_walk_init_sdesc(p, &walk_state);
+
+    while (!nstack_walk_nsp_reached_end(nsp, nsp_end)) {
+	sdesc_size = nstack_walk_frame_size(sdesc);
+	ra = (void*) nstack_walk_frame_ra(nsp, sdesc);
+	if (hipe_is_old_code(ra, modp)) {
+	    return 1;
+	}
+	sdesc = hipe_find_sdesc((unsigned long)ra);
+	nsp = nstack_walk_next_frame(nsp, sdesc_size);
+    }
+    ASSERT(nsp == nsp_end);
+
+    return hipe_is_old_code(p->hipe.ngra, modp);
+}
+
+
 Eterm *fullsweep_nstack(Process *p, Eterm *n_htop)
 {
     /* known nstack walk state */

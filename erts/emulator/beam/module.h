@@ -36,6 +36,10 @@ typedef struct erl_module {
     unsigned catches, old_catches;
     struct erl_module_nif* nif;
     struct erl_module_nif* old_nif;
+#ifdef HIPE
+    struct hipe_code_header* hipe_code;
+    struct hipe_code_header* old_hipe_code;
+#endif
 } Module; 
 
 Module* erts_get_module(Eterm mod);

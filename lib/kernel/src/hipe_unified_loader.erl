@@ -245,6 +245,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% The call to export_funs/1 above updated the native addresses
       %% for the targets, so passing 'Addresses' is not needed.
       redirect(ReferencesToPatch),
+      hipe_bifs:add_native_code(Mod, CodeAddress, CodeSize),
       ?debug_msg("****************Loader Finished****************\n", []),
       {module,Mod}  % for compatibility with code:load_file/1
   end.
@@ -916,9 +917,9 @@ assert_local_patch(Address) when is_integer(Address) ->
 
 %% Beam: nil() | binary()  (used as a flag)
 
-enter_code(CodeSize, CodeBinary, CalleeMFAs, Mod, Beam) ->
+enter_code(CodeSize, CodeBinary, CalleeMFAs, _Mod, _Beam) ->
   true = byte_size(CodeBinary) =:= CodeSize,
-  hipe_bifs:update_code_size(Mod, Beam, CodeSize),
+  %%hipe_bifs:update_code_size(Mod, Beam, CodeSize),
   {CodeAddress,Trampolines} = hipe_bifs:enter_code(CodeBinary, CalleeMFAs),
   ?init_assert_patch(CodeAddress, byte_size(CodeBinary)),
   {CodeAddress,Trampolines}.

@@ -389,37 +389,46 @@ BIF_RETTYPE hipe_bifs_ref_set_2(BIF_ALIST_2)
     BIF_RET(BIF_ARG_1);
 }
 
+
 /*
  * Allocate memory and copy machine code to it.
  */
 BIF_RETTYPE hipe_bifs_enter_code_2(BIF_ALIST_2)
 {
-    Uint nrbytes;
+    Uint code_size;
+    Uint tot_size;
     void *bytes;
     void *address;
     Uint bitoffs;
     Uint bitsize;
     Eterm trampolines;
     Eterm *hp;
+    struct hipe_code_header* hdr;
 
     if (is_not_binary(BIF_ARG_1))
 	BIF_ERROR(BIF_P, BADARG);
-    nrbytes = binary_size(BIF_ARG_1);
+    code_size = binary_size(BIF_ARG_1);
     ERTS_GET_BINARY_BYTES(BIF_ARG_1, bytes, bitoffs, bitsize);
     ASSERT(bitoffs == 0);
     ASSERT(bitsize == 0);
     trampolines = NIL;
+    tot_size = code_size + offsetof(struct hipe_code_header, code);
 #ifdef HIPE_ALLOC_CODE
-    address = HIPE_ALLOC_CODE(nrbytes, BIF_ARG_2, &trampolines, BIF_P);
-    if (!address)
+    hdr = (struct hipe_code_header*) HIPE_ALLOC_CODE(tot_size, BIF_ARG_2,
+						     &trampolines, BIF_P);
+    if (!hdr)
 	BIF_ERROR(BIF_P, BADARG);
 #else
     if (is_not_nil(BIF_ARG_2))
 	BIF_ERROR(BIF_P, BADARG);
-    address = erts_alloc(ERTS_ALC_T_HIPE, nrbytes);
+    hdr = (struct hipe_code_header*) erts_alloc(ERTS_ALC_T_HIPE, tot_size);
 #endif
-    memcpy(address, bytes, nrbytes);
-    hipe_flush_icache_range(address, nrbytes);
+    fprintf(stderr, "SVERK: ALLOC native code at %p -> %p\r\n", hdr, (char*)hdr + tot_size);
+    hdr->next = NULL; /* set later in add_native_code */
+    hdr->code_size = code_size;
+    address = &hdr->code;
+    memcpy(address, bytes, code_size);
+    hipe_flush_icache_range(hdr, tot_size);
     hp = HAlloc(BIF_P, 3);
     hp[0] = make_arityval(2);
     hp[1] = address_to_term(address, BIF_P);
@@ -1860,85 +1869,111 @@ void hipe_patch_address(Uint *address, Eterm patchtype, Uint value)
     }
 }
 
-struct modinfo {
-    HashBucket bucket;		/* bucket.hvalue == atom_val(the module name) */
-    unsigned int code_size;
-};
+//struct modinfo {
+//    HashBucket bucket;          /* bucket.hvalue == atom_val(the module name) */
+//    unsigned int code_size;
+//};
+//
+//static Hash modinfo_table;
+//
+//static HashValue modinfo_hash(void *tmpl)
+//{
+//    Eterm mod = (Eterm)tmpl;
+//    return atom_val(mod);
+//}
+//
+//static int modinfo_cmp(void *tmpl, void *bucket)
+//{
+//    /* bucket->hvalue == modinfo_hash(tmpl), so just return 0 (match) */
+//    return 0;
+//}
+//
+//static void *modinfo_alloc(void *tmpl)
+//{
+//    struct modinfo *p;
+//
+//    p = (struct modinfo*)erts_alloc(ERTS_ALC_T_HIPE, sizeof(*p));
+//    p->code_size = 0;
+//    return &p->bucket;
+//}
+//
+//static void init_modinfo_table(void)
+//{
+//    HashFunctions f;
+//    static int init_done = 0;
+//
+//    if (init_done)
+//        return;
+//    init_done = 1;
+//    f.hash = (H_FUN) modinfo_hash;
+//    f.cmp = (HCMP_FUN) modinfo_cmp;
+//    f.alloc = (HALLOC_FUN) modinfo_alloc;
+//    f.free = (HFREE_FUN) NULL;
+//    hash_init(ERTS_ALC_T_HIPE, &modinfo_table, "modinfo_table", 11, f);
+//}
+//
+//BIF_RETTYPE hipe_bifs_update_code_size_3(BIF_ALIST_3)
+//{
+//    struct modinfo *p;
+//    Sint code_size;
+//
+//    init_modinfo_table();
+//
+//    if (is_not_atom(BIF_ARG_1) ||
+//        is_not_small(BIF_ARG_3) ||
+//        (code_size = signed_val(BIF_ARG_3)) < 0)
+//        BIF_ERROR(BIF_P, BADARG);
+//
+//    p = (struct modinfo*)hash_put(&modinfo_table, (void*)BIF_ARG_1);
+//
+//    if (is_nil(BIF_ARG_2))      /* some MFAs, not whole module */
+//        p->code_size += code_size;
+//    else                        /* whole module */
+//        p->code_size = code_size;
+//    BIF_RET(NIL);
+//}
+//
+//
+//BIF_RETTYPE hipe_bifs_code_size_1(BIF_ALIST_1)
+//{
+//    struct modinfo *p;
+//    unsigned int code_size;
+//
+//    init_modinfo_table();
+//
+//    if (is_not_atom(BIF_ARG_1))
+//        BIF_ERROR(BIF_P, BADARG);
+//
+//    p = (struct modinfo*)hash_get(&modinfo_table, (void*)BIF_ARG_1);
+//
+//    code_size = p ? p->code_size : 0;
+//    BIF_RET(make_small(code_size));
+//}
 
-static Hash modinfo_table;
+BIF_RETTYPE hipe_bifs_add_native_code_3(BIF_ALIST_3)
+{ /* (Mod, CodeAddr, CodeSize) */
+    Uint code_size;
+    void* code_start = term_to_address(BIF_ARG_2);
+    Module* modp;
+    struct hipe_code_header* hdr;
 
-static HashValue modinfo_hash(void *tmpl)
-{
-    Eterm mod = (Eterm)tmpl;
-    return atom_val(mod);
-}
-
-static int modinfo_cmp(void *tmpl, void *bucket)
-{
-    /* bucket->hvalue == modinfo_hash(tmpl), so just return 0 (match) */
-    return 0;
-}
-
-static void *modinfo_alloc(void *tmpl)
-{
-    struct modinfo *p;
-
-    p = (struct modinfo*)erts_alloc(ERTS_ALC_T_HIPE, sizeof(*p));
-    p->code_size = 0;
-    return &p->bucket;
-}
-
-static void init_modinfo_table(void)
-{
-    HashFunctions f;
-    static int init_done = 0;
-
-    if (init_done)
-	return;
-    init_done = 1;
-    f.hash = (H_FUN) modinfo_hash;
-    f.cmp = (HCMP_FUN) modinfo_cmp;
-    f.alloc = (HALLOC_FUN) modinfo_alloc;
-    f.free = (HFREE_FUN) NULL;
-    hash_init(ERTS_ALC_T_HIPE, &modinfo_table, "modinfo_table", 11, f);
-}
-
-BIF_RETTYPE hipe_bifs_update_code_size_3(BIF_ALIST_3)
-{
-    struct modinfo *p;
-    Sint code_size;
-
-    init_modinfo_table();
-
-    if (is_not_atom(BIF_ARG_1) ||
-	is_not_small(BIF_ARG_3) ||
-	(code_size = signed_val(BIF_ARG_3)) < 0)
+    if (is_not_atom(BIF_ARG_1) || !(modp = erts_get_module(BIF_ARG_1))
+	|| !code_start
+	|| !term_to_Uint(BIF_ARG_3, &code_size)) {
 	BIF_ERROR(BIF_P, BADARG);
+    }
 
-    p = (struct modinfo*)hash_put(&modinfo_table, (void*)BIF_ARG_1);
+    hdr = (struct hipe_code_header*)((char*)code_start - 
+				     offsetof(struct hipe_code_header, code)); 
+    hdr->next = modp->hipe_code;
+    modp->hipe_code = hdr;
 
-    if (is_nil(BIF_ARG_2))	/* some MFAs, not whole module */
-	p->code_size += code_size;
-    else			/* whole module */
-	p->code_size = code_size;
+    erts_fprintf(stderr, "SVERK: ADD native code to '%T' at %p -> %p\r\n",
+	    BIF_ARG_1, hdr, (char*)hdr->code + hdr->code_size);
+
     BIF_RET(NIL);
 }
 
-BIF_RETTYPE hipe_bifs_code_size_1(BIF_ALIST_1)
-{
-    struct modinfo *p;
-    unsigned int code_size;
-
-    init_modinfo_table();
-
-    if (is_not_atom(BIF_ARG_1))
-	BIF_ERROR(BIF_P, BADARG);
-
-    p = (struct modinfo*)hash_get(&modinfo_table, (void*)BIF_ARG_1);
-
-    code_size = p ? p->code_size : 0;
-    BIF_RET(make_small(code_size));
-}
 
 BIF_RETTYPE hipe_bifs_patch_insn_3(BIF_ALIST_3)
 {
@@ -1975,3 +2010,41 @@ BIF_RETTYPE hipe_bifs_patch_call_3(BIF_ALIST_3)
 	BIF_ERROR(BIF_P, BADARG);
     BIF_RET(NIL);
 }
+
+
+void hipe_delete_code(Process* p, Eterm module)
+{
+    DeclareTmpHeap(tmp,4+2,p);
+    Eterm mfa, mfa_cons, res;
+    int i;
+    UseTmpHeap(4+2, p); /* mfa-tuple + cons */
+
+    tmp[0] = make_arityval(3);
+    tmp[1] = module;
+    mfa = make_tuple(&tmp[0]);
+    CAR(&tmp[4]) = mfa;
+    CDR(&tmp[4]) = NIL;
+    mfa_cons = make_list(&tmp[4]);
+
+    for (i = 0; i < export_list_size(); i++) {
+	Export *ep = export_list(i);
+	if (ep != NULL && (ep->code[0] == module)) {
+	    if (ep->address == ep->code+3 &&
+		(ep->code[3] == (BeamInstr) em_apply_bif)) {
+		continue;
+	    }
+	    tmp[2] = ep->code[1];             /* func */
+	    tmp[3] = make_small(ep->code[2]); /* arity */
+	    res = hipe_bifs_invalidate_funinfo_native_addresses_1(p, mfa_cons);
+	    ASSERT(res == NIL);
+	    res = hipe_bifs_mark_referred_from_1(p, mfa);
+	    ASSERT(res == NIL);
+	    res = hipe_bifs_remove_refs_from_1(p, mfa);
+	    ASSERT(res == NIL);
+	    res = hipe_bifs_redirect_referred_from_1(p, mfa);
+	    ASSERT(res == NIL);
+	}
+    }
+    UnUseTmpHeap(4+2, p);
+}
+
