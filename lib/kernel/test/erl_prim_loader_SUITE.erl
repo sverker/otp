@@ -175,9 +175,11 @@ wait_really_started(Node, N) ->
 inet_disconnects(doc) -> ["Start a node using the 'inet' loading method, ",
 			  "then lose the connection."];
 inet_disconnects(Config) when is_list(Config) ->
-    case os:type() of
-	vxworks ->
+    case {os:type(), code:is_module_native(erl_boot_server)} of
+	{vxworks,_} ->
 	    {comment, "VxWorks: tested separately"};
+	{_,true} ->
+	    {skip, "Lacking trace support in HiPE"};
 	_ ->
 	    ?line Name = erl_prim_test_inet_disconnects,
 	    ?line Host = host(),
