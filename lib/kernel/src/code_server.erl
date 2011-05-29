@@ -359,6 +359,7 @@ handle_call({delete,Mod0}, {_From,_Tag}, S) ->
 		  case catch erlang:delete_module(M) of
 		      true ->
 			  ets:delete(St#state.moddb, M),
+			  delete_native(M, St),
 			  {reply,true,St};
 		      _ -> 
 			  {reply,false,St}
@@ -373,7 +374,7 @@ handle_call({purge,Mod0}, {_From,_Tag}, St0) ->
 
 handle_call({soft_purge,Mod0}, {_From,_Tag}, St0) ->
     do_mod_call(fun (M, St) ->
-			{reply,do_soft_purge(M),St}
+			{reply,do_soft_purge(M,St),St}
 		end, Mod0, true, St0);
 
 handle_call({is_loaded,Mod0}, {_From,_Tag}, St0) ->
@@ -1258,7 +1259,7 @@ try_load_module(File, Mod, Bin, {From,_}=Caller, St0) ->
 	    {noreply,St}
     end.
 
-try_load_module_1(File, Mod, Bin, Caller, #state{moddb=ModDb,nativedb=NativeDb}=St) ->
+try_load_module_1(File, Mod, Bin, Caller, #state{moddb=ModDb}=St) ->
     case is_sticky(Mod, ModDb) of
 	true ->                         %% Sticky file reject the load
 	    error_msg("Can't load module that resides in sticky dir\n",[]),
@@ -1266,14 +1267,9 @@ try_load_module_1(File, Mod, Bin, Caller, #state{moddb=ModDb,nativedb=NativeDb}=
 	false ->
 	    case catch load_native_code(Mod, Bin) of
 		{module,Mod,CodeAddress,CodeSize} = Module ->
-		    Code = {CodeAddress,CodeSize},
-		    case ets:lookup(NativeDb, Mod) of
-			[] ->
-			    ets:insert(NativeDb, {Mod, {Code, undefined}});
-			[{Mod, {undefined, OldCode}}] ->
-			    ets:insert(NativeDb, {Mod, {Code, OldCode}})
-		    end,
 		    ets:insert(ModDb, {Mod,File}),
+		    Code = {CodeAddress,CodeSize},
+		    insert_native(Mod, Code, St),
 		    {reply,Module,St};
 		no_native ->
 		    case erlang:load_module(Mod, Bin) of
@@ -1420,23 +1416,9 @@ do_purge([P|Ps], Mod, Purged, St) ->
 	false ->
 	    do_purge(Ps, Mod, Purged, St)
     end;
-do_purge([], Mod, Purged, #state{nativedb=NativeDb} = St) ->
-    case ets:lookup(NativeDb, Mod) of
-	[] ->
-	    OldCode = undefined;
-	[{Mod,{undefined, OldCode}}] ->
-	    ets:delete(NativeDb, Mod);
-	[{Mod,{Code, OldCode}}] ->
-	    ets:insert(NativeDb, {Mod, {undefined, Code}}),
-	    OldCode
-    end,
+do_purge([], Mod, Purged, St) ->
     catch erlang:purge_module(Mod),
-    case OldCode of
-	undefined ->
-	    ok;
-	{CodeAddress, CodeSize} ->
-	    hipe_bifs:free_code(CodeAddress, CodeSize)
-    end,
+    purge_native(Mod, St),
     Purged.
 
 %% do_soft_purge(Module)
@@ -1444,20 +1426,56 @@ do_purge([], Mod, Purged, #state{nativedb=NativeDb} = St) ->
 %% Return true in that case, false if procs remain (in this
 %% case old code is not purged)
 
-do_soft_purge(Mod) ->
+do_soft_purge(Mod, St) ->
     case erlang:check_old_code(Mod) of
 	false -> true;
-	true -> do_soft_purge(processes(), Mod)
+	true -> do_soft_purge(processes(), Mod, St)
     end.
 
-do_soft_purge([P|Ps], Mod) ->
+do_soft_purge([P|Ps], Mod, St) ->
     case erlang:check_process_code(P, Mod) of
 	true -> false;
-	false -> do_soft_purge(Ps, Mod)
+	false -> do_soft_purge(Ps, Mod, St)
     end;
-do_soft_purge([], Mod) ->
+do_soft_purge([], Mod, St) ->
     catch erlang:purge_module(Mod),
+    purge_native(Mod, St),
     true.
+
+%% insert native code
+insert_native(Mod, Code, #state{nativedb=NativeDb}) ->
+    case ets:lookup(NativeDb, Mod) of
+	[] ->
+	    ets:insert(NativeDb, {Mod, {Code, undefined}});
+	[{Mod, {OldCode, undefined}}] ->
+	    ets:insert(NativeDb, {Mod, {Code, OldCode}})
+    end.
+
+%% delete native code
+delete_native(Mod, #state{nativedb=NativeDb}) ->
+    case ets:lookup(NativeDb, Mod) of
+	[] ->
+	    ok;
+	[{Mod,{Code, undefined}}] ->
+	    ets:insert(NativeDb, {Mod, {undefined, Code}})
+    end.
+
+%% purge native code
+purge_native(Mod, #state{nativedb=NativeDb} = St) ->
+    case ets:lookup(NativeDb, Mod) of
+	[] ->
+	    ok;
+	[{Mod,{_Code, undefined}}] ->
+	    ok;
+	[{Mod,{undefined, OldCode}}] ->
+	    {CodeAddress, CodeSize} = OldCode,
+	    hipe_bifs:free_code(CodeAddress, CodeSize),
+	    ets:delete(NativeDb, Mod);
+	[{Mod,{Code, OldCode}}] ->
+	    {CodeAddress, CodeSize} = OldCode,
+	    hipe_bifs:free_code(CodeAddress, CodeSize),
+	    ets:insert(NativeDb, {Mod, {Code, undefined}})
+    end.
 
 is_loaded(M, Db) ->
     case ets:lookup(Db, M) of
