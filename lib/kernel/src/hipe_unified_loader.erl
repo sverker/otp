@@ -736,7 +736,7 @@ find_const(ConstNo, []) ->
 %%
 
 add_ref(CalleeMFA, Address, Addresses, RefType, Trampoline, RemoteOrLocal) ->
-  CallerMFA = address_to_mfa(Address, Addresses),
+  CallerMFA = address_to_mfa(Address, lists:reverse(Addresses)),
   %% just a sanity assertion below
   true = case RemoteOrLocal of
 	   local ->
