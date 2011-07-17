@@ -356,10 +356,11 @@ handle_call({ensure_loaded,Mod0}, Caller, St0) ->
 
 handle_call({delete,Mod0}, {_From,_Tag}, S) ->
     Fun = fun (M, St) ->
+		  Native_MFAs = [{M, F, A} || {F,A,_Address} <- M:module_info(native_addresses)],
 		  case catch erlang:delete_module(M) of
 		      true ->
 			  ets:delete(St#state.moddb, M),
-			  delete_native(M, St),
+			  delete_native(Native_MFAs, M, St),
 			  {reply,true,St};
 		      _ -> 
 			  {reply,false,St}
@@ -1446,17 +1447,23 @@ do_soft_purge([], Mod, St) ->
 insert_native(Mod, Code, #state{nativedb=NativeDb}) ->
     case ets:lookup(NativeDb, Mod) of
 	[] ->
+	    %% Module not loaded
 	    ets:insert(NativeDb, {Mod, {Code, undefined}});
 	[{Mod, {OldCode, undefined}}] ->
+	    %% Module loaded, no old code
+	    ets:insert(NativeDb, {Mod, {Code, OldCode}});
+	[{Mod, {undefined, OldCode}}] ->
+	    %% Module has been loaded, but then deleted
 	    ets:insert(NativeDb, {Mod, {Code, OldCode}})
     end.
 
 %% delete native code
-delete_native(Mod, #state{nativedb=NativeDb}) ->
+delete_native(Native_MFAs, Mod, #state{nativedb=NativeDb}) ->
     case ets:lookup(NativeDb, Mod) of
 	[] ->
 	    ok;
 	[{Mod,{Code, undefined}}] ->
+	    lists:foreach(fun hipe_bifs:remove_mfa_entry/1, Native_MFAs),
 	    ets:insert(NativeDb, {Mod, {undefined, Code}})
     end.
 

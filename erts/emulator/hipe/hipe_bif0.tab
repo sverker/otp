@@ -88,6 +88,7 @@ bif hipe_bifs:add_ref/2
 bif hipe_bifs:mark_referred_from/1
 bif hipe_bifs:remove_refs_from/1
 bif hipe_bifs:redirect_referred_from/1
+bif hipe_bifs:remove_mfa_entry/1
 
 # atoms used by add_ref/2
 atom call
