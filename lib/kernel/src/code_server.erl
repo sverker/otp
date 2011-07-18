@@ -1267,7 +1267,8 @@ try_load_module_1(File, Mod, Bin, Caller, #state{moddb=ModDb}=St) ->
 	    {reply,{error,sticky_directory},St};
 	false ->
 	    case catch load_native_code(Mod, Bin) of
-		{module,Mod,CodeAddress,CodeSize} = Module ->
+		{module,Mod,CodeAddress,CodeSize} ->
+		    Module = {module,Mod},
 		    ets:insert(ModDb, {Mod,File}),
 		    Code = {CodeAddress,CodeSize},
 		    insert_native(Mod, Code, St),
