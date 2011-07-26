@@ -1742,7 +1742,7 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
  * This ensures that remove_refs_from() won't remove them: any
  * removal is instead done at the end of redirect_referred_from().
  */
-BIF_RETTYPE hipe_bifs_mark_referred_from_1(BIF_ALIST_1) /* get_refs_from */
+BIF_RETTYPE hipe_bifs_mark_referred_from_1(BIF_ALIST_1)
 {
     struct mfa mfa;
     const struct hipe_mfa_info *p;

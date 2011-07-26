@@ -220,7 +220,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% Note: Addresses are sorted descending.
       {MFAs,Addresses} = exports(ExportMap, CodeAddress),
       %% Remove references to old versions of the module.
-      ReferencesToPatch = get_refs_from(MFAs, []),
+      mark_referred_from(MFAs),
       remove_refs_from(MFAs),
       %% Patch all dynamic references in the code.
       %%  Function calls, Atoms, Constants, System calls
@@ -243,7 +243,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% Patch referring functions to call the new function
       %% The call to export_funs/1 above updated the native addresses
       %% for the targets, so passing 'Addresses' is not needed.
-      redirect(ReferencesToPatch),
+      redirect(MFAs),
       ?debug_msg("****************Loader Finished****************\n", []),
       {module,Mod,CodeAddress,CodeSize}
   end.
@@ -769,15 +769,10 @@ patch_to_emu_step1(Mod) ->
     true ->
       %% Get exported functions
       MFAs = [{Mod,Fun,Arity} || {Fun,Arity} <- Mod:module_info(exports)],
-      %% get_refs_from/2 only finds references from compiled static
-      %% call sites to the module, but some native address entries
-      %% were added as the result of dynamic apply calls. We must
-      %% purge them too, but we have no explicit record of them.
-      %% Therefore invalidate all native addresses for the module.
-      %% emu_make_stubs/1 will repair the ones for compiled static calls.
+      %% Set attributes of hipe_mfa_info entry for MFAs to NULL.
       hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
-      %% Find all call sites that call these MFAs. As a side-effect,
-      %% create native stubs for any MFAs that are referred.
+      %% Mark references pointing to the MFAs with the flag
+      %% REF_FLAG_PENDING_REDIRECT so that they will not be removed.
       mark_referred_from(MFAs),
       case Mod == test of
 	true ->
@@ -801,14 +796,8 @@ is_loaded(M) when is_atom(M) ->
   end.
 
 %%--------------------------------------------------------------------
-%% Given a list of MFAs, tag them with their referred_from references.
-%% The resulting {MFA,Refs} list is later passed to redirect/1, once
-%% the MFAs have been bound to (possibly new) native-code addresses.
+%% Mark MFAs that they are to be redirected.
 %%
-get_refs_from(MFAs, []) ->
-  mark_referred_from(MFAs),
-  MFAs.
-
 mark_referred_from([MFA|MFAs]) ->
   hipe_bifs:mark_referred_from(MFA),
   mark_referred_from(MFAs);
