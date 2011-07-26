@@ -99,7 +99,6 @@ load_native_code(Mod, Bin) when is_atom(Mod), is_binary(Bin) ->
   Architecture = erlang:system_info(hipe_architecture),
   try chunk_name(Architecture) of
     ChunkTag ->
-      %% patch_to_emu(Mod),
       case code:get_chunk(Bin, ChunkTag) of
 	undefined -> no_native;
 	NativeCode when is_binary(NativeCode) ->
