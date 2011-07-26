@@ -240,7 +240,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
 	  export_funs(Mod, BeamBinary, Addresses, AddressesOfClosuresToPatch)
       end,
       %% Redirect references to the old module to the new module's BEAM stub.
-      patch_to_emu_step2(OldReferencesToPatch),
+      redirect(OldReferencesToPatch),
       %% Patch referring functions to call the new function
       %% The call to export_funs/1 above updated the native addresses
       %% for the targets, so passing 'Addresses' is not needed.
@@ -760,7 +760,8 @@ address_to_mfa(Address, []) ->
 %% load_native_code/2 calls this just before loading native code.
 %%
 patch_to_emu(Mod) ->
-  patch_to_emu_step2(patch_to_emu_step1(Mod)).
+  ReferencesToPatch = patch_to_emu_step1(Mod),
+  redirect(ReferencesToPatch).
 
 %% Step 1 must occur before the loading of native code updates
 %% references information or creates a new BEAM stub module.
@@ -785,10 +786,6 @@ patch_to_emu_step1(Mod) ->
       %% The first time we load the module, no redirection needs to be done.
       []
   end.
-
-%% Step 2 must occur after the new BEAM stub module is created.
-patch_to_emu_step2(ReferencesToPatch) ->
-  redirect(ReferencesToPatch).
 
 -spec is_loaded(Module::atom()) -> boolean().
 %% @doc Checks whether a module is loaded or not.
