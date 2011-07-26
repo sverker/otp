@@ -778,9 +778,15 @@ patch_to_emu_step1(Mod) ->
       hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
       %% Find all call sites that call these MFAs. As a side-effect,
       %% create native stubs for any MFAs that are referred.
-      ReferencesToPatch = get_refs_from(MFAs, []),
+      mark_referred_from(MFAs),
+      case Mod == test of
+	true ->
+	  io:format("ReferencesToPatch ~w\n",[{MFAs}]);
+	false ->
+	  ok
+      end,
       remove_refs_from(MFAs),
-      ReferencesToPatch;
+      MFAs;
     false ->
       %% The first time we load the module, no redirection needs to be done.
       []
@@ -810,10 +816,8 @@ mark_referred_from([]) ->
   [].
 
 %%--------------------------------------------------------------------
-%% Given a list of MFAs with referred_from references, update their
-%% callers to refer to their new native-code addresses.
-%%
-%% The {MFA,Refs} list must come from get_refs_from/2.
+%% Given a list of MFAs update their callers to refer to their new
+%% native-code addresses.
 %%
 redirect([MFA|Rest]) ->
   hipe_bifs:redirect_referred_from(MFA),
