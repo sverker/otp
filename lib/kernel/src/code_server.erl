@@ -356,7 +356,7 @@ handle_call({ensure_loaded,Mod0}, Caller, St0) ->
 
 handle_call({delete,Mod0}, {_From,_Tag}, S) ->
     Fun = fun (M, St) ->
-		  Native_MFAs = [{M, F, A} || {F,A,_Address} <- M:module_info(native_addresses)],
+		  Native_MFAs = [{M, F, A} || {F,A} <- M:module_info(exports)],
 		  case catch erlang:delete_module(M) of
 		      true ->
 			  ets:delete(St#state.moddb, M),
