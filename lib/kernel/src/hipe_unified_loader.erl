@@ -796,7 +796,7 @@ is_loaded(M) when is_atom(M) ->
   end.
 
 %%--------------------------------------------------------------------
-%% Mark MFAs that they are to be redirected.
+%% Mark MFAs that are to be redirected.
 %%
 mark_referred_from([MFA|MFAs]) ->
   hipe_bifs:mark_referred_from(MFA),
