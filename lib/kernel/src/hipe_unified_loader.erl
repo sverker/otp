@@ -40,7 +40,9 @@
 	 load_native_code/2,
 	 post_beam_load/1,
 	 load_module/3,
-	 load/2]).
+	 load/2,
+	 inval_mark_remove/1,
+	 redirect/1]).
 
 %%-define(DEBUG,true).
 -define(DO_ASSERT,true).
@@ -769,23 +771,25 @@ patch_to_emu_step1(Mod) ->
     true ->
       %% Get exported functions
       MFAs = [{Mod,Fun,Arity} || {Fun,Arity} <- Mod:module_info(exports)],
-      %% Set attributes of hipe_mfa_info entry for MFAs to NULL.
-      hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
-      %% Mark references pointing to the MFAs with the flag
-      %% REF_FLAG_PENDING_REDIRECT so that they will not be removed.
-      mark_referred_from(MFAs),
-      case Mod == test of
-	true ->
-	  io:format("ReferencesToPatch ~w\n",[{MFAs}]);
-	false ->
-	  ok
-      end,
-      remove_refs_from(MFAs),
+      inval_mark_remove(MFAs),
       MFAs;
     false ->
       %% The first time we load the module, no redirection needs to be done.
       []
   end.
+
+%%----------------------------------------------------------------
+%% For all the MFAs, invalidate the funinfo, mark for redirection
+%% and remove unmarked references.
+%%
+inval_mark_remove(MFAs) ->
+  %% Set attributes of hipe_mfa_info entry for MFAs to NULL.
+  hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
+  %% Mark referred_from references pointing to the MFAs with the flag
+  %% REF_FLAG_PENDING_REDIRECT so that they will not be removed.
+  mark_referred_from(MFAs),
+  %% Remove all references not marked for redirection.
+  remove_refs_from(MFAs).
 
 -spec is_loaded(Module::atom()) -> boolean().
 %% @doc Checks whether a module is loaded or not.

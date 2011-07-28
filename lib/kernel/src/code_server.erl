@@ -356,11 +356,11 @@ handle_call({ensure_loaded,Mod0}, Caller, St0) ->
 
 handle_call({delete,Mod0}, {_From,_Tag}, S) ->
     Fun = fun (M, St) ->
-		  Native_MFAs = [{M, F, A} || {F,A} <- M:module_info(exports)],
+		  MFAs = [{M, F, A} || {F,A} <- M:module_info(exports)],
 		  case catch erlang:delete_module(M) of
 		      true ->
 			  ets:delete(St#state.moddb, M),
-			  delete_native(Native_MFAs, M, St),
+			  delete_native(MFAs, M, St),
 			  {reply,true,St};
 		      _ -> 
 			  {reply,false,St}
@@ -1459,12 +1459,13 @@ insert_native(Mod, Code, #state{nativedb=NativeDb}) ->
     end.
 
 %% delete native code
-delete_native(Native_MFAs, Mod, #state{nativedb=NativeDb}) ->
+delete_native(MFAs, Mod, #state{nativedb=NativeDb}) ->
     case ets:lookup(NativeDb, Mod) of
 	[] ->
 	    ok;
 	[{Mod,{Code, undefined}}] ->
-	    lists:foreach(fun hipe_bifs:remove_mfa_entry/1, Native_MFAs),
+	    hipe_unified_loader:inval_mark_remove(MFAs),
+	    hipe_unified_loader:redirect(MFAs),
 	    ets:insert(NativeDb, {Mod, {undefined, Code}})
     end.
 
