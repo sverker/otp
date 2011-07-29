@@ -34,6 +34,13 @@
 	 big_boot_embedded/1,
 	 on_load_embedded/1, on_load_errors/1, native_early_modules/1]).
 
+%% native test cases
+-export([hipe_delete/1,
+	 hipe_purge/1,
+	 hipe_soft_purge/1,
+	 hipe_load_abs/1,
+	 hipe_load_file/1]).
+
 -export([init_per_testcase/2, end_per_testcase/2, 
 	 init_per_suite/1, end_per_suite/1,
 	 sticky_compiler/1]).
@@ -46,28 +53,26 @@
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [set_path, get_path, add_path, add_paths, del_path,
-     replace_path, load_file, load_abs, ensure_loaded,
-     delete, purge, soft_purge, is_loaded, all_loaded,
-     load_binary, dir_req, object_code, set_path_file,
-     pa_pz_option, add_del_path, dir_disappeared,
-     ext_mod_dep, clash, load_cached, start_node_with_cache,
-     add_and_rehash, where_is_file_no_cache,
-     where_is_file_cached, purge_stacktrace, mult_lib_roots,
-     bad_erl_libs, code_archive, code_archive2, on_load,
-     on_load_embedded, big_boot_embedded, on_load_errors, 
-     native_early_modules].
+    [{group, non_native},
+     {group, native}].
 
-groups() -> 
-    [].
+groups() ->
+    [{non_native, [],
+      [set_path, get_path, add_path, add_paths, del_path,
+       replace_path, load_file, load_abs, ensure_loaded,
+       delete, purge, soft_purge, is_loaded, all_loaded,
+       load_binary, dir_req, object_code, set_path_file,
+       pa_pz_option, add_del_path, dir_disappeared,
+       ext_mod_dep, clash, load_cached, start_node_with_cache,
+       add_and_rehash, where_is_file_no_cache,
+       where_is_file_cached, purge_stacktrace, mult_lib_roots,
+       bad_erl_libs, code_archive, code_archive2, on_load,
+       on_load_embedded, big_boot_embedded, on_load_errors,
+       native_early_modules]},
+     {native, [], [hipe_delete, hipe_purge, hipe_load_abs,
+		   hipe_load_file, hipe_soft_purge]}].
 
-init_per_group(_GroupName, Config) ->
-	Config.
-
-end_per_group(_GroupName, Config) ->
-	Config.
-
-init_per_suite(Config) ->
+init_per_group(non_native, Config) ->
     %% The compiler will no longer create a Beam file if
     %% the module name does not match the filename, so
     %% we must compile to a binary and write the Beam file
@@ -76,6 +81,40 @@ init_per_suite(Config) ->
     ?line File = filename:join(Dir, "code_a_test"),
     ?line {ok,code_b_test,Code} = compile:file(File, [binary]),
     ?line ok = file:write_file(File++".beam", Code),
+    ?line compile:file(code_b_test),
+    Config;
+
+init_per_group(native, Config) ->
+    HipeEnabled = is_hipe_enabled(),
+    case HipeEnabled of
+	true ->
+	    %% Compile code_a_test native
+	    ?line Dir = filename:dirname(code:which(?MODULE)),
+	    ?line File = filename:join(Dir, "code_a_test"),
+	    ?line {ok,code_b_test,Code} = compile:file(File, [binary,native]),
+	    ?line ok = file:write_file(File++".beam", Code),
+	    %% Compile code_b_test native
+	    ?line compile:file(code_b_test, [native]);
+	false ->
+	    ok
+    end,
+    [{hipe_enabled, HipeEnabled} | Config].
+
+is_hipe_enabled() ->
+    case erlang:system_info(hipe_architecture) of
+	undefined ->
+	    false;
+	_Architecture ->
+	    true
+    end.
+
+end_per_group(_GroupName, Config) ->
+    ?line code:purge(code_b_test),
+    ?line code:delete(code_b_test),
+    ?line code:purge(code_b_test),
+    Config.
+
+init_per_suite(Config) ->
     Config.
 
 end_per_suite(Config) ->
@@ -111,6 +150,14 @@ end_per_testcase(Config) ->
     true=code:set_path(P),
     P=code:get_path(),
     ok.
+
+run_hipe(Fun, Config) ->
+    case ?config(hipe_enabled, Config) of
+	true ->
+	    Fun(Config);
+	false ->
+	    {skip, "Native code support is not enabled"}
+    end.
 
 set_path(suite) -> [];
 set_path(doc) -> [];
@@ -287,6 +334,12 @@ dir_disappeared(Config) when is_list(Config) ->
     ?line non_existing = code:which(bubbelskrammel),
     ok.
 
+hipe_load_file(suite) -> [];
+hipe_load_file(doc) -> [];
+hipe_load_file(Config) when is_list(Config) ->
+    run_hipe(fun load_file/1, Config),
+    ok.
+
 load_file(suite) -> [];
 load_file(doc) -> [];
 load_file(Config) when is_list(Config) ->
@@ -302,6 +355,12 @@ load_file(Config) when is_list(Config) ->
 
 test_dir() ->
     filename:dirname(code:which(?MODULE)).
+
+hipe_load_abs(suite) -> [];
+hipe_load_abs(doc) -> [];
+hipe_load_abs(Config) when is_list(Config) ->
+    run_hipe(fun load_abs/1, Config),
+    ok.
 
 load_abs(suite) -> [];
 load_abs(doc) -> [];
@@ -334,6 +393,12 @@ ensure_loaded(Config) when is_list(Config) ->
 	    ok
     end.
 
+hipe_delete(suite) -> [];
+hipe_delete(doc) -> [];
+hipe_delete(Config) when is_list(Config) ->
+    run_hipe(fun delete/1, Config),
+    ok.
+
 delete(suite) -> [];
 delete(doc) -> [];
 delete(Config) when is_list(Config) ->
@@ -352,6 +417,12 @@ delete(Config) when is_list(Config) ->
     process_flag(trap_exit, OldFlag),
     ok.
 
+hipe_purge(suite) -> [];
+hipe_purge(doc) -> [];
+hipe_purge(Config) when is_list(Config) ->
+    run_hipe(fun purge/1, Config),
+    ok.
+
 purge(suite) -> [];
 purge(doc) -> [];
 purge(Config) when is_list(Config) ->
@@ -365,6 +436,12 @@ purge(Config) when is_list(Config) ->
     ?line true = code:purge(code_b_test),
     ?line true = code_b_test:check_exit(Pid),
     process_flag(trap_exit, OldFlag),
+    ok.
+
+hipe_soft_purge(suite) -> [];
+hipe_soft_purge(doc) -> [];
+hipe_soft_purge(Config) when is_list(Config) ->
+    run_hipe(fun soft_purge/1, Config),
     ok.
 
 soft_purge(suite) -> [];
