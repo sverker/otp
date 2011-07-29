@@ -428,26 +428,24 @@ BIF_RETTYPE hipe_bifs_enter_code_2(BIF_ALIST_2)
 }
 
 /*
- * Free memory
+ * Free memory allocated to store native code
  */
 BIF_RETTYPE hipe_bifs_free_code_2(BIF_ALIST_2)
 {
-    int ret;
     Uint address;
     Uint size;
     if (is_not_small(BIF_ARG_1) || is_not_small(BIF_ARG_2))
 	BIF_ERROR(BIF_P, BADARG);
     address = unsigned_val(BIF_ARG_1);
     size = unsigned_val(BIF_ARG_2);
-    erts_fprintf(stderr, "freeing address %i size %i\n", address, size);
 #ifdef HIPE_DEALLOC_CODE
     HIPE_DEALLOC_CODE(address, size);
 #else
     if (is_not_nil(BIF_ARG_2))
 	BIF_ERROR(BIF_P, BADARG);
-    // TODO: free the erts_alloced code.
-#endif  
-    BIF_RET(am_true);
+    erts_free(ERTS_ALC_T_HIPE, address);
+#endif
+    BIF_RET(NIL);
 }
 
 /*
