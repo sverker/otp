@@ -1276,28 +1276,6 @@ void hipe_mfa_info_table_init(void)
     hipe_mfa_info_table_init_lock();
 }
 
-static inline struct hipe_mfa_info *hipe_mfa_info_table_remove_locked(Eterm m, Eterm f, unsigned int arity)
-{
-    unsigned long h;
-    unsigned int i;
-    struct hipe_mfa_info **prev, *p;
-
-    h = HIPE_MFA_HASH(m, f, arity);
-    i = h & hipe_mfa_info_table.mask;
-    prev = &hipe_mfa_info_table.bucket[i];
-    p = *prev;
-    while (p) {
-      if (p->m == m && p->f == f && p->a == arity) {
-	*prev = p->bucket.next;
-	return NULL;
-      }
-      prev = &p->bucket.next;
-      p = p->bucket.next;
-    }
-    // TODO: return constants instead of NULL and -1
-    return -1;
-}
-
 static inline struct hipe_mfa_info *hipe_mfa_info_table_get_locked(Eterm m, Eterm f, unsigned int arity)
 {
     unsigned long h;
@@ -1847,75 +1825,6 @@ BIF_RETTYPE hipe_bifs_redirect_referred_from_1(BIF_ALIST_1)
 		ref = ref->next;
 	    }
 	}
-    }
-    hipe_mfa_info_table_unlock();
-    BIF_RET(NIL);
-}
-
-/* Clear all traces of a MFA in the mfa_info_table. Removes all 'refers_to' references
-   pointing to the MFA. Removes all the 'referred_from' references pointing to the MFA.
-   Finally, removes the whole MFA entry from the mfa_info_table. Used for example when
-   code:delete/1 is called.
- */
-BIF_RETTYPE hipe_bifs_remove_mfa_entry_1(BIF_ALIST_1)
-{
-    struct mfa mfa;
-    struct mfa mfa2;
-    struct hipe_mfa_info *p;
-    struct hipe_mfa_info_list **ref_to_prev, *ref_to;
-    struct ref **ref_from_prev, *ref_from;
-    int res;
-
-    if (!term_to_mfa(BIF_ARG_1, &mfa))
-	BIF_ERROR(BIF_P, BADARG);
-    hipe_mfa_info_table_lock();
-    p = hipe_mfa_info_table_get_locked(mfa.mod, mfa.fun, mfa.ari);
-    if (p) {
-	// Remove all refers_to references pointing to the MFA
-	ref_from_prev = &p->referred_from;
-	ref_from = *ref_from_prev;
-	while (ref_from) {
-	    // Remove the reference to MFA
-	    ref_to_prev = &ref_from->caller_mfa->refers_to;
-	    if (*ref_to_prev == 0) {
-		// incoming references already removed
-		break;
-	    }
-	    ref_to = *ref_to_prev;
-	    while (ref_to) {
-		if (ref_to->mfa == p) {
-		    *ref_to_prev = ref_to->next; // TODO: NEED to free info_list here
-		    break;
-		}
-		ref_to_prev = &ref_to->next;
-		ref_to = ref_to->next;
-	    }
-	    // Move to next mfa in list
-	    ref_from_prev = &ref_from->next;
-	    ref_from = ref_from->next;
-	}
-
-	// Remove the referred_from references pointing to the MFA
-	ref_to_prev = &p->refers_to;
-	ref_to = *ref_to_prev;
-	while (ref_to) {
-	    ref_from_prev = &ref_to->mfa->referred_from;
-	    ref_from = *ref_from_prev;
-	    while (ref_from) {
-		if (ref_from->caller_mfa == p) {
-		    *ref_from_prev = ref_from->next;
-		    break;
-		}
-		ref_from_prev = &ref_from->next;
-		ref_from = ref_from->next;
-	    }
-	    ref_to_prev = &ref_to->next;
-	    ref_to = ref_to->next;
-	}
-
-	// Remove the entire MFA entry
-	// TODO: check response
-	res = hipe_mfa_info_table_remove_locked(mfa.mod, mfa.fun, mfa.ari);
     }
     hipe_mfa_info_table_unlock();
     BIF_RET(NIL);
