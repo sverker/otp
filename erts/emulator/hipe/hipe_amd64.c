@@ -216,11 +216,16 @@ void hipe_dealloc_code(Uint address, Uint nrbytes)
 {
     /* Align size to the system page boundary */
     Uint aligned_bytes = (nrbytes + page_size - 1) & ~(page_size-1);
-    /* Unmap the memory */
-    if (munmap((void*)address, aligned_bytes) != 0) {
-	perror("munmap");
-	abort();
-    }
+
+//    /* Unmap the memory */
+//    if (munmap((void*)address, aligned_bytes) != 0) {
+//	perror("munmap");
+//	abort();
+//    }
+// SVERK: Fill with bad code instead
+    fprintf(stderr, "SVERK: Kill hipe code at %p -> %p\r\n",
+	    (void*)address, (void*)(address + aligned_bytes));
+    sys_memset(address, 0xff, aligned_bytes);
 
     ALLOC_CODE_STATS(total_lost -= aligned_bytes - nrbytes);
 }
