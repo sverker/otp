@@ -122,7 +122,7 @@ static void *alloc_code(unsigned int alloc_bytes)
     }
 
     /* Page-align the amount to allocate. */
-    map_bytes = (alloc_bytes + page_size - 1) & ~page_size;
+    map_bytes = (alloc_bytes + page_size - 1) & ~(page_size-1);
 
     /* Create a new memory mapping, ensuring it is executable
        and in the low 2GB of the address space. Also attempt
@@ -170,7 +170,7 @@ void *hipe_alloc_code(Uint nrbytes, Eterm callees, Eterm *trampolines, Process *
 void hipe_dealloc_code(Uint address, Uint nrbytes)
 {
     /* Align size to the system page boundary */
-    Uint aligned_bytes = (nrbytes + page_size - 1) & ~page_size;
+    Uint aligned_bytes = (nrbytes + page_size - 1) & ~(page_size-1);
 
     /* Unmap the memory */
     if (munmap((void*)address, aligned_bytes) != 0) {
