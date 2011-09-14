@@ -862,6 +862,10 @@ check_funs({'$M_EXPR','$F_EXPR',1},
 	    {hipe_unified_loader,patch_consts,3} | _]) -> 0;
 check_funs({'$M_EXPR',warning_msg,2},
 	   [{code_server,finish_on_load_report,2} | _]) -> 0;
+check_funs({'$M_EXPR',module_info,1},
+	   [{code_server,handle_call,3},
+	    {code_server,loop,1},
+	    {code_server,system_continue,3}]) -> 0;
 %% This is cheating! /raimo
 %% 
 %% check_funs(This = {M,_,_}, Path) ->
