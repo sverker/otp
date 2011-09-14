@@ -1288,7 +1288,8 @@ try_load_module_1(File, Mod, Bin, Caller, #state{moddb=ModDb}=St) ->
 		Error ->
 		    error_msg("Native loading of ~s failed: ~p\n",
 			      [File,Error]),
-		    {reply,ok,St}
+		    %% at lack of discrete error, we assume badfile
+		    {reply,{error,badfile},St}
 	    end
     end.
 
