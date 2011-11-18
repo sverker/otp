@@ -356,13 +356,18 @@ handle_call({ensure_loaded,Mod0}, Caller, St0) ->
 
 handle_call({delete,Mod0}, {_From,_Tag}, S) ->
     Fun = fun (M, St) ->
-		  MFAs = [{M, F, A} || {F,A} <- M:module_info(exports)],
-		  case catch erlang:delete_module(M) of
+		  case erlang:module_loaded(M) of
 		      true ->
-			  ets:delete(St#state.moddb, M),
-			  delete_native(MFAs, M, St),
-			  {reply,true,St};
-		      _ -> 
+			  MFAs = [{M, F, A} || {F,A} <- M:module_info(exports)],
+			  case catch erlang:delete_module(M) of
+			      true ->
+				  ets:delete(St#state.moddb, M),
+				  delete_native(MFAs, M, St),
+				  {reply,true,St};
+			      _ ->
+				  {reply,false,St}
+			  end;
+		      false ->
 			  {reply,false,St}
 		  end
 	  end,
