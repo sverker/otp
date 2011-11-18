@@ -347,10 +347,11 @@ typedef Uint32 ErtsAlcType_t; /* The type used for memory types */
 foreach my $t (@t_order) {
   print DST
     "#define ERTS_ALC_T_$t (",
-      ((get_number($a_tab{get_allocator($t_tab{$t})}) << $a_shift)
-       | (get_number($c_tab{get_class($t_tab{$t})}) << $c_shift)
-       | (get_number($t_tab{$t}) << $n_shift)),
-	 ")\n";
+    sprintf("0x%x",
+            ((get_number($a_tab{get_allocator($t_tab{$t})}) << $a_shift)
+             | (get_number($c_tab{get_class($t_tab{$t})}) << $c_shift)
+             | (get_number($t_tab{$t}) << $n_shift))),
+     ")\n";
 }
 
 
