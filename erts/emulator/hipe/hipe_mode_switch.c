@@ -206,8 +206,21 @@ static __inline__ void hipe_pop_beam_trap_frame(Process *p)
     p->stop += 2;
 }
 
+unsigned sverk_call_id = 0;
+struct {
+    Process* p;
+    unsigned call_id; 
+    unsigned cmd;
+    unsigned line;
+}sverk_hist[16];
+unsigned sverk_ix = 0;
+
+#define SVERK_TRACE sverk_hist[sverk_ix].p = p; sverk_hist[sverk_ix].cmd = cmd; sverk_hist[sverk_ix].call_id = sverk_call_id; sverk_hist[sverk_ix].line = __LINE__; sverk_ix = (sverk_ix+1) % 16;
+
+
 Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 {
+
     unsigned result;
 #if NR_ARG_REGS > 5
     /* When NR_ARG_REGS > 5, we need to protect the process' input
@@ -218,6 +231,9 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 #if NR_ARG_REGS > 4
     Eterm o_reds = p->def_arg_reg[4];
 #endif
+
+    sverk_call_id++;
+    SVERK_TRACE
 
     p->i = NULL;
     /* Set current_function to undefined. stdlib hibernate tests rely on it. */
@@ -236,10 +252,12 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	    /* Native called BEAM, which now tailcalls native. */
 	    hipe_pop_beam_trap_frame(p);
 	    result = hipe_tailcall_to_native(p, arity, reg);
+	    SVERK_TRACE
 	    break;
 	  }
 	  DPRINTF("calling %#lx/%u", (long)p->hipe.ncallee, arity);
 	  result = hipe_call_to_native(p, arity, reg);
+	  SVERK_TRACE
 	  break;
       }
       case HIPE_MODE_SWITCH_CMD_CALL_CLOSURE: {
@@ -265,10 +283,12 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	      /* Native called BEAM, which now tailcalls native. */
 	      hipe_pop_beam_trap_frame(p);
 	      result = hipe_tailcall_to_native(p, arity, reg);
+	      SVERK_TRACE
 	      break;
 	  }
 	  DPRINTF("calling %#lx/%u", (long)p->hipe.ncallee, arity);
 	  result = hipe_call_to_native(p, arity, reg);
+	  SVERK_TRACE
 	  break;
       }
       case HIPE_MODE_SWITCH_CMD_THROW: {
@@ -280,6 +300,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	  p->def_arg_reg[0] = exception_tag[GET_EXC_CLASS(p->freason)];
 	  hipe_find_handler(p);
 	  result = hipe_throw_to_native(p);
+	  SVERK_TRACE
 	  break;
       }
       case HIPE_MODE_SWITCH_CMD_RETURN: {
@@ -289,6 +310,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	  hipe_pop_beam_trap_frame(p);
 	  p->def_arg_reg[0] = reg[0];
 	  result = hipe_return_to_native(p);
+	  SVERK_TRACE
 	  break;
       }
     do_resume:
@@ -301,9 +323,11 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	      p->flags &= ~F_TIMO;
 	      JOIN_MESSAGE(p);
 	      p->def_arg_reg[0] = 0;	/* make_small(0)? */
+		  SVERK_TRACE
 	  } else
 	      p->def_arg_reg[0] = 1;	/* make_small(1)? */
 	  result = hipe_return_to_native(p);
+	      SVERK_TRACE
 	  break;
       }
       default:
@@ -312,16 +336,19 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
  do_return_from_native:
     DPRINTF("result == %#x (%s)", result, code_str(result));
     HIPE_CHECK_PCB(p);
+    SVERK_TRACE
     switch (result) {
       case HIPE_MODE_SWITCH_RES_RETURN: {
 	  hipe_return_from_native(p);
 	  reg[0] = p->def_arg_reg[0];
 	  DPRINTF("returning with r(0) == %#lx", reg[0]);
+	  SVERK_TRACE
 	  break;
       }
       case HIPE_MODE_SWITCH_RES_THROW: {
 	  DPRINTF("native throws freason %#lx fvalue %#lx", p->freason, p->fvalue);
 	  hipe_throw_from_native(p);
+	  SVERK_TRACE
 	  break;
       }
       case HIPE_MODE_SWITCH_RES_TRAP: {
@@ -344,24 +371,30 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 
           if (p->hipe.nsp != NULL) {
 	      is_recursive = hipe_trap_from_native_is_recursive(p);
+	      SVERK_TRACE
           }
 
 	  /* Schedule next process if current process was hibernated or is waiting
 	     for messages */
 	  if (p->flags & F_HIBERNATE_SCHED) {
 	      p->flags &= ~F_HIBERNATE_SCHED;
+	      SVERK_TRACE
 	      goto do_schedule;
 	  }
 	  if (p->status == P_WAITING) {
 	      for (i = 0; i < p->arity; ++i)
-		  p->arg_reg[i] = reg[i]; 	      
+		  p->arg_reg[i] = reg[i];
+	      SVERK_TRACE
 	      goto do_schedule;
 	  }
 
-	  if (is_recursive)
+	  if (is_recursive) {
 	      hipe_push_beam_trap_frame(p, reg, p->arity);
+	      SVERK_TRACE
+	  }
 	  
 	  result = HIPE_MODE_SWITCH_RES_CALL;
+	  SVERK_TRACE
 	  break;
       }
       case HIPE_MODE_SWITCH_RES_CALL: {
@@ -375,7 +408,9 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	  if (hipe_call_from_native_is_recursive(p, reg)) {
 	      /* BEAM called native, which now calls BEAM */
 	      hipe_push_beam_trap_frame(p, reg, p->arity);
+	      SVERK_TRACE
 	  }
+	  SVERK_TRACE
 	  break;
       }
       case HIPE_MODE_SWITCH_RES_CALL_CLOSURE: {
@@ -411,6 +446,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	  if ((Sint)closure->fe->address[-1] < 0) {
 	      /* Unloaded. Let beam_emu.c:call_fun() deal with it. */
 	      result = HIPE_MODE_SWITCH_RES_CALL_CLOSURE;
+	      SVERK_TRACE
 	  } else {
 	      /* The BEAM code is present. Prepare to call it. */
 
@@ -426,6 +462,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 
 	      /* Change result code to the faster plain CALL type. */
 	      result = HIPE_MODE_SWITCH_RES_CALL;
+	      SVERK_TRACE
 	  }
 	  /* Append the closure as the last parameter. Don't increment arity. */
 	  reg[arity] = p->hipe.closure;
@@ -437,7 +474,9 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 		 the arguments, free vars, and most
 		 importantly the closure, all are in reg[]. */
 	      hipe_push_beam_trap_frame(p, reg, arity+1);
+	      SVERK_TRACE
 	  }
+	  SVERK_TRACE
 	  break;
       }
       case HIPE_MODE_SWITCH_RES_SUSPEND: {
@@ -447,6 +486,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	  if (p->status != P_SUSPENDED)
 	      erts_add_to_runq(p);
 	  erts_smp_proc_unlock(p, ERTS_PROC_LOCK_STATUS);
+	  SVERK_TRACE
 	  goto do_schedule;
       }
       case HIPE_MODE_SWITCH_RES_WAIT:
@@ -455,16 +495,21 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 #ifdef ERTS_SMP
 	  /* XXX: BEAM has different entries for the locked and unlocked
 	     cases. HiPE doesn't, so we must check dynamically. */
-	  if (p->hipe_smp.have_receive_locks)
+	  if (p->hipe_smp.have_receive_locks) {
 	      p->hipe_smp.have_receive_locks = 0;
-	  else
+	      SVERK_TRACE
+	  }
+	  else {
 	      erts_smp_proc_lock(p, ERTS_PROC_LOCKS_MSG_RECEIVE);
+	      SVERK_TRACE
+	  }
 #endif
 	  p->i = hipe_beam_pc_resume;
 	  p->arity = 0;
 	  p->status = P_WAITING;
 	  erts_smp_proc_unlock(p, ERTS_PROC_LOCKS_MSG_RECEIVE);
       do_schedule:
+	  SVERK_TRACE
 	  {
 #if !(NR_ARG_REGS > 5)
 	      int reds_in = p->def_arg_reg[5];
@@ -505,12 +550,14 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	      if (p->i == hipe_beam_pc_resume) {
 		  p->i = NULL;
 		  p->arity = 0;
+		  SVERK_TRACE
 		  goto do_resume;
 	      }
 	  }
 	  HIPE_CHECK_PCB(p);
 	  result = HIPE_MODE_SWITCH_RES_CALL;
 	  p->def_arg_reg[3] = result;
+	  SVERK_TRACE
 	  return p;
       }
       case HIPE_MODE_SWITCH_RES_APPLY: {
@@ -527,21 +574,29 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 	      if (arity < 255) {
 		  reg[arity++] = CAR(list_val(args));
 		  args = CDR(list_val(args));
-	      } else
+	      } else {
+		  SVERK_TRACE
 		  goto do_apply_fail;
+	      }
 	  }
-	  if (is_not_nil(args))
+	  if (is_not_nil(args)) {
+	      SVERK_TRACE
 	      goto do_apply_fail;
+	  }
 
 	  /* find a native code entry point for {M,F,A} for a remote call */
 	  address = hipe_get_remote_na(mfa[0], mfa[1], arity);
-	  if (!address)
-		  goto do_apply_fail;
+	  if (!address) {
+	      SVERK_TRACE
+	      goto do_apply_fail;
+	  }
 	  p->hipe.ncallee = (void(*)(void)) address;
 	  result = hipe_tailcall_to_native(p, arity, reg);
+	  SVERK_TRACE
 	  goto do_return_from_native;
       do_apply_fail:
 	  p->freason = BADARG;
+          SVERK_TRACE
 	  goto do_throw_to_native;
       }
       default:
@@ -555,6 +610,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 #if NR_ARG_REGS > 5
     p->def_arg_reg[5] = reds_in;
 #endif
+    SVERK_TRACE
     return p;
 }
 
