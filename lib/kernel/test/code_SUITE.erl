@@ -25,6 +25,7 @@
 	 replace_path/1, load_file/1, load_abs/1, ensure_loaded/1,
 	 delete/1, purge/1, soft_purge/1, is_loaded/1, all_loaded/1,
 	 load_binary/1, dir_req/1, object_code/1, set_path_file/1,
+	 upgrade/1,
 	 sticky_dir/1, pa_pz_option/1, add_del_path/1,
 	 dir_disappeared/1, ext_mod_dep/1, clash/1,
 	 load_cached/1, start_node_with_cache/1, add_and_rehash/1,
@@ -43,6 +44,8 @@
 	 handle_event/2, handle_call/2, handle_info/2,
 	 terminate/2]).
 
+-export([compile_load/4]).
+
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
@@ -50,6 +53,7 @@ all() ->
      replace_path, load_file, load_abs, ensure_loaded,
      delete, purge, soft_purge, is_loaded, all_loaded,
      load_binary, dir_req, object_code, set_path_file,
+     upgrade,
      pa_pz_option, add_del_path, dir_disappeared,
      ext_mod_dep, clash, load_cached, start_node_with_cache,
      add_and_rehash, where_is_file_no_cache,
@@ -448,6 +452,36 @@ load_binary(Config) when is_list(Config) ->
     code:unstick_dir(TestDir),
     code:purge(code_b_test),
     code:delete(code_b_test),
+    ok.
+
+upgrade(Config) ->
+    DataDir = ?config(data_dir, Config),
+    Client = filename:join(DataDir, "upgrade_client.erl"),
+    Src = filename:join(DataDir, "upgradee.erl"),
+
+    compile_load(upgrade_client, Client, 0, hipe),
+    true = code:is_module_native(upgrade_client),
+
+    upgrade_client:run(Src, beam, beam),
+    upgrade_client:run(Src, beam, hipe),
+    upgrade_client:run(Src, hipe, beam),
+    upgrade_client:run(Src, hipe, hipe).
+    
+
+compile_load(Mod, Src, Ver, CodeType) ->
+    io:format("Compiling version ~p of ~p as ~p\n", [Ver, Mod, CodeType]),
+    {_IsNative,Opts} = case CodeType of
+			   beam -> {false,[]};
+			   hipe -> {true,[native]}
+		       end,
+    VerDef = list_to_atom("VERSION_" ++ integer_to_list(Ver)),
+    CompOpts = [binary, report, {d,VerDef} | Opts],
+
+    %io:format("compile:file(~p,~p)\n", [Src, CompOpts]),
+    {ok,Mod,Code} = compile:file(Src, CompOpts),
+    ObjFile = filename:basename(Src,".erl") ++ ".beam",
+    {module,Mod} = code:load_binary(Mod, ObjFile, Code),
+    %IsNative = code:is_module_native(Mod),
     ok.
 
 dir_req(suite) -> [];
