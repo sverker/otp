@@ -33,7 +33,6 @@
 %% =======================================================================
 
 -module(hipe_unified_loader).
-
 -compile(no_native).
 % 'no_native' is a workaround to avoid "The code server called unloaded module"
 % caused by Mod:module_info(exports) in patch_to_emu_step1() called by post_beam_load.
@@ -103,7 +102,7 @@ load_native_code(Mod, Bin) when is_atom(Mod), is_binary(Bin) ->
          try
            OldReferencesToPatch = patch_to_emu_step1(Mod),
            case load_module(Mod, NativeCode, Bin, OldReferencesToPatch) of
-             bad_crc -> no_native;
+             bad_crc -> no_native; % SVERK: What about the patch_to_emu_step1 that we did above?
              Result -> Result
            end
          after
@@ -217,7 +216,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% Note: Addresses are sorted descending.
       {MFAs,Addresses} = exports(ExportMap, CodeAddress),
       %% Remove references to old versions of the module.
-      ReferencesToPatch = get_refs_from(MFAs, []),
+      mark_referred_from(MFAs),
       remove_refs_from(MFAs),
       %% Patch all dynamic references in the code.
       %%  Function calls, Atoms, Constants, System calls
@@ -240,7 +239,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% Patch referring functions to call the new function
       %% The call to export_funs/1 above updated the native addresses
       %% for the targets, so passing 'Addresses' is not needed.
-      redirect(ReferencesToPatch),
+      redirect(MFAs),
       ?debug_msg("****************Loader Finished****************\n", []),
       {module,Mod}  % for compatibility with code:load_file/1
   end.
@@ -796,7 +795,7 @@ patch_to_emu_step1(Mod) ->
     true ->
       %% Get exported functions
       MFAs = [{Mod,Fun,Arity} || {Fun,Arity} <- Mod:module_info(exports)],
-      %% get_refs_from/2 only finds references from compiled static
+      %% mark_referred_from/2 only finds references from compiled static
       %% call sites to the module, but some native address entries
       %% were added as the result of dynamic apply calls. We must
       %% purge them too, but we have no explicit record of them.
@@ -805,9 +804,9 @@ patch_to_emu_step1(Mod) ->
       hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
       %% Find all call sites that call these MFAs. As a side-effect,
       %% create native stubs for any MFAs that are referred.
-      ReferencesToPatch = get_refs_from(MFAs, []),
+      mark_referred_from(MFAs),
       remove_refs_from(MFAs),
-      ReferencesToPatch;
+      MFAs;
     false ->
       %% The first time we load the module, no redirection needs to be done.
       []
@@ -815,7 +814,7 @@ patch_to_emu_step1(Mod) ->
 
 %% Step 2 must occur after the new BEAM stub module is created.
 patch_to_emu_step2(ReferencesToPatch) ->
-  emu_make_stubs(ReferencesToPatch),
+  %emu_make_stubs(ReferencesToPatch),
   redirect(ReferencesToPatch).
 
 -spec is_loaded(Module::atom()) -> boolean().
@@ -826,29 +825,26 @@ is_loaded(M) when is_atom(M) ->
   catch _:_ -> false
   end.
 
--ifdef(notdef).
-emu_make_stubs([{MFA,_Refs}|Rest]) ->
-  make_stub(MFA),
-  emu_make_stubs(Rest);
-emu_make_stubs([]) ->
-  [].
+%emu_make_stubs([{MFA,_Refs}|Rest]) ->
+%  make_stub(MFA),
+%  emu_make_stubs(Rest);
+%emu_make_stubs([]) ->
+%  [].
+%
+%make_stub({_,_,A} = MFA) ->
+%  EmuAddress = hipe_bifs:get_emu_address(MFA),
+%  StubAddress = hipe_bifs:make_native_stub(EmuAddress, A),
+%  hipe_bifs:set_funinfo_native_address(MFA, StubAddress).
 
-make_stub({_,_,A} = MFA) ->
-  EmuAddress = hipe_bifs:get_emu_address(MFA),
-  StubAddress = hipe_bifs:make_native_stub(EmuAddress, A),
-  hipe_bifs:set_funinfo_native_address(MFA, StubAddress).
--else.
-emu_make_stubs(_) -> [].
--endif.
 
 %%--------------------------------------------------------------------
 %% Given a list of MFAs, tag them with their referred_from references.
 %% The resulting {MFA,Refs} list is later passed to redirect/1, once
 %% the MFAs have been bound to (possibly new) native-code addresses.
 %%
-get_refs_from(MFAs, []) ->
-  mark_referred_from(MFAs),
-  MFAs.
+%get_refs_from(MFAs, []) ->
+%  mark_referred_from(MFAs),
+%  MFAs.
 
 mark_referred_from([MFA|MFAs]) ->
   hipe_bifs:mark_referred_from(MFA),
