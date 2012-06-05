@@ -560,13 +560,13 @@ BIF_RETTYPE hipe_bifs_merge_term_1(BIF_ALIST_1)
     BIF_RET(val);
 }
 
-struct mfa {
+struct hipe_mfa {
     Eterm mod;
     Eterm fun;
     Uint  ari;
 };
 
-static int term_to_mfa(Eterm term, struct mfa *mfa)
+static int term_to_mfa(Eterm term, struct hipe_mfa *mfa)
 {
     Eterm mod, fun, a;
     Uint ari;
@@ -624,7 +624,7 @@ static Uint *hipe_find_emu_address(Eterm mod, Eterm name, unsigned int arity)
 
 Uint *hipe_bifs_find_pc_from_mfa(Eterm term)
 {
-    struct mfa mfa;
+    struct hipe_mfa mfa;
 
     if (!term_to_mfa(term, &mfa))
 	return NULL;
@@ -656,7 +656,7 @@ static void *hipe_get_emu_address(Eterm m, Eterm f, unsigned int arity, int is_r
 #if 0 /* XXX: unused */
 BIF_RETTYPE hipe_bifs_get_emu_address_1(BIF_ALIST_1)
 {
-    struct mfa mfa;
+    struct hipe_mfa mfa;
     void *address;
 
     if (!term_to_mfa(BIF_ARG_1, &mfa))
@@ -671,7 +671,7 @@ BIF_RETTYPE hipe_bifs_set_native_address_3(BIF_ALIST_3)
     Eterm *pc;
     void *address;
     int is_closure;
-    struct mfa mfa;
+    struct hipe_mfa mfa;
 
     switch (BIF_ARG_3) {
       case am_false:
@@ -1188,7 +1188,7 @@ struct hipe_mfa_info {
     Eterm *beam_code;
     Uint orig_beam_op;
     struct hipe_mfa_info_list *refers_to;
-    struct ref *referred_from;
+    struct hipe_ref *referred_from;
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
     void *trampoline;
 #endif
@@ -1390,7 +1390,7 @@ void hipe_mfa_set_trampoline(Eterm m, Eterm f, unsigned int arity, void *trampol
 
 BIF_RETTYPE hipe_bifs_set_funinfo_native_address_3(BIF_ALIST_3)
 {
-    struct mfa mfa;
+    struct hipe_mfa mfa;
     void *address;
     int is_exported;
 
@@ -1412,7 +1412,7 @@ BIF_RETTYPE hipe_bifs_set_funinfo_native_address_3(BIF_ALIST_3)
 BIF_RETTYPE hipe_bifs_invalidate_funinfo_native_addresses_1(BIF_ALIST_1)
 {
     Eterm lst;
-    struct mfa mfa;
+    struct hipe_mfa mfa;
     struct hipe_mfa_info *p;
 
     hipe_mfa_info_table_lock();
@@ -1553,7 +1553,7 @@ BIF_RETTYPE hipe_find_na_or_make_stub(BIF_ALIST_3)
 
 BIF_RETTYPE hipe_bifs_find_na_or_make_stub_2(BIF_ALIST_2)
 {
-    struct mfa mfa;
+    struct hipe_mfa mfa;
     void *address;
     int is_remote;
 
@@ -1647,12 +1647,12 @@ struct hipe_mfa_info_list {
     struct hipe_mfa_info_list *next;
 };
 
-struct ref {
+struct hipe_ref {
     struct hipe_mfa_info *caller_mfa;
     void *address;
     void *trampoline;
     unsigned int flags;
-    struct ref *next;
+    struct hipe_ref *next;
 };
 #define REF_FLAG_IS_LOAD_MFA		1	/* bit 0: 0 == call, 1 == load_mfa */
 #define REF_FLAG_IS_REMOTE		2	/* bit 1: 0 == local, 1 == remote */
@@ -1663,16 +1663,16 @@ struct ref {
  */
 BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
 {
-    struct mfa callee;
+    struct hipe_mfa callee;
     Eterm *tuple;
-    struct mfa caller;
+    struct hipe_mfa caller;
     void *address;
     void *trampoline;
     unsigned int flags;
     struct hipe_mfa_info *callee_mfa;
     struct hipe_mfa_info *caller_mfa;
     struct hipe_mfa_info_list *refers_to;
-    struct ref *ref;
+    struct hipe_ref *ref;
 
     if (!term_to_mfa(BIF_ARG_1, &callee))
 	goto badarg;
@@ -1742,9 +1742,9 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
  */
 BIF_RETTYPE hipe_bifs_mark_referred_from_1(BIF_ALIST_1) /* get_refs_from */
 {
-    struct mfa mfa;
+    struct hipe_mfa mfa;
     const struct hipe_mfa_info *p;
-    struct ref *ref;
+    struct hipe_ref *ref;
 
     if (!term_to_mfa(BIF_ARG_1, &mfa))
 	BIF_ERROR(BIF_P, BADARG);
@@ -1759,10 +1759,10 @@ BIF_RETTYPE hipe_bifs_mark_referred_from_1(BIF_ALIST_1) /* get_refs_from */
 
 BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
 {
-    struct mfa mfa;
+    struct hipe_mfa mfa;
     struct hipe_mfa_info *caller_mfa, *callee_mfa;
     struct hipe_mfa_info_list *refers_to, *tmp_refers_to;
-    struct ref **prev, *ref;
+    struct hipe_ref **prev, *ref;
 
     if (!term_to_mfa(BIF_ARG_1, &mfa))
 	BIF_ERROR(BIF_P, BADARG);
@@ -1781,7 +1781,7 @@ BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
 			prev = &ref->next;
 			ref = ref->next;
 		    } else {
-			struct ref *tmp = ref;
+			struct hipe_ref *tmp = ref;
 			ref = ref->next;
 			*prev = ref;
 			erts_free(ERTS_ALC_T_HIPE, tmp);
@@ -1807,9 +1807,9 @@ BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
  */
 BIF_RETTYPE hipe_bifs_redirect_referred_from_1(BIF_ALIST_1)
 {
-    struct mfa mfa;
+    struct hipe_mfa mfa;
     struct hipe_mfa_info *p;
-    struct ref **prev, *ref;
+    struct hipe_ref **prev, *ref;
     int is_remote, res;
     void *new_address;
 
@@ -1832,7 +1832,7 @@ BIF_RETTYPE hipe_bifs_redirect_referred_from_1(BIF_ALIST_1)
 		    fprintf(stderr, "%s: patch failed\r\n", __FUNCTION__);
 		ref->flags &= ~REF_FLAG_PENDING_REDIRECT;
 		if (ref->flags & REF_FLAG_PENDING_REMOVE) {
-		    struct ref *tmp = ref;
+		    struct hipe_ref *tmp = ref;
 		    ref = ref->next;
 		    *prev = ref;
 		    erts_free(ERTS_ALC_T_HIPE, tmp);
