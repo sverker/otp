@@ -1510,8 +1510,10 @@ static void *hipe_get_na_nofail_locked(Eterm m, Eterm f, unsigned int a, int is_
 
 	/* bummer, install stub, checking if one already existed */
 	address = p->remote_address;
-	if (address)
+	if (address) {
+	    abort();
 	    return address;
+	}
     } else
 	p = hipe_mfa_info_table_put_locked(m, f, a);
     address = hipe_make_stub(m, f, a, is_remote);
@@ -1705,6 +1707,8 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
     }
     switch (tuple[5]) {
       case am_local:
+	fprintf(stderr, "SVERK doesn't like local refs\r\n");
+	abort();
 	break;
       case am_remote:
 	flags |= REF_FLAG_IS_REMOTE;

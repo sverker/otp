@@ -749,8 +749,12 @@ add_ref(CalleeMFA, Address, Addresses, RefType, Trampoline, RemoteOrLocal) ->
 	   remote ->
 	     true
 	 end,
-  %% io:format("Adding ref ~w\n",[{CallerMFA, CalleeMFA, Address, RefType}]),
-  hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline,RemoteOrLocal}).
+  case RemoteOrLocal of
+      local -> ignore; % SVERK try ignore local refs
+      remote ->
+	%% io:format("Adding ref ~w\n",[{CallerMFA, CalleeMFA, Address, RefType}]),
+	hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline,RemoteOrLocal})
+  end.
 
 % For FunDefs sorted from low to high addresses
 address_to_mfa_lth(Address, FunDefs) ->
