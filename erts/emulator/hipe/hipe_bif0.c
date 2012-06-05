@@ -1502,9 +1502,7 @@ static void *hipe_get_na_nofail_locked(Eterm m, Eterm f, unsigned int a, int is_
     p = hipe_mfa_info_table_get_locked(m, f, a);
     if (p) {
 	/* find address, predicting for a runtime apply call */
-	address = p->remote_address;
-	if (!is_remote)
-	    address = p->local_address;
+	address = is_remote ? p->remote_address : p->local_address;
 	if (address)
 	    return address;
 
@@ -1754,9 +1752,33 @@ BIF_RETTYPE hipe_bifs_mark_referred_from_1(BIF_ALIST_1) /* get_refs_from */
 	BIF_ERROR(BIF_P, BADARG);
     hipe_mfa_info_table_lock();
     p = hipe_mfa_info_table_get_locked(mfa.mod, mfa.fun, mfa.ari);
-    if (p)
-	for (ref = p->referred_from; ref != NULL; ref = ref->next)
-	    ref->flags |= REF_FLAG_PENDING_REDIRECT;
+    if (p) {
+	erts_fprintf(stderr, "SVERK: START mark refs to %T:%T/%u\r\n",
+		p->m, p->f, p->a);		    
+	for (ref = p->referred_from; ref != NULL; ref = ref->next) {
+	    if (ref->flags & REF_FLAG_IS_REMOTE) {
+		ref->flags |= REF_FLAG_PENDING_REDIRECT;
+		erts_fprintf(stderr, "SVERK: mark ref from %T:%T/%u\r\n",
+			ref->caller_mfa->m,
+			ref->caller_mfa->f,
+			ref->caller_mfa->a);		    
+	    }
+	    else {
+		erts_fprintf(stderr, "SVERK: ignore local ref from %T:%T/%u\r\n",
+		     ref->caller_mfa->m,
+		     ref->caller_mfa->f,
+		     ref->caller_mfa->a);		    
+	    }
+
+
+	}
+	erts_fprintf(stderr, "SVERK: DONE mark refs to %T:%T/%u\r\n",
+		p->m, p->f, p->a);		    	
+    }
+    else {
+	erts_fprintf(stderr, "SVERK: (mark refs to) not found %T:%T/%u\r\n",
+		     mfa.mod, mfa.fun, mfa.ari);		    	
+    }
     hipe_mfa_info_table_unlock();
     BIF_RET(NIL);
 }
@@ -1773,6 +1795,10 @@ BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
     hipe_mfa_info_table_lock();
     caller_mfa = hipe_mfa_info_table_get_locked(mfa.mod, mfa.fun, mfa.ari);
     if (caller_mfa) {
+	erts_fprintf(stderr, "SVERK: START remove refs from %T:%T/%u\r\n",
+		caller_mfa->m,
+		caller_mfa->f,
+		caller_mfa->a);		    
 	refers_to = caller_mfa->refers_to;
 	while (refers_to) {
 	    callee_mfa = refers_to->mfa;
@@ -1781,11 +1807,19 @@ BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
 	    while (ref) {
 		if (ref->caller_mfa == caller_mfa) {
 		    if (ref->flags & REF_FLAG_PENDING_REDIRECT) {
+			erts_fprintf(stderr, "SVERK: set pending REMOVE to %T:%T/%u\r\n",
+				callee_mfa->m,
+				callee_mfa->f,
+				callee_mfa->a);		    
 			ref->flags |= REF_FLAG_PENDING_REMOVE;
 			prev = &ref->next;
 			ref = ref->next;
 		    } else {
 			struct hipe_ref *tmp = ref;
+			erts_fprintf(stderr, "SVERK: remove ref to %T:%T/%u\r\n",
+				callee_mfa->m,
+				callee_mfa->f,
+				callee_mfa->a);			
 			ref = ref->next;
 			*prev = ref;
 			erts_free(ERTS_ALC_T_HIPE, tmp);
@@ -1800,6 +1834,12 @@ BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
 	    erts_free(ERTS_ALC_T_HIPE, tmp_refers_to);
 	}
 	caller_mfa->refers_to = NULL;
+	erts_fprintf(stderr, "SVERK: DONE remove refs from %T:%T/%u\r\n",
+		caller_mfa->m, caller_mfa->f, caller_mfa->a);		    
+    }
+    else {
+	erts_fprintf(stderr, "SVERK: (remove refs from) not found %T:%T/%u\r\n",
+		mfa.mod, mfa.fun, mfa.ari);		    
     }
     hipe_mfa_info_table_unlock();
     BIF_RET(NIL);
@@ -1819,9 +1859,14 @@ BIF_RETTYPE hipe_bifs_redirect_referred_from_1(BIF_ALIST_1)
 
     if (!term_to_mfa(BIF_ARG_1, &mfa))
 	BIF_ERROR(BIF_P, BADARG);
+
     hipe_mfa_info_table_lock();
     p = hipe_mfa_info_table_get_locked(mfa.mod, mfa.fun, mfa.ari);
+
     if (p) {
+	erts_fprintf(stderr, "SVERK: START redirect towards %T:%T/%u\r\n",
+		p->m, p->f, p->a);		    
+
 	prev = &p->referred_from;
 	ref = *prev;
 	while (ref) {
@@ -1837,18 +1882,36 @@ BIF_RETTYPE hipe_bifs_redirect_referred_from_1(BIF_ALIST_1)
 		ref->flags &= ~REF_FLAG_PENDING_REDIRECT;
 		if (ref->flags & REF_FLAG_PENDING_REMOVE) {
 		    struct hipe_ref *tmp = ref;
+		    erts_fprintf(stderr, "SVERK: REMOVE??? PENDING redirect from %T:%T/%u\r\n",
+			    ref->caller_mfa->m,
+			    ref->caller_mfa->f,
+			    ref->caller_mfa->a);		    		   
 		    ref = ref->next;
 		    *prev = ref;
 		    erts_free(ERTS_ALC_T_HIPE, tmp);
 		} else {
+		    erts_fprintf(stderr, "SVERK: PENDING redirect from %T:%T/%u\r\n",
+			    ref->caller_mfa->m,
+			    ref->caller_mfa->f,
+			    ref->caller_mfa->a);
 		    prev = &ref->next;
 		    ref = ref->next;
 		}
 	    } else {
+		erts_fprintf(stderr, "SVERK: SKIP redirect from %T:%T/%u\r\n",
+			ref->caller_mfa->m,
+			ref->caller_mfa->f,
+			ref->caller_mfa->a);
 		prev = &ref->next;
 		ref = ref->next;
 	    }
 	}
+	erts_fprintf(stderr, "SVERK: DONE redirect towards %T:%T/%u\r\n",
+		p->m, p->f, p->a);
+    }
+    else {
+	erts_fprintf(stderr, "SVERK: (redirect) not found: %T:%T/%u\r\n",
+		mfa.mod, mfa.fun, mfa.ari);   
     }
     hipe_mfa_info_table_unlock();
     BIF_RET(NIL);
