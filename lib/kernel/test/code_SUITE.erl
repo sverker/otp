@@ -455,20 +455,23 @@ load_binary(Config) when is_list(Config) ->
     ok.
 
 upgrade(Config) ->
+    upgrade_do(Config, beam),
+    %%upgrade_do(Config, hipe),   
+    ok.
+
+upgrade_do(Config, ClientType) ->
     DataDir = ?config(data_dir, Config),
-    Client = filename:join(DataDir, "upgrade_client.erl"),
-    Src = filename:join(DataDir, "upgradee.erl"),
 
-    compile_load(upgrade_client, Client, 0, hipe),
-    true = code:is_module_native(upgrade_client),
+    compile_load(upgrade_client, DataDir, 0, ClientType),    
 
-    upgrade_client:run(Src, beam, beam),
-    upgrade_client:run(Src, beam, hipe),
-    upgrade_client:run(Src, hipe, beam),
-    upgrade_client:run(Src, hipe, hipe).
-    
+    %upgrade_client:run(Src, beam, beam),
+    %upgrade_client:run(Src, beam, hipe),
+    %upgrade_client:run(Src, hipe, beam),
+    upgrade_client:run(DataDir, hipe, hipe).
 
-compile_load(Mod, Src, Ver, CodeType) ->
+
+compile_load(Mod, Dir, Ver, CodeType) ->
+    Src = filename:join(Dir, atom_to_list(Mod) ++ ".erl"),
     io:format("Compiling version ~p of ~p as ~p\n", [Ver, Mod, CodeType]),
     {_IsNative,Opts} = case CodeType of
 			   beam -> {false,[]};
