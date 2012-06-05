@@ -455,28 +455,39 @@ load_binary(Config) when is_list(Config) ->
     ok.
 
 upgrade(Config) ->
+    %upgrade_do(Config, beam),
+    upgrade_do(Config, hipe),   
+    ok.
+
+upgrade_do(Config, ClientType) ->
     DataDir = ?config(data_dir, Config),
-    Client = filename:join(DataDir, "upgrade_client.erl"),
-    Src = filename:join(DataDir, "upgradee.erl"),
 
-    compile_load(upgrade_client, Client, 0, hipe),
-    true = code:is_module_native(upgrade_client),
+    compile_load(upgrade_client, DataDir, undefined, ClientType),    
 
-    upgrade_client:run(Src, beam, beam),
-    upgrade_client:run(Src, beam, hipe),
-    upgrade_client:run(Src, hipe, beam),
-    upgrade_client:run(Src, hipe, hipe).
-    
+    upgrade_client:run(DataDir, beam, beam, beam, beam),
+    upgrade_client:run(DataDir, hipe, hipe, hipe, hipe),
+    %upgrade_client:run(DataDir, beam, hipe),
+    %upgrade_client:run(DataDir, hipe, beam),
+    %upgrade_client:run(DataDir, hipe, hipe).
+    ok.
 
-compile_load(Mod, Src, Ver, CodeType) ->
-    io:format("Compiling version ~p of ~p as ~p\n", [Ver, Mod, CodeType]),
-    {_IsNative,Opts} = case CodeType of
-			   beam -> {false,[]};
-			   hipe -> {true,[native]}
-		       end,
-    VerDef = list_to_atom("VERSION_" ++ integer_to_list(Ver)),
-    CompOpts = [binary, report, {d,VerDef} | Opts],
+compile_load(Mod, Dir, Ver, CodeType) ->
+    Version = case Ver of
+		  undefined ->
+		      io:format("Compiling '~p' as ~p\n", [Mod, CodeType]),
+		      [];
+		  _ ->
+		      io:format("Compiling version ~p of '~p' as ~p\n",
+				[Ver, Mod, CodeType]),
+		      [{d,list_to_atom("VERSION_" ++ integer_to_list(Ver))}]
+	      end,
+    Target = case CodeType of
+		 beam -> [];
+		 hipe -> [native]
+	     end,
+    CompOpts = [binary, report] ++ Target ++ Version,
 
+    Src = filename:join(Dir, atom_to_list(Mod) ++ ".erl"),
     %io:format("compile:file(~p,~p)\n", [Src, CompOpts]),
     {ok,Mod,Code} = compile:file(Src, CompOpts),
     ObjFile = filename:basename(Src,".erl") ++ ".beam",
