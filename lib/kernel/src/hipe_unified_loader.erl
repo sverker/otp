@@ -216,8 +216,9 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% Note: Addresses are sorted descending.
       {MFAs,Addresses} = exports(ExportMap, CodeAddress),
       %% Remove references to old versions of the module.
-      mark_referred_from(MFAs),
-      remove_refs_from(MFAs),
+      %SVERK mark_referred_from(MFAs),
+      %%%%%%SVERK remove_refs_from(MFAs),
+
       %% Patch all dynamic references in the code.
       %%  Function calls, Atoms, Constants, System calls
       patch(Refs, CodeAddress, ConstMap2, Addresses, TrampolineMap),
@@ -235,7 +236,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
 	  export_funs(Mod, BeamBinary, Addresses, AddressesOfClosuresToPatch)
       end,
       %% Redirect references to the old module to the new module's BEAM stub.
-      patch_to_emu_step2(OldReferencesToPatch),
+      redirect(OldReferencesToPatch),
       %% Patch referring functions to call the new function
       %% The call to export_funs/1 above updated the native addresses
       %% for the targets, so passing 'Addresses' is not needed.
@@ -805,7 +806,7 @@ patch_to_emu_step1(Mod) ->
       %% Find all call sites that call these MFAs. As a side-effect,
       %% create native stubs for any MFAs that are referred.
       mark_referred_from(MFAs),
-      remove_refs_from(MFAs),
+      %%%%%%%SVERK remove_refs_from(MFAs),
       MFAs;
     false ->
       %% The first time we load the module, no redirection needs to be done.
