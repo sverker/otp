@@ -464,7 +464,7 @@ upgrade_do(Config, ClientType) ->
 
     compile_load(upgrade_client, DataDir, undefined, ClientType),    
 
-    upgrade_client:run(DataDir, beam, beam, beam, beam),
+    %upgrade_client:run(DataDir, beam, beam, beam, beam),
     upgrade_client:run(DataDir, hipe, hipe, hipe, hipe),
     %upgrade_client:run(DataDir, beam, hipe),
     %upgrade_client:run(DataDir, hipe, beam),

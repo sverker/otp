@@ -936,7 +936,11 @@ BIF_RETTYPE purge_module_1(BIF_ALIST_1)
 	    /*
 	     * Unload any NIF library
 	     */
-	    if (modp->old.nif != NULL) {
+	    if (modp->old.nif != NULL
+#ifdef HIPE
+		|| modp->old.first_hipe_ref != NULL)
+#endif
+	    {
 		/* ToDo: Do unload nif without blocking */
 		erts_rwunlock_old_code(code_ix);
 		erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
@@ -963,6 +967,12 @@ BIF_RETTYPE purge_module_1(BIF_ALIST_1)
 	    modp->old.code_length = 0;
 	    modp->old.catches = BEAM_CATCHES_NIL;
 	    erts_remove_from_ranges(code);
+#ifdef HIPE
+	    {
+		void hipe_remove_refs_from_old_module(Module* modp);
+		hipe_remove_refs_from_old_module(modp);
+	    }
+#endif	    
 	    ERTS_BIF_PREP_RET(ret, am_true);
 	}
 	erts_rwunlock_old_code(code_ix);

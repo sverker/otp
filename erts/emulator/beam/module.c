@@ -84,6 +84,11 @@ static Module* module_alloc(Module* tmpl)
     obj->old.num_breakpoints  = 0;
     obj->curr.num_traced_exports = 0;
     obj->old.num_traced_exports = 0;
+#ifdef HIPE
+    obj->first_hipe_mfa = NULL;
+    obj->curr.first_hipe_ref = NULL;
+    obj->old.first_hipe_ref = NULL;
+#endif
     return obj;
 }
 
@@ -134,25 +139,38 @@ erts_get_module(Eterm mod, ErtsCodeIndex code_ix)
     }
 }
 
-Module*
-erts_put_module(Eterm mod)
+
+static Module* put_module(Eterm mod, IndexTable* mod_tab)
 {
     Module e;
-    IndexTable* mod_tab;
     int oldsz, newsz;
     Module* res;
 
     ASSERT(is_atom(mod));
-    ERTS_SMP_LC_ASSERT(erts_initialized == 0
-		       || erts_is_code_ix_locked());
-
-    mod_tab = &module_tables[erts_staging_code_ix()];
     e.module = atom_val(mod);
     oldsz = index_table_sz(mod_tab);
     res = (Module*) index_put_entry(mod_tab, (void*) &e);
     newsz = index_table_sz(mod_tab);
     erts_smp_atomic_add_nob(&tot_module_bytes, (newsz - oldsz));
     return res;
+}
+
+Module*
+erts_put_module(Eterm mod)
+{
+    ERTS_SMP_LC_ASSERT(erts_initialized == 0
+		       || erts_is_code_ix_locked());
+
+    return put_module(mod, &module_tables[erts_staging_code_ix()]);
+}
+
+Module*
+erts_put_active_module(Eterm mod)
+{
+    ASSERT(is_atom(mod));
+    //SVERK Why not? ERTS_SMP_LC_ASSERT(erts_smp_thr_progress_is_blocking());
+
+    return put_module(mod, &module_tables[erts_active_code_ix()]);
 }
 
 Module *module_code(int i, ErtsCodeIndex code_ix)
@@ -197,6 +215,9 @@ void module_start_staging(void)
 
 	dst_mod->curr = src_mod->curr;
 	dst_mod->old = src_mod->old;
+      #ifdef HIPE
+	dst_mod->first_hipe_mfa = src_mod->first_hipe_mfa;
+      #endif
     }
 
     /*
@@ -210,6 +231,9 @@ void module_start_staging(void)
 
 	dst_mod->curr = src_mod->curr;
 	dst_mod->old = src_mod->old;
+      #ifdef HIPE
+	dst_mod->first_hipe_mfa = src_mod->first_hipe_mfa;
+      #endif
     }
     newsz = index_table_sz(dst);
     erts_smp_atomic_add_nob(&tot_module_bytes, (newsz - oldsz));

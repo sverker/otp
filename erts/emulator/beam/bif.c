@@ -4094,6 +4094,7 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
 						    BIF_ARG_2 == am_block,
 						    0)) {
 		case ERTS_SCHDLR_SSPND_DONE_MSCHED_BLOCKED:
+		    //SVERK Why not? ASSERT(erts_smp_thr_progress_is_blocking());
 		    BIF_RET(am_blocked);
 		case ERTS_SCHDLR_SSPND_YIELD_DONE_MSCHED_BLOCKED:
 		    ERTS_BIF_YIELD_RETURN_X(BIF_P, am_blocked,

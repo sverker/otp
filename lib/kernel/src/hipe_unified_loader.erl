@@ -96,9 +96,9 @@ load_native_code(Mod, Bin) when is_atom(Mod), is_binary(Bin) ->
     ChunkTag ->
       %% patch_to_emu(Mod),
       case code:get_chunk(Bin, ChunkTag) of
-	undefined -> no_native;
-	NativeCode when is_binary(NativeCode) ->
-         erlang:system_flag(multi_scheduling, block),
+			undefined -> no_native;
+			NativeCode when is_binary(NativeCode) ->
+				 erlang:system_flag(multi_scheduling, block),
          try
            OldReferencesToPatch = patch_to_emu_step1(Mod),
            case load_module(Mod, NativeCode, Bin, OldReferencesToPatch) of
@@ -125,7 +125,9 @@ post_beam_load(Mod) when is_atom(Mod) ->
     _ChunkTag ->
       erlang:system_flag(multi_scheduling, block),
       try
-       patch_to_emu(Mod)
+				%%%%%%SVERK patch_to_emu(Mod)
+				hipe_bifs:invalidate_funinfo_native_addresses(Mod),
+				hipe_bifs:redirect_referred_from(Mod)
       after
        erlang:system_flag(multi_scheduling, unblock)
       end
@@ -152,13 +154,11 @@ version_check(Version, Mod) when is_atom(Mod) ->
 load_module(Mod, Bin, Beam) ->
   erlang:system_flag(multi_scheduling, block),
   try
-    load_module_nosmp(Mod, Bin, Beam)
+			load_module(Mod, Bin, Beam, [])
   after
     erlang:system_flag(multi_scheduling, unblock)
   end.
 
-load_module_nosmp(Mod, Bin, Beam) ->
-  load_module(Mod, Bin, Beam, []).
 
 load_module(Mod, Bin, Beam, OldReferencesToPatch) ->
   ?debug_msg("************ Loading Module ~w ************\n",[Mod]),
@@ -173,16 +173,13 @@ load_module(Mod, Bin, Beam, OldReferencesToPatch) ->
 load(Mod, Bin) ->
   erlang:system_flag(multi_scheduling, block),
   try
-    load_nosmp(Mod, Bin)
+		?debug_msg("********* Loading funs in module ~w *********\n",[Mod]),
+		%% Loading just some functions in a module; patch closures separately.
+		put(hipe_patch_closures, true),
+		load_common(Mod, Bin, [], [])
   after
     erlang:system_flag(multi_scheduling, unblock)
   end.
-
-load_nosmp(Mod, Bin) ->
-  ?debug_msg("********* Loading funs in module ~w *********\n",[Mod]),
-  %% Loading just some functions in a module; patch closures separately.
-  put(hipe_patch_closures, true),
-  load_common(Mod, Bin, [], []).
 
 %%------------------------------------------------------------------------
 
@@ -235,12 +232,14 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
 	  export_funs(Addresses),
 	  export_funs(Mod, BeamBinary, Addresses, AddressesOfClosuresToPatch)
       end,
+
       %% Redirect references to the old module to the new module's BEAM stub.
-      redirect(OldReferencesToPatch),
+      %%%%%%%%%%%SVERK redirect(OldReferencesToPatch),
       %% Patch referring functions to call the new function
       %% The call to export_funs/1 above updated the native addresses
       %% for the targets, so passing 'Addresses' is not needed.
-      redirect(MFAs),
+      %%%%%%%%%%%%SVERK redirect(MFAs),
+			hipe_bifs:redirect_referred_from(Mod),
       ?debug_msg("****************Loader Finished****************\n", []),
       {module,Mod}  % for compatibility with code:load_file/1
   end.
@@ -752,8 +751,8 @@ add_ref(CalleeMFA, Address, Addresses, RefType, Trampoline, RemoteOrLocal) ->
   case RemoteOrLocal of
       local -> ignore; % SVERK try ignore local refs
       remote ->
-	%% io:format("Adding ref ~w\n",[{CallerMFA, CalleeMFA, Address, RefType}]),
-	hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline,RemoteOrLocal})
+				%% io:format("Adding ref ~w\n",[{CallerMFA, CalleeMFA, Address, RefType}]),
+				hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline,RemoteOrLocal})
   end.
 
 % For FunDefs sorted from low to high addresses
@@ -786,8 +785,8 @@ address_to_mfa_lth(_Address, [], Prev) ->
 %% Change callers of the given module to instead trap to BEAM.
 %% load_native_code/2 calls this just before loading native code.
 %%
-patch_to_emu(Mod) ->
-  patch_to_emu_step2(patch_to_emu_step1(Mod)).
+%patch_to_emu(Mod) ->
+%  patch_to_emu_step2(patch_to_emu_step1(Mod)).
 
 %% Step 1 must occur before the loading of native code updates
 %% references information or creates a new BEAM stub module.
@@ -802,10 +801,11 @@ patch_to_emu_step1(Mod) ->
       %% purge them too, but we have no explicit record of them.
       %% Therefore invalidate all native addresses for the module.
       %% emu_make_stubs/1 will repair the ones for compiled static calls.
-      hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
+      %%%%%%%%SVERK hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
+			hipe_bifs:invalidate_funinfo_native_addresses(Mod),
       %% Find all call sites that call these MFAs. As a side-effect,
       %% create native stubs for any MFAs that are referred.
-      mark_referred_from(MFAs),
+      %%%%%SVERK mark_referred_from(MFAs),
       %%%%%%%SVERK remove_refs_from(MFAs),
       MFAs;
     false ->
@@ -814,9 +814,9 @@ patch_to_emu_step1(Mod) ->
   end.
 
 %% Step 2 must occur after the new BEAM stub module is created.
-patch_to_emu_step2(ReferencesToPatch) ->
-  %emu_make_stubs(ReferencesToPatch),
-  redirect(ReferencesToPatch).
+%patch_to_emu_step2(ReferencesToPatch) ->
+%  %emu_make_stubs(ReferencesToPatch),
+%  redirect(ReferencesToPatch).
 
 -spec is_loaded(Module::atom()) -> boolean().
 %% @doc Checks whether a module is loaded or not.
@@ -847,11 +847,11 @@ is_loaded(M) when is_atom(M) ->
 %  mark_referred_from(MFAs),
 %  MFAs.
 
-mark_referred_from([MFA|MFAs]) ->
-  hipe_bifs:mark_referred_from(MFA),
-  mark_referred_from(MFAs);
-mark_referred_from([]) ->
-  [].
+%mark_referred_from([MFA|MFAs]) ->
+%  hipe_bifs:mark_referred_from(MFA),
+%  mark_referred_from(MFAs);
+%mark_referred_from([]) ->
+%  [].
 
 %%--------------------------------------------------------------------
 %% Given a list of MFAs with referred_from references, update their
@@ -859,11 +859,11 @@ mark_referred_from([]) ->
 %%
 %% The {MFA,Refs} list must come from get_refs_from/2.
 %%
-redirect([MFA|Rest]) ->
-  hipe_bifs:redirect_referred_from(MFA),
-  redirect(Rest);
-redirect([]) ->
-  ok.
+%redirect([MFA|Rest]) ->
+%  hipe_bifs:redirect_referred_from(MFA),
+%  redirect(Rest);
+%redirect([]) ->
+%  ok.
 
 %%--------------------------------------------------------------------
 %% Given a list of MFAs, remove all referred_from references having
