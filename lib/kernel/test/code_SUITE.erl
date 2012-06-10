@@ -472,6 +472,7 @@ upgrade_do(Config, ClientType) ->
     ok.
 
 compile_load(Mod, Dir, Ver, CodeType) ->
+    erlang:display({"{{{{{{{{{{{{{{{{Loading",Mod,Ver,CodeType}),
     Version = case Ver of
 		  undefined ->
 		      io:format("Compiling '~p' as ~p\n", [Mod, CodeType]),
@@ -493,6 +494,7 @@ compile_load(Mod, Dir, Ver, CodeType) ->
     ObjFile = filename:basename(Src,".erl") ++ ".beam",
     {module,Mod} = code:load_binary(Mod, ObjFile, Code),
     %IsNative = code:is_module_native(Mod),
+    erlang:display({"}}}}}}}}}}}}}}}Loaded",Mod,Ver,CodeType}),
     ok.
 
 dir_req(suite) -> [];

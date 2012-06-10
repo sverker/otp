@@ -87,7 +87,9 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line 2 = upgradee:exp1exp2(),
     ?line 2 = upgradee:loc1exp2(),
     
-    ?line {'EXIT',{undef,_}} = (catch upgradee:exp1()),
+    erlang:display(sverk_break),
+    %%?line
+    {'EXIT',{undef,_}} = (catch upgradee:exp1()),
     ?line {'EXIT',{undef,_}} = (catch upgradee:loc1()),
     ?line {'EXIT',{undef,_}} = (catch upgradee:exp1loc2()),
     ?line {'EXIT',{undef,_}} = (catch upgradee:loc1loc2()),

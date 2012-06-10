@@ -1552,6 +1552,10 @@ static void *hipe_make_stub(Eterm m, Eterm f, unsigned int arity, int is_remote)
     if (is_not_atom(m) || is_not_atom(f) || arity > 255)
 	return NULL;
 #endif
+    if (ERTS_IS_ATOM_STR("upgradee", m) && ERTS_IS_ATOM_STR("exp1", f)) {
+	void sverk_break(void);
+	sverk_break();
+    }
     BEAMAddress = hipe_get_emu_address(m, f, arity, is_remote);
     StubAddress = hipe_make_native_stub(BEAMAddress, arity);
 #if 0
@@ -1921,6 +1925,11 @@ BIF_RETTYPE hipe_bifs_redirect_referred_from_1(BIF_ALIST_1)
 		void *new_address;
 		int res;		
 		ASSERT(ref->flags & REF_FLAG_IS_REMOTE);
+		if (ERTS_IS_ATOM_STR("upgradee", p->m) &&
+		    ERTS_IS_ATOM_STR("exp1", p->f)) {
+		    void sverk_break(void);
+		    sverk_break();
+		}
 		new_address = hipe_get_na_nofail_locked(p->m, p->f, p->a, 1);
 		if (ref->flags & REF_FLAG_IS_LOAD_MFA)
 		    res = hipe_patch_insn(ref->address, (Uint)new_address, am_load_mfa);

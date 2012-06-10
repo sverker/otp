@@ -3601,12 +3601,20 @@ BIF_RETTYPE throw_1(BIF_ALIST_1)
 /**********************************************************************/
 
 
+void sverk_break(void)
+{
+    fprintf(stderr, "SVERK BREAK\r\n");
+}
+
 /* 
  * Non-standard, undocumented, dirty BIF, meant for debugging.
  *
  */
 BIF_RETTYPE display_1(BIF_ALIST_1)
 {
+    if (ERTS_IS_ATOM_STR("sverk_break", BIF_ARG_1)) {
+	sverk_break();
+    }
     erts_printf("%.*T\n", INT_MAX, BIF_ARG_1);
     BIF_RET(am_true);
 }

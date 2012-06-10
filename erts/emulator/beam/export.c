@@ -146,6 +146,12 @@ export_alloc(struct export_entry* tmpl_e)
 	    blob->entryv[ix].ep = &blob->exp;
 	}
 	ix = 0;
+
+	if (ERTS_IS_ATOM_STR("exp1",obj->code[1]) &&
+	    ERTS_IS_ATOM_STR("upgradee",obj->code[0])) {
+	    erts_fprintf(stderr, "##### SVERK %T:%T/%u export entry at %p\r\n",
+			 obj->code[0], obj->code[1], obj);
+	}
     }
     else { /* Existing entry in another table, use free entry in blob */
 	blob = entry_to_blob(tmpl_e);
