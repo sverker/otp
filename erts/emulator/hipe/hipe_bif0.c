@@ -1201,6 +1201,7 @@ struct hipe_mfa_info {
     unsigned int a;
     void *remote_address;
     void *local_address;
+    void *old_address;
     Eterm *beam_code;
     Uint orig_beam_op;
     struct hipe_ref* first_caller;
@@ -1310,6 +1311,7 @@ static struct hipe_mfa_info *hipe_mfa_info_table_alloc(Eterm m, Eterm f, unsigne
     res->a = arity;
     res->remote_address = NULL;
     res->local_address = NULL;
+    res->old_address = NULL;
     res->beam_code = NULL;
     res->orig_beam_op = 0;
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
@@ -1388,6 +1390,8 @@ static struct hipe_mfa_info *hipe_mfa_info_table_put_locked(Eterm m, Eterm f, un
     p->next_in_mod = modp->first_hipe_mfa;
     modp->first_hipe_mfa = p;
 
+    DBG_TRACE_MFA(m,f,arity, "hipe_mfa_info allocated at %p", p);
+
     return p;
 }
 
@@ -1406,6 +1410,9 @@ static void hipe_mfa_set_na(Eterm m, Eterm f, unsigned int arity, void *address,
     p->remote_address = is_exported ? address : NULL;
 	
     hipe_mfa_info_table_unlock();
+
+    DBG_TRACE_MFA(m,f,arity,"set native address in hipe_mfa_info at %p is_exported=%d",
+		  p, is_exported);
 }
 
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
@@ -1480,9 +1487,8 @@ BIF_RETTYPE hipe_bifs_invalidate_funinfo_native_addresses_1(BIF_ALIST_1)
     }
     modp = erts_put_active_module(BIF_ARG_1);
     ASSERT(modp);
-    SVERK_TRACE1("START invalidate and mark refs toward module '%T'", BIF_ARG_1);  
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
-	SVERK_TRACE3(" INVALIDATE mfa %T:%T/%u", p->m, p->f, p->a);		      
+	DBG_TRACE_MFA(p->m,p->f,p->a,"INVALIDATE hipe_mfa_info at %p", p);
 	    p->remote_address = NULL;
 	    p->local_address = NULL;
 	    if (p->beam_code) {
@@ -1512,9 +1518,21 @@ BIF_RETTYPE hipe_bifs_invalidate_funinfo_native_addresses_1(BIF_ALIST_1)
 		SVERK What's the point? ref->flags |= REF_FLAG_PENDING_REDIRECT;
 	    }*/
     }
-    SVERK_TRACE1("DONE invalidating and marking refs toward module '%T'", BIF_ARG_1);		      
     BIF_RET(NIL);
 }
+
+void hipe_delete_code(Module* modp)
+{
+    struct hipe_mfa_info *p;
+
+    for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
+	DBG_TRACE_MFA(p->m,p->f,p->a,"INVALIDATE hipe_mfa_info at %p", p);
+	p->remote_address = NULL;
+	p->old_address = p->local_address;
+	p->local_address = NULL;
+    }
+}
+
 
 void hipe_mfa_save_orig_beam_op(Eterm mod, Eterm fun, unsigned int ari, Eterm *pc)
 {
@@ -1552,12 +1570,10 @@ static void *hipe_make_stub(Eterm m, Eterm f, unsigned int arity, int is_remote)
     if (is_not_atom(m) || is_not_atom(f) || arity > 255)
 	return NULL;
 #endif
-    if (ERTS_IS_ATOM_STR("upgradee", m) && ERTS_IS_ATOM_STR("exp1", f)) {
-	void sverk_break(void);
-	sverk_break();
-    }
+    
     BEAMAddress = hipe_get_emu_address(m, f, arity, is_remote);
     StubAddress = hipe_make_native_stub(BEAMAddress, arity);
+    DBG_TRACE_MFA(m,f,arity,"hipe_make_stub beam=%p hipe=%p is_remote=%d", BEAMAddress, StubAddress, is_remote);
 #if 0
     hipe_mfa_set_na(m, f, arity, StubAddress);
 #endif
@@ -1697,6 +1713,11 @@ int hipe_find_mfa_from_ra(const void *ra, Eterm *m, Eterm *f, unsigned int *a)
 		mfa_offset = ra_offset;
 		mfa = b;
 	    }
+	    ra_offset = (char*)ra - (char*)b->old_address;
+	    if (ra_offset > 0 && ra_offset < mfa_offset) {
+		mfa_offset = ra_offset;
+		mfa = b;
+	    }
 	    b = b->bucket.next;
 	}
     }
@@ -1791,9 +1812,10 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
 #endif
     hipe_mfa_info_table_unlock();
 
-    SVERK_TRACE6("add_ref from %T:%T/%u to %T:%T/%u",
-		 caller.mod, caller.fun, caller.ari,
-		 callee.mod, callee.fun, callee.ari);
+    DBG_TRACE_MFA(caller.mod, caller.fun, caller.ari, "add_ref at %p TO %T:%T/u",
+		  ref, callee.mod, callee.fun, callee.ari);
+    DBG_TRACE_MFA(callee.mod, callee.fun, callee.ari, "add_ref at %p FROM %T:%T/u",
+		  ref, caller.mod, caller.fun, caller.ari);
     BIF_RET(NIL);
 
  badarg:
@@ -1848,9 +1870,7 @@ BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
     BIF_ERROR(BIF_P, BADARG);
 }
 
-void hipe_remove_refs_from_old_module(Module*); //SVERK include me
-
-void hipe_remove_refs_from_old_module(Module* modp)
+void hipe_purge_module(Module* modp)
 {
 /*   struct hipe_mfa mfa;
     struct hipe_mfa_info* caller_mfa;
@@ -1869,14 +1889,17 @@ void hipe_remove_refs_from_old_module(Module* modp)
     struct hipe_ref* ref;
 
     ASSERT(modp);
-    for (ref = modp->old.first_hipe_ref; ref; ref = ref->next_callee) {
+    ref = modp->old.first_hipe_ref;
+    while (ref) {
 	struct hipe_ref* free_ref = ref;
 
-	SVERK_TRACE6("REMOVE old ref from %T:%T/%u to %T:%T/%u",
-		     ref->caller_m, ref->caller_f, ref->caller_a,
-		     ref->callee->m, ref->callee->f, ref->callee->a);		
+	DBG_TRACE_MFA(ref->caller_m, ref->caller_f, ref->caller_a, "REMOVE ref at %p from %T:%T/%u to %T:%T/u", ref,
+		      ref->caller_m, ref->caller_f, ref->caller_a,
+		      ref->callee->m, ref->callee->f, ref->callee->a);		 
+	DBG_TRACE_MFA(ref->callee->m, ref->callee->f, ref->callee->a, "REMOVE ref at %p from %T:%T/%u to %T:%T/u", ref,
+		      ref->caller_m, ref->caller_f, ref->caller_a,
+		      ref->callee->m, ref->callee->f, ref->callee->a);		 
 	ASSERT(ref->caller_m == make_atom(modp->module));
-	ASSERT(ref->callee->m == make_atom(modp->module));
 	if (ref->next) {
 	    ref->next->prevp = ref->prevp;
 	}
@@ -1915,21 +1938,20 @@ BIF_RETTYPE hipe_bifs_redirect_referred_from_1(BIF_ALIST_1)
     modp = erts_put_active_module(BIF_ARG_1);
     ASSERT(modp);
 
-    SVERK_TRACE2("START redirect all refs to module '%T' (modp=%p)", BIF_ARG_1, modp);
-
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
-	SVERK_TRACE3(" START redirect towards %T:%T/%u",
-		p->m, p->f, p->a);		    
+	DBG_TRACE_MFA(p->m,p->f,p->a,"START REDIRECT towards hipe_mfa_info at %p", p);
 	for (ref = p->first_caller; ref; ref = ref->next) {
 	    //SVERK if (ref->flags & REF_FLAG_PENDING_REDIRECT) {
 		void *new_address;
 		int res;		
 		ASSERT(ref->flags & REF_FLAG_IS_REMOTE);
-		if (ERTS_IS_ATOM_STR("upgradee", p->m) &&
-		    ERTS_IS_ATOM_STR("exp1", p->f)) {
-		    void sverk_break(void);
-		    sverk_break();
-		}
+
+		DBG_TRACE_MFA(p->m,p->f,p->a, "  REDIRECT ref at %p FROM %T:%T/%u",
+			      ref, ref->caller_m, ref->caller_f, ref->caller_a);
+
+		DBG_TRACE_MFA(ref->caller_m, ref->caller_f, ref->caller_a,
+			      "REDIRECT ref at %p TO %T:%T/%u", ref, p->m,p->f,p->a);	    
+
 		new_address = hipe_get_na_nofail_locked(p->m, p->f, p->a, 1);
 		if (ref->flags & REF_FLAG_IS_LOAD_MFA)
 		    res = hipe_patch_insn(ref->address, (Uint)new_address, am_load_mfa);
@@ -1938,17 +1960,13 @@ BIF_RETTYPE hipe_bifs_redirect_referred_from_1(BIF_ALIST_1)
 		if (res)
 		    fprintf(stderr, "%s: patch failed", __FUNCTION__);
 		ref->flags &= ~REF_FLAG_PENDING_REDIRECT;
-		SVERK_TRACE3("  REDIRECT from %T:%T/%u",
-			     ref->caller_m, ref->caller_f, ref->caller_a);
 	    /*} else {
 		SVERK_TRACE3("  SKIP redirect from %T:%T/%u",
 			ref->caller_m, ref->caller_f, ref->caller_a);
 	    }*/
 	}
-	SVERK_TRACE3(" DONE redirect towards %T:%T/%u",
-		p->m, p->f, p->a);
+	DBG_TRACE_MFA(p->m,p->f,p->a,"DONE REDIRECT towards hipe_mfa_info at %p", p);
     }
-    SVERK_TRACE1("DONE redirect all refs to module %T", BIF_ARG_1);
     BIF_RET(NIL);
 }
 

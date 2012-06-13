@@ -43,6 +43,9 @@ extern void hipe_primop_set_trampoline(Eterm name, void *trampoline);
 /* needed in beam_load.c */
 void hipe_mfa_save_orig_beam_op(Eterm m, Eterm f, unsigned int a, Eterm *pc);
 
+void hipe_delete_code(Module*);
+void hipe_purge_module(Module*);
+
 /* these are also needed in hipe_amd64.c */
 extern void *term_to_address(Eterm);
 extern int term_to_Sint32(Eterm, Sint *);

@@ -34,6 +34,9 @@
 #include "erl_binary.h"
 #include "erl_nif.h"
 #include "erl_thr_progress.h"
+#ifdef HIPE
+#  include "hipe_bif0.h"
+#endif
 
 static void set_default_trace_pattern(Eterm module);
 static Eterm check_process_code(Process* rp, Module* modp);
@@ -947,8 +950,10 @@ BIF_RETTYPE purge_module_1(BIF_ALIST_1)
 		erts_smp_thr_progress_block();
 		is_blocking = 1;
 		erts_rwlock_old_code(code_ix);
-		erts_unload_nif(modp->old.nif);
-		modp->old.nif = NULL;
+		if (modp->old.nif) {
+		    erts_unload_nif(modp->old.nif);
+		    modp->old.nif = NULL;
+		}
 	    }
 
 	    /*
@@ -968,10 +973,7 @@ BIF_RETTYPE purge_module_1(BIF_ALIST_1)
 	    modp->old.catches = BEAM_CATCHES_NIL;
 	    erts_remove_from_ranges(code);
 #ifdef HIPE
-	    {
-		void hipe_remove_refs_from_old_module(Module* modp);
-		hipe_remove_refs_from_old_module(modp);
-	    }
+	    hipe_purge_module(modp);
 #endif	    
 	    ERTS_BIF_PREP_RET(ret, am_true);
 	}
@@ -1026,6 +1028,8 @@ delete_code(Module* modp)
 		    --modp->curr.num_traced_exports;
 		    MatchSetUnref(ep->match_prog_set);
 		    ep->match_prog_set = NULL;
+		    DBG_TRACE_MFA(ep->code[0],ep->code[1],ep->code[2],
+				  "export trace cleared, code_ix=%d", code_ix);
 		}
 		else ASSERT(ep->code[3] == (BeamInstr) em_call_error_handler
 			    || !erts_initialized);
@@ -1034,6 +1038,8 @@ delete_code(Module* modp)
 	    ep->code[3] = (BeamInstr) em_call_error_handler;
 	    ep->code[4] = 0;
 	    ASSERT(ep->match_prog_set == NULL);
+	    DBG_TRACE_MFA(ep->code[0],ep->code[1],ep->code[2],
+			  "export invalidation, code_ix=%d", code_ix);
 	}
     }
 
@@ -1044,6 +1050,10 @@ delete_code(Module* modp)
     modp->curr.code_length = 0;
     modp->curr.catches = BEAM_CATCHES_NIL;
     modp->curr.nif = NULL;
+#ifdef HIPE
+    modp->curr.first_hipe_ref = NULL;
+    hipe_delete_code(modp);
+#endif
 }
 
 

@@ -5507,6 +5507,7 @@ code_module_md5_1(BIF_ALIST_1)
 static BeamInstr*
 make_stub(BeamInstr* fp, Eterm mod, Eterm func, Uint arity, Uint native, BeamInstr OpCode)
 {
+    DBG_TRACE_MFA(mod,func,arity,"make beam stub at %p", &fp[5]);
     fp[0] = (BeamInstr) BeamOp(op_i_func_info_IaaI);
     fp[1] = native;
     fp[2] = mod;
@@ -5603,6 +5604,8 @@ stub_final_touch(LoaderState* stp, BeamInstr* fp)
 	if (stp->export[i].function == function && stp->export[i].arity == arity) {
 	    Export* ep = erts_export_put(mod, function, arity);
 	    ep->addressv[erts_staging_code_ix()] = fp+5;
+	    DBG_TRACE_MFA(mod,function,arity,"set beam stub at %p in export at %p (code_ix=%d)",
+			  fp+5, ep, erts_staging_code_ix());
 	    return;
 	}
     }
@@ -6014,4 +6017,24 @@ static int safe_mul(UWord a, UWord b, UWord* resp)
 	return (res / b) == a;
     }
 }
+
+#ifdef ENABLE_DBG_TRACE_MFA
+
+Eterm dbg_trace_m;
+Eterm dbg_trace_f;
+Uint  dbg_trace_a;
+
+void dbg_set_traced_mfa(const char* m, const char* f, Uint a)
+{
+    dbg_trace_m = am_atom_put(m, strlen(m));
+    dbg_trace_f = am_atom_put(f, strlen(f));
+    dbg_trace_a = a;
+}
+
+int dbg_is_traced_mfa(Eterm m, Eterm f, Uint a)
+{
+    return (m == dbg_trace_m) && (f == dbg_trace_f) && (a == dbg_trace_a);
+}
+
+#endif /* ENABLE_DBG_TRACE_MFA */
 

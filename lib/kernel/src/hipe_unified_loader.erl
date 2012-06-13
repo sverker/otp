@@ -100,7 +100,7 @@ load_native_code(Mod, Bin) when is_atom(Mod), is_binary(Bin) ->
 			NativeCode when is_binary(NativeCode) ->
 				 erlang:system_flag(multi_scheduling, block),
          try
-           OldReferencesToPatch = patch_to_emu_step1(Mod),
+           OldReferencesToPatch = [], %%%%%%%SVERK patch_to_emu_step1(Mod),
            case load_module(Mod, NativeCode, Bin, OldReferencesToPatch) of
              bad_crc -> no_native; % SVERK: What about the patch_to_emu_step1 that we did above?
              Result -> Result

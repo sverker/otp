@@ -134,4 +134,21 @@ extern Uint erts_total_code_size;
 #define LOC_FILE(Loc) ((Loc) >> 24)
 #define LOC_LINE(Loc) ((Loc) & ((1 << 24)-1))
 
+#define ENABLE_DBG_TRACE_MFA
+#ifdef  ENABLE_DBG_TRACE_MFA
+
+extern Eterm dbg_trace_m;
+extern Eterm dbg_trace_f;
+extern Uint  dbg_trace_a;
+
+void dbg_set_traced_mfa(const char* m, const char* f, Uint a);
+int dbg_is_traced_mfa(Eterm m, Eterm f, Uint a);
+#define DBG_TRACE_MFA(M,F,A,FMT, ...) do {\
+    if (dbg_is_traced_mfa(M,F,A)) \
+      erts_fprintf(stderr, "MFA TRACE %T:%T/%u: "FMT"\n",\
+	  dbg_trace_m, dbg_trace_f, (int)dbg_trace_a, ##__VA_ARGS__);\
+  }while(0)
+
+#endif /* ENABLE_DBG_TRACE_MFA */
+
 #endif /* _BEAM_LOAD_H */
