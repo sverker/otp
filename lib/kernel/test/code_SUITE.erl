@@ -454,21 +454,21 @@ load_binary(Config) when is_list(Config) ->
     code:delete(code_b_test),
     ok.
 
-upgrade(Config) ->
-    %upgrade_do(Config, beam),
-    upgrade_do(Config, hipe),   
-    ok.
 
-upgrade_do(Config, ClientType) ->
+upgrade(Config) ->    
     DataDir = ?config(data_dir, Config),
 
-    compile_load(upgrade_client, DataDir, undefined, ClientType),    
+    %%T = [beam, hipe],
+    T = [beam],
 
-    %upgrade_client:run(DataDir, beam, beam, beam, beam),
-    upgrade_client:run(DataDir, hipe, hipe, hipe, hipe),
-    %upgrade_client:run(DataDir, beam, hipe),
-    %upgrade_client:run(DataDir, hipe, beam),
-    %upgrade_client:run(DataDir, hipe, hipe).
+    [upgrade_do(DataDir, Client, U1, U2, O1, O2)
+     || Client<-T, U1<-T, U2<-T, O1<-T, O2<-T],
+    
+    ok.
+
+upgrade_do(DataDir, Client, U1, U2, O1, O2) ->
+    compile_load(upgrade_client, DataDir, undefined, Client),        
+    upgrade_client:run(DataDir, U1, U2, O1, O2),
     ok.
 
 compile_load(Mod, Dir, Ver, CodeType) ->

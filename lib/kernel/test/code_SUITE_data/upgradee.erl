@@ -32,66 +32,72 @@ loc1exp2() -> ?VERSION.
 loc1loc2() -> ?VERSION.
 
 dispatch_loop() ->
-    Msg = receive M -> M end,
-    erlang:display({"upgradee version", ?VERSION, "got msg", Msg}),
-    {Func,Ret} = case Msg of
-		     %% Local calls
-		     {Pid, local, F=exp1} ->
-			 {F, local_exp1()};
-		     {Pid, local, F=loc1} ->
-			 {F, local_loc1()};
-		     {Pid, local, F=exp1exp2} ->
-			 {F, catch exp1exp2()};
-		     {Pid, local, F=exp1loc2} ->
-			 {F, catch exp1loc2()};
-		     {Pid, local, F=loc1exp2} ->
-			 {F, catch loc1exp2()};
-		     {Pid, local, F=loc1loc2} ->
-			 {F, catch loc1loc2()};
-		     {Pid, local, F=exp2} ->
-			 {F, local_exp2()};
-		     {Pid, local, F=loc2} ->
-			 {F, local_loc2()};
+    receive 
+	upgrade_order ->
+	    %%erlang:display({"upgradee version", ?VERSION, "got upgrade_order"}),
+	    ?MODULE:dispatch_loop();
 
-		     %% Extern calls to own module
-                     {Pid, external, F=exp1} ->
-			 {F, catch ?MODULE:exp1()};
-                     {Pid, external, F=loc1} ->
-			 {F, catch ?MODULE:loc1()};
-		     {Pid, external, F=exp1exp2} ->
-			 {F, catch ?MODULE:exp1exp2()};
-		     {Pid, external, F=exp1loc2} ->
-			 {F, catch ?MODULE:exp1loc2()};
-		     {Pid, external, F=loc1exp2} ->
-			 {F, catch ?MODULE:loc1exp2()};
-		     {Pid, external, F=loc1loc2} ->
-			 {F, catch ?MODULE:loc1loc2()};
-		     {Pid, external, F=exp2} ->
-			 {F, catch ?MODULE:exp2()};
-		     {Pid, external, F=loc2} ->
-			 {F, catch ?MODULE:loc2()};
-
-		     %% External calls to other module
-                     {Pid, other, F=exp1} ->
-			 {F, catch other:exp1()};
-                     {Pid, other, F=loc1} ->
-			 {F, catch other:loc1()};
-		     {Pid, other, F=exp1exp2} ->
-			 {F, catch other:exp1exp2()};
-		     {Pid, other, F=exp1loc2} ->
-			 {F, catch other:exp1loc2()};
-		     {Pid, other, F=loc1exp2} ->
-			 {F, catch other:loc1exp2()};
-		     {Pid, other, F=loc1loc2} ->
-			 {F, catch other:loc1loc2()};
-		     {Pid, other, F=exp2} ->
-			 {F, catch other:exp2()};
-		     {Pid, other, F=loc2} ->
-			 {F, catch other:loc2()}
-		 end,
-    Pid ! {self(), call_result, Func, Ret},
-
-    dispatch_loop(). % A local call, we don't want to upgrade the dispatcher
+	Msg -> 
+	    %%erlang:display({"upgradee version", ?VERSION, "got msg", Msg}),
+	    {Func,Ret} = case Msg of
+			     %% Local calls
+			     {Pid, local, F=exp1} ->
+				 {F, local_exp1()};
+			     {Pid, local, F=loc1} ->
+				 {F, local_loc1()};
+			     {Pid, local, F=exp1exp2} ->
+				 {F, catch exp1exp2()};
+			     {Pid, local, F=exp1loc2} ->
+				 {F, catch exp1loc2()};
+			     {Pid, local, F=loc1exp2} ->
+				 {F, catch loc1exp2()};
+			     {Pid, local, F=loc1loc2} ->
+				 {F, catch loc1loc2()};
+			     {Pid, local, F=exp2} ->
+				 {F, local_exp2()};
+			     {Pid, local, F=loc2} ->
+				 {F, local_loc2()};
+			     
+			     %% Extern calls to own module
+			     {Pid, external, F=exp1} ->
+				 {F, catch ?MODULE:exp1()};
+			     {Pid, external, F=loc1} ->
+				 {F, catch ?MODULE:loc1()};
+			     {Pid, external, F=exp1exp2} ->
+				 {F, catch ?MODULE:exp1exp2()};
+			     {Pid, external, F=exp1loc2} ->
+				 {F, catch ?MODULE:exp1loc2()};
+			     {Pid, external, F=loc1exp2} ->
+				 {F, catch ?MODULE:loc1exp2()};
+			     {Pid, external, F=loc1loc2} ->
+				 {F, catch ?MODULE:loc1loc2()};
+			     {Pid, external, F=exp2} ->
+				 {F, catch ?MODULE:exp2()};
+			     {Pid, external, F=loc2} ->
+				 {F, catch ?MODULE:loc2()};
+			     
+			     %% External calls to other module
+			     {Pid, other, F=exp1} ->
+				 {F, catch other:exp1()};
+			     {Pid, other, F=loc1} ->
+				 {F, catch other:loc1()};
+			     {Pid, other, F=exp1exp2} ->
+				 {F, catch other:exp1exp2()};
+			     {Pid, other, F=exp1loc2} ->
+				 {F, catch other:exp1loc2()};
+			     {Pid, other, F=loc1exp2} ->
+				 {F, catch other:loc1exp2()};
+			     {Pid, other, F=loc1loc2} ->
+				 {F, catch other:loc1loc2()};
+			     {Pid, other, F=exp2} ->
+				 {F, catch other:exp2()};
+			     {Pid, other, F=loc2} ->
+				 {F, catch other:loc2()}
+			 end,
+	    Pid ! {self(), call_result, Func, Ret},
+	    
+	    dispatch_loop() % A local call, we don't want to upgrade the dispatcher
+    end.
 
 
 
@@ -100,7 +106,7 @@ local_exp1() -> catch exp1().
 local_loc1() -> catch loc1().
 -else.
 local_exp1() ->
-    erlang:display({"upgradee:local_exp1 in version", ?VERSION}),
+    %%erlang:display({"upgradee:local_exp1 in version", ?VERSION}),
     {cannot_compile,?VERSION}.
 local_loc1() -> {cannot_compile,?VERSION}.
 -endif.
@@ -110,7 +116,7 @@ local_exp2() -> catch exp2().
 local_loc2() -> catch loc2().
 -else.
 local_exp2() -> 
-    erlang:display({"upgradee:local_exp2 in version", ?VERSION}),
+    %%erlang:display({"upgradee:local_exp2 in version", ?VERSION}),
     {cannot_compile,?VERSION}.
 local_loc2() -> 
     {cannot_compile,?VERSION}.
