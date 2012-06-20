@@ -5516,7 +5516,7 @@ make_stub(BeamInstr* fp, Eterm mod, Eterm func, Uint arity, Uint native, BeamIns
 #ifdef HIPE
     if (native) {
 	fp[5] = BeamOpCode(op_move_return_nr);
-	hipe_mfa_save_orig_beam_op(mod, func, arity, fp+5);
+	//hipe_mfa_save_orig_beam_op(mod, func, arity, fp+5);
     }
 #endif
     fp[5] = OpCode;

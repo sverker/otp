@@ -149,6 +149,8 @@ int dbg_is_traced_mfa(Eterm m, Eterm f, Uint a);
 	  dbg_trace_m, dbg_trace_f, (int)dbg_trace_a, ##__VA_ARGS__);\
   }while(0)
 
+#else
+#  define DBG_TRACE_MFA(M,F,A,FMT, ...) 
 #endif /* ENABLE_DBG_TRACE_MFA */
 
 #endif /* _BEAM_LOAD_H */

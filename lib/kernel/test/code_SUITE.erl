@@ -459,7 +459,8 @@ upgrade(Config) ->
     DataDir = ?config(data_dir, Config),
 
     %%T = [beam, hipe],
-    T = [beam],
+    %%T = [beam],
+    T = [hipe],
 
     [upgrade_do(DataDir, Client, U1, U2, O1, O2)
      || Client<-T, U1<-T, U2<-T, O1<-T, O2<-T],

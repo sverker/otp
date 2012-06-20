@@ -1070,9 +1070,6 @@ type(hipe_bifs, fun_to_address, 1, Xs) ->
 type(hipe_bifs, get_rts_param, 1, Xs) ->
   strict(arg_types(hipe_bifs, get_rts_param, 1), Xs,
 	 fun (_) -> t_sup(t_integer(), t_nil()) end);
-type(hipe_bifs, invalidate_funinfo_native_addresses, 1, Xs) ->
-  strict(arg_types(hipe_bifs, invalidate_funinfo_native_addresses, 1), Xs,
-	 fun (_) -> t_nil() end);
 type(hipe_bifs, make_fe, 3, Xs) ->
   strict(arg_types(hipe_bifs, make_fe, 3), Xs, fun (_) -> t_integer() end);
 %% type(hipe_bifs, make_native_stub, 2, Xs) ->
@@ -1090,9 +1087,6 @@ type(hipe_bifs, patch_insn, 3, Xs) ->
 type(hipe_bifs, primop_address, 1, Xs) ->
   strict(arg_types(hipe_bifs, primop_address, 1), Xs,
 	 fun (_) -> t_sup(t_integer(), t_atom('false')) end);
-type(hipe_bifs, redirect_referred_from, 1, Xs) ->
-  strict(arg_types(hipe_bifs, redirect_referred_from, 1), Xs,
-	 fun (_) -> t_nil() end);
 type(hipe_bifs, ref, 1, Xs) ->
   strict(arg_types(hipe_bifs, ref, 1), Xs, fun (_) -> t_immarray() end);
 type(hipe_bifs, ref_get, 1, Xs) ->
@@ -2395,8 +2389,6 @@ arg_types(hipe_bifs, fun_to_address, 1) ->
 %%   [t_mfa()];
 arg_types(hipe_bifs, get_rts_param, 1) ->
   [t_fixnum()];
-arg_types(hipe_bifs, invalidate_funinfo_native_addresses, 1) ->
-  [t_list(t_mfa())];
 arg_types(hipe_bifs, make_fe, 3) ->
   [t_integer(), t_atom(), t_tuple([t_integer(), t_integer(), t_integer()])];
 %% arg_types(hipe_bifs, make_native_stub, 2) ->
@@ -2411,8 +2403,6 @@ arg_types(hipe_bifs, patch_insn, 3) ->
   [t_integer(), t_integer(), t_insn_type()];
 arg_types(hipe_bifs, primop_address, 1) ->
   [t_atom()];
-arg_types(hipe_bifs, redirect_referred_from, 1) ->
-  [t_mfa()];
 arg_types(hipe_bifs, ref, 1) ->
   [t_immediate()];
 arg_types(hipe_bifs, ref_get, 1) ->

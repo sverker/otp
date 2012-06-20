@@ -74,6 +74,8 @@ BIF_RETTYPE code_make_stub_module_3(BIF_ALIST_3)
     Module* modp;
     Eterm res;
 
+    erts_fprintf(stderr, "SVERK: code_make_stub_module_3(%T) called\r\n", BIF_ARG_1);
+
     if (!erts_try_seize_code_write_permission(BIF_P)) {
 	ERTS_BIF_YIELD3(bif_export[BIF_code_make_stub_module_3],
 			BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3);
@@ -97,13 +99,19 @@ BIF_RETTYPE code_make_stub_module_3(BIF_ALIST_3)
     if (res == BIF_ARG_1) {
 	erts_end_staging_code_ix();
 	erts_commit_staging_code_ix();
+      #ifdef HIPE
+	hipe_redirect_to_module(modp);
+      #endif
     }
     else {
+	erts_fprintf(stderr, "SVERK: staging stub FAILED!!!!!!! res=%lx\r\n", res);
 	erts_abort_staging_code_ix();
     }
     erts_smp_thr_progress_unblock();
     erts_smp_proc_lock(BIF_P, ERTS_PROC_LOCK_MAIN);
     erts_release_code_write_permission();
+
+    erts_fprintf(stderr, "SVERK: code_make_stub_module_3(%T) returns\r\n", BIF_ARG_1);
     return res;
 }
 
@@ -150,7 +158,7 @@ struct m {
     Uint exception;
 };
 
-static Eterm staging_epilogue(Process* c_p, int, Eterm res, int, struct m*, int);
+static Eterm staging_epilogue(Process* c_p, int, Eterm res, int, struct m*, int, int);
 
 static Eterm
 exception_list(Process* p, Eterm tag, struct m* mp, Sint exceptions)
@@ -255,8 +263,9 @@ finish_loading_1(BIF_ALIST_1)
     for (i = 0; i < n; i++) {
 	if (p[i].modp->curr.num_breakpoints > 0 ||
 	    p[i].modp->curr.num_traced_exports > 0 ||
-	    erts_is_default_trace_enabled()) {
-	    /* tracing involved, fallback with thread blocking */
+	    erts_is_default_trace_enabled() ||
+	    hipe_need_blocking(p[i].modp)) {
+	    /* tracing or hipe need thread blocking */
 	    erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
 	    erts_smp_thr_progress_block();
 	    is_blocking = 1;
@@ -314,32 +323,36 @@ finish_loading_1(BIF_ALIST_1)
     }
 
 done:
-    return staging_epilogue(BIF_P, do_commit, res, is_blocking, p, n);
+    return staging_epilogue(BIF_P, do_commit, res, is_blocking, p, n, 1);
 }
 
 static Eterm
 staging_epilogue(Process* c_p, int commit, Eterm res, int is_blocking,
-		 struct m* loaded, int nloaded)
+		 struct m* mods, int nmods, int free_mods)
 {    
 #ifdef ERTS_SMP
     if (is_blocking || !commit)
 #endif
     {
 	if (commit) {
+	    int i;
 	    erts_end_staging_code_ix();
 	    erts_commit_staging_code_ix();
-	    if (loaded) {
-		int i;
-		for (i=0; i < nloaded; i++) {		
-		    set_default_trace_pattern(loaded[i].module);
+
+	    for (i=0; i < nmods; i++) {
+		if (mods[i].modp->curr.code) {
+		    set_default_trace_pattern(mods[i].module);
 		}
+	      #ifdef HIPE
+		hipe_redirect_to_module(mods[i].modp);
+	      #endif
 	    }
 	}
 	else {
 	    erts_abort_staging_code_ix();
 	}
-	if (loaded) {
-	    erts_free(ERTS_ALC_T_LOADER_TMP, loaded);
+	if (free_mods) {
+	    erts_free(ERTS_ALC_T_LOADER_TMP, mods);
 	}
 	if (is_blocking) {
 	    erts_smp_thr_progress_unblock();
@@ -353,8 +366,8 @@ staging_epilogue(Process* c_p, int commit, Eterm res, int is_blocking,
 	ErtsThrPrgrVal later;
 	ASSERT(is_value(res));
 
-	if (loaded) {
-	    erts_free(ERTS_ALC_T_LOADER_TMP, loaded);
+	if (free_mods) {
+	    erts_free(ERTS_ALC_T_LOADER_TMP, mods);
 	}
 	erts_end_staging_code_ix();
 	/*
@@ -472,6 +485,8 @@ BIF_RETTYPE delete_module_1(BIF_ALIST_1)
     int success = 0;
     Eterm res = NIL;
 
+    erts_fprintf(stderr, "SVERK: delete_module_1(%T) called\r\n", BIF_ARG_1);
+
     if (is_not_atom(BIF_ARG_1)) {
 	BIF_ERROR(BIF_P, BADARG);
     }
@@ -496,8 +511,9 @@ BIF_RETTYPE delete_module_1(BIF_ALIST_1)
 	}
 	else {
 	    if (modp->curr.num_breakpoints > 0 ||
-		modp->curr.num_traced_exports > 0) {
-		/* we have tracing, retry single threaded */
+		modp->curr.num_traced_exports > 0 ||
+		hipe_need_blocking(modp)) {
+		/* tracing or hipe need to go single threaded */
 		erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
 		erts_smp_thr_progress_block();
 		is_blocking = 1;
@@ -511,7 +527,15 @@ BIF_RETTYPE delete_module_1(BIF_ALIST_1)
 	    success = 1;
 	}
     }
-    return staging_epilogue(BIF_P, success, res, is_blocking, NULL, 0);  
+    {
+	struct m mod;
+	Eterm retval;
+	mod.module = BIF_ARG_1;
+	mod.modp = modp;
+	retval = staging_epilogue(BIF_P, success, res, is_blocking, &mod, 1, 0);
+	erts_fprintf(stderr, "SVERK: delete_module_1(%T) returning\r\n", BIF_ARG_1);
+	return retval;  
+    }
 }
 
 BIF_RETTYPE module_loaded_1(BIF_ALIST_1)
@@ -1067,9 +1091,11 @@ beam_make_current_old(Process *c_p, ErtsProcLocks c_p_locks, Eterm module)
      * if not, delete old code; error if old code already exists.
      */
 
-    if (modp->curr.code != NULL && modp->old.code != NULL)  {
-	return am_not_purged;
-    } else if (modp->old.code == NULL) { /* Make the current version old. */
+    if (modp->curr.code) {
+	if (modp->old.code)  {
+	    return am_not_purged;
+	}
+	/* Make the current version old. */
 	delete_code(modp);
     }
     return NIL;

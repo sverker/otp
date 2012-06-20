@@ -112,6 +112,7 @@ load_native_code(Mod, Bin) when is_atom(Mod), is_binary(Bin) ->
   catch
     _:_ ->
       %% Unknown HiPE architecture. Can't happen (in principle).
+				erlang:display({"@@@@@@@@@@@@@@@@ Hipe loading failed for", Mod}),
       no_native
   end.
 
@@ -120,21 +121,22 @@ load_native_code(Mod, Bin) when is_atom(Mod), is_binary(Bin) ->
 -spec post_beam_load(atom()) -> 'ok'.
 
 post_beam_load(Mod) when is_atom(Mod) ->
-  Architecture = erlang:system_info(hipe_architecture),
-  try chunk_name(Architecture) of
-    _ChunkTag ->
-      erlang:system_flag(multi_scheduling, block),
-      try
-				%%%%%%SVERK patch_to_emu(Mod)
-				hipe_bifs:invalidate_funinfo_native_addresses(Mod),
-				hipe_bifs:redirect_referred_from(Mod)
-      after
-       erlang:system_flag(multi_scheduling, unblock)
-      end
-  catch
-    _:_ ->
-      ok
-  end.
+		ok.
+% Architecture = erlang:system_info(hipe_architecture),
+% try chunk_name(Architecture) of
+%   _ChunkTag ->
+%     erlang:system_flag(multi_scheduling, block),
+%     try
+% 			%%%%%%SVERK patch_to_emu(Mod)
+% 			hipe_bifs:invalidate_funinfo_native_addresses(Mod),
+% 			hipe_bifs:redirect_referred_from(Mod)
+%     after
+%      erlang:system_flag(multi_scheduling, unblock)
+%     end
+% catch
+%   _:_ ->
+%     ok
+% end.
 
 %%========================================================================
 
@@ -215,6 +217,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% Remove references to old versions of the module.
       %SVERK mark_referred_from(MFAs),
       %%%%%%SVERK remove_refs_from(MFAs),
+			erlang:delete_module(Mod), % SVERK
 
       %% Patch all dynamic references in the code.
       %%  Function calls, Atoms, Constants, System calls
@@ -229,8 +232,9 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
 	  ClosurePatches = find_closure_patches(Refs),
 	  AddressesOfClosuresToPatch =
 	    calculate_addresses(ClosurePatches, CodeAddress, Addresses),
-	  export_funs(Addresses),
-	  export_funs(Mod, BeamBinary, Addresses, AddressesOfClosuresToPatch)
+		%%%%SVERK switch places of export_funs calls
+	  export_funs(Mod, BeamBinary, Addresses, AddressesOfClosuresToPatch),
+		export_funs(Addresses)
       end,
 
       %% Redirect references to the old module to the new module's BEAM stub.
@@ -239,7 +243,7 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       %% The call to export_funs/1 above updated the native addresses
       %% for the targets, so passing 'Addresses' is not needed.
       %%%%%%%%%%%%SVERK redirect(MFAs),
-			hipe_bifs:redirect_referred_from(Mod),
+			%%%%%%%%%%%%SVERK hipe_bifs:redirect_referred_from(Mod),
       ?debug_msg("****************Loader Finished****************\n", []),
       {module,Mod}  % for compatibility with code:load_file/1
   end.
@@ -401,7 +405,7 @@ export_funs([FunDef | Addresses]) ->
      end, no_debug),
   hipe_bifs:set_funinfo_native_address(MFA, Address, IsExported),
   hipe_bifs:set_native_address(MFA, Address, IsClosure),
-  export_funs(Addresses);
+	export_funs(Addresses);
 export_funs([]) ->
   true.
 
@@ -790,28 +794,29 @@ address_to_mfa_lth(_Address, [], Prev) ->
 
 %% Step 1 must occur before the loading of native code updates
 %% references information or creates a new BEAM stub module.
-patch_to_emu_step1(Mod) ->
-  case is_loaded(Mod) of
-    true ->
-      %% Get exported functions
-      MFAs = [{Mod,Fun,Arity} || {Fun,Arity} <- Mod:module_info(exports)],
-      %% mark_referred_from/2 only finds references from compiled static
-      %% call sites to the module, but some native address entries
-      %% were added as the result of dynamic apply calls. We must
-      %% purge them too, but we have no explicit record of them.
-      %% Therefore invalidate all native addresses for the module.
-      %% emu_make_stubs/1 will repair the ones for compiled static calls.
-      %%%%%%%%SVERK hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
-			hipe_bifs:invalidate_funinfo_native_addresses(Mod),
-      %% Find all call sites that call these MFAs. As a side-effect,
-      %% create native stubs for any MFAs that are referred.
-      %%%%%SVERK mark_referred_from(MFAs),
-      %%%%%%%SVERK remove_refs_from(MFAs),
-      MFAs;
-    false ->
-      %% The first time we load the module, no redirection needs to be done.
-      []
-  end.
+
+%patch_to_emu_step1(Mod) ->
+%  case is_loaded(Mod) of
+%    true ->
+%      %% Get exported functions
+%      MFAs = [{Mod,Fun,Arity} || {Fun,Arity} <- Mod:module_info(exports)],
+%      %% mark_referred_from/2 only finds references from compiled static
+%      %% call sites to the module, but some native address entries
+%      %% were added as the result of dynamic apply calls. We must
+%      %% purge them too, but we have no explicit record of them.
+%      %% Therefore invalidate all native addresses for the module.
+%      %% emu_make_stubs/1 will repair the ones for compiled static calls.
+%      %%%%%%%%SVERK hipe_bifs:invalidate_funinfo_native_addresses(MFAs),
+%      hipe_bifs:invalidate_funinfo_native_addresses(Mod),
+%      %% Find all call sites that call these MFAs. As a side-effect,
+%      %% create native stubs for any MFAs that are referred.
+%      %%%%%SVERK mark_referred_from(MFAs),
+%      %%%%%%%SVERK remove_refs_from(MFAs),
+%      MFAs;
+%    false ->
+%      %% The first time we load the module, no redirection needs to be done.
+%      []
+%  end.
 
 %% Step 2 must occur after the new BEAM stub module is created.
 %patch_to_emu_step2(ReferencesToPatch) ->
