@@ -458,22 +458,21 @@ load_binary(Config) when is_list(Config) ->
 upgrade(Config) ->    
     DataDir = ?config(data_dir, Config),
 
-    %%T = [beam, hipe],
+    T = [beam, hipe],
     %%T = [beam],
-    T = [hipe],
-
-    [upgrade_do(DataDir, Client, U1, U2, O1, O2)
-     || Client<-T, U1<-T, U2<-T, O1<-T, O2<-T],
+    %%T = [hipe],
     
+    [upgrade_do(DataDir, Client, T) || Client <- T],
     ok.
 
-upgrade_do(DataDir, Client, U1, U2, O1, O2) ->
-    compile_load(upgrade_client, DataDir, undefined, Client),        
-    upgrade_client:run(DataDir, U1, U2, O1, O2),
+upgrade_do(DataDir, Client, T) ->
+    compile_load(upgrade_client, DataDir, undefined, Client),
+    [upgrade_client:run(DataDir, U1, U2, O1, O2)
+     || U1<-T, U2<-T, O1<-T, O2<-T],
     ok.
 
 compile_load(Mod, Dir, Ver, CodeType) ->
-    erlang:display({"{{{{{{{{{{{{{{{{Loading",Mod,Ver,CodeType}),
+    %%erlang:display({"{{{{{{{{{{{{{{{{Loading",Mod,Ver,CodeType}),
     Version = case Ver of
 		  undefined ->
 		      io:format("Compiling '~p' as ~p\n", [Mod, CodeType]),
@@ -491,11 +490,16 @@ compile_load(Mod, Dir, Ver, CodeType) ->
 
     Src = filename:join(Dir, atom_to_list(Mod) ++ ".erl"),
     %io:format("compile:file(~p,~p)\n", [Src, CompOpts]),
+    T1 = erlang:now(),
     {ok,Mod,Code} = compile:file(Src, CompOpts),
+    T2 = erlang:now(),
     ObjFile = filename:basename(Src,".erl") ++ ".beam",
     {module,Mod} = code:load_binary(Mod, ObjFile, Code),
-    %IsNative = code:is_module_native(Mod),
-    erlang:display({"}}}}}}}}}}}}}}}Loaded",Mod,Ver,CodeType}),
+    T3 = erlang:now(),
+    %IsNative = code:is_module_native(Mod)
+    io:format("Compile time ~p ms, Load time ~p ms\n",
+	      [timer:now_diff(T2,T1) div 1000, timer:now_diff(T3,T2) div 1000]),
+    %%erlang:display({"}}}}}}}}}}}}}}}Loaded",Mod,Ver,CodeType}),
     ok.
 
 dir_req(suite) -> [];
