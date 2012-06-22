@@ -162,11 +162,11 @@ load_module(Mod, Bin, Beam) ->
   end.
 
 
-load_module(Mod, Bin, Beam, OldReferencesToPatch) ->
+load_module(Mod, Bin, Beam, []) ->
   ?debug_msg("************ Loading Module ~w ************\n",[Mod]),
   %% Loading a whole module, let the BEAM loader patch closures.
   put(hipe_patch_closures, false),
-  load_common(Mod, Bin, Beam, OldReferencesToPatch).
+  load_common(Mod, Bin, Beam).
 
 %%========================================================================
 
@@ -178,14 +178,14 @@ load(Mod, Bin) ->
 		?debug_msg("********* Loading funs in module ~w *********\n",[Mod]),
 		%% Loading just some functions in a module; patch closures separately.
 		put(hipe_patch_closures, true),
-		load_common(Mod, Bin, [], [])
+		load_common(Mod, Bin, [])
   after
     erlang:system_flag(multi_scheduling, unblock)
   end.
 
 %%------------------------------------------------------------------------
 
-load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
+load_common(Mod, Bin, Beam) ->
   %% Unpack the binary.
   [{Version, CheckSum},
    ConstAlign, ConstSize, ConstMap, LabelMap, ExportMap,
@@ -213,14 +213,14 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
       patch_consts(LabelMap, ConstAddr, CodeAddress),
       %% Find out which functions are being loaded (and where).
       %% Note: Addresses are sorted descending.
-      {MFAs,Addresses} = exports(ExportMap, CodeAddress),
+      {_MFAs,Addresses} = exports(ExportMap, CodeAddress),
       %% Remove references to old versions of the module.
       %SVERK mark_referred_from(MFAs),
       %%%%%%SVERK remove_refs_from(MFAs),
-			erlang:delete_module(Mod), % SVERK
+      erlang:delete_module(Mod), % SVERK
 
       %% Patch all dynamic references in the code.
-      %%  Function calls, Atoms, Constants, System calls
+      %% Function calls, Atoms, Constants, System calls
       patch(Refs, CodeAddress, ConstMap2, Addresses, TrampolineMap),
       %% Tell the system where the loaded funs are. 
       %%  (patches the BEAM code to redirect to native.)
@@ -232,18 +232,18 @@ load_common(Mod, Bin, Beam, OldReferencesToPatch) ->
 	  ClosurePatches = find_closure_patches(Refs),
 	  AddressesOfClosuresToPatch =
 	    calculate_addresses(ClosurePatches, CodeAddress, Addresses),
-		%%%%SVERK switch places of export_funs calls
+	  %%SVERK switch places of export_funs calls
 	  export_funs(Mod, BeamBinary, Addresses, AddressesOfClosuresToPatch),
-		export_funs(Addresses)
+	  export_funs(Addresses)
       end,
 
       %% Redirect references to the old module to the new module's BEAM stub.
-      %%%%%%%%%%%SVERK redirect(OldReferencesToPatch),
+      %%SVERK redirect(OldReferencesToPatch),
       %% Patch referring functions to call the new function
       %% The call to export_funs/1 above updated the native addresses
       %% for the targets, so passing 'Addresses' is not needed.
-      %%%%%%%%%%%%SVERK redirect(MFAs),
-			%%%%%%%%%%%%SVERK hipe_bifs:redirect_referred_from(Mod),
+      %%SVERK redirect(MFAs),
+      %%SVERK hipe_bifs:redirect_referred_from(Mod),
       ?debug_msg("****************Loader Finished****************\n", []),
       {module,Mod}  % for compatibility with code:load_file/1
   end.
@@ -405,7 +405,7 @@ export_funs([FunDef | Addresses]) ->
      end, no_debug),
   hipe_bifs:set_funinfo_native_address(MFA, Address, IsExported),
   hipe_bifs:set_native_address(MFA, Address, IsClosure),
-	export_funs(Addresses);
+  export_funs(Addresses);
 export_funs([]) ->
   true.
 
@@ -823,13 +823,13 @@ address_to_mfa_lth(_Address, [], Prev) ->
 %  %emu_make_stubs(ReferencesToPatch),
 %  redirect(ReferencesToPatch).
 
--spec is_loaded(Module::atom()) -> boolean().
+%-spec is_loaded(Module::atom()) -> boolean().
 %% @doc Checks whether a module is loaded or not.
-is_loaded(M) when is_atom(M) ->
-  try hipe_bifs:fun_to_address({M,module_info,0}) of
-    I when is_integer(I) -> true
-  catch _:_ -> false
-  end.
+%is_loaded(M) when is_atom(M) ->
+%  try hipe_bifs:fun_to_address({M,module_info,0}) of
+%    I when is_integer(I) -> true
+%  catch _:_ -> false
+%  end.
 
 %emu_make_stubs([{MFA,_Refs}|Rest]) ->
 %  make_stub(MFA),
@@ -880,11 +880,11 @@ is_loaded(M) when is_atom(M) ->
 %% list. The refers_to list is used here to find the CalleeMFAs whose
 %% referred_from lists should be updated.
 %%
-remove_refs_from([CallerMFA|CallerMFAs]) ->
-  hipe_bifs:remove_refs_from(CallerMFA),
-  remove_refs_from(CallerMFAs);
-remove_refs_from([]) ->
-  [].
+%remove_refs_from([CallerMFA|CallerMFAs]) ->
+%  hipe_bifs:remove_refs_from(CallerMFA),
+%  remove_refs_from(CallerMFAs);
+%remove_refs_from([]) ->
+%  [].
 
 %%--------------------------------------------------------------------
 
