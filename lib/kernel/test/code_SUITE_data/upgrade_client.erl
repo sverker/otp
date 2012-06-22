@@ -55,6 +55,9 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc1),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
+    put(fun1, upgradee:get_fun()),
+    ?line 1 = (get(fun1))(),
+
     %%
     %% Load version 1 of other
     %%
@@ -129,6 +132,10 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, exp2),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
+    ?line 1 = (get(fun1))(),
+    put(fun2, upgradee:get_fun()),
+    ?line 2 = (get(fun2))(),
+
     %%
     %% Load version 2 of other
     %%
@@ -181,17 +188,23 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc1loc2),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
+    ?line 1 = (get(fun1))(),
+    ?line 2 = (get(fun2))(),
 
     %%
     %% Upgrade proxy to version 2
     %%
     P ! upgrade_order,
+   
+    %%
+    io:format("Purge version 1 of 'upgradee'\n",[]),
+    %%
+    put(fun1,undefined),
+    code:purge(upgradee),
 
-    
     %%
     io:format("Delete version 2 of 'upgradee'\n",[]),
     %%
-    code:purge(upgradee),
     code:delete(upgradee),
     
     ?line {'EXIT',{undef,_}} = (catch upgradee:exp2()),
@@ -243,6 +256,7 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     exit(P, die_please),
 
     io:format("Purge 'upgradee'\n",[]),
+    put(fun2,undefined),
     code:purge(upgradee),
 
     io:format("Delete and purge 'other'\n",[]),
