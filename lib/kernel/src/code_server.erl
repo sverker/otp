@@ -32,7 +32,7 @@
 
 -import(lists, [foreach/2]).
 
--define(ANY_NATIVE_CODE_LOADED, any_native_code_loaded).
+%%SVERK -define(ANY_NATIVE_CODE_LOADED, any_native_code_loaded).
 
 -record(state, {supervisor,
 		root,
@@ -99,7 +99,7 @@ init(Ref, Parent, [Root,Mode0]) ->
 		State0
 	end,
 
-    put(?ANY_NATIVE_CODE_LOADED, false),
+    %%SVERK put(?ANY_NATIVE_CODE_LOADED, false),
 
     Parent ! {Ref,{ok,self()}},
     loop(State#state{supervisor = Parent}).
@@ -1261,7 +1261,7 @@ try_load_module_1(File, Mod, Bin, Caller, #state{moddb=Db}=St) ->
 		    case erlang:load_module(Mod, Bin) of
 			{module,Mod} = Module ->
 			    ets:insert(Db, {Mod,File}),
-			    post_beam_load(Mod),
+			    %%SVERK post_beam_load(Mod),
 			    {reply,Module,St};
 			{error,on_load} ->
 			    handle_on_load(Mod, File, Caller, St);
@@ -1286,32 +1286,32 @@ load_native_code(Mod, Bin) ->
 	    no_native;
 	true ->
 	    Result = hipe_unified_loader:load_native_code(Mod, Bin),
-	    case Result of
-		{module,_} ->
-		    put(?ANY_NATIVE_CODE_LOADED, true);
-		_ ->
-		    ok
-	    end,
+	    %% case Result of
+	    %% 	{module,_} ->
+	    %% 	    put(?ANY_NATIVE_CODE_LOADED, true);
+	    %% 	_ ->
+	    %% 	    ok
+	    %% end,
 	    Result
     end.
 
 hipe_result_to_status(Result) ->
     case Result of
 	{module,_} ->
-	    put(?ANY_NATIVE_CODE_LOADED, true),
+	    %%SVERK put(?ANY_NATIVE_CODE_LOADED, true),
 	    Result;
 	_ ->
 	    {error,Result}
     end.
 
-post_beam_load(Mod) ->
-    %% post_beam_load/1 can potentially be very expensive because it
-    %% blocks multi-scheduling; thus we want to avoid the call if we
-    %% know that it is not needed.
-    case get(?ANY_NATIVE_CODE_LOADED) of
-	true -> hipe_unified_loader:post_beam_load(Mod);
-	false -> ok
-    end.
+%% post_beam_load(Mod) ->
+%%     %% post_beam_load/1 can potentially be very expensive because it
+%%     %% blocks multi-scheduling; thus we want to avoid the call if we
+%%     %% know that it is not needed.
+%%     case get(?ANY_NATIVE_CODE_LOADED) of
+%% 	true -> hipe_unified_loader:post_beam_load(Mod);
+%% 	false -> ok
+%%     end.
 
 int_list([H|T]) when is_integer(H) -> int_list(T);
 int_list([_|_])                    -> false;

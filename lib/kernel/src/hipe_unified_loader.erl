@@ -43,7 +43,7 @@
 -export([chunk_name/1,
 	 %% Only the code and code_server modules may call the entries below!
 	 load_native_code/2,
-	 post_beam_load/1,
+	 %%post_beam_load/1,
 	 load_module/3,
 	 load/2]).
 
@@ -118,10 +118,10 @@ load_native_code(Mod, Bin) when is_atom(Mod), is_binary(Bin) ->
 
 %%========================================================================
 
--spec post_beam_load(atom()) -> 'ok'.
-
-post_beam_load(Mod) when is_atom(Mod) ->
-		ok.
+%-spec post_beam_load(atom()) -> 'ok'.
+%
+%post_beam_load(Mod) when is_atom(Mod) ->
+%		ok.
 % Architecture = erlang:system_info(hipe_architecture),
 % try chunk_name(Architecture) of
 %   _ChunkTag ->
