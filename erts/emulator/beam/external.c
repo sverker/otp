@@ -1432,7 +1432,7 @@ enc_atom(ErtsAtomCacheMap *acmp, Eterm atom, byte *ep, Uint32 dflags)
 	i = atom_val(atom);
 	j = atom_tab(i)->len;
 	if (dflags & DFLAG_UTF8_ATOMS) {
-	    if (j <= 255) {
+	    if (j > 255) {
 		*ep++ = ATOM_UTF8_EXT;
 		put_int16(j, ep);
 		ep += 2;
@@ -1440,7 +1440,7 @@ enc_atom(ErtsAtomCacheMap *acmp, Eterm atom, byte *ep, Uint32 dflags)
 	    else {
 		*ep++ = SMALL_ATOM_UTF8_EXT;
 		put_int8(j, ep);
-		ep += 2;
+		ep += 1;
 	    }
 	    sys_memcpy((char *) ep, (char*)atom_tab(i)->name, (int) j);
 	}
