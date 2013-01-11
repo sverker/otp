@@ -32,12 +32,7 @@ int ei_encode_port(char *buf, int *index, const erlang_port *p)
     put8(s,ERL_PORT_EXT);
 
     /* first the nodename */
-    put8(s,ERL_ATOM_EXT);
-
-    put16be(s,len);
-  
-    memmove(s, p->node, len);
-    s += len;
+    put_atom(&s, p->node, len, p->node_org_enc);
 
     /* now the integers */
     put32be(s,p->id & 0x0fffffff /* 28 bits */);

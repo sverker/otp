@@ -112,6 +112,14 @@ do {						\
     (ptr) = NULL;				\
 } while (0)
 
+static void erl_atom_free(Erl_Atom_data* p)
+{
+    FREE_AND_CLEAR(p->latin1);
+    p->lenL = 0;
+    FREE_AND_CLEAR(p->utf8);
+    p->lenU = 0;
+}
+
 static void _erl_free_term (ETERM *ep, int external, int compound)
 {
 restart:
@@ -122,7 +130,7 @@ restart:
 	switch(ERL_TYPE(ep)) 
 	    {
 	    case ERL_ATOM:
-		FREE_AND_CLEAR(ERL_ATOM_PTR(ep));
+		erl_atom_free(&ep->uval.aval.d);
 		break;
 	    case ERL_VARIABLE:
 		FREE_AND_CLEAR(ERL_VAR_NAME(ep));
@@ -161,13 +169,13 @@ restart:
 		FREE_AND_CLEAR(ERL_BIN_PTR(ep));
 		break;
 	    case ERL_PID:
-		FREE_AND_CLEAR(ERL_PID_NODE(ep));
+		erl_atom_free(&ep->uval.pidval.node);
 		break;
 	    case ERL_PORT:
-		FREE_AND_CLEAR(ERL_PORT_NODE(ep));
+		erl_atom_free(&ep->uval.portval.node);
 		break;
 	    case ERL_REF:
-		FREE_AND_CLEAR(ERL_REF_NODE(ep));
+		erl_atom_free(&ep->uval.refval.node);
 		break;
 	    case ERL_EMPTY_LIST:
 	    case ERL_INTEGER:

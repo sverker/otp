@@ -32,12 +32,7 @@ int ei_encode_pid(char *buf, int *index, const erlang_pid *p)
     put8(s,ERL_PID_EXT);
 
     /* first the nodename */
-    put8(s,ERL_ATOM_EXT);
-
-    put16be(s,len);
-  
-    memmove(s, p->node, len);
-    s += len;
+    put_atom(&s, p->node, len, p->node_org_enc); 
 
     /* now the integers */
     put32be(s,p->num & 0x7fff); /* 15 bits */

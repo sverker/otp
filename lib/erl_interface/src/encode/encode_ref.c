@@ -38,12 +38,7 @@ int ei_encode_ref(char *buf, int *index, const erlang_ref *p)
 	  put16be(s, p->len);
 
 	  /* then the nodename */
-	  put8(s,ERL_ATOM_EXT);
-
-	  put16be(s,len);
-  
-	  memmove(s, p->node, len);
-	  s += len;
+	  put_atom(&s, p->node, len, p->node_org_enc);
 
 	  /* now the integers */
 	  put8(s,(p->creation & 0x03));
