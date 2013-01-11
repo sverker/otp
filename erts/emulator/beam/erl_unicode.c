@@ -1836,7 +1836,7 @@ BIF_RETTYPE atom_to_binary_2(BIF_ALIST_2)
 	    int dbg_sz;
 	    bin_term = new_binary(BIF_P, 0, bin_size);
 	    bin_p = binary_bytes(bin_term);
-	    dbg_sz = erts_utf8_to_latin1(bin_p, ap->name, ap->len);
+	    dbg_sz = erts_utf8_to_latin1(bin_p, bin_size, ap->name, ap->len, 0);
 	    ASSERT(dbg_sz == bin_size); (void)dbg_sz; 
 	}
 	BIF_RET(bin_term);
@@ -2625,29 +2625,43 @@ BIF_RETTYPE file_native_name_encoding_0(BIF_ALIST_0)
     }
 }
 
-/* Assumes 'dest' has enough room.
- */
-int erts_utf8_to_latin1(byte* dest, const byte* source, unsigned slen)
+int erts_utf8_to_latin1(byte* dest, unsigned dlen, const byte* source, unsigned slen,
+			int be_tolerant)
 {
     byte* dp = dest;
+    byte* dest_end = dest + dlen;
+
     while (slen > 0) {
+	if (dp >= dest_end) {
+	    return -1;
+	}
 	if ((source[0] & 0x80) == 0) {
-	    *dp++ = *source++;
+	    if (dest) {
+		*dp = *source;
+	    }
+	    ++source;
 	    --slen;
 	}
 	else if (slen > 1 &&
 		 (source[0] & 0xFE) == 0xC2 &&
 		 (source[1] & 0xC0) == 0x80) {
-	    *dp++ = (char) ((source[0] << 6) | (source[1] & 0x3F));
+	    if (dest) {
+		*dp = (char) ((source[0] << 6) | (source[1] & 0x3F));
+	    }
 	    source += 2;
 	    slen -= 2;
 	}
-	else {
+	else if (be_tolerant) {
 	    /* Just let unconvertable octets through. This should not happen
 	       in a correctly upgraded system */
-	    *dp++ = *source++;
+	    if (dest) {
+		*dp = *source;
+	    }
+	    ++source;
 	    --slen;
 	}
+	else return -1;
+	++dp;
     }
     return dp - dest;
 }

@@ -1447,13 +1447,13 @@ enc_atom(ErtsAtomCacheMap *acmp, Eterm atom, byte *ep, Uint32 dflags)
 	else {
 	    if (j <= 255 && (dflags & DFLAG_SMALL_ATOM_TAGS)) {
 		*ep++ = SMALL_ATOM_EXT;
-		j = erts_utf8_to_latin1(ep+1, atom_tab(i)->name, j);
+		j = erts_utf8_to_latin1(ep+1, j, atom_tab(i)->name, j, 1);
 		put_int8(j, ep);
 		ep++;
 	    }
 	    else {
 		*ep++ = ATOM_EXT;
-		j = erts_utf8_to_latin1(ep+2, atom_tab(i)->name, j);
+		j = erts_utf8_to_latin1(ep+2, j, atom_tab(i)->name, j, 1);
 		put_int16(j, ep);
 		ep += 2;
 	    }	    
