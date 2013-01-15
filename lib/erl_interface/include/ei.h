@@ -241,6 +241,7 @@ typedef struct {
 typedef struct {
     long arity;
     char module[MAXATOMLEN_UTF8];
+    enum erlang_char_encoding module_org_enc;
     char md5[16];
     long index;
     long old_index;

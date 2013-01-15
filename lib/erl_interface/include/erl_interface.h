@@ -302,7 +302,7 @@ typedef struct _eterm {
 } ETERM;
 
 
-#define MAXREGLEN 255  /* max length of registered (atom) name */
+#define MAXREGLEN (255*4)  /* max length of registered (atom) name */
 
 typedef struct {
   int type;   /* one of the message type constants in eiext.h */
