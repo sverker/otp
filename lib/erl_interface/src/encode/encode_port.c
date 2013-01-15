@@ -24,23 +24,23 @@
 int ei_encode_port(char *buf, int *index, const erlang_port *p)
 {
   char *s = buf + *index;
-  char *s0 = s;
-  int len = strlen(p->node);
-  
-  if (!buf) s += 9 + len;
-  else {
+
+  ++(*index); /* skip ERL_PORT_EXT */
+  if (ei_encode_atom_len2(buf, index, p->node, strlen(p->node), ERLANG_UTF8,
+			  p->node_org_enc) < 0) {
+      return -1;
+  }
+  if (buf) {
     put8(s,ERL_PORT_EXT);
 
-    /* first the nodename */
-    put_atom(&s, p->node, len, p->node_org_enc);
+    s = buf + *index;
 
     /* now the integers */
     put32be(s,p->id & 0x0fffffff /* 28 bits */);
     put8(s,(p->creation & 0x03));
   }
   
-  *index += s-s0;
-  
+  *index += 4 + 1;
   return 0;
 }
 

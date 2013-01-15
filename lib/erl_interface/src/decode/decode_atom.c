@@ -24,12 +24,13 @@
 
 int ei_decode_atom(const char *buf, int *index, char *p)
 {
-    return ei_decode_atom2(buf, index, p, MAXATOMLEN, ERLANG_LATIN1, NULL);
+    return ei_decode_atom2(buf, index, p, MAXATOMLEN, ERLANG_LATIN1, NULL, NULL);
 }
 
-int ei_decode_atom2(const char *buf, int *index, char* p,
-		    int destlen, enum erlang_char_encoding want_enc,
-		    enum erlang_char_encoding* was_encp)
+int ei_decode_atom2(const char *buf, int *index, char* p, int destlen,
+		    enum erlang_char_encoding want_enc,
+		    enum erlang_char_encoding* was_encp,
+		    enum erlang_char_encoding* res_encp)
 {
     const char *s = buf + *index;
     const char *s0 = s;
@@ -65,18 +66,20 @@ int ei_decode_atom2(const char *buf, int *index, char* p,
 	    if (s[i] & 0x80) found_non_ascii = 1;
 	    if (p) p[i] = s[i];
 	}
-	if (!found_non_ascii) {
-	    got_enc = ERLANG_ASCII;
-	}
-	else if (want_enc == ERLANG_ASCII)
-	    return -1;
 	if (p) p[len] = 0;
+	if (want_enc == ERLANG_ASCII && found_non_ascii) {
+	    return -1;
+	}
+	if (res_encp) {
+	    *res_encp = found_non_ascii ? got_enc : ERLANG_ASCII;
+	}
     }
     else {
 	int plen = (got_enc == ERLANG_LATIN1) ?
-	    utf8_to_latin1(p, s, len, destlen, &got_enc) :
-	    latin1_to_utf8(p, s, len, destlen, &got_enc);
+	    utf8_to_latin1(p, s, len, destlen-1, res_encp) :
+	    latin1_to_utf8(p, s, len, destlen-1, res_encp);
 	if (plen < 0) return -1;
+	if (p) p[plen] = 0;
     }
     if (was_encp) {
 	*was_encp = got_enc;
@@ -92,7 +95,7 @@ int utf8_to_latin1(char* dst, const char* src, int slen, int destlen,
 		   enum erlang_char_encoding* res_encp)
 {
     const char* const dst_start = dst;
-    const char* const dst_end = dst + (destlen - 1);
+    const char* const dst_end = dst + destlen;
     int found_non_ascii = 0;
 
     while (slen > 0) {
@@ -121,9 +124,6 @@ int utf8_to_latin1(char* dst, const char* src, int slen, int destlen,
     if (res_encp) {
 	*res_encp = found_non_ascii ? ERLANG_LATIN1 : ERLANG_ASCII;
     }
-    if (dst_start) {
-	*dst = 0;
-    }
     return dst - dst_start;
 }
 
@@ -132,7 +132,7 @@ int latin1_to_utf8(char* dst, const char* src, int slen, int destlen,
 {
     const char* const src_end = src + slen;
     const char* const dst_start = dst;
-    const char* const dst_end = dst + (destlen - 1);
+    const char* const dst_end = dst + destlen;
     int found_non_ascii = 0;
 
     while (src < src_end) {
@@ -157,9 +157,6 @@ int latin1_to_utf8(char* dst, const char* src, int slen, int destlen,
     if (res_encp) {
 	*res_encp = found_non_ascii ? ERLANG_UTF8 : ERLANG_ASCII;
     }
-    if (dst_start) {
-	*dst = 0;
-    }
     return dst - dst_start;
 }
 
@@ -169,7 +166,7 @@ int ei_internal_get_atom(const char** bufp, char* p,
 			 enum erlang_char_encoding* was_encp)
 {
     int ix = 0;
-    if (ei_decode_atom2(*bufp, &ix, p, MAXATOMLEN_UTF8, ERLANG_UTF8, was_encp) < 0)
+    if (ei_decode_atom2(*bufp, &ix, p, MAXATOMLEN_UTF8, ERLANG_UTF8, was_encp, NULL) < 0)
 	return -1;
     *bufp += ix;
     return 0;

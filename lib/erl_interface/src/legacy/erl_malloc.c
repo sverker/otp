@@ -114,9 +114,13 @@ do {						\
 
 static void erl_atom_free(Erl_Atom_data* p)
 {
-    FREE_AND_CLEAR(p->latin1);
+    erl_free(p->latin1);
+    if (p->utf8 != p->latin1) {
+	erl_free(p->utf8);
+    }
+    p->latin1 = NULL;
+    p->utf8 = NULL;
     p->lenL = 0;
-    FREE_AND_CLEAR(p->utf8);
     p->lenU = 0;
 }
 

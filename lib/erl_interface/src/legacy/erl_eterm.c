@@ -36,6 +36,7 @@
 #include "erl_error.h"
 #include "erl_internal.h"
 #include "ei_internal.h"
+#include "putget.h"
 
 #define ERL_IS_BYTE(x) (ERL_IS_INTEGER(x) && (ERL_INT_VALUE(x) & ~0xFF) == 0)
 
@@ -142,17 +143,72 @@ ETERM *erl_mk_atom (const char *s)
 
   ep = erl_alloc_eterm(ERL_ATOM);
   ERL_COUNT(ep) = 1;
-  ep->uval.aval.d.lenL = strlen(s);
-  if ((ep->uval.aval.d.latin1 = strsave(s)) == NULL)
-  {
+  if (erl_atom_init_latin1(&ep->uval.aval.d, s) == NULL) {
       erl_free_term(ep);
       erl_errno = ENOMEM;
       return NULL;
   }
-  ep->uval.aval.d.utf8 = NULL;
-  ep->uval.aval.d.lenU = 0;
   return ep;
 } 
+
+char* erl_atom_ptr_latin1(Erl_Atom_data* a)
+{
+    if (a->latin1 == NULL) {
+	enum erlang_char_encoding enc;
+	a->lenL = utf8_to_latin1(NULL, a->utf8, a->lenU, a->lenU, &enc);
+	if (a->lenL < 0) {
+	    a->lenL = 0;
+	    return NULL;
+	}
+	if (enc == ERLANG_ASCII) {
+	    a->latin1 = a->utf8; 
+	}
+	else {
+	    a->latin1 = malloc(a->lenL+1);
+	    utf8_to_latin1(a->latin1, a->utf8, a->lenU, a->lenL, NULL);
+	    a->latin1[a->lenL] = '\0';
+	}
+    }
+    return a->latin1;
+}
+
+char* erl_atom_ptr_utf8(Erl_Atom_data* a)
+{
+    if (a->utf8 == NULL) {
+	int dlen = a->lenL * 2; /* over estimation */
+	a->utf8 = malloc(dlen + 1); 
+	a->lenU = latin1_to_utf8(a->utf8, a->latin1, a->lenL, dlen, NULL);
+	a->utf8[a->lenU] = '\0';
+    }
+    return a->utf8;
+
+}
+int erl_atom_size_latin1(Erl_Atom_data* a)
+{
+    if (a->latin1 == NULL) {
+	erl_atom_ptr_latin1(a);
+    }
+    return a->lenL;
+}
+int erl_atom_size_utf8(Erl_Atom_data* a)
+{
+    if (a->utf8 == NULL) {
+	erl_atom_ptr_utf8(a);
+    }
+    return a->lenU;
+}
+char* erl_atom_init_latin1(Erl_Atom_data* a, const char* s)
+{
+    a->lenL = strlen(s);
+    if ((a->latin1 = strsave(s)) == NULL)
+    {
+	return NULL;
+    }
+    a->utf8 = NULL;
+    a->lenU = 0;
+    return a->latin1;
+}
+
 
 /*
  * Given a string as input, creates a list.

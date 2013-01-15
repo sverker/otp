@@ -247,9 +247,15 @@ int erl_send(int fd, ETERM *to ,ETERM *msg)
 	erl_errno = EINVAL;
 	return -1;
     }
-    
-    strncpy(topid.node, (char *)ERL_PID_NODE_UTF8(to), sizeof(topid.node));
-    topid.node[sizeof(topid.node)-1] = '\0';
+
+    if (to->uval.pidval.node.latin1) {
+	strcpy(topid.node, to->uval.pidval.node.latin1);
+	topid.node_org_enc = ERLANG_LATIN1;
+    }
+    else {
+	strcpy(topid.node, to->uval.pidval.node.utf8);
+	topid.node_org_enc = ERLANG_UTF8;
+    }    
     topid.num = ERL_PID_NUMBER(to);
     topid.serial = ERL_PID_SERIAL(to);
     topid.creation = ERL_PID_CREATION(to);

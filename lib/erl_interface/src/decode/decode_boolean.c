@@ -27,7 +27,7 @@ int ei_decode_boolean(const char *buf, int *index, int *p)
   char tbuf[6];
   int t;
 
-  if (ei_decode_atom2(buf, index, tbuf, sizeof(tbuf), ERLANG_UTF8, NULL) < 0)
+  if (ei_decode_atom2(buf, index, tbuf, sizeof(tbuf), ERLANG_ASCII, NULL, NULL) < 0)
       return -1;
 
   if (memcmp(tbuf, "true", 5) == 0)

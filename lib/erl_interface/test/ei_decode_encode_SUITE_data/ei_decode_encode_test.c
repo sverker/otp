@@ -29,99 +29,20 @@
  * Author:  kent@erix.ericsson.se
  */
 
-#if 0
-#define EI_DECODE_ENCODE(FUNC,TYPE) \
-  { \
-    char *buf; \
-    char buf2[1024]; \
-    TYPE p; \
-    int size1 = 0; \
-    int size2 = 0; \
-    int size3 = 0; \
-    int err; \
-    ei_x_buff arg; \
-\
-    message("ei_decode_" #FUNC ", arg is type " #TYPE); \
-    buf = read_packet(NULL); \
-    err = ei_decode_ ## FUNC(buf+1, &size1, &p); \
-    if (err != 0) { \
-      if (err != -1) { \
-	fail("decode returned non zero but not -1"); \
-      } else { \
-	fail("decode returned non zero"); \
-      } \
-      return; \
-    } \
-    if (size1 < 1) { \
-      fail("size is < 1"); \
-      return; \
-    } \
-\
-    message("ei_encode_" #FUNC " buf is NULL, arg is type " #TYPE); \
-    err = ei_encode_ ## FUNC(NULL, &size2, &p); \
-    if (err != 0) { \
-      if (err != -1) { \
-	fail("size calculation returned non zero but not -1"); \
-	return; \
-      } else { \
-	fail("size calculation returned non zero"); \
-	return; \
-      } \
-    } \
-    if (size1 != size2) { \
-      message("size1 = %d, size2 = %d\n",size1,size2); \
-      fail("decode and encode size differs when buf is NULL"); \
-      return; \
-    } \
-    message("ei_encode_" #FUNC ", arg is type " #TYPE); \
-    err = ei_encode_ ## FUNC(buf2, &size3, &p); \
-    if (err != 0) { \
-      if (err != -1) { \
-	fail("returned non zero but not -1"); \
-      } else { \
-	fail("returned non zero"); \
-      } \
-      return; \
-    } \
-    if (size1 != size3) { \
-      message("size1 = %d, size2 = %d\n",size1,size3); \
-      fail("decode and encode size differs"); \
-      return; \
-    } \
-    send_buffer(buf2, size1); \
-\
-    message("ei_x_encode_" #FUNC ", arg is type " #TYPE); \
-    ei_x_new(&arg); \
-    err = ei_x_encode_ ## FUNC(&arg, &p); \
-    if (err != 0) { \
-      if (err != -1) { \
-	fail("returned non zero but not -1"); \
-      } else { \
-	fail("returned non zero"); \
-      } \
-      ei_x_free(&arg); \
-      return; \
-    } \
-    if (arg.index < 1) { \
-      fail("size is < 1"); \
-      ei_x_free(&arg); \
-      return; \
-    } \
-    send_buffer(arg.buff, arg.index); \
-    ei_x_free(&arg); \
-  }
-#endif
+typedef int decodeFT(const char *buf, int *index, void*);
+typedef int encodeFT(char *buf, int *index, void*);
+typedef int x_encodeFT(ei_x_buff*, void*);
 
 struct Type {
     char* name;
     char* type;
-    int (*decode_fp)(char*,int*,void*);
-    int (*encode_fp)(char*,int*,void*);
-    int (*x_encode_fp)(ei_x_buff*,void*);
+    decodeFT* ei_decode_fp;
+    encodeFT* ei_encode_fp;
+    x_encodeFT* ei_x_encode_fp;
 };
 
 
-void decode_encode(struct Type* p, void* obj)
+void decode_encode(struct Type* t, void* obj)
 {
     char *buf;
     char buf2[1024];
@@ -131,9 +52,9 @@ void decode_encode(struct Type* p, void* obj)
     int err;
     ei_x_buff arg;
     
-    message("ei_decode_%s, arg is type %s", p->name, p->type);
+    message("ei_decode_%s, arg is type %s", t->name, t->type);
     buf = read_packet(NULL);
-    err = p->decode_fp(buf+1, &size1, obj);
+    err = t->ei_decode_fp(buf+1, &size1, obj);
     if (err != 0) {
 	if (err != -1) {
 	    fail("decode returned non zero but not -1");
@@ -147,8 +68,8 @@ void decode_encode(struct Type* p, void* obj)
 	return;
     }
 
-    message("ei_encode_%s buf is NULL, arg is type %s", p->name, p->type);
-    err = p->encode_fp(NULL, &size2, obj);
+    message("ei_encode_%s buf is NULL, arg is type %s", t->name, t->type);
+    err = t->ei_encode_fp(NULL, &size2, obj);
     if (err != 0) {
 	if (err != -1) {
 	    fail("size calculation returned non zero but not -1");
@@ -163,8 +84,8 @@ void decode_encode(struct Type* p, void* obj)
 	fail("decode and encode size differs when buf is NULL");
 	return;
     }
-    message("ei_encode_%s, arg is type %s", p->name, p->type);
-    err = p->encode_fp(buf2, &size3, obj);
+    message("ei_encode_%s, arg is type %s", t->name, t->type);
+    err = t->ei_encode_fp(buf2, &size3, obj);
     if (err != 0) {
 	if (err != -1) {
 	    fail("returned non zero but not -1");
@@ -180,9 +101,9 @@ void decode_encode(struct Type* p, void* obj)
     }
     send_buffer(buf2, size1);
 
-    message("ei_x_encode_%s, arg is type %s", p->name, p->type);
+    message("ei_x_encode_%s, arg is type %s", t->name, t->type);
     ei_x_new(&arg);
-    err = p->x_encode_fp(&arg, obj);
+    err = t->ei_x_encode_fp(&arg, obj);
     if (err != 0) {
 	if (err != -1) {
 	    fail("returned non zero but not -1");
@@ -202,97 +123,107 @@ void decode_encode(struct Type* p, void* obj)
 }
 
 
-
-#define EI_DECODE_ENCODE_BIG(FUNC,TYPE) \
-  { \
-    char *buf; \
-    char buf2[2048]; \
-    TYPE *p; \
-    int size1 = 0; \
-    int size2 = 0; \
-    int size3 = 0; \
-    int err, index = 0, len, type; \
-    ei_x_buff arg; \
-\
-    message("ei_decode_" #FUNC ", arg is type " #TYPE); \
-    buf = read_packet(NULL); \
-    ei_get_type(buf+1, &index, &type, &len); \
-    p = ei_alloc_big(len); \
-    err = ei_decode_ ## FUNC(buf+1, &size1, p); \
-    if (err != 0) { \
-      if (err != -1) { \
-	fail("decode returned non zero but not -1"); \
-      } else { \
-	fail("decode returned non zero"); \
-      } \
-      return; \
-    } \
-    if (size1 < 1) { \
-      fail("size is < 1"); \
-      return; \
-    } \
-\
-    message("ei_encode_" #FUNC " buf is NULL, arg is type " #TYPE); \
-    err = ei_encode_ ## FUNC(NULL, &size2, p); \
-    if (err != 0) { \
-      if (err != -1) { \
-	fail("size calculation returned non zero but not -1"); \
-	return; \
-      } else { \
-	fail("size calculation returned non zero"); \
-	return; \
-      } \
-    } \
-    if (size1 != size2) { \
-      message("size1 = %d, size2 = %d\n",size1,size2); \
-      fail("decode and encode size differs when buf is NULL"); \
-      return; \
-    } \
-    message("ei_encode_" #FUNC ", arg is type " #TYPE); \
-    err = ei_encode_ ## FUNC(buf2, &size3, p); \
-    if (err != 0) { \
-      if (err != -1) { \
-	fail("returned non zero but not -1"); \
-      } else { \
-	fail("returned non zero"); \
-      } \
-      return; \
-    } \
-    if (size1 != size3) { \
-      message("size1 = %d, size2 = %d\n",size1,size3); \
-      fail("decode and encode size differs"); \
-      return; \
-    } \
-    send_buffer(buf2, size1); \
-\
-    message("ei_x_encode_" #FUNC ", arg is type " #TYPE); \
-    ei_x_new(&arg); \
-    err = ei_x_encode_ ## FUNC(&arg, p); \
-    if (err != 0) { \
-      if (err != -1) { \
-	fail("returned non zero but not -1"); \
-      } else { \
-	fail("returned non zero"); \
-      } \
-      ei_x_free(&arg); \
-      return; \
-    } \
-    if (arg.index < 1) { \
-      fail("size is < 1"); \
-      ei_x_free(&arg); \
-      return; \
-    } \
-    send_buffer(arg.buff, arg.index); \
-    ei_x_free(&arg); \
-    ei_free_big(p); \
-  }
+#define EI_DECODE_ENCODE(TYPE, ERLANG_TYPE) {			\
+	struct Type type_struct = {#TYPE, #ERLANG_TYPE,		\
+				   (decodeFT*)ei_decode_##TYPE,		\
+				   (encodeFT*)ei_encode_##TYPE,		\
+				   (x_encodeFT*)ei_x_encode_##TYPE };	\
+	erlang_##TYPE type_obj;						\
+	decode_encode(&type_struct, &type_obj);				\
+    }
 
 
-#define DECODE_ENCODE(TYPE) {\
-    struct Type type_struct = {#TYPE, "erlang_"#TYPE, ei_decode_##TYPE, ei_encode_##TYPE, ei_x_encode_##TYPE };\
-    erlang_##TYPE type_obj;\
-    decode_encode(&type_struct, &type_obj);\
+void decode_encode_big(struct Type* t)
+{
+    char *buf;
+    char buf2[2048];
+    void *p; /* (TYPE*) */
+    int size1 = 0;
+    int size2 = 0;
+    int size3 = 0;
+    int err, index = 0, len, type;
+    ei_x_buff arg;
+
+    message("ei_decode_%s, arg is type %s", t->name, t->type);
+    buf = read_packet(NULL);
+    ei_get_type(buf+1, &index, &type, &len);
+    p = ei_alloc_big(len);
+    err = t->ei_decode_fp(buf+1, &size1, p);
+    if (err != 0) {
+	if (err != -1) {
+	    fail("decode returned non zero but not -1");
+	} else {
+	    fail("decode returned non zero");
+	}
+	return;
+    }
+    if (size1 < 1) {
+	fail("size is < 1");
+	return;
+    }
+
+    message("ei_encode_%s buf is NULL, arg is type %s", t->name, t->type);
+    err = t->ei_encode_fp(NULL, &size2, p);
+    if (err != 0) {
+	if (err != -1) {
+	    fail("size calculation returned non zero but not -1");
+	    return;
+	} else {
+	    fail("size calculation returned non zero");
+	    return;
+	}
+    }
+    if (size1 != size2) {
+	message("size1 = %d, size2 = %d\n",size1,size2);
+	fail("decode and encode size differs when buf is NULL");
+	return;
+    }
+    message("ei_encode_%s, arg is type %s", t->name, t->type);
+    err = t->ei_encode_fp(buf2, &size3, p);
+    if (err != 0) {
+	if (err != -1) {
+	    fail("returned non zero but not -1");
+	} else {
+	    fail("returned non zero");
+	}
+	return;
+    }
+    if (size1 != size3) {
+	message("size1 = %d, size2 = %d\n",size1,size3);
+	fail("decode and encode size differs");
+	return;
+    }
+    send_buffer(buf2, size1);
+
+    message("ei_x_encode_%s, arg is type %s", t->name, t->type);
+    ei_x_new(&arg);
+    err = t->ei_x_encode_fp(&arg, p);
+    if (err != 0) {
+	if (err != -1) {
+	    fail("returned non zero but not -1");
+	} else {
+	    fail("returned non zero");
+	}
+	ei_x_free(&arg);
+	return;
+    }
+    if (arg.index < 1) {
+	fail("size is < 1");
+	ei_x_free(&arg);
+	return;
+    }
+    send_buffer(arg.buff, arg.index);
+    ei_x_free(&arg);
+    ei_free_big(p);
 }
+
+#define EI_DECODE_ENCODE_BIG(TYPE, ERLANG_TYPE) {	\
+	struct Type type_struct = {#TYPE, #ERLANG_TYPE,		\
+				   (decodeFT*)ei_decode_##TYPE,	\
+				   (encodeFT*)ei_encode_##TYPE,		\
+				   (x_encodeFT*)ei_x_encode_##TYPE };	\
+	decode_encode_big(&type_struct);				\
+    }
 
 
 
@@ -300,8 +231,6 @@ void decode_encode(struct Type* p, void* obj)
 
 TESTCASE(test_ei_decode_encode)
 {
-    DECODE_ENCODE(fun);
-#if 0
     EI_DECODE_ENCODE(fun  , erlang_fun);
     EI_DECODE_ENCODE(pid  , erlang_pid);
     EI_DECODE_ENCODE(port , erlang_port);
@@ -323,7 +252,7 @@ TESTCASE(test_ei_decode_encode)
     EI_DECODE_ENCODE(pid  , erlang_pid);
     EI_DECODE_ENCODE(port , erlang_port);
     EI_DECODE_ENCODE(ref  , erlang_ref);
-#endif
+
     report(1);
 }
 

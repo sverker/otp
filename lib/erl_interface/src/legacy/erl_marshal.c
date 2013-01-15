@@ -662,7 +662,7 @@ static int read_atom(unsigned char** ext, Erl_Atom_data* a)
     int offs = 0;
     enum erlang_char_encoding enc;
     int ret = ei_decode_atom2((char*)*ext, &offs, buf, MAXATOMLEN_UTF8,
-			      ERLANG_WHATEVER, &enc);
+			      ERLANG_WHATEVER, NULL, &enc);
     *ext += offs;
 
     if (ret == 0) {

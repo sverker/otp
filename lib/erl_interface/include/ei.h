@@ -494,7 +494,7 @@ int ei_decode_boolean(const char *buf, int *index, int *p);
 int ei_decode_char(const char *buf, int *index, char *p);
 int ei_decode_string(const char *buf, int *index, char *p);
 int ei_decode_atom(const char *buf, int *index, char *p);
-int ei_decode_atom2(const char *buf, int *index, char *p, int destlen, enum erlang_char_encoding want, enum erlang_char_encoding* was);
+int ei_decode_atom2(const char *buf, int *index, char *p, int destlen, enum erlang_char_encoding want, enum erlang_char_encoding* was, enum erlang_char_encoding* result);
 int ei_decode_binary(const char *buf, int *index, void *p, long *len);
 int ei_decode_fun(const char* buf, int* index, erlang_fun* p);
 void free_fun(erlang_fun* f);
