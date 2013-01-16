@@ -651,10 +651,17 @@ BIF_RETTYPE finish_after_on_load_2(BIF_ALIST_2)
 		ep->code[4] != 0) {
 		ep->addressv[code_ix] = (void *) ep->code[4];
 		ep->code[4] = 0;
+	      #ifdef HIPE
+		hipe_export_beam(ep->code[0], ep->code[1], ep->code[2],
+				 ep->addressv[code_ix]);
+	      #endif
 	    }
 	}
 	modp->curr.code[MI_ON_LOAD_FUNCTION_PTR] = 0;
 	set_default_trace_pattern(BIF_ARG_1);
+      #ifdef HIPE
+        hipe_redirect_to_module(modp);
+      #endif
     } else if (BIF_ARG_2 == am_false) {
 	BeamInstr* code;
 	BeamInstr* end;

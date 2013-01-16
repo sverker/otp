@@ -4314,16 +4314,19 @@ final_touch(LoaderState* stp)
 	}
 	ep = erts_export_put(stp->module, stp->export[i].function,
 			     stp->export[i].arity);
-	if (!on_load) {
-	    ep->addressv[erts_staging_code_ix()] = address;
-	} else {
+	if (on_load) {
 	    /*
 	     * Don't make any of the exported functions
 	     * callable yet.
 	     */
-	    ep->addressv[erts_staging_code_ix()] = ep->code+3;
 	    ep->code[4] = (BeamInstr) address;
+	    address = ep->code+3;
 	}
+	ep->addressv[erts_staging_code_ix()] = address;
+      #ifdef HIPE
+	hipe_export_beam(stp->module, stp->export[i].function,
+			 stp->export[i].arity, address);
+      #endif
     }
 
     /*

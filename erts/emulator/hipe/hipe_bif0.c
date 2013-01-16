@@ -1193,6 +1193,7 @@ static struct hipe_mfa_info *hipe_mfa_info_table_put_locked(Eterm m, Eterm f, un
     p->next_in_mod = modp->first_hipe_mfa;
     modp->first_hipe_mfa = p;
 
+    erts_fprintf(stderr, "hipe_mfa_info created for %T:%T/%u\n", m, f, arity);
     DBG_TRACE_MFA(m,f,arity, "hipe_mfa_info allocated at %p", p);
 
     return p;
@@ -1286,7 +1287,7 @@ void hipe_delete_code(Module* modp)
 
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
 	DBG_TRACE_MFA(p->m,p->f,p->a,"INVALIDATE hipe_mfa_info at %p", p);
-	p->remote_address = NULL;
+	p->remote_address = NULL; 
 	ASSERT(p->old_address == NULL);
 	p->old_address = p->local_address;
 	p->local_address = NULL;
@@ -1312,17 +1313,22 @@ static void *hipe_make_stub(Eterm m, Eterm f, unsigned int arity, int is_remote)
     }
     StubAddress = hipe_make_native_stub(BEAMAddress, arity);
 
-    if (*BEAMAddress == (BeamInstr)em_call_error_handler) {
-	ASSERT(BEAMAddress == &ep->code[3]);
+#if defined(DEBUG) || defined(ENABLE_DBG_TRACE_MFA)
+    if (BEAMAddress != &ep->code[3]) {
+	ASSERT(*BEAMAddress != (BeamInstr)em_call_error_handler);
+	DBG_TRACE_MFA(m,f,arity,"hipe_make_stub to beam=%p hipe=%p is_remote=%d",
+	BEAMAddress, StubAddress, is_remote);
+    }
+    else if (*BEAMAddress == (BeamInstr)em_call_error_handler) {
 	DBG_TRACE_MFA(m,f,arity,"hipe_make_stub to error_handler hipe=%p is_remote=%d",
 		      StubAddress, is_remote);
     }
-    else {
-	ASSERT(BEAMAddress != &ep->code[3]);
-	DBG_TRACE_MFA(m,f,arity,"hipe_make_stub to beam=%p hipe=%p is_remote=%d",
-	       BEAMAddress, StubAddress, is_remote);
+    else if (*BEAMAddress == (BeamInstr)em_apply_bif) {
+	DBG_TRACE_MFA(m,f,arity,"hipe_make_stub to BIF hipe=%p is_remote=%d",
+	       StubAddress, is_remote);
     }
-    
+    else ASSERT(!"strange beam instruction in export entry");
+#endif
     return StubAddress;
 }
 
@@ -1635,6 +1641,23 @@ void hipe_purge_module(Module* modp)
      */
 }
 
+void hipe_export_beam(Eterm m, Eterm f, Uint a, BeamInstr* BeamAddress)
+{
+    struct hipe_mfa_info *p;
+    hipe_mfa_info_table_lock();
+    p = hipe_mfa_info_table_get_locked(m, f, a);
+    if (p) {
+	void* StubAddress = hipe_make_native_stub(BeamAddress, a);
+
+	DBG_TRACE_MFA(m,f,a, "hipe_export_beam at beam=%p, hipe stub=%p",
+		      BeamAddress, StubAddress);
+	ASSERT(!p->local_address);
+	p->remote_address = StubAddress;
+    }
+    hipe_mfa_info_table_unlock();
+}
+
+
 /* redirect_referred_from(CalleeMFA)
  * Redirect all pending-redirect refs in CalleeMFA's referred_from.
  * Then remove any pending-redirect && pending-remove refs from CalleeMFA's referred_from.
@@ -1653,7 +1676,6 @@ void hipe_redirect_to_module(Module* modp)
 	for (ref = p->first_caller; ref; ref = ref->next) {
 	    void *new_address;
 	    int res;
-	    //ASSERT(ref->flags & REF_FLAG_IS_REMOTE);
 	    
 	    new_address = hipe_get_na_nofail_locked(p->m, p->f, p->a, 1);
 	    	    
@@ -1671,7 +1693,6 @@ void hipe_redirect_to_module(Module* modp)
 		res = hipe_patch_call(ref->address, new_address, ref->trampoline);
 	    if (res)
 		fprintf(stderr, "%s: patch failed", __FUNCTION__);
-	    //SVERK ref->flags &= ~REF_FLAG_PENDING_REDIRECT;
 	}
 	DBG_TRACE_MFA(p->m,p->f,p->a,"DONE REDIRECT towards hipe_mfa_info at %p", p);
     }

@@ -216,12 +216,18 @@ load_common(Mod, Bin, Beam) ->
       {_MFAs,Addresses} = exports(ExportMap, CodeAddress),
       %% Remove references to old versions of the module.
       %SVERK mark_referred_from(MFAs),
-      %%%%%%SVERK remove_refs_from(MFAs),
-      erlang:delete_module(Mod), % SVERK
+      %SVERK remove_refs_from(MFAs),
+      case Beam of
+	[] -> ok;
+	Beam when is_binary(Beam) ->
+	  erlang:delete_module(Mod) % SVERK
+      end,
 
       %% Patch all dynamic references in the code.
       %% Function calls, Atoms, Constants, System calls
+
       patch(Refs, CodeAddress, ConstMap2, Addresses, TrampolineMap),
+
       %% Tell the system where the loaded funs are. 
       %%  (patches the BEAM code to redirect to native.)
       case Beam of
@@ -232,9 +238,8 @@ load_common(Mod, Bin, Beam) ->
 	  ClosurePatches = find_closure_patches(Refs),
 	  AddressesOfClosuresToPatch =
 	    calculate_addresses(ClosurePatches, CodeAddress, Addresses),
-	  %%SVERK switch places of export_funs calls
-	  export_funs(Mod, BeamBinary, Addresses, AddressesOfClosuresToPatch),
-	  export_funs(Addresses)
+	  export_funs(Addresses),
+	  make_beam_stub(Mod, BeamBinary, Addresses, AddressesOfClosuresToPatch)
       end,
 
       %% Redirect references to the old module to the new module's BEAM stub.
@@ -409,7 +414,7 @@ export_funs([FunDef | Addresses]) ->
 export_funs([]) ->
   true.
 
-export_funs(Mod, Beam, Addresses, ClosuresToPatch) ->
+make_beam_stub(Mod, Beam, Addresses, ClosuresToPatch) ->
  Fs = [{F,A,Address} || #fundef{address=Address, mfa={_M,F,A}} <- Addresses],
  code:make_stub_module(Mod, Beam, {Fs,ClosuresToPatch}).
 
@@ -577,6 +582,7 @@ patch_closure(DestMFA, Uniq, Index, Address, Addresses) ->
 %% RemoteOrLocal ::= 'remote' | 'local'
 %%
 patch_load_mfa(CodeAddress, DestMFA, Addresses, RemoteOrLocal) ->
+  ?ASSERT(assert_local_patch(CodeAddress)),
   DestAddress =
     case bif_address(DestMFA) of
       false ->
@@ -584,9 +590,9 @@ patch_load_mfa(CodeAddress, DestMFA, Addresses, RemoteOrLocal) ->
 	add_ref(DestMFA, CodeAddress, Addresses, 'load_mfa', [], RemoteOrLocal),
 	NativeAddress;
       BifAddress when is_integer(BifAddress) ->
+	patch_instr(CodeAddress, BifAddress, 'load_mfa'),
 	BifAddress
     end,
-  ?ASSERT(assert_local_patch(CodeAddress)),
   patch_instr(CodeAddress, DestAddress, 'load_mfa').
 
 %%----------------------------------------------------------------
@@ -753,10 +759,10 @@ add_ref(CalleeMFA, Address, Addresses, RefType, Trampoline, RemoteOrLocal) ->
 	     true
 	 end,
   case RemoteOrLocal of
-      local -> ignore; % SVERK try ignore local refs
-      remote ->
-				%% io:format("Adding ref ~w\n",[{CallerMFA, CalleeMFA, Address, RefType}]),
-				hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline,RemoteOrLocal})
+    local -> ignore; % SVERK try ignore local refs
+    remote ->
+      %% io:format("Adding ref ~w\n",[{CallerMFA, CalleeMFA, Address, RefType}]),
+      hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline,RemoteOrLocal})
   end.
 
 % For FunDefs sorted from low to high addresses
