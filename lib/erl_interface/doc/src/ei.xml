@@ -247,6 +247,19 @@ enum erlang_char_encoding {
       </desc>
     </func>
     <func>
+      <name><ret>int</ret><nametext>ei_encode_atom2(char *buf, int *index, const char *p, enum erlang_char_encoding from_enc, enum erlang_char_encoding to_enc)</nametext></name>
+      <name><ret>int</ret><nametext>ei_encode_atom_len2(char *buf, int *index, const char *p, int len, enum erlang_char_encoding from_enc, enum erlang_char_encoding to_enc)</nametext></name>
+      <name><ret>int</ret><nametext>ei_x_encode_atom2(ei_x_buff* x, const char *p, enum erlang_char_encoding from_enc, enum erlang_char_encoding to_enc)</nametext></name>
+      <name><ret>int</ret><nametext>ei_x_encode_atom_len2(ei_x_buff* x, const char *p, int len, enum erlang_char_encoding from_enc, enum erlang_char_encoding to_enc)</nametext></name>
+      <fsummary>Encode an atom</fsummary>
+      <desc>
+        <p>Encodes an atom in the binary format using character encoding <c>to_enc</c>.
+	  The <c>p</c> parameter is the name of the atom with character encoding <c>from_enc</c>.
+	  The name must either be zero-terminated or a function variant with a <c>len</c>
+	  parameter must be used.</p>
+      </desc>
+    </func>
+    <func>
       <name><ret>int</ret><nametext>ei_encode_binary(char *buf, int *index, const void *p, long len)</nametext></name>
       <name><ret>int</ret><nametext>ei_x_encode_binary(ei_x_buff* x, const void *p, long len)</nametext></name>
       <fsummary>Encode a binary</fsummary>
