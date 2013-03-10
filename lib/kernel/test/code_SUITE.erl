@@ -26,6 +26,7 @@
 	 delete/1, purge/1, soft_purge/1, is_loaded/1, all_loaded/1,
 	 load_binary/1, dir_req/1, object_code/1, set_path_file/1,
 	 upgrade/1,
+	 upgrade/0, % SVERK TEST
 	 sticky_dir/1, pa_pz_option/1, add_del_path/1,
 	 dir_disappeared/1, ext_mod_dep/1, clash/1,
 	 load_cached/1, start_node_with_cache/1, add_and_rehash/1,
@@ -455,6 +456,11 @@ load_binary(Config) when is_list(Config) ->
     ok.
 
 
+upgrade() -> % SVERK TEST
+    DataDir = "/home/sverker/otp/sverk_tests/kernel_test/code_SUITE_data",
+    Config = [{data_dir,DataDir}],
+    upgrade(Config).
+    
 upgrade(Config) ->    
     DataDir = ?config(data_dir, Config),
 

@@ -289,14 +289,12 @@ proxy_call(Pid, CallType, Func) ->
 
 start_tracing() ->
     Self = self(),
-    spawn_link(fun() -> tracer_start(Self) end).
-
-
-tracer_start(Tracee) ->
+    {Tracer,_} = spawn_opt(fun() -> tracer_loop(Self) end, [link,monitor]),
     ?line 1 = erlang:trace_pattern({error_handler,undefined_function,3},
 				   true, [global]),
-    ?line 1 = erlang:trace(Tracee, true, [call]),
-    tracer_loop(Tracee).
+    ?line 1 = erlang:trace(Self, true, [call,{tracer,Tracer}]),
+    Tracer.
+
 
 tracer_loop(Receiver) ->
     receive 
@@ -322,4 +320,7 @@ check_tracing_loop(N) ->
 
 stop_tracing(Tracer) ->
     erlang:trace(self(), false, [call]),
-    Tracer ! die_please.
+    Tracer ! die_please,
+    receive
+	{'DOWN', _, process, Tracer, _} -> ok
+    end.
