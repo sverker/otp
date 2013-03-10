@@ -53,7 +53,8 @@
 	  plt                           :: dialyzer_plt:plt(),
 	  start_from     = byte_code    :: start_from(),
 	  use_contracts  = true         :: boolean(),
-	  timing_server                 :: dialyzer_timing:timing_server()
+	  timing_server                 :: dialyzer_timing:timing_server(),
+          solvers                       :: [solver()]
 	 }).
 
 -record(server_state, {parent :: pid(), legal_warnings :: [dial_warn_tag()]}).
@@ -136,7 +137,8 @@ analysis_start(Parent, Analysis) ->
 			  parent = Parent,
 			  start_from = Analysis#analysis.start_from,
 			  use_contracts = Analysis#analysis.use_contracts,
-			  timing_server = Analysis#analysis.timing_server
+			  timing_server = Analysis#analysis.timing_server,
+                          solvers = Analysis#analysis.solvers
 			 },
   Files = ordsets:from_list(Analysis#analysis.files),
   {Callgraph, NoWarn, TmpCServer0} = compile_and_store(Files, State),
@@ -182,6 +184,7 @@ analysis_start(Parent, Analysis) ->
       false -> Callgraph
     end,
   State3 = analyze_callgraph(NewCallgraph, State2#analysis_state{plt = Plt1}),
+  dialyzer_callgraph:dispose_race_server(NewCallgraph),
   rcv_and_send_ext_types(Parent),
   NonExports = sets:subtract(sets:from_list(AllNodes), Exports),
   NonExportsList = sets:to_list(NonExports),
@@ -192,20 +195,21 @@ analysis_start(Parent, Analysis) ->
 analyze_callgraph(Callgraph, #analysis_state{codeserver = Codeserver,
 					     doc_plt = DocPlt,
 					     timing_server = TimingServer,
-					     parent = Parent} = State) ->
+					     parent = Parent,
+                                             solvers = Solvers} = State) ->
   Plt = dialyzer_plt:insert_callbacks(State#analysis_state.plt, Codeserver),
   {NewPlt, NewDocPlt} =
     case State#analysis_state.analysis_type of
       plt_build ->
 	NewPlt0 =
 	  dialyzer_succ_typings:analyze_callgraph(Callgraph, Plt, Codeserver,
-						  TimingServer, Parent),
+						  TimingServer, Solvers, Parent),
 	{NewPlt0, DocPlt};
       succ_typings ->
 	NoWarn = State#analysis_state.no_warn_unused,
 	{Warnings, NewPlt0, NewDocPlt0} =
 	  dialyzer_succ_typings:get_warnings(Callgraph, Plt, DocPlt, Codeserver,
-					     NoWarn, TimingServer, Parent),
+					     NoWarn, TimingServer, Solvers, Parent),
 	send_warnings(State#analysis_state.parent, Warnings),
 	{NewPlt0, NewDocPlt0}
     end,
@@ -322,13 +326,6 @@ cleanup_callgraph(#analysis_state{plt = InitPlt, parent = Parent,
   ModuleDeps = dialyzer_callgraph:module_deps(Callgraph),
   send_mod_deps(Parent, ModuleDeps),
   {Callgraph1, ExtCalls} = dialyzer_callgraph:remove_external(Callgraph),
-  RelevantAPICalls =
-    dialyzer_behaviours:get_behaviour_apis([gen_server]),
-  BehaviourAPICalls = [Call || {_From, To} = Call <- ExtCalls,
-			       lists:member(To, RelevantAPICalls)],
-  Callgraph2 =
-    dialyzer_callgraph:put_behaviour_api_calls(BehaviourAPICalls,
-					       Callgraph1),
   ExtCalls1 = [Call || Call = {_From, To} <- ExtCalls,
 		       not dialyzer_plt:contains_mfa(InitPlt, To)],
   {BadCalls1, RealExtCalls} =
@@ -351,7 +348,7 @@ cleanup_callgraph(#analysis_state{plt = InitPlt, parent = Parent,
      true ->
       send_ext_calls(Parent, lists:usort([To || {_From, To} <- RealExtCalls]))
   end,
-  Callgraph2.
+  Callgraph1.
 
 compile_src(File, Includes, Defines, Callgraph, CServer, UseContracts) ->
   DefaultIncludes = default_includes(filename:dirname(File)),
@@ -516,9 +513,10 @@ rcv_and_send_ext_types(Parent) ->
   Self ! {Self, done},
   case rcv_ext_types(Self, []) of
     [] -> ok;
-    ExtTypes -> Parent ! {Self, ext_types, ExtTypes}
-  end,
-  ok.
+    ExtTypes ->
+      Parent ! {Self, ext_types, ExtTypes},
+      ok
+  end.
 
 rcv_ext_types(Self, ExtTypes) ->
   receive

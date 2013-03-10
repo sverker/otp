@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1996-2012. All Rights Reserved.
+# Copyright Ericsson AB 1996-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -17,6 +17,8 @@
 # %CopyrightEnd%
 #
 
+#
+# IMPORTANT! All atoms defined here *need* to be in 7-bit ascii!
 #
 # File format:
 #
@@ -94,6 +96,7 @@ atom asynchronous
 atom atom
 atom atom_used
 atom attributes
+atom await_port_send_result
 atom await_proc_exit
 atom await_sched_wall_time_modifications
 atom awaiting_load
@@ -143,6 +146,7 @@ atom close
 atom closed
 atom code
 atom command
+atom compact
 atom compat_rel
 atom compile
 atom compressed
@@ -152,6 +156,7 @@ atom connection_closed
 atom cons
 atom const
 atom context_switches
+atom control
 atom copy
 atom cpu
 atom cpu_timestamp
@@ -163,6 +168,7 @@ atom current_location
 atom current_stacktrace
 atom data
 atom debug_flags
+atom decimals
 atom delay_trap
 atom dexit
 atom depth
@@ -204,6 +210,7 @@ atom erlang
 atom ERROR='ERROR'
 atom error_handler
 atom error_logger
+atom erts_internal
 atom ets
 atom ETS_TRANSFER='ETS-TRANSFER'
 atom event
@@ -237,6 +244,7 @@ atom gc_end
 atom gc_start
 atom Ge='>='
 atom generational
+atom get_data
 atom get_seq_token
 atom get_tcw
 atom getenv
@@ -244,7 +252,6 @@ atom gather_sched_wall_time_result
 atom getting_linked
 atom getting_unlinked
 atom global
-atom global_heaps_size
 atom Gt='>'
 atom grun
 atom group_leader
@@ -253,15 +260,16 @@ atom heap_block_size
 atom heap_size
 atom heap_sizes
 atom heap_type
+atom heart_port
 atom heir
 atom hidden
 atom hide
 atom high
 atom hipe_architecture
 atom http httph https http_response http_request http_header http_eoh http_error http_bin httph_bin
-atom hybrid
 atom id
 atom if_clause
+atom ignore
 atom imports
 atom in
 atom in_exiting
@@ -409,6 +417,7 @@ atom overlapped_io
 atom owner
 atom packet
 atom packet_size
+atom parallelism
 atom Plus='+'
 atom pause
 atom pending
@@ -420,12 +429,12 @@ atom pid
 atom port
 atom ports
 atom port_count
+atom port_limit
 atom print
 atom priority
 atom private
 atom process
 atom processes
-atom processes_trap
 atom processes_used
 atom process_count
 atom process_display
@@ -435,6 +444,7 @@ atom procs
 atom profile
 atom protected
 atom protection
+atom ptab_list_continue
 atom public
 atom purify
 atom quantify
@@ -475,6 +485,7 @@ atom scheduler
 atom scheduler_id
 atom schedulers_online
 atom scheme
+atom scientific
 atom scope
 atom sensitive
 atom sequential_tracer
@@ -482,6 +493,7 @@ atom sequential_trace_token
 atom serial
 atom set
 atom set_cpu_topology
+atom set_data
 atom set_on_first_link
 atom set_on_first_spawn
 atom set_on_link

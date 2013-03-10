@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1997-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1997-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -186,6 +186,7 @@ main(int argc, char** argv)
      */
 
     PUSH("+sbtu");
+    PUSH("+A0");
     PUSH("-noinput");
     PUSH2("-mode", "minimal");
     PUSH2("-boot", "start_clean");
@@ -250,13 +251,6 @@ main(int argc, char** argv)
 			equals++;
 			PUSH3("@dv", def, equals);
 		    }
-		}
-		break;
-	    case 'h':
-		if (strcmp(argv[1], "-hybrid") == 0) {
-		    UNSHIFT(argv[1]);
-		} else {
-		    usage();
 		}
 		break;
 	    case 'I':
@@ -342,7 +336,7 @@ main(int argc, char** argv)
 			    /* Push the following options:
 			     *   o  makedep_phony
 			     */
-			    buf = strsave("makedep_add_missing");
+			    buf = strsave("makedep_phony");
 			    PUSH2("@option", buf);
 			    break;
 			default:
@@ -649,7 +643,6 @@ usage(void)
 	{"-d", "turn on debugging of erlc itself"},
 	{"-Dname", "define name"},
 	{"-Dname=value", "define name to have value"},
-	{"-hybrid", "compile using hybrid-heap emulator"},
 	{"-help", "shows this help text"},
 	{"-I path", "where to search for include files"},
 	{"-M", "generate a rule for make(1) describing the dependencies"},

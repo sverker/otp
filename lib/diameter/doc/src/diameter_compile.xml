@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="iso-8859-1" ?>
-<!DOCTYPE comref SYSTEM "comref.dtd">
+<!DOCTYPE comref SYSTEM "comref.dtd" [
+  <!ENTITY dictionary
+  '<seealso marker="diameter_dict">dictionary file</seealso>'>
+  <!ENTITY % also SYSTEM "seealso.ent" >
+  <!ENTITY % here SYSTEM "seehere.ent" >
+  %also;
+  %here;
+]>
 
 <comref>
 <header>
 <copyright>
-<year>2011</year>
+<year>2011</year><year>2012</year>
 <holder>Ericsson AB. All Rights Reserved.</holder>
 </copyright>
 <legalnotice>
@@ -31,11 +38,13 @@ supplied.
 <description>
 
 <p>
-The diameterc utility is used to transform diameter
-<seealso marker="diameter_dict">dictionary files</seealso>
-into Erlang source.
-The resulting source implements the interface diameter requires
+The diameterc utility is used to compile a diameter
+&dictionary; into Erlang source.
+The resulting source implements the interface diameter required
 to encode and decode the dictionary's messages and AVP's.</p>
+
+<p>
+The module &man_make; provides an alternate compilation interface.</p>
 
 </description>
 
@@ -47,64 +56,52 @@ to encode and decode the dictionary's messages and AVP's.</p>
 <tag><![CDATA[diameterc [<options>] <file>]]></tag>
 <item>
 <p>
-Transforms a single dictionary file. Valid options are as follows.</p>
-
-<!-- Leave -h/d/v undocumented, except for the usage message from the
-     utility itself. -->
-
-<taglist>
-<tag><![CDATA[-o <dir>]]></tag>
-<item>
-<p>
-Specifies the directory into which the generated source should be written.
-Defaults to the current working directory.</p>
-</item>
+Compile a single dictionary file to Erlang source.
+Valid options are as follows.</p>
 
 <tag><![CDATA[-i <dir>]]></tag>
 <item>
 <p>
-Specifies a directory to add to the code path.
-Use to point at beam files corresponding to dictionaries
-inherited by the one being compiled using <c>@inherits</c> or
-<c>--inherits</c>.
-Inheritance is a beam dependency, not an erl/hrl dependency.</p>
+Prepend the specified directory to the code path.
+Use to point at beam files compiled from inherited dictionaries,
+<c>&dict_inherits;</c> in a dictionary file creating a beam
+dependency, not an erl/hrl dependency.</p>
 
 <p>
 Multiple <c>-i</c> options can be specified.</p>
 </item>
 
-<tag><![CDATA[-E]]></tag>
+<taglist>
+<tag><![CDATA[-o <dir>]]></tag>
 <item>
 <p>
-Supresses erl generation.</p>
+Write generated source to the specified directory.
+Defaults to the current working directory.</p>
 </item>
 
+<tag><![CDATA[-E]]></tag>
 <tag><![CDATA[-H]]></tag>
 <item>
 <p>
-Supresses hrl generation.</p>
+Supress erl and hrl generation, respectively.</p>
 </item>
 
 <tag><![CDATA[--name <name>]]></tag>
-<item>
-<p>
-Set <c>@name</c> in the dictionary file.
-Overrides any setting in the file itself.</p>
-</item>
-
 <tag><![CDATA[--prefix <prefix>]]></tag>
 <item>
 <p>
-Set <c>@prefix</c> in the dictionary file.
+Set <c>&dict_name;</c> or <c>&dict_prefix;</c> to the specified
+string.
 Overrides any setting in the file itself.</p>
 </item>
 
 <tag><![CDATA[--inherits <dict>]]></tag>
 <item>
 <p>
-Append an <c>@inherits</c> to the dictionary file.
-Specifying <c>'-'</c> as the dictionary has the effect of clearing
-any previous inherits, effectively ignoring previous inherits.</p>
+Append &dict_inherits; of the specified module.
+Specifying <c>"-"</c> has the effect of discarding clearing any
+previous inherits, both in the dictionary file and on the options
+list.</p>
 
 <p>
 Multiple <c>--inherits</c> options can be specified.</p>
@@ -130,20 +127,10 @@ Returns 0 on success, non-zero on failure.</p>
 <!-- ===================================================================== -->
 
 <section>
-<title>BUGS</title>
-
-<p>
-The identification of errors in the source file is poor.</p>
-
-</section>
-
-<!-- ===================================================================== -->
-
-<section>
 <title>SEE ALSO</title>
 
 <p>
-<seealso marker="diameter_dict">diameter_dict(4)</seealso></p>
+&man_make;, &man_dict;</p>
 
 </section>
 

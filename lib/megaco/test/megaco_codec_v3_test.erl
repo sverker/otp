@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2006-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2006-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -56,9 +56,7 @@
 	 flex_compact_dm_timers8/1, 
 	 bin_test_msgs/1,
 	 ber_test_msgs/1, 
-	 ber_bin_test_msgs/1, 
 	 per_test_msgs/1,
-	 per_bin_test_msgs/1,
 	 erl_dist_m_test_msgs/1,
 
 	 tickets/0, 
@@ -288,17 +286,14 @@ groups() ->
       [{group, pretty}, {group, flex_pretty},
        {group, compact}, {group, flex_compact}]},
      {binary, [],
-      [{group, bin}, {group, ber}, {group, ber_bin},
-       {group, per}, {group, per_bin}]},
+      [{group, bin}, {group, ber}, {group, per}]},
      {erl_dist, [], [{group, erl_dist_m}]},
      {pretty, [], [pretty_test_msgs]},
      {compact, [], [compact_test_msgs]},
      {flex_pretty, [], flex_pretty_cases()},
      {flex_compact, [], flex_compact_cases()},
      {bin, [], [bin_test_msgs]}, {ber, [], [ber_test_msgs]},
-     {ber_bin, [], [ber_bin_test_msgs]},
      {per, [], [per_test_msgs]},
-     {per_bin, [], [per_bin_test_msgs]},
      {erl_dist_m, [], [erl_dist_m_test_msgs]},
      {tickets, [],
       [{group, compact_tickets},
@@ -823,22 +818,6 @@ ber_test_msgs(Config) when is_list(Config) ->
    
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-ber_bin_test_msgs(suite) ->
-    [];
-ber_bin_test_msgs(Config) when is_list(Config) ->
-    ?ACQUIRE_NODES(1, Config),
-    Msgs = 
-	msgs1a(binary) ++ 
-	msgs5(binary) ++ 
-	msgs6(binary) ++ 
-	msgs7(binary) ++ 
-	msgs8(binary),
-    DynamicDecode = true,
-    test_msgs(megaco_ber_bin_encoder, DynamicDecode, ?EC, Msgs).
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 per_test_msgs(suite) ->
     [];
 per_test_msgs(Config) when is_list(Config) ->
@@ -851,22 +830,6 @@ per_test_msgs(Config) when is_list(Config) ->
 	msgs8(binary),
     DynamicDecode = false,
     test_msgs(megaco_per_encoder, DynamicDecode, ?EC, Msgs).
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-per_bin_test_msgs(suite) ->
-    [];
-per_bin_test_msgs(Config) when is_list(Config) ->
-    ?ACQUIRE_NODES(1, Config),
-    Msgs = 
-	msgs1a(binary) ++ 
-	msgs5(binary) ++ 
-	msgs6(binary) ++ 
-	msgs7(binary) ++ 
-	msgs8(binary),
-    DynamicDecode = false,
-    test_msgs(megaco_per_bin_encoder, DynamicDecode, ?EC, Msgs).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2738,7 +2701,7 @@ pretty_otp5068_msg1() ->
       190,
       asn1_NOVALUE,
       {actionReplies,
-       [{'ActionReply',  %% Comments: Detta upprepas många gånger
+       [{'ActionReply',  %% Comments: This is repeated many times.
 	 0,
 	 asn1_NOVALUE,
 	 asn1_NOVALUE,

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2003-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2003-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -26,7 +26,7 @@
 	 id_transform/1]).
 
 -export([check/2,check2/1,g/0,f/1,t/1,t1/1,t2/1,t3/1,t4/1,
-	 t5/1,t6/1,apa/1,new_fun/0]).
+	 t5/1,apa/1,new_fun/0]).
 
 						% Serves as test...
 -hej(hopp).
@@ -61,7 +61,7 @@ id_transform(Config) when is_list(Config) ->
     ?line {module,erl_id_trans}=code:load_binary(erl_id_trans,File,Bin),
     ?line case test_server:purify_is_running() of
 	      false ->
-		  Dog = ?t:timetrap(?t:hours(1)),
+		  Dog = ct:timetrap(?t:hours(1)),
 		  ?line Res = run_in_test_suite(),
 		  ?t:timetrap_cancel(Dog),
 		  Res;
@@ -388,8 +388,6 @@ t3(A) when is_tuple(A) or is_tuple(A) ->
    is_tuple; 
 t3(A) when record(A, apa) ->
    foo;
-t3(A) when {erlang,is_record}(A, apa) ->
-   foo;
 t3(A) when erlang:is_record(A, apa) ->
    foo;
 t3(A) when is_record(A, apa) ->
@@ -397,13 +395,10 @@ t3(A) when is_record(A, apa) ->
 t3(A) when record({apa}, apa) ->
    {A,foo}.
 
-t4(_) when {erlang,is_record}({apa}, apa) ->
-   foo.
-
-t5(A) when erlang:is_record({apa}, apa) ->
+t4(A) when erlang:is_record({apa}, apa) ->
    {A,foo}.
 
-t6(A) when is_record({apa}, apa) ->
+t5(A) when is_record({apa}, apa) ->
    {A,foo}.
 
 -record(apa2,{a=a,b=foo:bar()}).

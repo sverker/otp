@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -272,25 +272,13 @@ slave_start_link(Host, Name, Retries) ->
     end.
 
 starter(Host, Name, Args) ->
-    case os:type() of
-	vxworks ->
-	    X = test_server:start_node(Name, slave, [{args,Args}]),
-	    timer:sleep(5000),
-	    X;
-	_ ->
-	    slave:start(Host, Name, Args)
-    end.
+    slave:start(Host, Name, Args).
 
 slave_sup() ->
     process_flag(trap_exit, true),
     receive
 	{'EXIT', _, _} ->
-	    case os:type() of
-		vxworks ->
-		    erlang:halt();
-		_  ->
-		    ignore
-	    end
+	    ignore
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

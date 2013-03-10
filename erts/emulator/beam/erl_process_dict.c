@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1999-2009. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -360,7 +360,7 @@ static void pd_hash_erase(Process *p, Eterm id, Eterm *ret)
 	erts_fprintf(stderr,
 		     "Process dictionary for process %T is broken, trying to "
 		     "display term found in line %d:\n"
-		     "%T\n", p->id, __LINE__, old);
+		     "%T\n", p->common.id, __LINE__, old);
 #endif
 	erl_exit(1, "Damaged process dictionary found during erase/1.");
     }
@@ -405,7 +405,7 @@ Eterm erts_pd_hash_get(Process *p, Eterm id)
 	erts_fprintf(stderr,
 		     "Process dictionary for process %T is broken, trying to "
 		     "display term found in line %d:\n"
-		     "%T\n", p->id, __LINE__, tmp);
+		     "%T\n", p->common.id, __LINE__, tmp);
 #endif
 	erl_exit(1, "Damaged process dictionary found during get/1.");
     }
@@ -614,7 +614,7 @@ static Eterm pd_hash_put(Process *p, Eterm id, Eterm value)
 	erts_fprintf(stderr,
 		     "Process dictionary for process %T is broken, trying to "
 		     "display term found in line %d:\n"
-		     "%T\n", p->id, __LINE__, old);
+		     "%T\n", p->common.id, __LINE__, old);
 #endif
 
 	erl_exit(1, "Damaged process dictionary found during put/2.");

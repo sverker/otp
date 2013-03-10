@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2000-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2000-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -300,8 +300,17 @@ _ET_DECLARE_CHECKED(Uint,header_arity,Eterm)
 #define header_arity(x)	_ET_APPLY(header_arity,(x))
 
 /* arityval access methods */
+/* Erlang Spec. 4.7.3 defines max arity to 65535
+ * we will however enforce max arity of 16777215 (24 bits)
+ * (checked in bifs and asserted in debug)
+ */
+#define MAX_ARITYVAL            ((((Uint)1) << 24) - 1)
+#define ERTS_MAX_TUPLE_SIZE     MAX_ARITYVAL
+
 #define make_arityval(sz)	_make_header((sz),_TAG_HEADER_ARITYVAL)
 #define is_arity_value(x)	(((x) & _TAG_HEADER_MASK) == _TAG_HEADER_ARITYVAL)
+#define is_sane_arity_value(x)	((((x) & _TAG_HEADER_MASK) == _TAG_HEADER_ARITYVAL) && \
+				 (((x) >> _HEADER_ARITY_OFFS) <= MAX_ARITYVAL))
 #define is_not_arity_value(x)	(!is_arity_value((x)))
 #define _unchecked_arityval(x)	_unchecked_header_arity((x))
 _ET_DECLARE_CHECKED(Uint,arityval,Eterm)
@@ -542,12 +551,6 @@ _ET_DECLARE_CHECKED(Eterm*,tuple_val,Wterm)
 #define _GETBITS(X,Pos,Size) (((X) >> (Pos)) & ~(~((Uint) 0) << (Size)))
 
 /*
- * Observe! New layout for pids, ports and references in R9 (see also note
- * in erl_node_container_utils.h).
- */
-
-
-/*
  * Creation in node specific data (pids, ports, refs)
  */
 
@@ -584,7 +587,6 @@ _ET_DECLARE_CHECKED(Eterm*,tuple_val,Wterm)
  *
  */
 
-#define _PID_R9_SER_SIZE	3
 #define _PID_SER_SIZE		(_PID_DATA_SIZE - _PID_NUM_SIZE)
 #define _PID_NUM_SIZE 		15
 
@@ -598,22 +600,12 @@ _ET_DECLARE_CHECKED(Eterm*,tuple_val,Wterm)
 #define make_pid_data(Ser, Num) \
   ((Uint) ((Ser) << _PID_NUM_SIZE | (Num)))
 
-#define make_internal_pid(X) \
-  ((Eterm) (((X) << _PID_DATA_SHIFT) | _TAG_IMMED1_PID))
-
 #define is_internal_pid(x)	(((x) & _TAG_IMMED1_MASK) == _TAG_IMMED1_PID)
 #define is_not_internal_pid(x)	(!is_internal_pid((x)))
-
-#define _unchecked_internal_pid_data(x) _GET_PID_DATA((x))
-_ET_DECLARE_CHECKED(Uint,internal_pid_data,Eterm)
-#define internal_pid_data(x) _ET_APPLY(internal_pid_data,(x))
 
 #define _unchecked_internal_pid_node(x) erts_this_node
 _ET_DECLARE_CHECKED(struct erl_node_*,internal_pid_node,Eterm)
 #define internal_pid_node(x) _ET_APPLY(internal_pid_node,(x))
-
-#define internal_pid_number(x) _GET_PID_NUM(internal_pid_data((x)))
-#define internal_pid_serial(x) _GET_PID_SER(internal_pid_data((x)))
 
 #define internal_pid_data_words(x) (1)
 
@@ -644,7 +636,6 @@ _ET_DECLARE_CHECKED(struct erl_node_*,internal_pid_node,Eterm)
  *  N : node number
  *
  */
-#define _PORT_R9_NUM_SIZE	18
 #define _PORT_NUM_SIZE		_PORT_DATA_SIZE
 
 #define _PORT_DATA_SIZE		28
@@ -654,17 +645,8 @@ _ET_DECLARE_CHECKED(struct erl_node_*,internal_pid_node,Eterm)
 #define _GET_PORT_NUM(X)	_GETBITS((X), 0, _PORT_NUM_SIZE)
 
 
-#define make_internal_port(X) \
-  ((Eterm) (((X) << _PORT_DATA_SHIFT) | _TAG_IMMED1_PORT))
-
 #define is_internal_port(x)	(((x) & _TAG_IMMED1_MASK) == _TAG_IMMED1_PORT)
 #define is_not_internal_port(x)	(!is_internal_port(x))
-
-#define _unchecked_internal_port_data(x) _GET_PORT_DATA((x))
-_ET_DECLARE_CHECKED(Uint,internal_port_data,Eterm)
-#define internal_port_data(x) _ET_APPLY(internal_port_data,(x))
-
-#define internal_port_number(x) _GET_PORT_NUM(internal_port_data((x)))
 
 #define _unchecked_internal_port_node(x) erts_this_node
 _ET_DECLARE_CHECKED(struct erl_node_*,internal_port_node,Eterm)

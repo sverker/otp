@@ -192,21 +192,22 @@ source({M, P, Name, Path}, Dir, Suffix, Env, Set, Private, Hidden,
 		andalso ((not is_hidden(Doc)) orelse Hidden) of
 		true ->
 		    Text = edoc:layout(Doc, Options),
-		    Name1 = packages:last(M) ++ Suffix,
-		    edoc_lib:write_file(Text, Dir, Name1, P),
+		    Name1 = atom_to_list(M) ++ Suffix,
+                    Encoding = [{encoding,encoding(Doc)}],
+		    edoc_lib:write_file(Text, Dir, Name1, P, Encoding),
 		    {sets:add_element(Module, Set), Error};
 		false ->
 		    {Set, Error}
 	    end;
 	R ->
-	    report("skipping source file '~s': ~W.", [File, R, 15]),
+	    report("skipping source file '~ts': ~W.", [File, R, 15]),
 	    {Set, true}
     end.
 
 check_name(M, M0, P0, File) ->
-    P = list_to_atom(packages:strip_last(M)),
-    N = packages:last(M),
-    N0 = packages:last(M0),
+    P = '',
+    N = M,
+    N0 = M0,
     case N of
 	[$? | _] ->
 	    %% A module name of the form '?...' is assumed to be caused
@@ -215,14 +216,14 @@ check_name(M, M0, P0, File) ->
 	    ok;
 	_ ->
 	    if N =/= N0 ->
-		    warning("file '~s' actually contains module '~s'.",
+		    warning("file '~ts' actually contains module '~s'.",
 			    [File, M]);
 	       true ->
 		    ok
 	    end
     end,
     if P =/= P0 ->
-	    warning("file '~s' belongs to package '~s', not '~s'.",
+	    warning("file '~ts' belongs to package '~s', not '~s'.",
 		    [File, P, P0]);
        true ->
 	    ok
@@ -359,14 +360,19 @@ xhtml_1(Title, CSS, Body) ->
 overview(Dir, Title, Env, Opts) ->
     File = proplists:get_value(overview, Opts,
 			       filename:join(Dir, ?OVERVIEW_FILE)),
+    Encoding = edoc_lib:read_encoding(File, [{in_comment_only, false}]),
     Tags = read_file(File, overview, Env, Opts),
-    Data = edoc_data:overview(Title, Tags, Env, Opts),
+    Data0 = edoc_data:overview(Title, Tags, Env, Opts),
+    EncodingAttribute = #xmlAttribute{name = encoding,
+                                      value = atom_to_list(Encoding)},
+    #xmlElement{attributes = As} = Data0,
+    Data = Data0#xmlElement{attributes = [EncodingAttribute | As]},
     F = fun (M) ->
 		M:overview(Data, Opts)
 	end,
     Text = edoc_lib:run_layout(F, Opts),
-    edoc_lib:write_file(Text, Dir, ?OVERVIEW_SUMMARY).
-
+    EncOpts = [{encoding,Encoding}],
+    edoc_lib:write_file(Text, Dir, ?OVERVIEW_SUMMARY, '', EncOpts).
 
 copy_image(Dir) ->
     case code:priv_dir(?EDOC_APP) of
@@ -439,6 +445,12 @@ is_hidden(E) ->
     case get_attrval(hidden, E) of
  	"yes" -> true;
  	_ -> false
+    end.
+
+encoding(E) ->
+    case get_attrval(encoding, E) of
+        "latin1" -> latin1;
+        _ -> utf8
     end.
 
 get_attrval(Name, #xmlElement{attributes = As}) ->

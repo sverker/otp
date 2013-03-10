@@ -1,7 +1,7 @@
-Erlang/OTP                                               December 8, 2011
+Erlang/OTP                                               Januari 25, 2013
 
 
-Release of Erlang 5.9/OTP R15B
+Release of Erlang 5.10/OTP R16
 
 
 1.      GENERAL
@@ -51,10 +51,9 @@ Release of Erlang 5.9/OTP R15B
         -------------------------------
 
 3.1	The platform VxWorks is discontinued in the sense that only the 
-	libraries (erl_interface and ic's libraries) are supported. Running
-	the Erlang emulator on VxWorks might still possible but it's no longer
-	maintained. The VxWorks release is still packaged as a full release,
-	but no support will be available for anything but the communication libraries. 
+	libraries (erl_interface and ic's libraries) are supported. The VxWorks
+	release is still packaged as a full release, but no support will be
+	available for anything but the communication libraries. 
 
 4       NOTES ABOUT THE LINUX VERSIONS
         -----------------------------

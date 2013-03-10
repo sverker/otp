@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2000-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -32,17 +32,22 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     test_lib:recompile(?MODULE),
-    [attribute, bsdecode, bsdes, barnes2, decode1, smith,
-     itracer, pseudoknot, comma_splitter, lists, really_inlined, otp_7223,
-     coverage].
+    [{group,p}].
 
 groups() -> 
-    [].
+    [{p,test_lib:parallel(),
+      [attribute,bsdecode,bsdes,barnes2,decode1,smith,
+       itracer,pseudoknot,comma_splitter,lists,really_inlined,otp_7223,
+       coverage]}].
 
 init_per_suite(Config) ->
-    Config.
+    Pa = "-pa " ++ filename:dirname(code:which(?MODULE)),
+    {ok,Node} = start_node(compiler, Pa),
+    [{testing_node,Node}|Config].
 
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
+    Node = ?config(testing_node, Config),
+    ?t:stop_node(Node),
     ok.
 
 init_per_group(_GroupName, Config) ->
@@ -81,6 +86,7 @@ attribute(Config) when is_list(Config) ->
 ?comp(comma_splitter).
 
 try_inline(Mod, Config) ->
+    Node = ?config(testing_node, Config),
     ?line Src = filename:join(?config(data_dir, Config), atom_to_list(Mod)),
     ?line Out = ?config(priv_dir,Config),
 
@@ -89,8 +95,6 @@ try_inline(Mod, Config) ->
     ?line {ok,Mod} = compile:file(Src, [{outdir,Out},report,bin_opt_info,clint]),
 
     ?line Dog = test_server:timetrap(test_server:minutes(10)),
-    ?line Pa = "-pa " ++ filename:dirname(code:which(?MODULE)),
-    ?line {ok,Node} = start_node(compiler, Pa),
     ?line NormalResult = rpc:call(Node, ?MODULE, load_and_call, [Out,Mod]),
     ?line test_server:timetrap_cancel(Dog),
 
@@ -125,7 +129,6 @@ try_inline(Mod, Config) ->
     %% Delete Beam file.
     ?line ok = file:delete(filename:join(Out, atom_to_list(Mod)++code:objfile_extension())),
 
-    ?line ?t:stop_node(Node),
     ok.
 
 compare(Same, Same) -> ok;
@@ -255,6 +258,49 @@ lists(Config) when is_list(Config) ->
 
     %% Cleanup.
     erase(?MODULE),
+
+    {'EXIT',{function_clause,[{?MODULE,_,[_,not_a_list],_}|_]}} =
+        (catch lists:map(fun (X) -> X end, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,not_a_list],_}|_]}} =
+        (catch lists:flatmap(fun (X) -> X end, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,not_a_list],_}|_]}} =
+        (catch lists:foreach(fun (X) -> X end, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,not_a_list],_}|_]}} =
+        (catch lists:filter(fun (_) -> true end, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,not_a_list],_}|_]}} =
+        (catch lists:any(fun (_) -> false end, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,not_a_list],_}|_]}} =
+        (catch lists:all(fun (_) -> true end, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,acc,not_a_list],_}|_]}} =
+        (catch lists:foldl(fun (X, Acc) -> {X,Acc} end, acc, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,acc,not_a_list],_}|_]}} =
+        (catch lists:foldr(fun (X, Acc) -> {X,Acc} end, acc, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,acc,not_a_list],_}|_]}} =
+        (catch lists:mapfoldl(fun (X, Acc) -> {X,Acc} end, acc, not_a_list)),
+    {'EXIT',{function_clause,[{?MODULE,_,[_,acc,not_a_list],_}|_]}} =
+        (catch lists:mapfoldr(fun (X, Acc) -> {X,Acc} end, acc, not_a_list)),
+
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
+        (catch lists:map(not_a_function, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
+        (catch lists:flatmap(not_a_function, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
+        (catch lists:foreach(not_a_function, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
+        (catch lists:filter(not_a_function, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
+        (catch lists:any(not_a_function, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,[]],_}|_]}} =
+        (catch lists:all(not_a_function, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,acc,[]],_}|_]}} =
+        (catch lists:foldl(not_a_function, acc, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,acc,[]],_}|_]}} =
+        (catch lists:foldr(not_a_function, acc, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,acc,[]],_}|_]}} =
+        (catch lists:mapfoldl(not_a_function, acc, [])),
+    {'EXIT',{function_clause,[{?MODULE,_,[not_a_function,acc,[]],_}|_]}} =
+        (catch lists:mapfoldr(not_a_function, acc, [])),
+
     ok.
 		       
 my_apply(M, F, A, Init) ->
@@ -293,9 +339,9 @@ otp_7223_2({a}) ->
     1.
 
 coverage(Config) when is_list(Config) ->
-    ?line Src = filename:join(?config(data_dir, Config), bsdecode),
-    ?line Out = ?config(priv_dir,Config),
-    ?line {ok,Mod} = compile:file(Src, [{outdir,Out},report,{inline,0},clint]),
-    ?line {ok,Mod} = compile:file(Src, [{outdir,Out},report,{inline,20},verbose,clint]),
-    ?line ok = file:delete(filename:join(Out, "bsdecode"++code:objfile_extension())),
+    Mod = bsdecode,
+    Src = filename:join(?config(data_dir, Config), Mod),
+    {ok,Mod,_} = compile:file(Src, [binary,report,{inline,0},clint]),
+    {ok,Mod,_} = compile:file(Src, [binary,report,{inline,20},
+				    verbose,clint]),
     ok.

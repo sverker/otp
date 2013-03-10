@@ -1,3 +1,4 @@
+%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %%
@@ -46,14 +47,14 @@
 -export([
 	 add/1, default/1, info/1, lib/1, read/1, read2/1, remove/1,
 	 replace/1, update/1, deprecated/1, trycatch/1,
-         abstract_modules/1, fun_mfa/1, fun_mfa_r14/1,
+         fun_mfa/1, fun_mfa_r14/1,
 	 fun_mfa_vars/1, qlc/1]).
 
 -export([
 	 analyze/1, basic/1, md/1, q/1, variables/1, unused_locals/1]).
 
 -export([
-	 format_error/1, otp_7423/1, otp_7831/1]).
+	 format_error/1, otp_7423/1, otp_7831/1, otp_10192/1]).
 
 -import(lists, [append/2, flatten/1, keysearch/3, member/2, sort/1, usort/1]).
 
@@ -82,11 +83,11 @@ groups() ->
        modules]},
      {files, [],
       [add, default, info, lib, read, read2, remove, replace,
-       update, deprecated, trycatch, abstract_modules, fun_mfa,
+       update, deprecated, trycatch, fun_mfa,
        fun_mfa_r14, fun_mfa_vars, qlc]},
      {analyses, [],
       [analyze, basic, md, q, variables, unused_locals]},
-     {misc, [], [format_error, otp_7423, otp_7831]}].
+     {misc, [], [format_error, otp_7423, otp_7831, otp_10192]}].
 
 init_per_suite(Config) ->
     init(Config).
@@ -1668,64 +1669,6 @@ trycatch(Conf) when is_list(Conf) ->
     ok.
 
 
-abstract_modules(suite) -> [];
-abstract_modules(doc) -> ["OTP-5520: Abstract (parameterized) modules."];
-abstract_modules(Conf) when is_list(Conf) ->
-    Dir = ?copydir,
-    File = fname(Dir, "absmod.erl"),
-    MFile = fname(Dir, "absmod"),
-    Beam = fname(Dir, "absmod.beam"),
-    Test = <<"-module(param, [A, B]).
-
-              -export([args/1]).
-
-              args(C) ->
-                  X = local(C),
-                  Y = THIS:new(), % undef
-                  Z = new(A, B),
-                  {X, Y, Z}.
-
-              local(C) ->
-                  module_info(C).
-             ">>,
-
-    ?line ok = file:write_file(File, Test),
-
-    %% The compiler will no longer allow us to have a mismatch between
-    %% the module name and the output file, so we must use a trick.
-    ?line {ok, param, BeamCode} = compile:file(File, [binary,debug_info]),
-    ?line ok = file:write_file(Beam, BeamCode),
-
-    ?line {ok, _} = xref:start(s),
-    ?line {ok, param} = xref:add_module(s, MFile, {warnings,false}),
-    A = param,
-    ?line {ok, [{{{A,args,1},{'$M_EXPR',new,0}},[7]},
-                {{{A,args,1},{A,local,1}},[6]},
-                {{{A,args,1},{A,new,2}},[8]},
-                {{{A,local,1},{A,module_info,1}},[12]},
-                {{{param,new,2},{param,instance,2}},[0]}]} =
-        xref:q(s, "(Lin) E"),
-    ?line {ok,[{param,args,1},
-               {param,instance,2},
-               {param,local,1},
-               {param,module_info,1},
-               {param,new,2}]} = xref:q(s, "F"),
-
-    ?line ok = check_state(s),
-    ?line xref:stop(s),
-
-    ?line {ok, _} = xref:start(s, {xref_mode, modules}),
-    ?line {ok, param} = xref:add_module(s, MFile),
-    ?line {ok,[{param,args,1},
-               {param,instance,2},
-               {param,new,2}]} = xref:q(s, "X"),
-    ?line ok = check_state(s),
-    ?line xref:stop(s),
-
-    ?line ok = file:delete(File),
-    ?line ok = file:delete(Beam),
-    ok.
-
 fun_mfa(suite) -> [];
 fun_mfa(doc) -> ["OTP-5653: fun M:F/A."];
 fun_mfa(Conf) when is_list(Conf) ->
@@ -2513,6 +2456,18 @@ otp_7831(Conf) when is_list(Conf) ->
     ?line xref:stop(Pid1),
     ?line {ok, Pid2} = xref:start([{xref_mode, modules}]),
     ?line xref:stop(Pid2),
+    ok.
+
+otp_10192(suite) -> [];
+otp_10192(doc) ->
+    ["OTP-10192. Allow filenames with character codes greater than 126."];
+otp_10192(Conf) when is_list(Conf) ->
+    PrivDir = ?privdir,
+    {ok, _Pid} = xref:start(s),
+    Dir = filename:join(PrivDir, "ä"),
+    ok = file:make_dir(Dir),
+    {ok, []} = xref:add_directory(s, Dir),
+    xref:stop(s),
     ok.
 
 %%%

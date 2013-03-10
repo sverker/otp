@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1996-2012. All Rights Reserved.
+# Copyright Ericsson AB 1996-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -20,6 +20,8 @@
 include $(ERL_TOP)/make/target.mk
 include ../vsn.mk
 include $(ERL_TOP)/make/$(TARGET)/otp.mk
+-include $(TARGET)/gen_git_version.mk
+
 
 ENABLE_ALLOC_TYPE_VARS = @ENABLE_ALLOC_TYPE_VARS@
 HIPE_ENABLED=@HIPE_ENABLED@
@@ -61,7 +63,7 @@ else
 ifeq ($(TYPE),purify)
 PURIFY = purify $(PURIFY_BUILD_OPTIONS)
 TYPEMARKER = .purify
-TYPE_FLAGS = $(DEBUG_CFLAGS) -DPURIFY -DNO_JUMP_TABLE -DERTS_MSEG_FAKE_SEGMENTS
+TYPE_FLAGS = $(DEBUG_CFLAGS) -DPURIFY -DNO_JUMP_TABLE
 ENABLE_ALLOC_TYPE_VARS += purify
 else
 
@@ -92,7 +94,7 @@ else
 ifeq ($(TYPE),valgrind)
 PURIFY = 
 TYPEMARKER = .valgrind
-TYPE_FLAGS = $(DEBUG_CFLAGS) -DVALGRIND -DNO_JUMP_TABLE -DERTS_MSEG_FAKE_SEGMENTS
+TYPE_FLAGS = $(DEBUG_CFLAGS) -DVALGRIND -DNO_JUMP_TABLE
 ENABLE_ALLOC_TYPE_VARS += valgrind
 else
 
@@ -136,13 +138,6 @@ ENABLE_ALLOC_TYPE_VARS += smp nofrag
 M4FLAGS += -DERTS_SMP=1
 else
 
-ifeq ($(FLAVOR),hybrid)
-FLAVOR_MARKER=.hybrid
-FLAVOR_FLAGS=-DHYBRID
-ENABLE_ALLOC_TYPE_VARS += hybrid
-else
-
-
 # If flavor isn't one of the above, it *is* plain flavor...
 override FLAVOR=plain
 FLAVOR_MARKER=
@@ -150,7 +145,6 @@ FLAVOR_FLAGS=
 ENABLE_ALLOC_TYPE_VARS += nofrag
 M4FLAGS +=
 
-endif
 endif
 
 TF_MARKER=$(TYPEMARKER)$(FLAVOR_MARKER)
@@ -204,7 +198,7 @@ else
 EMU_CC  = @EMU_CC@
 endif
 WFLAGS  = @WFLAGS@
-CFLAGS  = @STATIC_CFLAGS@ $(TYPE_FLAGS) $(FLAVOR_FLAGS) $(DEFS) $(WFLAGS) $(THR_DEFS) $(ARCHCFLAGS)
+CFLAGS  = @STATIC_CFLAGS@ $(TYPE_FLAGS) $(FLAVOR_FLAGS) $(DEFS) $(WFLAGS) $(THR_DEFS) $(ARCHCFLAGS) $(GIT_VSN)
 HCC     = @HCC@
 LD      = @LD@
 DEXPORT = @DEXPORT@
@@ -340,14 +334,10 @@ LIBS += $(THR_LIBS)
 
 ifneq ($(findstring erts_internal_r, $(THR_LIBS)),erts_internal_r)
 
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-ERTS_INTERNAL_LIB=erts_internal
-else
 ifneq ($(strip $(THR_LIB_NAME)),)
 ERTS_INTERNAL_LIB=erts_internal_r
 else
 ERTS_INTERNAL_LIB=erts_internal
-endif
 endif
 
 LIBS += -l$(ERTS_INTERNAL_LIB)$(TYPEMARKER)
@@ -411,7 +401,7 @@ include zlib/zlib.mk
 include pcre/pcre.mk
 
 $(ERTS_LIB):
-	cd $(ERTS_LIB_DIR) && $(MAKE) $(TYPE)
+	$(V_at)cd $(ERTS_LIB_DIR) && $(MAKE) $(TYPE)
 
 .PHONY: clean
 clean:
@@ -444,18 +434,18 @@ release_spec:
 	@echo $(VOID_EMULATOR)' - omitted target release_spec (install)'
 else
 release_spec: all
-	$(INSTALL_DIR) $(RELSYSDIR)
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DIR) $(RELSYSDIR)/man
-	$(INSTALL_DIR) $(RELSYSDIR)/doc
-	$(INSTALL_DIR) $(RELSYSDIR)/bin
-	$(INSTALL_DIR) $(RELEASE_PATH)/usr/include
-	$(INSTALL_DATA) $(RELEASE_INCLUDES) $(RELEASE_PATH)/usr/include
-	$(INSTALL_DATA) $(RELEASE_INCLUDES) $(RELSYSDIR)/include
-	$(INSTALL_PROGRAM) $(BINDIR)/$(EMULATOR_EXECUTABLE) $(RELSYSDIR)/bin
+	$(INSTALL_DIR) "$(RELSYSDIR)"
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DIR) "$(RELSYSDIR)/man"
+	$(INSTALL_DIR) "$(RELSYSDIR)/doc"
+	$(INSTALL_DIR) "$(RELSYSDIR)/bin"
+	$(INSTALL_DIR) "$(RELEASE_PATH)/usr/include"
+	$(INSTALL_DATA) $(RELEASE_INCLUDES) "$(RELEASE_PATH)/usr/include"
+	$(INSTALL_DATA) $(RELEASE_INCLUDES) "$(RELSYSDIR)/include"
+	$(INSTALL_PROGRAM) $(BINDIR)/$(EMULATOR_EXECUTABLE) "$(RELSYSDIR)/bin"
 ifeq ($(ERLANG_OSTYPE), unix)
-	$(INSTALL_PROGRAM) $(BINDIR)/$(CS_EXECUTABLE) $(RELSYSDIR)/bin
+	$(INSTALL_PROGRAM) $(BINDIR)/$(CS_EXECUTABLE) "$(RELSYSDIR)/bin"
 endif
 endif
 
@@ -471,8 +461,6 @@ _create_dirs := $(shell mkdir -p $(CREATE_DIRS))
 GENERATE =
 HIPE_ASM =
 
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-else
 ifdef HIPE_ENABLED
 HIPE_ASM +=	$(TTF_DIR)/hipe_x86_asm.h \
 		$(TTF_DIR)/hipe_amd64_asm.h \
@@ -483,7 +471,6 @@ HIPE_ASM +=	$(TTF_DIR)/hipe_x86_asm.h \
 GENERATE +=	$(HIPE_ASM) \
 		$(TTF_DIR)/hipe_literals.h \
 		$(BINDIR)/hipe_mkliterals$(TF_MARKER)
-endif
 endif
 
 ifdef DTRACE_ENABLED
@@ -506,7 +493,7 @@ $(TTF_DIR)/beam_pred_funcs.h \
 $(TTF_DIR)/beam_tr_funcs.h \
 	: $(TTF_DIR)/OPCODES-GENERATED
 $(TTF_DIR)/OPCODES-GENERATED: $(OPCODE_TABLES) utils/beam_makeops
-	LANG=C $(PERL) utils/beam_makeops \
+	$(gen_verbose)LANG=C $(PERL) utils/beam_makeops \
 		-wordsize @EXTERNAL_WORD_SIZE@ \
 		-outdir $(TTF_DIR) \
 		-DUSE_VM_PROBES=$(if $(USE_VM_PROBES),1,0) \
@@ -540,22 +527,22 @@ $(TARGET)/erl_atom_table.h \
 $(TARGET)/erl_pbifs.c \
 	: $(TARGET)/TABLES-GENERATED
 $(TARGET)/TABLES-GENERATED: $(ATOMS) $(BIFS) utils/make_tables
-	LANG=C $(PERL) utils/make_tables -src $(TARGET) -include $(TARGET)\
+	$(gen_verbose)LANG=C $(PERL) utils/make_tables -src $(TARGET) -include $(TARGET)\
 		$(ATOMS) $(BIFS) && echo $? >$(TARGET)/TABLES-GENERATED
 GENERATE += $(TARGET)/TABLES-GENERATED
 
 $(TTF_DIR)/erl_alloc_types.h: beam/erl_alloc.types utils/make_alloc_types
-	LANG=C $(PERL) utils/make_alloc_types -src $< -dst $@ $(ENABLE_ALLOC_TYPE_VARS)
+	$(gen_verbose)LANG=C $(PERL) utils/make_alloc_types -src $< -dst $@ $(ENABLE_ALLOC_TYPE_VARS)
 GENERATE += $(TTF_DIR)/erl_alloc_types.h
 
 # version include file
 $(TARGET)/erl_version.h: ../vsn.mk
-	LANG=C $(PERL) utils/make_version -o $@ $(SYSTEM_VSN) $(VSN)$(SERIALNO) $(TARGET)
+	$(gen_verbose)LANG=C $(PERL) utils/make_version -o $@ $(SYSTEM_VSN) $(VSN)$(SERIALNO) $(TARGET)
 GENERATE += $(TARGET)/erl_version.h
 
 # driver table
 $(TTF_DIR)/driver_tab.c: Makefile.in
-	LANG=C $(PERL) utils/make_driver_tab -o $@ $(DRV_OBJS)
+	$(gen_verbose)LANG=C $(PERL) utils/make_driver_tab -o $@ $(DRV_OBJS)
 GENERATE += $(TTF_DIR)/driver_tab.c
 
 
@@ -575,8 +562,9 @@ $(PRELOAD_SRC): $(ERL_TOP)/erts/preloaded/ebin/otp_ring0.beam \
 			$(ERL_TOP)/erts/preloaded/ebin/zlib.beam \
 			$(ERL_TOP)/erts/preloaded/ebin/prim_zip.beam \
 			$(ERL_TOP)/erts/preloaded/ebin/erl_prim_loader.beam \
-			$(ERL_TOP)/erts/preloaded/ebin/erlang.beam
-	LANG=C $(PERL) utils/make_preload $(MAKE_PRELOAD_EXTRA) -rc $^ > $@
+			$(ERL_TOP)/erts/preloaded/ebin/erlang.beam \
+			$(ERL_TOP)/erts/preloaded/ebin/erts_internal.beam
+	$(gen_verbose)LANG=C $(PERL) utils/make_preload $(MAKE_PRELOAD_EXTRA) -rc $^ > $@
 else
 PRELOAD_OBJ = $(OBJDIR)/preload.o
 PRELOAD_SRC = $(TARGET)/preload.c
@@ -587,8 +575,9 @@ $(PRELOAD_SRC): $(ERL_TOP)/erts/preloaded/ebin/otp_ring0.beam \
 			$(ERL_TOP)/erts/preloaded/ebin/zlib.beam \
 			$(ERL_TOP)/erts/preloaded/ebin/prim_zip.beam \
 			$(ERL_TOP)/erts/preloaded/ebin/erl_prim_loader.beam \
-			$(ERL_TOP)/erts/preloaded/ebin/erlang.beam
-	LANG=C $(PERL) utils/make_preload -old $^ > $@
+			$(ERL_TOP)/erts/preloaded/ebin/erlang.beam \
+			$(ERL_TOP)/erts/preloaded/ebin/erts_internal.beam
+	$(gen_verbose)LANG=C $(PERL) utils/make_preload -old $^ > $@
 endif
 
 .PHONY : generate
@@ -599,13 +588,13 @@ else
 generate: $(TTF_DIR)/GENERATED $(PRELOAD_SRC)
 
 $(TTF_DIR)/GENERATED: $(GENERATE)
-	echo $? >$(TTF_DIR)/GENERATED
+	$(gen_verbose)echo $? >$(TTF_DIR)/GENERATED
 endif
 
 $(TARGET)/erlang_dtrace.h: beam/erlang_dtrace.d
-	dtrace -h -C -Ibeam -s $< -o ./erlang_dtrace.tmp
-	sed -e '/^#define[ 	]*ERLANG_[A-Z0-9_]*(.*)/y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/' ./erlang_dtrace.tmp > $@
-	rm ./erlang_dtrace.tmp
+	$(dtrace_verbose)dtrace -h -C -Ibeam -s $< -o ./erlang_dtrace.tmp
+	$(V_at)sed -e '/^#define[ 	]*ERLANG_[A-Z0-9_]*(.*)/y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/' ./erlang_dtrace.tmp > $@
+	$(V_at)rm ./erlang_dtrace.tmp
 
 # ----------------------------------------------------------------------
 # Pattern rules
@@ -624,58 +613,47 @@ ifdef PERFCTR_PATH
 INCLUDES += -I$(PERFCTR_PATH)/usr.lib -I$(PERFCTR_PATH)/linux/include
 endif
 
-# Need to include etc dir on VxWorks
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-INCLUDES += -I$(ERL_TOP)/erts/etc/vxworks
-endif
-
 ifeq ($(TARGET),win32)
 $(OBJDIR)/dll_sys.o: sys/$(ERLANG_OSTYPE)/sys.c
-	$(CC) $(CFLAGS) -DERL_RUN_SHARED_LIB=1 $(INCLUDES) -c $< -o $@
+	$(V_CC) $(CFLAGS) -DERL_RUN_SHARED_LIB=1 $(INCLUDES) -c $< -o $@
 
 $(OBJDIR)/beams.$(RES_EXT): $(TARGET)/beams.rc
-	$(RC) -o $@  -I$(ERL_TOP)/erts/etc/win32 $(TARGET)/beams.rc 
+	$(V_RC) -o $@  -I$(ERL_TOP)/erts/etc/win32 $(TARGET)/beams.rc
 
 endif
 
 ifneq ($(filter tile-%,$(TARGET)),)
 $(OBJDIR)/beam_emu.o: beam/beam_emu.c
-	$(CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) \
+	$(V_CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) \
          -OPT:Olimit=0 -WOPT:lpre=off:spre=off:epre=off \
          $(INCLUDES) -c $< -o $@
 else
 # Usually the same as the default rule, but certain platforms (e.g. win32) mix
 # different compilers
 $(OBJDIR)/beam_emu.o: beam/beam_emu.c
-	$(EMU_CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
+	$(V_EMU_CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
 endif
 
 $(OBJDIR)/%.o: beam/%.c
-	$(CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
+	$(V_CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
 
 $(OBJDIR)/%.o: $(TARGET)/%.c
-	$(CC) $(CFLAGS) $(INCLUDES) -Idrivers/common -c $< -o $@
+	$(V_CC) $(CFLAGS) $(INCLUDES) -Idrivers/common -c $< -o $@
 
 $(OBJDIR)/%.o: $(TTF_DIR)/%.c
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(V_CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJDIR)/%.o: sys/$(ERLANG_OSTYPE)/%.c
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(V_CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJDIR)/%.o: sys/common/%.c
-	$(CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
+	$(V_CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
 
 $(OBJDIR)/%.o: drivers/common/%.c
-	$(CC) $(CFLAGS) -DLIBSCTP=$(LIBSCTP) $(INCLUDES) -Idrivers/common -Idrivers/$(ERLANG_OSTYPE) -c $< -o $@
+	$(V_CC) $(CFLAGS) -DLIBSCTP=$(LIBSCTP) $(INCLUDES) -Idrivers/common -Idrivers/$(ERLANG_OSTYPE) -c $< -o $@
 
 $(OBJDIR)/%.o: drivers/$(ERLANG_OSTYPE)/%.c
-	$(CC) $(CFLAGS) $(INCLUDES) -Idrivers/common -Idrivers/$(ERLANG_OSTYPE) -I../etc/$(ERLANG_OSTYPE) -c $< -o $@
-
-# VxWorks uses unix drivers too...
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-$(OBJDIR)/%.o: drivers/unix/%.c
-	$(CC) $(CFLAGS) $(INCLUDES) -Idrivers/common -c $< -o $@
-endif
+	$(V_CC) $(CFLAGS) $(INCLUDES) -Idrivers/common -Idrivers/$(ERLANG_OSTYPE) -I../etc/$(ERLANG_OSTYPE) -c $< -o $@
 
 # ----------------------------------------------------------------------
 # Specials
@@ -683,19 +661,19 @@ endif
 CS_SRC = sys/$(ERLANG_OSTYPE)/erl_child_setup.c
 
 $(BINDIR)/$(CS_EXECUTABLE): $(TTF_DIR)/GENERATED $(PRELOAD_SRC) $(CS_SRC) $(ERTS_LIB)
-	$(CS_PURIFY) $(CC) $(CS_LDFLAGS) -o $(BINDIR)/$(CS_EXECUTABLE) \
+	$(ld_verbose)$(CS_PURIFY) $(CC) $(CS_LDFLAGS) -o $(BINDIR)/$(CS_EXECUTABLE) \
                $(CS_CFLAGS) $(COMMON_INCLUDES) $(CS_SRC) $(CS_LIBS)
 
 $(OBJDIR)/%.kp.o: sys/common/%.c
-	$(CC) -DERTS_KERNEL_POLL_VERSION $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
+	$(V_CC) -DERTS_KERNEL_POLL_VERSION $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
 
 $(OBJDIR)/%.nkp.o: sys/common/%.c
-	$(CC) -DERTS_NO_KERNEL_POLL_VERSION $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
+	$(V_CC) -DERTS_NO_KERNEL_POLL_VERSION $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
 
 ifeq ($(GCC),yes)
 
 $(OBJDIR)/erl_goodfit_alloc.o: beam/erl_goodfit_alloc.c
-	$(CC) $(subst -O2, $(GEN_OPT_FLGS) $(UNROLL_FLG), $(CFLAGS)) $(INCLUDES) -c $< -o $@
+	$(V_CC) $(subst -O2, $(GEN_OPT_FLGS) $(UNROLL_FLG), $(CFLAGS)) $(INCLUDES) -c $< -o $@
 endif
 
 # ----------------------------------------------------------------------
@@ -750,7 +728,7 @@ RUN_OBJS = \
 	$(OBJDIR)/register.o		$(OBJDIR)/break.o \
 	$(OBJDIR)/erl_async.o		$(OBJDIR)/erl_lock_check.o \
 	$(OBJDIR)/erl_gc.o 		$(OBJDIR)/erl_lock_count.o \
-	$(OBJDIR)/erl_nmgc.o		$(OBJDIR)/erl_posix_str.o \
+	$(OBJDIR)/erl_posix_str.o \
 	$(OBJDIR)/erl_bits.o 		$(OBJDIR)/erl_math.o \
 	$(OBJDIR)/erl_fun.o             $(OBJDIR)/erl_bif_port.o \
 	$(OBJDIR)/erl_term.o 		$(OBJDIR)/erl_node_tables.o \
@@ -761,7 +739,8 @@ RUN_OBJS = \
 	$(OBJDIR)/packet_parser.o	$(OBJDIR)/safe_hash.o \
 	$(OBJDIR)/erl_zlib.o		$(OBJDIR)/erl_nif.o \
 	$(OBJDIR)/erl_bif_binary.o      $(OBJDIR)/erl_ao_firstfit_alloc.o \
-	$(OBJDIR)/erl_thr_queue.o	$(OBJDIR)/erl_sched_spec_pre_alloc.o
+	$(OBJDIR)/erl_thr_queue.o	$(OBJDIR)/erl_sched_spec_pre_alloc.o \
+	$(OBJDIR)/erl_ptab.o
 
 ifeq ($(TARGET),win32)
 DRV_OBJS = \
@@ -789,12 +768,8 @@ OS_OBJS = \
 	$(OBJDIR)/gzio.o \
 	$(OBJDIR)/elib_memmove.o
 
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-	OS_OBJS += $(OBJDIR)/int64.o 
-else
 	OS_OBJS += $(OBJDIR)/sys_float.o \
                    $(OBJDIR)/sys_time.o
-endif
 DRV_OBJS = \
 	$(OBJDIR)/efile_drv.o \
 	$(OBJDIR)/inet_drv.o \
@@ -802,9 +777,7 @@ DRV_OBJS = \
 	$(OBJDIR)/ram_file_drv.o
 endif
 
-ifneq ($(findstring vxworks,$(TARGET)),vxworks)
 	DRV_OBJS += $(OBJDIR)/ttsl_drv.o
-endif
 
 ifeq ($(ERTS_ENABLE_KERNEL_POLL),yes)
 OS_OBJS += 	$(OBJDIR)/erl_poll.kp.o \
@@ -873,28 +846,28 @@ $(OBJS): $(TTF_DIR)/GENERATED
 M4FLAGS += -DTARGET=$(TARGET) -DOPSYS=$(OPSYS) -DARCH=$(ARCH)
 
 $(TTF_DIR)/%.S: hipe/%.m4
-	m4 $(M4FLAGS) $< > $@
+	$(m4_verbose)m4 $(M4FLAGS) $< > $@
 
 $(TTF_DIR)/%.h: hipe/%.m4
-	m4 $(M4FLAGS) $< > $@
+	$(m4_verbose)m4 $(M4FLAGS) $< > $@
 
 $(OBJDIR)/%.o: $(TTF_DIR)/%.S
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(V_CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJDIR)/%.o: hipe/%.S
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(V_CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJDIR)/%.o: hipe/%.c
-	$(CC) $(subst O2,O3, $(CFLAGS)) $(INCLUDES) -c $< -o $@
+	$(V_CC) $(subst O2,O3, $(CFLAGS)) $(INCLUDES) -c $< -o $@
 
 $(BINDIR)/hipe_mkliterals$(TF_MARKER):	$(OBJDIR)/hipe_mkliterals.o
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $<
+	$(ld_verbose)$(CC) $(CFLAGS) $(INCLUDES) -o $@ $<
 
 $(OBJDIR)/hipe_mkliterals.o:	$(HIPE_ASM) $(TTF_DIR)/erl_alloc_types.h \
 	$(TTF_DIR)/OPCODES-GENERATED $(TARGET)/TABLES-GENERATED
 
 $(TTF_DIR)/hipe_literals.h:	$(BINDIR)/hipe_mkliterals$(TF_MARKER)
-	$(BINDIR)/hipe_mkliterals$(TF_MARKER) -c > $@
+	$(gen_verbose)$(BINDIR)/hipe_mkliterals$(TF_MARKER) -c > $@
 
 $(OBJDIR)/hipe_x86_glue.o:	hipe/hipe_x86_glue.S \
 	$(TTF_DIR)/hipe_x86_asm.h $(TTF_DIR)/hipe_literals.h \
@@ -934,33 +907,13 @@ $(TTF_DIR)/hipe_arm_bifs.S:	hipe/hipe_arm_bifs.m4 hipe/hipe_arm_asm.m4 \
 $(OBJDIR)/hipe_arm_bifs.o:	$(TTF_DIR)/hipe_arm_bifs.S \
 	$(TTF_DIR)/hipe_literals.h
 
+# Use -fomit-frame-pointer to work around gcc (v4.5.2) bug causing
+# "error: r7 cannot be used in asm here" for DEBUG build.
+$(OBJDIR)/hipe_arm.o:           hipe/hipe_arm.c
+	$(V_CC) $(subst O2,O3, $(CFLAGS)) -fomit-frame-pointer $(INCLUDES) -c $< -o $@
+
 # end of HiPE section
 ########################################
-
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-########################################
-# Extract what we need from libgcc.a
-########################################
-GCCLIBFLAGS=@GCCLIBFLAGS@
-STRIP=@STRIP@
-SYMPREFIX=@SYMPREFIX@
-
-NEEDFUNCTIONS=__divdi3 __moddi3 __udivdi3
-KEEPSYMS=$(NEEDFUNCTIONS:%=-K $(SYMPREFIX)%)
-
-$(OBJDIR)/int64.o: $(TARGET)/int64.c
-	$(CC) -o $(OBJDIR)/int64tmp.o -c $(TARGET)/int64.c
-	$(LD) -o $(OBJDIR)/int64.o $(OBJDIR)/int64tmp.o $(LDFLAGS) $(GCCLIBFLAGS)
-	$(STRIP) $(KEEPSYMS) $(OBJDIR)/int64.o
-
-$(TARGET)/int64.c:
-	echo 'void dummy(void); void dummy(void) {' > $(TARGET)/int64.c
-	for x in $(NEEDFUNCTIONS); do echo 'extern void '$$x'();' \
-		>> $(TARGET)/int64.c; done 
-	for x in $(NEEDFUNCTIONS); do echo $$x'();' >> $(TARGET)/int64.c; done
-	echo '}'  >> $(TARGET)/int64.c 
-
-endif
 
 # ----------------------------------------------------------------------
 # The emulator itself
@@ -968,13 +921,13 @@ endif
 ifeq ($(TARGET), win32)
 # Only the basic erlang to begin with eh?
 $(BINDIR)/$(EMULATOR_EXECUTABLE): $(INIT_OBJS) $(OBJS) $(DEPLIBS)
-	$(PURIFY) $(LD) -dll -def:sys/$(ERLANG_OSTYPE)/erl.def -implib:$(BINDIR)/erl_dll.lib -o $(BINDIR)/$(EMULATOR_EXECUTABLE) \
+	$(ld_verbose)$(PURIFY) $(LD) -dll -def:sys/$(ERLANG_OSTYPE)/erl.def -implib:$(BINDIR)/erl_dll.lib -o $(BINDIR)/$(EMULATOR_EXECUTABLE) \
 	$(LDFLAGS) $(DEXPORT) $(INIT_OBJS) $(OBJS) $(LIBS)
 else
 
 
 $(BINDIR)/$(EMULATOR_EXECUTABLE): $(INIT_OBJS) $(OBJS) $(DEPLIBS)
-	$(PURIFY) $(LD) -o $(BINDIR)/$(EMULATOR_EXECUTABLE) \
+	$(ld_verbose)$(PURIFY) $(LD) -o $(BINDIR)/$(EMULATOR_EXECUTABLE) \
 	$(HIPEBEAMLDFLAGS) $(LDFLAGS) $(DEXPORT) $(INIT_OBJS) $(OBJS) $(LIBS)
 
 endif
@@ -1055,6 +1008,12 @@ DEP_FLAGS=-MM $(MG_FLAG) $(CFLAGS) $(INCLUDES) -Idrivers/common -Idrivers/$(ERLA
 SYS_SRC=$(ALL_SYS_SRC)
 endif
 
+.PHONY: $(TARGET)/gen_git_version.mk
+$(TARGET)/gen_git_version.mk:
+# We touch beam/erl_bif.info.c if we regenerated the git version to force a
+# rebuild.
+	if $(gen_verbose)utils/gen_git_version $@; then touch beam/erl_bif_info.c; fi
+
 .PHONY: depend
 ifdef VOID_EMULATOR
 depend:
@@ -1062,23 +1021,24 @@ depend:
 else
 depend: $(TTF_DIR)/depend.mk
 $(TTF_DIR)/depend.mk: $(TTF_DIR)/GENERATED $(PRELOAD_SRC)
-	$(DEP_CC) $(DEP_FLAGS) $(BEAM_SRC) \
+	$(gen_verbose)
+	$(V_at)$(DEP_CC) $(DEP_FLAGS) $(BEAM_SRC) \
 		| $(SED_DEPEND) > $(TTF_DIR)/depend.mk
-	$(DEP_CC) $(DEP_FLAGS) -DLIBSCTP=$(LIBSCTP) $(DRV_COMMON_SRC) \
+	$(V_at)$(DEP_CC) $(DEP_FLAGS) -DLIBSCTP=$(LIBSCTP) $(DRV_COMMON_SRC) \
 		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk
-	$(DEP_CC) $(DEP_FLAGS) -I../etc/$(ERLANG_OSTYPE) $(DRV_OSTYPE_SRC) \
+	$(V_at)$(DEP_CC) $(DEP_FLAGS) -I../etc/$(ERLANG_OSTYPE) $(DRV_OSTYPE_SRC) \
 		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk
-	$(DEP_CC) $(DEP_FLAGS) $(SYS_SRC) \
+	$(V_at)$(DEP_CC) $(DEP_FLAGS) $(SYS_SRC) \
 		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk
-	$(DEP_CC) $(DEP_FLAGS) $(TARGET_SRC) \
+	$(V_at)$(DEP_CC) $(DEP_FLAGS) $(TARGET_SRC) \
 		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk
-	$(DEP_CC) $(DEP_FLAGS) $(ZLIB_SRC) \
+	$(V_at)$(DEP_CC) $(DEP_FLAGS) $(ZLIB_SRC) \
 		| $(SED_DEPEND_ZLIB) >> $(TTF_DIR)/depend.mk
 ifdef HIPE_ENABLED
-	$(DEP_CC) $(DEP_FLAGS) $(HIPE_SRC) \
+	$(V_at)$(DEP_CC) $(DEP_FLAGS) $(HIPE_SRC) \
 		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk
 endif
-	cd $(ERTS_LIB_DIR) && $(MAKE) depend
+	$(V_at)cd $(ERTS_LIB_DIR) && $(MAKE) depend
 endif
 
 ifneq ($(MAKECMDGOALS),clean)

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2000-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -79,12 +79,6 @@ form({attribute, Line, xref, Calls}, S) -> % experimental
 	   lattrs = L, xattrs = X, battrs = B} = S,
     attr(Calls, Line, M, Fun, L, X, B, S);
 form({attribute, _Line, _Attr, _Val}, S) ->
-    S;
-form({function, 0, 'MNEMOSYNE RULE', 1, _Clauses}, S) ->
-    S;
-form({function, 0, 'MNEMOSYNE QUERY', 2, _Clauses}, S) ->
-    S;
-form({function, 0, 'MNEMOSYNE RECFUNDEF', 1, _Clauses}, S) ->
     S;
 form({function, 0, module_info, 0, _Clauses}, S) ->
     S;
@@ -331,9 +325,6 @@ handle_call(Locality, Module, Name, Arity, Line, S) ->
 	    handle_call(Locality, To, Line, S, false)
     end.
 
-handle_call(_Locality, {_, 'MNEMOSYNE RULE',1}, _Line, S, _) -> S;
-handle_call(_Locality, {_, 'MNEMOSYNE QUERY', 2}, _Line, S, _) -> S;
-handle_call(_Locality, {_, 'MNEMOSYNE RECFUNDEF',1}, _Line, S, _) -> S;
 handle_call(Locality, To0, Line, S, IsUnres) ->
     From = S#xrefr.function,
     To = adjust_arity(S, To0),

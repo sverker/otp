@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1998-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -394,8 +394,8 @@ handle_call(stop,{_From,_Tag}, S) ->
 handle_call({is_cached,_File}, {_From,_Tag}, S=#state{cache=no_cache}) ->
     {reply, no, S};
 
-handle_call({set_primary_archive, File, ArchiveBin, FileInfo}, {_From,_Tag}, S=#state{mode=Mode}) ->
-    case erl_prim_loader:set_primary_archive(File, ArchiveBin, FileInfo) of
+handle_call({set_primary_archive, File, ArchiveBin, FileInfo, ParserFun}, {_From,_Tag}, S=#state{mode=Mode}) ->
+    case erl_prim_loader:set_primary_archive(File, ArchiveBin, FileInfo, ParserFun) of
 	{ok, Files} ->
 	    {reply, {ok, Mode, Files}, S};
 	{error, _Reason} = Error ->
@@ -421,6 +421,9 @@ handle_call({is_cached,File}, {_From,_Tag}, S=#state{cache=Cache}) ->
 		    {reply, Dir, S}
 	    end
     end;
+
+handle_call(get_mode, {_From,_Tag}, S=#state{mode=Mode}) ->
+    {reply, Mode, S};
 
 handle_call(Other,{_From,_Tag}, S) ->			
     error_msg(" ** Codeserver*** ignoring ~w~n ",[Other]),
@@ -1229,7 +1232,7 @@ load_abs(File, Mod0, Caller, St) ->
     end.
 
 try_load_module(Mod, Dir, Caller, St) ->
-    File = filename:append(Dir, to_path(Mod) ++ 
+    File = filename:append(Dir, to_list(Mod) ++
 			   objfile_extension()),
     case erl_prim_loader:get_file(File) of
 	error -> 
@@ -1266,11 +1269,11 @@ try_load_module_1(File, Mod, Bin, Caller, #state{moddb=Db}=St) ->
 			{error,on_load} ->
 			    handle_on_load(Mod, File, Caller, St);
 			{error,What} = Error ->
-			    error_msg("Loading of ~s failed: ~p\n", [File, What]),
+			    error_msg("Loading of ~ts failed: ~p\n", [File, What]),
 			    {reply,Error,St}
 		    end;
 		Error ->
-		    error_msg("Native loading of ~s failed: ~p\n",
+		    error_msg("Native loading of ~ts failed: ~p\n",
 			      [File,Error]),
 		    {reply,ok,St}
 	    end
@@ -1347,7 +1350,7 @@ load_file_1(Mod, Caller, #state{cache=Cache}=St0) ->
     end.
 
 mod_to_bin([Dir|Tail], Mod) ->
-    File = filename:append(Dir, to_path(Mod) ++ objfile_extension()),
+    File = filename:append(Dir, to_list(Mod) ++ objfile_extension()),
     case erl_prim_loader:get_file(File) of
 	error -> 
 	    mod_to_bin(Tail, Mod);
@@ -1356,7 +1359,7 @@ mod_to_bin([Dir|Tail], Mod) ->
     end;
 mod_to_bin([], Mod) ->
     %% At last, try also erl_prim_loader's own method
-    File = to_path(Mod) ++ objfile_extension(),
+    File = to_list(Mod) ++ objfile_extension(),
     case erl_prim_loader:get_file(File) of
 	error -> 
 	    error;     % No more alternatives !
@@ -1570,6 +1573,3 @@ to_list(X) when is_atom(X) -> atom_to_list(X).
 
 to_atom(X) when is_atom(X) -> X;
 to_atom(X) when is_list(X) -> list_to_atom(X).
-
-to_path(X) ->
-    filename:join(packages:split(X)).

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2004-2009. All Rights Reserved.
+ * Copyright Ericsson AB 2004-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -136,8 +136,6 @@ typedef struct erts_suspend_monitor {
 
 #define ERTS_LINK_ROOT(Linkp) ((Linkp)->shared.root)
 #define ERTS_LINK_REFC(Linkp) ((Linkp)->shared.refc) 
-
-#define ERTS_LINK_ROOT_AS_UINT(Linkp) (*((Uint *) &((Linkp)->root)))
 
 Uint erts_tot_link_lh_size(void);
 

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -159,7 +159,7 @@ Module*
 erts_put_module(Eterm mod)
 {
     ERTS_SMP_LC_ASSERT(erts_initialized == 0
-		       || erts_is_code_ix_locked());
+		       || erts_has_code_write_permission());
 
     return put_module(mod, &module_tables[erts_staging_code_ix()]);
 }

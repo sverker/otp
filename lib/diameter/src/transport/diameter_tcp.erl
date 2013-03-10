@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -37,16 +37,25 @@
          code_change/3,
          terminate/2]).
 
+-export([info/1]).  %% service_info callback
+
 -export([ports/0,
          ports/1]).
 
 -include_lib("diameter/include/diameter.hrl").
 
+%% Keys into process dictionary.
+-define(INFO_KEY, info).
+-define(REF_KEY,  ref).
+
 -define(ERROR(T), erlang:error({T, ?MODULE, ?LINE})).
 
 -define(DEFAULT_PORT, 3868).  %% RFC 3588, ch 2.1
 -define(LISTENER_TIMEOUT, 30000).
--define(FRAGMENT_TIMEOUT, 1000).
+-define(DEFAULT_FRAGMENT_TIMEOUT, 1000).
+
+-define(IS_UINT32(N), (is_integer(N) andalso 0 =< N andalso 0 == N bsr 32)).
+-define(IS_TIMEOUT(N), (infinity == N orelse ?IS_UINT32(N))).
 
 %% cb_info passed to ssl.
 -define(TCP_CB(Mod), {Mod, tcp, tcp_closed, tcp_error}).
@@ -66,7 +75,6 @@
         {parent             :: pid(),
          transport = self() :: pid()}).
 
--type tref()   :: reference().  %% timer reference
 -type length() :: 0..16#FFFFFF. %% message length from Diameter header
 -type size()   :: non_neg_integer().  %% accumulated binary size
 -type frag()   :: {length(), size(), binary(), list(binary())}
@@ -74,11 +82,14 @@
 
 %% Accepting/connecting transport process state.
 -record(transport,
-        {socket  :: inet:socket(),  %% accept or connect socket
+        {socket  :: inet:socket() | ssl:sslsocket(), %% accept/connect socket
          parent  :: pid(),          %% of process that started us
          module  :: module(),       %% gen_tcp-like module
-         frag = <<>> :: binary() | {tref(), frag()},  %% message fragment
-         ssl     :: boolean() | [term()]}). %% ssl options
+         frag = <<>> :: frag(),     %% message fragment
+         ssl     :: boolean() | [term()],       %% ssl options
+         timeout :: infinity | 0..16#FFFFFFFF,  %% fragment timeout
+         tref = false  :: false | reference(),  %% fragment timer reference
+         flush = false :: boolean()}).          %% flush fragment at timeout?
 %% The usual transport using gen_tcp can be replaced by anything
 %% sufficiently gen_tcp-like by passing a 'module' option as the first
 %% (for simplicity) transport option. The transport_module diameter_etcp
@@ -111,6 +122,33 @@ start_link(T) ->
                         diameter_lib:spawn_opts(server, [])).
 
 %% ---------------------------------------------------------------------------
+%% # info/1
+%% ---------------------------------------------------------------------------
+
+info({Mod, Sock}) ->
+    lists:flatmap(fun(K) -> info(Mod, K, Sock) end,
+                  [{socket, fun sockname/2},
+                   {peer, fun peername/2},
+                   {statistics, fun getstat/2}
+                   | ssl_info(Mod, Sock)]).
+
+info(Mod, {K,F}, Sock) ->
+    case F(Mod, Sock) of
+        {ok, V} ->
+            [{K,V}];
+        _ ->
+            []
+    end.
+
+ssl_info(ssl = M, Sock) ->
+    [{M, ssl_info(Sock)}];
+ssl_info(_, _) ->
+    [].
+
+ssl_info(Sock) ->
+    [{peercert, C} || {ok, C} <- [ssl:peercert(Sock)]].
+
+%% ---------------------------------------------------------------------------
 %% # init/1
 %% ---------------------------------------------------------------------------
 
@@ -128,16 +166,22 @@ i({T, Ref, Mod, Pid, Opts, Addrs})
     %% that does nothing but kill us with the parent until call
     %% returns.
     {ok, MPid} = diameter_tcp_sup:start_child(#monitor{parent = Pid}),
-    {SslOpts, Rest} = ssl(Opts),
+    {SslOpts, Rest0} = ssl(Opts),
+    {OwnOpts, Rest} = own(Rest0),
+    Tmo = proplists:get_value(fragment_timer,
+                              OwnOpts,
+                              ?DEFAULT_FRAGMENT_TIMEOUT),
+    ?IS_TIMEOUT(Tmo) orelse ?ERROR({fragment_timer, Tmo}),
     Sock = i(T, Ref, Mod, Pid, SslOpts, Rest, Addrs),
     MPid ! {stop, self()},  %% tell the monitor to die
     M = if SslOpts -> ssl; true -> Mod end,
     setopts(M, Sock),
-    putr(ref, Ref),
+    putr(?REF_KEY, Ref),
     #transport{parent = Pid,
                module = M,
                socket = Sock,
-               ssl = SslOpts};
+               ssl = SslOpts,
+               timeout = Tmo};
 %% Put the reference in the process dictionary since we now use it
 %% advertise the ssl socket after TLS upgrade.
 
@@ -162,6 +206,10 @@ i({listen, LRef, APid, {Mod, Opts, Addrs}}) ->
     proc_lib:init_ack({ok, self(), {LAddr, LSock}}),
     erlang:monitor(process, APid),
     start_timer(#listener{socket = LSock}).
+
+own(Opts) ->
+    {Own, Rest} = proplists:split(Opts, [fragment_timer]),
+    {lists:append(Own), Rest}.
 
 ssl(Opts) ->
     {[SslOpts], Rest} = proplists:split(Opts, [ssl_options]),
@@ -191,7 +239,7 @@ i(accept = T, Ref, Mod, Pid, Opts, Addrs) ->
     {LAddr, LSock} = listener(Ref, {Mod, Opts, Addrs}),
     proc_lib:init_ack({ok, self(), [LAddr]}),
     Sock = ok(accept(Mod, LSock)),
-    true = diameter_reg:add_new({?MODULE, T, {Ref, Sock}}),
+    publish(Mod, T, Ref, Sock),
     diameter_peer:up(Pid),
     Sock;
 
@@ -202,9 +250,13 @@ i(connect = T, Ref, Mod, Pid, Opts, Addrs) ->
     RPort = get_port(RP),
     proc_lib:init_ack({ok, self(), [LAddr]}),
     Sock = ok(connect(Mod, RAddr, RPort, gen_opts(LAddr, Rest))),
-    true = diameter_reg:add_new({?MODULE, T, {Ref, Sock}}),
+    publish(Mod, T, Ref, Sock),
     diameter_peer:up(Pid, {RAddr, RPort}),
     Sock.
+
+publish(Mod, T, Ref, Sock) ->
+    true = diameter_reg:add_new({?MODULE, T, {Ref, Sock}}),
+    putr(?INFO_KEY, {Mod, Sock}).  %% for info/1
 
 ok({ok, T}) ->
     T;
@@ -331,8 +383,6 @@ handle_info(T, #monitor{} = S) ->
 %% # code_change/3
 %% ---------------------------------------------------------------------------
 
-code_change(_, {transport, _, _, _, _} = S, _) ->
-    {ok, #transport{} = list_to_tuple(tuple_to_list(S) ++ [false])};
 code_change(_, State, _) ->
     {ok, State}.
 
@@ -415,6 +465,7 @@ t(T,S) ->
 
 %% Initial incoming message when we might need to upgrade to TLS:
 %% don't request another message until we know.
+
 transition({tcp, Sock, Bin}, #transport{socket = Sock,
                                         parent = Pid,
                                         frag = Head,
@@ -422,13 +473,13 @@ transition({tcp, Sock, Bin}, #transport{socket = Sock,
                                         ssl = Opts}
                              = S)
   when is_list(Opts) ->
-    case recv1(Head, Bin) of
+    case rcv(Head, Bin) of
         {Msg, B} when is_binary(Msg) ->
             diameter_peer:recv(Pid, Msg),
             S#transport{frag = B};
         Frag ->
             setopts(M, Sock),
-            S#transport{frag = Frag}
+            start_fragment_timer(S#transport{frag = Frag})
     end;
 
 %% Incoming message.
@@ -439,7 +490,7 @@ transition({P, Sock, Bin}, #transport{socket = Sock,
   when P == tcp, not B;
        P == ssl, B ->
     setopts(M, Sock),
-    recv(Bin, S);
+    start_fragment_timer(recv(Bin, S));
 
 %% Capabilties exchange has decided on whether or not to run over TLS.
 transition({diameter, {tls, Ref, Type, B}}, #transport{parent = Pid}
@@ -450,7 +501,7 @@ transition({diameter, {tls, Ref, Type, B}}, #transport{parent = Pid}
         = tls_handshake(Type, B, S),
     Pid ! {diameter, {tls, Ref}},
     setopts(M, Sock),
-    NS#transport{ssl = B};
+    start_fragment_timer(NS#transport{ssl = B});
 
 transition({C, Sock}, #transport{socket = Sock,
                                  ssl = B})
@@ -483,8 +534,8 @@ transition({diameter, {close, Pid}}, #transport{parent = Pid,
     stop;
 
 %% Timeout for reception of outstanding packets.
-transition({timeout, TRef, flush}, S) ->
-    flush(TRef, S);
+transition({timeout, TRef, flush}, #transport{tref = TRef} = S) ->
+    flush(S#transport{tref = false});
 
 %% Request for the local port number.
 transition({resolve_port, Pid}, #transport{socket = Sock,
@@ -521,10 +572,8 @@ tls_handshake(Type, true, #transport{socket = Sock,
                                      ssl = Opts}
                           = S) ->
     {ok, SSock} = tls(Type, Sock, [{cb_info, ?TCP_CB(M)} | Opts]),
-    Ref = getr(ref),
-    is_reference(Ref)  %% started in new code
-        andalso
-        (true = diameter_reg:add_new({?MODULE, Type, {Ref, SSock}})),
+    Ref = getr(?REF_KEY),
+    true = diameter_reg:add_new({?MODULE, Type, {Ref, SSock}}),
     S#transport{socket = SSock,
                 module = ssl};
 
@@ -539,29 +588,24 @@ tls(accept, Sock, Opts) ->
 
 %% recv/2
 %%
-%% Reassemble fragmented messages and extract multple message sent
+%% Reassemble fragmented messages and extract multiple message sent
 %% using Nagle.
 
 recv(Bin, #transport{parent = Pid, frag = Head} = S) ->
-    case recv1(Head, Bin) of
+    case rcv(Head, Bin) of
         {Msg, B} when is_binary(Msg) ->
             diameter_peer:recv(Pid, Msg),
             recv(B, S#transport{frag = <<>>});
         Frag ->
-            S#transport{frag = Frag}
+            S#transport{frag = Frag,
+                        flush = false}
     end.
 
-%% recv1/2
+%% rcv/2
 
 %% No previous fragment.
-recv1(<<>>, Bin) ->
+rcv(<<>>, Bin) ->
     rcv(Bin);
-
-recv1({TRef, Head}, Bin) ->
-    erlang:cancel_timer(TRef),
-    rcv(Head, Bin).
-
-%% rcv/2
 
 %% Not even the first four bytes of the header.
 rcv(Head, Bin)
@@ -577,22 +621,22 @@ rcv({Len, N, Head, Acc}, Bin) ->
 %% Extract a message for which we have all bytes.
 rcv(Len, N, Head, Acc)
   when Len =< N ->
-    rcv1(Len, bin(Head, Acc));
+    recv1(Len, bin(Head, Acc));
 
 %% Wait for more packets.
 rcv(Len, N, Head, Acc) ->
-    {start_timer(), {Len, N, Head, Acc}}.
+    {Len, N, Head, Acc}.
 
-%% rcv/2
+%% rcv/1
 
 %% Nothing left.
 rcv(<<>> = Bin) ->
     Bin;
 
-%% Well, this isn't good. Chances are things will go south from here
-%% but if we're lucky then the bytes we have extend to an intended
-%% message boundary and we can recover by simply discarding them,
-%% which is the result of receiving them.
+%% The Message Length isn't even sufficient for a header. Chances are
+%% things will go south from here but if we're lucky then the bytes we
+%% have extend to an intended message boundary and we can recover by
+%% simply receiving them. Make it so.
 rcv(<<_:1/binary, Len:24, _/binary>> = Bin)
   when Len < 20 ->
     {Bin, <<>>};
@@ -600,23 +644,23 @@ rcv(<<_:1/binary, Len:24, _/binary>> = Bin)
 %% Enough bytes to extract a message.
 rcv(<<_:1/binary, Len:24, _/binary>> = Bin)
   when Len =< size(Bin) ->
-    rcv1(Len, Bin);
+    recv1(Len, Bin);
 
 %% Or not: wait for more packets.
 rcv(<<_:1/binary, Len:24, _/binary>> = Head) ->
-    {start_timer(), {Len, size(Head), Head, []}};
+    {Len, size(Head), Head, []};
 
 %% Not even 4 bytes yet.
 rcv(Head) ->
-    {start_timer(), Head}.
+    Head.
 
-%% rcv1/2
+%% recv1/2
 
-rcv1(Len, Bin) ->
+recv1(Len, Bin) ->
     <<Msg:Len/binary, Rest/binary>> = Bin,
     {Msg, Rest}.
 
-%% bin/[12]
+%% bin/1-2
 
 bin(Head, Acc) ->
     list_to_binary([Head | lists:reverse(Acc)]).
@@ -627,7 +671,7 @@ bin(Bin)
   when is_binary(Bin) ->
     Bin.
 
-%% start_timer/0
+%% flush/1
 
 %% An erroneously large message length may leave us with a fragment
 %% that lingers if the peer doesn't have anything more to send. Start
@@ -640,14 +684,30 @@ bin(Bin)
 %% since all messages with length problems are discarded this should
 %% also eventually lead to watchdog failover.
 
-start_timer() ->
-    erlang:start_timer(?FRAGMENT_TIMEOUT, self(), flush).
+%% No fragment to flush.
+flush(#transport{frag = <<>>} = S) ->
+    S;
 
-flush(TRef, #transport{parent = Pid, frag = {TRef, Head}} = S) ->
-    diameter_peer:recv(Pid, bin(Head)),
-    S#transport{frag = <<>>};
-flush(_, S) ->
-    S.
+%% Messages have been received since last timer expiry.
+flush(#transport{flush = false} = S) ->
+    start_fragment_timer(S#transport{flush = true});
+
+%% No messages since last expiry.
+flush(#transport{frag = Frag, parent = Pid} = S) ->
+    diameter_peer:recv(Pid, bin(Frag)),
+    S#transport{frag = <<>>}.
+
+%% start_fragment_timer/1
+%%
+%% Start a timer only if there's none running and a message to flush.
+
+start_fragment_timer(#transport{frag = B, tref = TRef} = S)
+  when B == <<>>;
+       TRef /= false ->
+    S;
+
+start_fragment_timer(#transport{timeout = Tmo} = S) ->
+    S#transport{tref = erlang:start_timer(Tmo, self(), flush)}.
 
 %% accept/2
 
@@ -696,12 +756,32 @@ setopts(M, Sock) ->
 
 portnr(gen_tcp, Sock) ->
     inet:port(Sock);
-portnr(ssl, Sock) ->
-    case ssl:sockname(Sock) of
+portnr(M, Sock) ->
+    case M:sockname(Sock) of
         {ok, {_Addr, PortNr}} ->
             {ok, PortNr};
         {error, _} = No ->
             No
-    end;
-portnr(M, Sock) ->
-    M:port(Sock).
+    end.
+
+%% sockname/2
+
+sockname(gen_tcp, Sock) ->
+    inet:sockname(Sock);
+sockname(M, Sock) ->
+    M:sockname(Sock).
+
+%% peername/2
+
+peername(gen_tcp, Sock) ->
+    inet:peername(Sock);
+peername(M, Sock) ->
+    M:peername(Sock).
+
+%% getstat/2
+
+getstat(gen_tcp, Sock) ->
+    inet:getstat(Sock);
+getstat(M, Sock) ->
+    M:getstat(Sock).
+%% Note that ssl:getstat/1 doesn't yet exist in R15B01.

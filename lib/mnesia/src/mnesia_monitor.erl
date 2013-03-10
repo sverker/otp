@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -673,7 +673,6 @@ env() ->
      dump_log_time_threshold,
      dump_log_update_in_place,
      dump_log_write_threshold,
-     embedded_mnemosyne,
      event_module,
      extra_db_nodes,
      ignore_fallback_at_startup,
@@ -706,8 +705,6 @@ default_env(dump_log_update_in_place) ->
     true;
 default_env(dump_log_write_threshold) ->
     1000;
-default_env(embedded_mnemosyne) ->
-    false;
 default_env(event_module) ->
     mnesia_event;
 default_env(extra_db_nodes) ->
@@ -757,7 +754,6 @@ do_check_type(event_module, A) when is_atom(A) -> A;
 do_check_type(ignore_fallback_at_startup, B) -> bool(B);
 do_check_type(fallback_error_function, {Mod, Func})
   when is_atom(Mod), is_atom(Func) -> {Mod, Func};
-do_check_type(embedded_mnemosyne, B) -> bool(B);
 do_check_type(extra_db_nodes, L) when is_list(L) ->
     Fun = fun(N) when N == node() -> false;
 	     (A) when is_atom(A) -> true

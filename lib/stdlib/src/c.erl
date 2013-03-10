@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -116,13 +116,13 @@ machine_load(Mod, File, Opts) ->
     File2 = filename:join(Dir, filename:basename(File, ".erl")),
     case compile:output_generated(Opts) of
 	true ->
-	    Base = packages:last(Mod),
+	    Base = atom_to_list(Mod),
 	    case filename:basename(File, ".erl") of
 		Base ->
 		    code:purge(Mod),
 		    check_load(code:load_abs(File2,Mod), Mod);
 		_OtherMod ->
-		    format("** Module name '~p' does not match file name '~p' **~n",
+		    format("** Module name '~p' does not match file name '~tp' **~n",
 			   [Mod,File]),
 		    {error, badfile}
 	    end;
@@ -203,11 +203,11 @@ make_term(Str) ->
 	    case erl_parse:parse_term(Tokens ++ [{dot, 1}]) of
 		{ok, Term} -> Term;
 		{error, {_,_,Reason}} ->
-		    io:format("~s: ~s~n", [Reason, Str]),
+		    io:format("~ts: ~ts~n", [Reason, Str]),
 		    throw(error)
 	    end;
 	{error, {_,_,Reason}, _} ->
-	    io:format("~s: ~s~n", [Reason, Str]),
+	    io:format("~ts: ~ts~n", [Reason, Str]),
 	    throw(error)
     end.
 
@@ -475,11 +475,11 @@ f_p_e(P, F) ->
 	{error, enoent} = Enoent ->
 	    Enoent;
 	{error, E={Line, _Mod, _Term}} ->
-	    error("file:path_eval(~p,~p): error on line ~p: ~s~n",
+	    error("file:path_eval(~tp,~tp): error on line ~p: ~ts~n",
 		  [P, F, Line, file:format_error(E)]),
 	    ok;
 	{error, E} ->
-	    error("file:path_eval(~p,~p): ~s~n",
+	    error("file:path_eval(~tp,~tp): ~ts~n",
 		  [P, F, file:format_error(E)]),
 	    ok;
 	Other ->
@@ -512,7 +512,7 @@ m(M) ->
 print_object_file(Mod) ->
     case code:is_loaded(Mod) of
 	{file,File} ->
-	    format("Object file: ~s\n", [File]);
+	    format("Object file: ~ts\n", [File]);
 	_ ->
 	    ignore
     end.
@@ -588,7 +588,12 @@ month(12) -> "December".
 flush() ->
     receive
 	X ->
-	    format("Shell got ~p~n",[X]),
+            case lists:keyfind(encoding, 1, io:getopts()) of
+                {encoding,unicode} ->
+                    format("Shell got ~tp~n",[X]);
+                _ ->
+                    format("Shell got ~p~n",[X])
+            end,
 	    flush()
     after 0 ->
 	    ok
@@ -680,7 +685,7 @@ portformat(Name, Id, Cmd) ->
 pwd() ->
     case file:get_cwd() of
 	{ok, Str} ->
-	    ok = io:format("~ts\n", [fixup_one_bin(Str)]);
+	    ok = io:format("~ts\n", [Str]);
 	{error, _} ->
 	    ok = io:format("Cannot determine current directory\n")
     end.
@@ -707,26 +712,10 @@ ls() ->
 ls(Dir) ->
     case file:list_dir(Dir) of
 	{ok, Entries} ->
-	    ls_print(sort(fixup_bin(Entries)));
+	    ls_print(sort(Entries));
 	{error,_E} ->
 	    format("Invalid directory\n")
     end.
-
-fixup_one_bin(X) when is_binary(X) ->
-    L = binary_to_list(X),
-    [ if 
-	  El > 127 ->
-	      $?;
-	  true ->
-	      El
-      end || El <- L];
-fixup_one_bin(X) -> 
-    X.
-fixup_bin([H|T]) ->
-    [fixup_one_bin(H) | fixup_bin(T)];
-fixup_bin([]) ->
-    [].
-	      
 
 ls_print([]) -> ok;
 ls_print(L) ->

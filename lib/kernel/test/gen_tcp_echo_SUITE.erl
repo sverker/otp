@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -190,24 +190,19 @@ echo_test_1(SockOpts, EchoFun, Config0) ->
     ok.
 
 echo_packet(SockOpts, EchoFun, Opts) ->
-    ?line Type =
-	case lists:keysearch(type, 1, Opts) of
-	    {value, {type, T}} ->
-		T;
-	    _ ->
-		{value, {packet, T}} = lists:keysearch(packet, 1, SockOpts),
-		T
-	end,
+    Type = case lists:keysearch(type, 1, Opts) of
+	{value, {type, T}} ->
+	    T;
+	_ ->
+	    {value, {packet, T}} = lists:keysearch(packet, 1, SockOpts),
+	    T
+    end,
 
     %% Connect to the echo server.
-    ?line EchoPort = ?config(echo_port, Opts),
-    ?line {ok, Echo} = gen_tcp:connect(localhost, EchoPort, SockOpts),
+    EchoPort = ?config(echo_port, Opts),
+    {ok, Echo} = gen_tcp:connect(localhost, EchoPort, SockOpts),
 
-    ?line SlowEcho = 
-	case os:type() of
-	    vxworks -> true;
-	    _ -> lists:member(slow_echo, Opts)
-	end,
+    SlowEcho = lists:member(slow_echo, Opts),
 
     case Type of
 	http ->

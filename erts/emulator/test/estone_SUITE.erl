@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2002-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -19,7 +19,7 @@
 -module(estone_SUITE).
 %% Test functions
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
-	 init_per_group/2,end_per_group/2,estone/1]).
+	 init_per_group/2,end_per_group/2,estone/1,estone_bench/1]).
 -export([init_per_testcase/2, end_per_testcase/2]).
 
 %% Internal exports for EStone tests
@@ -46,6 +46,7 @@
 
 
 -include_lib("test_server/include/test_server.hrl").
+-include_lib("common_test/include/ct_event.hrl").
 
 %% Test suite defines
 -define(default_timeout, ?t:minutes(10)).
@@ -80,7 +81,7 @@ all() ->
     [estone].
 
 groups() -> 
-    [].
+    [{estone_bench, [{repeat,50}],[estone_bench]}].
 
 init_per_suite(Config) ->
     Config.
@@ -107,6 +108,17 @@ estone(Config) when is_list(Config) ->
     ?line pp(Mhz,Total,Stones,L),
     ?line {comment,Mhz ++ " MHz, " ++ 
 	   integer_to_list(Stones) ++ " ESTONES"}.
+
+estone_bench(Config) ->
+    DataDir = ?config(data_dir,Config),
+    L = ?MODULE:macro(?MODULE:micros(),DataDir),
+    [ct_event:notify(
+       #event{name = benchmark_data, 
+	      data = [{name,proplists:get_value(title,Mark)},
+		      {value,proplists:get_value(estones,Mark)}]})
+     || Mark <- L],
+    L.
+
 
 %%
 %% Calculate CPU speed

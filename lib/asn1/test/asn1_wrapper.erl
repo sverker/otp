@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -34,41 +34,16 @@ encode(Module,Type,Value) ->
 	    Error
     end.
 
-decode(Module,Type,Bytes) ->
-    case Module:encoding_rule() of
-	ber ->
-	    asn1rt:decode(Module,Type,Bytes);
-	ber_bin when is_binary(Bytes) ->
-	    asn1rt:decode(Module,Type,Bytes);
-	ber_bin ->
-	    asn1rt:decode(Module,Type,list_to_binary(Bytes));
-	ber_bin_v2 when is_binary(Bytes) ->
-	    asn1rt:decode(Module,Type,Bytes);
-	ber_bin_v2 ->
-	    asn1rt:decode(Module,Type,list_to_binary(Bytes));
-	per ->
-	    asn1rt:decode(Module,Type,Bytes);
-	per_bin when is_binary(Bytes) ->
-	    asn1rt:decode(Module,Type,Bytes);
-	per_bin ->
-	    asn1rt:decode(Module,Type,list_to_binary(Bytes));
-	uper_bin when is_binary(Bytes) ->
-	    asn1rt:decode(Module,Type,Bytes);
-	uper_bin ->
-	    asn1rt:decode(Module,Type,list_to_binary(Bytes))
-    end.
+decode(Module, Type, Bytes) when is_binary(Bytes) ->
+    asn1rt:decode(Module, Type, Bytes);
+decode(Module, Type, Bytes) when is_list(Bytes) ->
+    asn1rt:decode(Module, Type, list_to_binary(Bytes)).
 
 erule(ber) ->
     ber;
-erule(ber_bin) ->
-    ber;
-erule(ber_bin_v2) ->
-    ber;
 erule(per) ->
     per;
-erule(per_bin) ->
-    per;
-erule(uper_bin) ->
+erule(uper) ->
     per.
 
 

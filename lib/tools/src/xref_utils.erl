@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2000-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -141,7 +141,7 @@ is_string([], _) ->
 is_string(Term, C) ->
     is_string1(Term, C).
 
-is_string1([H | T], C) when H > C, H < 127 -> 
+is_string1([H | T], C) when H > C ->
     is_string1(T, C);
 is_string1([], _) -> 
     true;
@@ -517,16 +517,16 @@ subprocess(Fun, Opts) ->
 format_error({error, Module, Error}) ->
     Module:format_error(Error);
 format_error({file_error, FileName, Reason}) ->
-    io_lib:format("~s: ~p~n", [FileName, file:format_error(Reason)]);
+    io_lib:format("~ts: ~tp~n", [FileName, file:format_error(Reason)]);
 format_error({unrecognized_file, FileName}) ->
-    io_lib:format("~p is neither a regular file nor a directory~n", 
+    io_lib:format("~tp is neither a regular file nor a directory~n", 
 		  [FileName]);
 format_error({no_such_module, Module}) ->
-    io_lib:format("Cannot find module ~p using the code path~n", [Module]);
+    io_lib:format("Cannot find module ~tp using the code path~n", [Module]);
 format_error({interpreted, Module}) ->
-    io_lib:format("Cannot use BEAM code of interpreted module ~p~n", [Module]);
+    io_lib:format("Cannot use BEAM code of interpreted module ~tp~n", [Module]);
 format_error(E) ->
-    io_lib:format("~p~n", [E]).
+    io_lib:format("~tp~n", [E]).
 
 %%
 %%  Local functions

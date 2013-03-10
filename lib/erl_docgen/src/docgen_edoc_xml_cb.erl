@@ -1,19 +1,20 @@
-%% ``The contents of this file are subject to the Erlang Public License,
+%%
+%% %CopyrightBegin%
+%%
+%% Copyright Ericsson AB 2001-2012. All Rights Reserved.
+%%
+%% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
-%% retrieved via the world wide web at http://www.erlang.org/.
+%% retrieved online at http://www.erlang.org/.
 %%
 %% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied. See
-%% the Licence for the specific language governing rights and limitations
+%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+%% the License for the specific language governing rights and limitations
 %% under the License.
 %%
-%% The Initial Developer of the Original Code is Ericsson AB.
-%% Portions created by Ericsson are Copyright 1999-2006, Ericsson AB.
-%% All Rights Reserved.´´
-%%
-%%     $Id$
+%% %CopyrightEnd%
 %%
 -module(docgen_edoc_xml_cb).
 
@@ -39,12 +40,14 @@
 module(Element, Opts) ->
     SortP = proplists:get_value(sort_functions, Opts, true),
     XML = layout_module(Element, SortP),
-    xmerl:export_simple([XML], docgen_xmerl_xml_cb, []).
+    RootAttributes = root_attributes(Element, Opts),
+    xmerl:export_simple([XML], docgen_xmerl_xml_cb, RootAttributes).
 
 %% CHAPTER
-overview(Element, _Opts) ->
+overview(Element, Opts) ->
     XML = layout_chapter(Element),
-    xmerl:export_simple([XML], docgen_xmerl_xml_cb, []).
+    RootAttributes = root_attributes(Element, Opts),
+    xmerl:export_simple([XML], docgen_xmerl_xml_cb, RootAttributes).
 
 %%--Internal functions--------------------------------------------------
 
@@ -98,6 +101,16 @@ layout_module(#xmlElement{name = module, content = Es}=E, SortP) ->
       ?NL,See,
       ?NL,Authors]
     }.
+
+root_attributes(Element, Opts) ->
+    Encoding = case get_attrval(encoding, Element) of
+                   "" ->
+                       DefaultEncoding = epp:default_encoding(),
+                       proplists:get_value(encoding, Opts, DefaultEncoding);
+                   Enc ->
+                       Enc
+               end,
+    [#xmlAttribute{name=encoding, value=Encoding}].
 
 layout_chapter(#xmlElement{name=overview, content=Es}) ->
     Title = get_text(title, Es),
@@ -338,7 +351,7 @@ otp_xmlify_e(#xmlElement{name=code} = E) ->    % 4)
     end;
 otp_xmlify_e(#xmlElement{name=Tag} = E)        % 5a
   when Tag==h1; Tag==h2; Tag==h3; Tag==h4; Tag==h5 ->
-    Content = text_only(E#xmlElement.content),
+    Content = text_and_a_name_only(E#xmlElement.content),
     [E#xmlElement{name=b, content=Content}];
 otp_xmlify_e(#xmlElement{name=Tag} = E)        % 5b-c)
   when Tag==center;
@@ -1160,6 +1173,18 @@ get_text(#xmlElement{content=[#xmlText{value=Text}]}) ->
     Text;
 get_text(#xmlElement{content=[E]}) ->
     get_text(E).
+
+%% text_and_name_only(Es) -> Ts
+text_and_a_name_only([#xmlElement{
+		       name = a, 
+		       attributes = [#xmlAttribute{name=name}]} = Name|Es]) ->
+    [Name|text_and_a_name_only(Es)];
+text_and_a_name_only([#xmlElement{content = Content}|Es]) ->
+    text_and_a_name_only(Content) ++ text_and_a_name_only(Es);
+text_and_a_name_only([#xmlText{} = E |Es]) ->
+    [E | text_and_a_name_only(Es)];
+text_and_a_name_only([]) ->
+    [].
 
 %% text_only(Es) -> Ts
 %% Takes a list of xmlElement and xmlText and return a lists of xmlText.

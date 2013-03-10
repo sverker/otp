@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2003-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2003-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -611,7 +611,7 @@ void erts_mtrace_init(char *receiver, char *nodename)
 	if (erts_sock_gethostname(hostname, MAXHOSTNAMELEN) != 0)
 	    hostname[0] = '\0';
 	hostname[MAXHOSTNAMELEN-1] = '\0';
-	sys_get_pid(pid);
+	sys_get_pid(pid, sizeof(pid));
 	write_trace_header(nodename ? nodename : "", pid, hostname);
 	erts_mtrace_update_heap_size();
     }

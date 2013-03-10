@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2012. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -26,7 +26,6 @@
 #include "erl_vm.h"
 #include "global.h"
 #include "erl_process.h"
-#include "erl_nmgc.h"
 #include "error.h"
 #include "bif.h"
 #include "big.h"
@@ -218,7 +217,6 @@ BeamInstr beam_continue_exit[1];
 
 BeamInstr* em_call_error_handler;
 BeamInstr* em_apply_bif;
-BeamInstr* em_call_traced_function;
 
 
 /* NOTE These should be the only variables containing trace instructions.
@@ -233,11 +231,6 @@ BeamInstr beam_return_time_trace[1]; /* OpCode(i_return_time_trace) */
 
 
 /*
- * We should warn only once for tuple funs.
- */
-static erts_smp_atomic_t warned_for_tuple_funs;
-
-/*
  * All Beam instructions in numerical order.
  */
 
@@ -249,20 +242,6 @@ void** beam_ops;
 extern int count_instructions;
 #endif
 
-#if defined(HYBRID)
-#define SWAPIN             \
-    g_htop = global_htop;  \
-    g_hend = global_hend;  \
-    HTOP = HEAP_TOP(c_p);  \
-    E = c_p->stop
-
-#define SWAPOUT            \
-    global_htop = g_htop;  \
-    global_hend = g_hend;  \
-    HEAP_TOP(c_p) = HTOP;  \
-    c_p->stop = E
-
-#else
 #define SWAPIN             \
     HTOP = HEAP_TOP(c_p);  \
     E = c_p->stop
@@ -289,8 +268,6 @@ extern int count_instructions;
  */
 
 #define LIGHT_SWAPIN HTOP = HEAP_TOP(c_p)
-
-#endif
 
 #ifdef FORCE_HEAP_FRAGS
 #  define HEAP_SPACE_VERIFIED(Words) do { \
@@ -453,36 +430,6 @@ extern int count_instructions;
      CHECK_TERM(r(0));				\
   } while (0)
 
-#ifdef HYBRID
-#ifdef INCREMENTAL
-#define TestGlobalHeap(Nh, Live, hp)                                    \
-  do {                                                                  \
-    unsigned need = (Nh);                                               \
-    ASSERT(global_heap <= g_htop && g_htop <= global_hend);             \
-    SWAPOUT;                                                            \
-    reg[0] = r(0);                                                      \
-    FCALLS -= need;                                                     \
-    (hp) = IncAlloc(c_p,need,reg,(Live));                               \
-    r(0) = reg[0];                                                      \
-    SWAPIN;                                                             \
-  } while (0)
-#else
-#define TestGlobalHeap(Nh, Live, hp)                                    \
-  do {                                                                  \
-    unsigned need = (Nh);                                               \
-    ASSERT(global_heap <= g_htop && g_htop <= global_hend);             \
-    if (g_hend - g_htop < need) {                                       \
-       SWAPOUT;                                                         \
-       reg[0] = r(0);                                                   \
-       FCALLS -= erts_global_garbage_collect(c_p, need, reg, (Live));   \
-       r(0) = reg[0];                                                   \
-       SWAPIN;                                                          \
-    }                                                                   \
-    (hp) = global_htop;                                                 \
-  } while (0)
-#endif
-#endif /* HYBRID */
-
 #define Init(N) make_blank(yb(N))
 
 #define Init2(Y1, Y2) do { make_blank(Y1); make_blank(Y2); } while (0)
@@ -569,7 +516,7 @@ extern int count_instructions;
 #  define Dispatchfun() DispatchMacroFun()
 #endif
 
-#define Self(R) R = c_p->id
+#define Self(R) R = c_p->common.id
 #define Node(R) R = erts_this_node->sysname
 
 #define Arg(N)       I[(N)+1]
@@ -1008,17 +955,9 @@ static void save_stacktrace(Process* c_p, BeamInstr* pc, Eterm* reg,
 static struct StackTrace * get_trace_from_exc(Eterm exc);
 static Eterm make_arglist(Process* c_p, Eterm* reg, int a);
 
-#if defined(VXWORKS)
-static int init_done;
-#endif
-
 void
 init_emulator(void)
 {
-#if defined(VXWORKS)
-    init_done = 0;
-#endif
-    erts_smp_atomic_init_nob(&warned_for_tuple_funs, (erts_aint_t) 0);
     process_main();
 }
 
@@ -1131,17 +1070,6 @@ init_emulator(void)
 
 #endif /* USE_VM_PROBES */
 
-#ifdef USE_VM_PROBES
-void
-dtrace_drvport_str(ErlDrvPort drvport, char *port_buf)
-{
-    Port *port = erts_drvport2port(drvport);
-
-    erts_snprintf(port_buf, DTRACE_TERM_BUF_SIZE, "#Port<%lu.%lu>",
-                  port_channel_no(port->id),
-                  port_number(port->id));
-}
-#endif
 /*
  * process_main() is called twice:
  * The first call performs some initialisation, including exporting
@@ -1150,9 +1078,7 @@ dtrace_drvport_str(ErlDrvPort drvport, char *port_buf)
  */
 void process_main(void)
 {
-#if !defined(VXWORKS)
     static int init_done = 0;
-#endif
     Process* c_p = NULL;
     int reds_used;
 #ifdef DEBUG
@@ -1173,12 +1099,6 @@ void process_main(void)
      * Top of heap (next free location); grows upwards.
      */
     register Eterm* HTOP REG_htop = NULL;
-
-
-#ifdef HYBRID
-     Eterm *g_htop;
-     Eterm *g_hend;
-#endif
 
     /* Stack pointer.  Grows downwards; points
      * to last item pushed (normally a saved
@@ -1264,7 +1184,7 @@ void process_main(void)
     c_p = schedule(c_p, reds_used);
     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 #ifdef DEBUG
-    pid = c_p->id; /* Save for debugging purpouses */
+    pid = c_p->common.id; /* Save for debugging purpouses */
 #endif
     ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
     PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -1296,7 +1216,7 @@ void process_main(void)
 
 	reds = c_p->fcalls;
 	if (ERTS_PROC_GET_SAVED_CALLS_BUF(c_p)
-	    && (c_p->trace_flags & F_SENSITIVE) == 0) {
+	    && (ERTS_TRACE_FLAGS(c_p) & F_SENSITIVE) == 0) {
 	    neg_o_reds = -reds;
 	    FCALLS = REDS_IN(c_p) = 0;
 	} else {
@@ -1660,6 +1580,7 @@ void process_main(void)
      reg[0] = r(0);
      result = erl_send(c_p, r(0), x(1));
      PreFetch(0, next);
+     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
      ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
      PROCESS_MAIN_CHK_LOCKS(c_p);
      if (c_p->mbuf || MSO(c_p).overhead >= BIN_VHEAP_SZ(c_p)) {
@@ -1935,14 +1856,14 @@ void process_main(void)
 		     erts_fprintf(stderr,
 				  "Dtrace -> (%T) stop spreading "
 				  "tag %T with message %T\r\n",
-				  c_p->id,DT_UTAG(c_p),ERL_MESSAGE_TERM(msgp));
+				  c_p->common.id,DT_UTAG(c_p),ERL_MESSAGE_TERM(msgp));
 #endif
 	     } else {
 #ifdef DTRACE_TAG_HARDDEBUG
 		 erts_fprintf(stderr,
 			      "Dtrace -> (%T) kill tag %T with "
 			      "message %T\r\n",
-			      c_p->id,DT_UTAG(c_p),ERL_MESSAGE_TERM(msgp));
+			      c_p->common.id,DT_UTAG(c_p),ERL_MESSAGE_TERM(msgp));
 #endif
 		 DT_UTAG(c_p) = NIL;
 		 SEQ_TRACE_TOKEN(c_p) = NIL;
@@ -1967,7 +1888,7 @@ void process_main(void)
 	     erts_fprintf(stderr,
 			  "Dtrace -> (%T) receive tag (%T) "
 			  "with message %T\r\n",
-			  c_p->id, DT_UTAG(c_p), ERL_MESSAGE_TERM(msgp));
+			  c_p->common.id, DT_UTAG(c_p), ERL_MESSAGE_TERM(msgp));
 #endif
 	 } else {
 #endif
@@ -1983,7 +1904,7 @@ void process_main(void)
 	     }
 	     msg = ERL_MESSAGE_TERM(msgp);
 	     seq_trace_output(SEQ_TRACE_TOKEN(c_p), msg, SEQ_TRACE_RECEIVE, 
-			      c_p->id, c_p);
+			      c_p->common.id, c_p);
 #ifdef USE_VM_PROBES
 	 }
 #endif
@@ -2636,6 +2557,7 @@ void process_main(void)
 	reg[0] = r(0);
 	result = (*bf)(c_p, reg, I);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
+	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	ERTS_HOLE_CHECK(c_p);
 	ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -3370,7 +3292,6 @@ void process_main(void)
 	    PROCESS_MAIN_CHK_LOCKS(c_p);
 	    bif_nif_arity = I[-1];
 	    ERTS_SMP_UNREQ_PROC_MAIN_LOCK(c_p);
-	    ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 
 	    ASSERT(!ERTS_PROC_IS_EXITING(c_p));
 	    {
@@ -3415,7 +3336,6 @@ void process_main(void)
 	    bif_nif_arity = I[-1];
 	    ASSERT(bif_nif_arity <= 3);
 	    ERTS_SMP_UNREQ_PROC_MAIN_LOCK(c_p);
-	    ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	    reg[0] = r(0);
 	    {
 		Eterm (*bf)(Process*, Eterm*, BeamInstr*) = vbf;
@@ -4624,64 +4544,6 @@ void process_main(void)
      * Trace and debugging support.
      */
 
-    /*
-     * At this point, I points to the code[3] in the export entry for
-     * a trace-enabled function.
-     *
-     * code[0]: Module
-     * code[1]: Function
-     * code[2]: Arity
-     * code[3]: &&call_traced_function
-     * code[4]: Address of function.
-     */
- OpCase(call_traced_function): {
-     if (IS_TRACED_FL(c_p, F_TRACE_CALLS)) {
-	 unsigned offset = offsetof(Export, code) + 3*sizeof(BeamInstr);
-	 Export* ep = (Export *) (((char *)I)-offset);
-	 Uint32 flags;
-
-	 SWAPOUT;
-	 reg[0] = r(0);
-	 PROCESS_MAIN_CHK_LOCKS(c_p);
-	 ERTS_SMP_UNREQ_PROC_MAIN_LOCK(c_p);
-	 flags = erts_call_trace(c_p, ep->code, ep->match_prog_set, reg,
-				 0, &c_p->tracer_proc);
-	 ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
-	 ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
-	 PROCESS_MAIN_CHK_LOCKS(c_p);
-	 ASSERT(!ERTS_PROC_IS_EXITING(c_p));
-	 SWAPIN;
-	 
-	 if (flags & MATCH_SET_RX_TRACE) {
-	     ASSERT(c_p->htop <= E && E <= c_p->hend);
-	     if (E - 3 < HTOP) {
-		 /* SWAPOUT, SWAPIN was done and r(0) was saved above */
-		 PROCESS_MAIN_CHK_LOCKS(c_p);
-		 FCALLS -= erts_garbage_collect(c_p, 3, reg, ep->code[2]);
-		 ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
-		 PROCESS_MAIN_CHK_LOCKS(c_p);
-		 r(0) = reg[0];
-		 SWAPIN;
-	     }
-	     E -= 3;
-	     ASSERT(c_p->htop <= E && E <= c_p->hend);
-	     ASSERT(is_CP((BeamInstr)(ep->code)));
-	     ASSERT(is_internal_pid(c_p->tracer_proc) || 
-		    is_internal_port(c_p->tracer_proc));
-	     E[2] = make_cp(c_p->cp); /* Code in lower range on halfword */
-	     E[1] = am_true; /* Process tracer */
-	     E[0] = make_cp(ep->code);
-	     c_p->cp = (flags & MATCH_SET_EXCEPTION_TRACE)
-		 ? beam_exception_trace : beam_return_trace;
-	     erts_smp_proc_lock(c_p, ERTS_PROC_LOCKS_ALL_MINOR);
-	     c_p->trace_flags |= F_EXCEPTION_TRACE;
-	     erts_smp_proc_unlock(c_p, ERTS_PROC_LOCKS_ALL_MINOR);
-	 }
-     }
-     SET_I((BeamInstr *)Arg(0));
-     Dispatch();
- }
-
  OpCase(return_trace): {
      BeamInstr* code = (BeamInstr *) (UWord) E[0];
      
@@ -4696,80 +4558,22 @@ void process_main(void)
      Goto(*I);
  }
 
- OpCase(i_count_breakpoint): {
+ OpCase(i_generic_breakpoint): {
      BeamInstr real_I;
-     
-     ErtsCountBreak(c_p, (BeamInstr *) I, &real_I);
+     ASSERT(I[-5] == (BeamInstr) BeamOp(op_i_func_info_IaaI));
+     SWAPOUT;
+     reg[0] = r(0);
+     real_I = erts_generic_breakpoint(c_p, I, reg);
+     r(0) = reg[0];
+     SWAPIN;
      ASSERT(VALID_INSTR(real_I));
-     Goto(real_I);
- }
-
- /* need to send mfa instead of bdt pointer
-  * the pointer might be deallocated.
-  */
-
- OpCase(i_time_breakpoint): {
-     BeamInstr real_I;
-     BpData **bds = (BpData **) (I)[-4];
-     BpDataTime *bdt = NULL;
-     Uint ix = 0;
-#ifdef ERTS_SMP
-     ix = c_p->scheduler_data->no - 1;
-#else
-     ix = 0;
-#endif
-     bdt = (BpDataTime *)bds[ix];
-
-     ASSERT((I)[-5] == (BeamInstr) BeamOp(op_i_func_info_IaaI));
-     ASSERT(bdt);
-     bdt = (BpDataTime *) bdt->next;
-     ASSERT(bdt);
-     bds[ix] = (BpData *) bdt;
-     real_I = bdt->orig_instr;
-     ASSERT(VALID_INSTR(real_I));
-
-     if (IS_TRACED_FL(c_p, F_TRACE_CALLS) && !(bdt->pause)) {
-	 if (	(*(c_p->cp) == (BeamInstr) OpCode(i_return_time_trace)) ||
-		(*(c_p->cp) == (BeamInstr) OpCode(return_trace)) ||
-		(*(c_p->cp) == (BeamInstr) OpCode(i_return_to_trace))) {
-	     /* This _IS_ a tail recursive call */
-	     SWAPOUT;
-	     erts_trace_time_break(c_p, I, bdt, ERTS_BP_CALL_TIME_TAIL_CALL);
-	     SWAPIN;
-	 } else {
-	     SWAPOUT;
-	     erts_trace_time_break(c_p, I, bdt, ERTS_BP_CALL_TIME_CALL);
-
-	     /* r register needs to be copied to the array
-	      * for the garbage collector
-	      */
-	     ASSERT(c_p->htop <= E && E <= c_p->hend);
-	     if (E - 2 < HTOP) {
-		 reg[0] = r(0);
-		 PROCESS_MAIN_CHK_LOCKS(c_p);
-		 FCALLS -= erts_garbage_collect(c_p, 2, reg, I[-1]);
-		 ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
-		 PROCESS_MAIN_CHK_LOCKS(c_p);
-		 r(0) = reg[0];
-	     }
-	     SWAPIN;
-
-	     ASSERT(c_p->htop <= E && E <= c_p->hend);
-
-	     E -= 2;
-	     E[0] = make_cp(I);
-	     E[1] = make_cp(c_p->cp);     /* original return address */
-	     c_p->cp = beam_return_time_trace;
-	 }
-     }
-
      Goto(real_I);
  }
 
  OpCase(i_return_time_trace): {
      BeamInstr *pc = (BeamInstr *) (UWord) E[0];
      SWAPOUT;
-     erts_trace_time_break(c_p, pc, NULL, ERTS_BP_CALL_TIME_RETURN);
+     erts_trace_time_return(c_p, pc);
      SWAPIN;
      c_p->cp = NULL;
      SET_I((BeamInstr *) cp_val(E[1]));
@@ -4777,114 +4581,6 @@ void process_main(void)
      Goto(*I);
  }
 
- OpCase(i_trace_breakpoint):
-     if (! IS_TRACED_FL(c_p, F_TRACE_CALLS)) {
-	 BeamInstr real_I;
-	 
-	 ErtsBreakSkip(c_p, (BeamInstr *) I, &real_I);
-	 Goto(real_I);
-     }
- /* Fall through to next case */
- OpCase(i_mtrace_breakpoint): {
-     BeamInstr real_I;
-     Uint32 flags;
-     Eterm tracer_pid;
-     Uint* cpp;
-     int return_to_trace = 0, need = 0;
-     flags = 0;
-     SWAPOUT;
-     reg[0] = r(0);
-
-     if (*(c_p->cp) == (BeamInstr) OpCode(return_trace)) {
-	 cpp = &E[2];
-     } else if (*(c_p->cp) == (BeamInstr) OpCode(i_return_to_trace)) {
-	 return_to_trace = !0;
-	 cpp = &E[0];
-     } else if (*(c_p->cp) == (BeamInstr) OpCode(i_return_time_trace)) {
-	 return_to_trace = !0;
-	 cpp = &E[0];
-     } else {
-	 cpp = NULL;
-     }
-     if (cpp) {
-	 /* This _IS_ a tail recursive call, if there are
-	  * return_trace and/or i_return_to_trace stackframes
-	  * on the stack, they are not intermixed with y registers
-	  */
-	 BeamInstr *cp_save = c_p->cp;
-	 for (;;) {
-	     ASSERT(is_CP(*cpp));
-	     if (*cp_val(*cpp) == (BeamInstr) OpCode(return_trace)) {
-		 cpp += 3;
-	     } else if (*cp_val(*cpp) == (BeamInstr) OpCode(i_return_to_trace)) {
-		 return_to_trace = !0;
-		 cpp += 1;
-	     } else if (*cp_val(*cpp) == (BeamInstr) OpCode(i_return_time_trace)) {
-		 cpp += 2;
-	     } else
-		 break;
-	 }
-	 c_p->cp = (BeamInstr *) cp_val(*cpp);
-	 ASSERT(is_CP(*cpp));
-	 ERTS_SMP_UNREQ_PROC_MAIN_LOCK(c_p);
-	 real_I = erts_trace_break(c_p, I, reg, &flags, &tracer_pid);
-	 ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
-	 SWAPIN;		/* Needed by shared heap. */
-	 c_p->cp = cp_save;
-     } else {
-	 ERTS_SMP_UNREQ_PROC_MAIN_LOCK(c_p);
-	 real_I = erts_trace_break(c_p, I, reg, &flags, &tracer_pid);
-	 ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
-	 SWAPIN;		/* Needed by shared heap. */
-     }
-
-     ASSERT(!ERTS_PROC_IS_EXITING(c_p));
-
-     if ((flags & MATCH_SET_RETURN_TO_TRACE) && !return_to_trace) {
-	 need += 1;
-     }
-     if (flags & MATCH_SET_RX_TRACE) {
-	 need += 3;
-     }
-     if (need) {
-	 ASSERT(c_p->htop <= E && E <= c_p->hend);
-	 if (E - need < HTOP) {
-	     /* SWAPOUT was done and r(0) was saved above */
-	     PROCESS_MAIN_CHK_LOCKS(c_p);
-	     FCALLS -= erts_garbage_collect(c_p, need, reg, I[-1]);
-	     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
-	     PROCESS_MAIN_CHK_LOCKS(c_p);
-	     r(0) = reg[0];
-	     SWAPIN;
-	 }
-     }
-     if ((flags & MATCH_SET_RETURN_TO_TRACE) && !return_to_trace) {
-	 E -= 1;
-	 ASSERT(c_p->htop <= E && E <= c_p->hend);
-	 E[0] = make_cp(c_p->cp);
-	 c_p->cp = (BeamInstr *) beam_return_to_trace;
-     }
-     if (flags & MATCH_SET_RX_TRACE) {
-	 E -= 3;
-	 ASSERT(c_p->htop <= E && E <= c_p->hend);
-	 ASSERT(is_CP((Eterm) (UWord) (I - 3)));
-	 ASSERT(am_true == tracer_pid || 
-		is_internal_pid(tracer_pid) || is_internal_port(tracer_pid));
-	 E[2] = make_cp(c_p->cp);
-	 E[1] = tracer_pid;
-	 E[0] = make_cp(I - 3); /* We ARE at the beginning of an 
-				   instruction,
-				   the funcinfo is above i. */
-	 c_p->cp =
-	     (flags & MATCH_SET_EXCEPTION_TRACE)
-		     ? beam_exception_trace : beam_return_trace;
-	 erts_smp_proc_lock(c_p, ERTS_PROC_LOCKS_ALL_MINOR);
-	 c_p->trace_flags |= F_EXCEPTION_TRACE;
-	 erts_smp_proc_unlock(c_p, ERTS_PROC_LOCKS_ALL_MINOR);
-     }
-     Goto(real_I);
- }
- 
  OpCase(i_return_to_trace): {
      if (IS_TRACED_FL(c_p, F_TRACE_RETURN_TO)) {
 	 Uint *cpp = (Uint*) E;
@@ -5234,7 +4930,6 @@ void process_main(void)
 #endif /* NO_JUMP_TABLE */
      
      em_call_error_handler = OpCode(call_error_handler);
-     em_call_traced_function = OpCode(call_traced_function);
      em_apply_bif = OpCode(apply_bif);
 
      beam_apply[0]             = (BeamInstr) OpCode(i_apply);
@@ -5551,7 +5246,7 @@ terminate_proc(Process* c_p, Eterm Value)
     /* EXF_LOG is a primary exception flag */
     if (c_p->freason & EXF_LOG) {
 	erts_dsprintf_buf_t *dsbufp = erts_create_logger_dsbuf();
-	erts_dsprintf(dsbufp, "Error in process %T ", c_p->id);
+	erts_dsprintf(dsbufp, "Error in process %T ", c_p->common.id);
 	if (erts_is_alive)
 	    erts_dsprintf(dsbufp, "on node %T ", erts_this_node->sysname);
 	erts_dsprintf(dsbufp,"with exit value: %0.*T\n", display_items, Value);
@@ -6279,7 +5974,6 @@ call_fun(Process* p,		/* Current process. */
     Eterm fun = reg[arity];
     Eterm hdr;
     int i;
-    Eterm function;
     Eterm* hp;
 
     if (!is_boxed(fun)) {
@@ -6417,63 +6111,6 @@ call_fun(Process* p,		/* Current process. */
 	    p->fvalue = TUPLE2(hp, fun, args);
 	    return NULL;
 	}
-    } else if (hdr == make_arityval(2)) {
-	Eterm* tp;
-	Export* ep;
-	Eterm module;
-
-	tp = tuple_val(fun);
-	module = tp[1];
-	function = tp[2];
-	if (!is_atom(module) || !is_atom(function)) {
-	    goto badfun;
-	}
-
-	/*
-	 * If this is the first time a tuple fun is used,
-	 * send a warning to the logger.
-	 */
-	if (erts_smp_atomic_xchg_nob(&warned_for_tuple_funs,
-				     (erts_aint_t) 1) == 0) {
-	    erts_dsprintf_buf_t* dsbufp;
-
-	    dsbufp = erts_create_logger_dsbuf();
-	    erts_dsprintf(dsbufp, "Call to tuple fun {%T,%T}.\n\n"
-			  "Tuple funs are deprecated and will be removed "
-			  "in R16. Use \"fun M:F/A\" instead, for example "
-			  "\"fun %T:%T/%d\".\n\n"
-			  "(This warning will only be shown the first time "
-			  "a tuple fun is called.)\n",
-			  module, function, module, function, arity);
-	    erts_send_warning_to_logger(p->group_leader, dsbufp);
-	}
-
-	if ((ep = erts_active_export_entry(module, function, arity)) == NULL) {
-	    ep = erts_active_export_entry(erts_proc_get_error_handler(p),
-					am_undefined_function, 3);
-	    if (ep == NULL) {
-		p->freason = EXC_UNDEF;
-		return 0;
-	    }
-	    if (is_non_value(args)) {
-		Uint sz = 2 * arity;
-		if (HeapWordsLeft(p) < sz) {
-		    erts_garbage_collect(p, sz, reg, arity);
-		}
-		hp = HEAP_TOP(p);
-		HEAP_TOP(p) += sz;
-		args = NIL;
-		while (arity-- > 0) {
-		    args = CONS(hp, reg[arity], args);
-		    hp += 2;
-		}
-	    }
-	    reg[0] = module;
-	    reg[1] = function;
-	    reg[2] = args;
-	}
-	DTRACE_GLOBAL_CALL(p, module, function, arity);
-	return ep->addressv[erts_active_code_ix()];
     } else {
     badfun:
 	p->current = NULL;
@@ -6535,13 +6172,11 @@ new_fun(Process* p, Eterm* reg, ErlFunEntry* fe, int num_free)
     hp = funp->env;
     erts_refc_inc(&fe->refc, 2);
     funp->thing_word = HEADER_FUN;
-#ifndef HYBRID /* FIND ME! */
     funp->next = MSO(p).first;
     MSO(p).first = (struct erl_off_heap_header*) funp;
-#endif
     funp->fe = fe;
     funp->num_free = num_free;
-    funp->creator = p->id;
+    funp->creator = p->common.id;
 #ifdef HIPE
     funp->native_address = fe->native_address;
 #endif

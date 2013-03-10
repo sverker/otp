@@ -1,7 +1,7 @@
 dnl
 dnl %CopyrightBegin%
 dnl
-dnl Copyright Ericsson AB 1998-2011. All Rights Reserved.
+dnl Copyright Ericsson AB 1998-2013. All Rights Reserved.
 dnl
 dnl The contents of this file are subject to the Erlang Public License,
 dnl Version 1.1, (the "License"); you may not use this file except in
@@ -59,6 +59,7 @@ AC_ARG_VAR(erl_xcomp_isysroot, [Absolute cross system root include path (only us
 
 dnl Cross compilation variables
 AC_ARG_VAR(erl_xcomp_bigendian, [big endian system: yes|no (only used when cross compiling)])
+AC_ARG_VAR(erl_xcomp_double_middle_endian, [double-middle-endian system: yes|no (only used when cross compiling)])
 AC_ARG_VAR(erl_xcomp_linux_clock_gettime_correction, [clock_gettime() can be used for time correction: yes|no (only used when cross compiling)])
 AC_ARG_VAR(erl_xcomp_linux_nptl, [have Native POSIX Thread Library: yes|no (only used when cross compiling)])
 AC_ARG_VAR(erl_xcomp_linux_usable_sigusrx, [SIGUSR1 and SIGUSR2 can be used: yes|no (only used when cross compiling)])
@@ -606,6 +607,103 @@ ifelse([$5], , , [$5
 fi
 ])
 
+dnl ----------------------------------------------------------------------
+dnl
+dnl AC_DOUBLE_MIDDLE_ENDIAN
+dnl
+dnl Checks whether doubles are represented in "middle-endian" format.
+dnl Sets ac_cv_double_middle_endian={no,yes,unknown} accordingly,
+dnl as well as DOUBLE_MIDDLE_ENDIAN.
+dnl
+dnl
+
+AC_DEFUN([AC_C_DOUBLE_MIDDLE_ENDIAN],
+[AC_CACHE_CHECK(whether double word ordering is middle-endian, ac_cv_c_double_middle_endian,
+[# It does not; compile a test program.
+AC_RUN_IFELSE(
+[AC_LANG_SOURCE([[#include <stdlib.h>
+
+int
+main(void)
+{
+  int i = 0;
+  int zero = 0;
+  int bigendian;
+  int zero_index = 0;
+
+  union
+  {
+    long int l;
+    char c[sizeof (long int)];
+  } u;
+
+  /* we'll use the one with 32-bit words */
+  union
+  {
+    double d;
+    unsigned int c[2];
+  } vint;
+
+  union
+  {
+    double d;
+    unsigned long c[2];
+  } vlong;
+
+  union
+  {
+    double d;
+    unsigned short c[2];
+  } vshort;
+
+
+  /* Are we little or big endian?  From Harbison&Steele.  */
+  u.l = 1;
+  bigendian = (u.c[sizeof (long int) - 1] == 1);
+
+  zero_index = bigendian ? 1 : 0;
+
+  vint.d = 1.0;
+  vlong.d = 1.0;
+  vshort.d = 1.0;
+
+  if (sizeof(unsigned int) == 4)
+    {
+      if (vint.c[zero_index] != 0)
+	zero = 1;
+    }
+  else if (sizeof(unsigned long) == 4)
+    {
+      if (vlong.c[zero_index] != 0)
+	zero = 1;
+    }
+  else if (sizeof(unsigned short) == 4)
+    {
+      if (vshort.c[zero_index] != 0)
+	zero = 1;
+    }
+
+  exit (zero);
+}
+]])],
+	      [ac_cv_c_double_middle_endian=no],
+	      [ac_cv_c_double_middle_endian=yes],
+	      [ac_cv_c_double_middle=unknown])])
+case $ac_cv_c_double_middle_endian in
+  yes)
+    m4_default([$1],
+      [AC_DEFINE([DOUBLE_MIDDLE_ENDIAN], 1,
+	[Define to 1 if your processor stores the words in a double in
+	 middle-endian format (like some ARMs).])]) ;;
+  no)
+    $2 ;;
+  *)
+    m4_default([$3],
+      [AC_MSG_WARN([unknown double endianness
+presetting ac_cv_c_double_middle_endian=no (or yes) will help])]) ;;
+esac
+])# AC_C_DOUBLE_MIDDLE_ENDIAN
+
 
 dnl ----------------------------------------------------------------------
 dnl
@@ -642,9 +740,14 @@ dnl Try to find POSIX threads
 dnl The usual pthread lib...
     AC_CHECK_LIB(pthread, pthread_create, THR_LIBS="-lpthread")
 
-dnl FreeBSD has pthreads in special c library, c_r...
+dnl Very old versions of FreeBSD have pthreads in special c library, c_r...
     if test "x$THR_LIBS" = "x"; then
 	AC_CHECK_LIB(c_r, pthread_create, THR_LIBS="-lc_r")
+    fi
+
+dnl QNX has pthreads in standard C library
+    if test "x$THR_LIBS" = "x"; then
+	AC_CHECK_FUNC(pthread_create, THR_LIBS="none_needed")
     fi
 
 dnl On ofs1 the '-pthread' switch should be used
@@ -667,6 +770,9 @@ dnl On ofs1 the '-pthread' switch should be used
     if test "x$THR_LIBS" != "x"; then
 	THR_DEFS="$THR_DEFS -D_THREAD_SAFE -D_REENTRANT -DPOSIX_THREADS"
 	THR_LIB_NAME=pthread
+	if test "x$THR_LIBS" = "xnone_needed"; then
+	    THR_LIBS=
+	fi
 	case $host_os in
 	    solaris*)
 		THR_DEFS="$THR_DEFS -D_POSIX_PTHREAD_SEMANTICS" ;;
@@ -1337,6 +1443,14 @@ if test "$ac_cv_c_bigendian" = "yes"; then
     AC_DEFINE(ETHR_BIGENDIAN, 1, [Define if bigendian])
 fi
 
+case X$erl_xcomp_double_middle_endian in
+    X) ;;
+    Xyes|Xno|Xunknown) ac_cv_c_double_middle_endian=$erl_xcomp_double_middle_endian;;
+    *) AC_MSG_ERROR([Bad erl_xcomp_double_middle_endian value: $erl_xcomp_double_middle_endian]);;
+esac
+
+AC_C_DOUBLE_MIDDLE_ENDIAN
+
 AC_ARG_ENABLE(native-ethr-impls,
 	      AS_HELP_STRING([--disable-native-ethr-impls],
                              [disable native ethread implementations]),
@@ -1734,6 +1848,31 @@ case $erl_gethrvtime in
 	;;
 esac
 ])dnl
+
+dnl ----------------------------------------------------------------------
+dnl
+dnl LM_TRY_ENABLE_CFLAG
+dnl
+dnl
+dnl Tries a CFLAG and sees if it can be enabled without compiler errors
+dnl $1: textual cflag to add
+dnl $2: variable to store the modified CFLAG in
+dnl Usage example LM_TRY_ENABLE_CFLAG([-Werror=return-type], [CFLAGS])
+dnl
+dnl
+AC_DEFUN([LM_TRY_ENABLE_CFLAG], [
+    AC_MSG_CHECKING([if we can add $1 to $2 (via CFLAGS)])
+    saved_CFLAGS=$CFLAGS;
+    CFLAGS="$1 $$2";
+    AC_TRY_COMPILE([],[return 0;],can_enable_flag=true,can_enable_flag=false)
+    CFLAGS=$saved_CFLAGS;
+    if test "X$can_enable_flag" = "Xtrue"; then
+        AC_MSG_RESULT([yes])
+        AS_VAR_SET($2, "$1 $$2")
+    else
+        AC_MSG_RESULT([no])
+    fi
+])
 
 dnl ERL_TRY_LINK_JAVA(CLASSES, FUNCTION-BODY
 dnl                   [ACTION_IF_FOUND [, ACTION-IF-NOT-FOUND]])

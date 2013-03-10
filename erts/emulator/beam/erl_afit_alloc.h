@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2003-2009. All Rights Reserved.
+ * Copyright Ericsson AB 2003-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -49,11 +49,6 @@ Allctr_t *erts_afalc_start(AFAllctr_t *, AFAllctrInit_t *, AllctrInit_t *);
 #include "erl_alloc_util.h"
 
 typedef struct AFFreeBlock_t_ AFFreeBlock_t;
-struct AFFreeBlock_t_ {
-    Block_t block_head;
-    AFFreeBlock_t *prev;
-    AFFreeBlock_t *next;
-};
 
 struct AFAllctr_t_ {
     Allctr_t		allctr; /* Has to be first! */

@@ -2,7 +2,7 @@
 
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 1999-2009. All Rights Reserved.
+# Copyright Ericsson AB 1999-2013. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -29,10 +29,6 @@ PERL   = perl
 #	Erlang language section
 # ----------------------------------------------------
 EMULATOR = beam
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-# VxWorks jam object files should be compressed
-ERL_COMPILE_FLAGS += +compressed
-endif
 ERLC_WFLAGS = -W
 ERLC = erlc $(ERLC_WFLAGS) $(ERLC_FLAGS)
 ERL.beam =  erl.beam -boot start_clean

@@ -23,7 +23,6 @@ MODULES= \
 	dummy_via \
 	edlin_expand_SUITE \
 	epp_SUITE \
-	erl_eval_helper \
 	erl_eval_SUITE \
 	erl_expand_records_SUITE \
 	erl_internal_SUITE \
@@ -135,10 +134,10 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 release_spec: opt
 
 release_tests_spec: make_emakefile
-	$(INSTALL_DIR) $(RELSYSDIR)
+	$(INSTALL_DIR) "$(RELSYSDIR)"
 	$(INSTALL_DATA) stdlib.spec $(EMAKEFILE) \
-		$(ERL_FILES) $(COVERFILE) $(RELSYSDIR)
-	chmod -R u+w $(RELSYSDIR)
-	@tar cf - *_SUITE_data | (cd $(RELSYSDIR); tar xf -)
+		$(ERL_FILES) $(COVERFILE) "$(RELSYSDIR)"
+	chmod -R u+w "$(RELSYSDIR)"
+	@tar cf - *_SUITE_data | (cd "$(RELSYSDIR)"; tar xf -)
 
 release_docs_spec:

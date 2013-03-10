@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2006</year><year>2011</year>
+      <year>2006</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -30,6 +30,166 @@
   </header>
   <p>This document describes the changes made to the Dialyzer
     application.</p>
+
+<section><title>Dialyzer 2.6</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+	    <p> Miscellaneous updates due to Unicode support. </p>
+          <p>
+	    Own Id: OTP-10820</p>
+        </item>
+        <item>
+          <p>
+	    User defined types with same name and different arity and
+	    documentation inconsistencies. Thanks Stavros Aronis.</p>
+          <p>
+	    Own Id: OTP-10861</p>
+        </item>
+        <item>
+          <p>
+	    Native code compilation changes. Thanks to Kostis
+	    Sagonas.</p>
+          <p>
+	    Own Id: OTP-10865</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Dialyzer 2.5.4</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+	    <p> Support for Unicode has been implemented. </p>
+          <p>
+	    Own Id: OTP-10302</p>
+        </item>
+        <item>
+	    <p> Dialyzer no longer outputs warnings for unused
+	    anonymous functions ("funs"). Warnings are still output
+	    for unused functions. </p>
+          <p>
+	    Own Id: OTP-10433</p>
+        </item>
+        <item>
+	    <p>Where necessary a comment stating encoding has been
+	    added to Erlang files. The comment is meant to be removed
+	    in Erlang/OTP R17B when UTF-8 becomes the default
+	    encoding. </p>
+          <p>
+	    Own Id: OTP-10630</p>
+        </item>
+        <item>
+	    <p> Some examples overflowing the width of PDF pages have
+	    been corrected. </p>
+          <p>
+	    Own Id: OTP-10665</p>
+        </item>
+        <item>
+          <p>
+	    Fix precision of record creation violation warnings.
+	    Thanks to Stavros Aronis</p>
+          <p>
+	    Own Id: OTP-10681</p>
+        </item>
+        <item>
+          <p>
+	    Report spec discrepancy on mismatching lists. Thanks to
+	    Stavros Aronis.</p>
+          <p>
+	    Own Id: OTP-10740</p>
+        </item>
+        <item>
+          <p>
+	    Properly support functions with arbitrary arity in type
+	    specs. Thanks to Stavros Aronis.</p>
+          <p>
+	    Own Id: OTP-10772</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Dialyzer 2.5.3</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p>Fix a crash in race condition detection</p> <p>Remove
+	    old untested experimental extension</p> <p>Respect
+	    {plt_check,false} option when using dialyzer:run/1</p>
+	    <p>Fix handling of tuple set remote types appearing in
+	    tuple sets</p>
+          <p>
+	    Own Id: OTP-10464</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Dialyzer 2.5.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p> Correct handling of type names in contracts. Fix
+	    crash related to contract checking. Do not rewrite
+	    unchanged PLT. </p>
+          <p>
+	    Own Id: OTP-10083</p>
+        </item>
+        <item>
+          <p>
+	    Stop a forgotten server process</p>
+          <p>
+	    Dialyzer forgot to stop a server process before finishing
+	    its analysis. This is a concurrency error detected by
+	    Concuerror. Changes to fix warnings identified by running
+	    dialyzer -Wunmatched_returns. Thanks to Kostis Sagonas.</p>
+          <p>
+	    Own Id: OTP-10231</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+	    <p> Bug fixes and improvements of
+	    <c>dialyzer_typesig</c>. </p>
+          <p>
+	    Own Id: OTP-10082</p>
+        </item>
+        <item>
+          <p>
+	    Add parallel dialyzer support</p>
+          <p>
+	    Own Id: OTP-10103</p>
+        </item>
+        <item>
+	    <p> An alternative implementation of the solver in
+	    <c>dialyzer_typesig</c> has been introduced. It is faster
+	    than the original implementation. </p>
+          <p>
+	    Own Id: OTP-10110</p>
+        </item>
+        <item>
+	    <p> Bugs in <c>erl_types:t_inf()</c> (HiPE) and in
+	    <c>dialyzer_dataflow</c> (Dialyzer) have been fixed. </p>
+          <p>
+	    Own Id: OTP-10191</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Dialyzer 2.5.1</title>
 

@@ -35,7 +35,7 @@
 	 init_per_group/2,end_per_group/2, 
 	 init_per_testcase/2, end_per_testcase/2]).
 
--export([abstract_module/1, attributes/1, expr/1, guard/1,
+-export([attributes/1, expr/1, guard/1,
          init/1, pattern/1, strict/1, update/1,
 	 otp_5915/1, otp_7931/1, otp_5990/1,
 	 otp_7078/1, otp_7101/1]).
@@ -55,7 +55,7 @@ end_per_testcase(_Case, _Config) ->
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [abstract_module, attributes, expr, guard, init,
+    [attributes, expr, guard, init,
      pattern, strict, update, {group, tickets}].
 
 groups() -> 
@@ -75,40 +75,12 @@ end_per_group(_GroupName, Config) ->
     Config.
 
 
-abstract_module(doc) ->
-    "Compile an abstract module.";
-abstract_module(suite) -> [];
-abstract_module(Config) when is_list(Config) ->
-    %% erl_expand_records does not handle abstract modules. But anyway...
-    File = filename("param.erl", Config),
-    Beam = filename("param.beam", Config),
-    Test = <<"-module(param, [A, B]).
-
-              -export([args/1]).
-
-              args(C) ->
-                  X = local(C),
-                  Z = new(A, B),
-                  {X, Z}.
-
-              local(C) ->
-                  module_info(C).
-             ">>,
-
-    ?line ok = file:write_file(File, Test),
-    ?line {ok, param} = compile:file(File, [{outdir,?privdir}]),
-
-    ?line ok = file:delete(File),
-    ?line ok = file:delete(Beam),
-    ok.
-
 attributes(doc) ->
     "Import module and functions.";
 attributes(suite) -> [];
 attributes(Config) when is_list(Config) ->
     Ts = [
-      <<"-import(erl_expand_records_SUITE).
-         -import(lists, [append/2, reverse/1]).
+      <<"-import(lists, [append/2, reverse/1]).
 
          -record(r, {a,b}).
 
@@ -157,13 +129,13 @@ expr(Config) when is_list(Config) ->
              One = 1 = fun f/1(1),
              2 = fun(X) -> X end(One + One),
              3 = fun exprec_test:f/1(3),
-             4 = {exprec_test,f}(4),
-             5 = ''.f(5),
+             4 = exprec_test:f(4),
+             5 = f(5),
              L = receive 
                      {a,message,L0} ->
                          L0
                  end,
-             case catch a.b.c:foo(bar) of
+             case catch a:foo(bar) of
                  {'EXIT', _} -> ok
              end,
              _ = receive 			%Suppress warning.
@@ -197,7 +169,7 @@ guard(suite) -> [];
 guard(Config) when is_list(Config) ->
     File = filename("guard.erl", Config),
     Beam = filename("guard.beam", Config),
-    Test = <<"-module(guard, [A, B]).
+    Test = <<"-module(guard).
 
               -export([t/1]).
 
@@ -263,8 +235,7 @@ pattern(doc) ->
 pattern(suite) -> [];
 pattern(Config) when is_list(Config) ->
     Ts = [
-      <<"-import(erl_expand_records_SUITE).
-         -import(lists, [append/2, reverse/1]).
+      <<"-import(lists, [append/2, reverse/1]).
 
          -record(r, {a,b}).
 
@@ -292,10 +263,10 @@ pattern(Config) when is_list(Config) ->
              21 = t(#r{a = #r{}}),
              22 = t(2),
              23 = t(#r{a = #r{}, b = b}),
-             24 = t(a.b.c),
+             24 = t(abc),
              ok.
 
-         t(a.b.c) ->
+         t(abc) ->
              24;
          t($a) ->
              2;

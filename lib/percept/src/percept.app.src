@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2009. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -17,14 +17,26 @@
 %% %CopyrightEnd%
 %%
 
-{application,percept,
-	[{description, 	"PERCEPT Erlang Concurrency Profiling Tool"},
-	 {vsn,		"%VSN%"},
-	 {modules,	[percept,percept_db,percept_html,percept_graph,percept_analyzer]},
-	 {registered,	[percept_db,percept_port]},
-	 {applications,	[kernel,stdlib]},
-	 {env,		[]}
-	]}.
+{application,percept, [
+    {description, "PERCEPT Erlang Concurrency Profiling Tool"},
+    {vsn, "%VSN%"},
+    {modules, [
+	egd,
+	egd_font,
+	egd_png,
+	egd_primitives,
+	egd_render,
+	percept,
+	percept_analyzer,
+	percept_db,
+	percept_graph,
+	percept_html,
+	percept_image
+    ]},
+    {registered, [percept_db,percept_port]},
+    {applications, [kernel,stdlib]},
+    {env,[]}
+]}.
 
 
-
+%% vim: syntax=erlang

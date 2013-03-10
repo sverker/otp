@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -72,8 +72,7 @@ groups() ->
        resource_consumption_at_full_load]},
      {benchmarks, [],
       [{group, meter}, cost, dbn_meters,
-       measure_all_api_functions, {group, tpcb},
-       mnemosyne_vs_mnesia_kernel]},
+       measure_all_api_functions, {group, tpcb}]},
      {tpcb, [], [ram_tpcb, disc_tpcb, disc_only_tpcb]},
      {meter, [], [ram_meter, disc_meter, disc_only_meter]}].
 

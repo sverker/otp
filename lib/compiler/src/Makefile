@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1996-2011. All Rights Reserved.
+# Copyright Ericsson AB 1996-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -45,6 +45,7 @@ RELSYSDIR = $(RELEASE_PATH)/lib/compiler-$(VSN)
 # Target Specs
 # ----------------------------------------------------
 MODULES =  \
+	beam_a \
 	beam_asm \
 	beam_block \
 	beam_bool \
@@ -65,6 +66,7 @@ MODULES =  \
 	beam_type \
 	beam_utils \
 	beam_validator \
+        beam_z \
 	cerl \
 	cerl_clauses \
 	cerl_inline \
@@ -80,7 +82,6 @@ MODULES =  \
 	sys_core_dsetel \
 	sys_core_fold \
 	sys_core_inline \
-	sys_expand_pmod \
 	sys_pre_attributes \
 	sys_pre_expand \
 	v3_codegen \
@@ -121,7 +122,7 @@ ifeq ($(NATIVE_LIBS_ENABLED),yes)
 ERL_COMPILE_FLAGS += +native
 endif
 ERL_COMPILE_FLAGS += +inline +warn_unused_import \
- +warnings_as_errors \
+ -Werror \
  -I../../stdlib/include -I$(EGEN) -W
 
 # ----------------------------------------------------
@@ -143,19 +144,19 @@ clean:
 # ----------------------------------------------------
 
 $(APP_TARGET): $(APP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(EGEN)/beam_opcodes.erl $(EGEN)/beam_opcodes.hrl: genop.tab
-	$(PERL) $(ERL_TOP)/erts/emulator/utils/beam_makeops -compiler -outdir $(EGEN) $<
+	$(gen_verbose)$(PERL) $(ERL_TOP)/erts/emulator/utils/beam_makeops -compiler -outdir $(EGEN) $<
 
 $(EBIN)/beam_asm.beam: $(ESRC)/beam_asm.erl $(EGEN)/beam_opcodes.hrl
-	$(ERLC) $(ERL_COMPILE_FLAGS) -DCOMPILER_VSN='"$(VSN)"' -o$(EBIN) $<
+	$(V_ERLC) $(ERL_COMPILE_FLAGS) -DCOMPILER_VSN='"$(VSN)"' -o$(EBIN) $<
 
 $(EBIN)/cerl_inline.beam: $(ESRC)/cerl_inline.erl
-	$(ERLC) $(ERL_COMPILE_FLAGS) +nowarn_shadow_vars -o$(EBIN) $<
+	$(V_ERLC) $(ERL_COMPILE_FLAGS) +nowarn_shadow_vars -o$(EBIN) $<
 
 # ----------------------------------------------------
 # Release Target
@@ -163,11 +164,11 @@ $(EBIN)/cerl_inline.beam: $(ESRC)/cerl_inline.erl
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/src
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
 	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(EXTRA_FILES) \
-		$(YRL_FILE) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(INSTALL_FILES) $(RELSYSDIR)/ebin
+		$(YRL_FILE) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(INSTALL_FILES) "$(RELSYSDIR)/ebin"
 
 release_docs_spec:
 

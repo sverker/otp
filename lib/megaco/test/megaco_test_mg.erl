@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2003-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2003-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -158,7 +158,7 @@ select_encoding(pretty_text) ->
 select_encoding(compact_text) ->
     {megaco_compact_text_encoder, 2944};
 select_encoding(binary) ->
-    {megaco_ber_bin_encoder, 2945};
+    {megaco_ber_encoder, 2945};
 select_encoding(erl_dist) ->
     {megaco_erl_dist_encoder, 2946};
 select_encoding(Encoding) ->

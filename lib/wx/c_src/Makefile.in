@@ -71,8 +71,7 @@ WX_OBJECTS  = $(GENERAL_O) $(GENERATED_O) $(RC_FILE)
 
 OBJECTS = $(WX_OBJECTS) $(GL_OBJECTS)
 
-TARGET_APIS = wxe_driver erl_gl
-TARGET_DIR = ../priv
+TARGET_DIR = ../priv/$(SYS_TYPE)
 
 # -O2 -funroll-loops  -ffast-math -fomit-frame-pointer 
 
@@ -121,7 +120,7 @@ debug:
 
 clean:  
 	rm -f $(OBJECTS) 
-	rm -f ../priv/$(TARGET_DIR)/$(TARGET_API)$(SO_EXT)
+	rm -f $(TARGET_DIR)/*$(SO_EXT)
 	rm -f *~ erl_crash.dump
 
 complete_clean: 
@@ -176,10 +175,10 @@ $(TARGET_DIR)/erl_gl$(SO_EXT): $(GL_OBJECTS)
 # ----------------------------------------------------
 include $(ERL_TOP)/make/otp_release_targets.mk
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/priv
-	$(INSTALL_DATA) ../priv/erlang-logo32.png $(RELSYSDIR)/priv/
-	$(INSTALL_DATA) ../priv/erlang-logo64.png $(RELSYSDIR)/priv/
-	$(INSTALL_PROGRAM) $(TARGET_DIR)/wxe_driver$(SO_EXT) $(RELSYSDIR)/priv/
-	$(INSTALL_PROGRAM) $(TARGET_DIR)/erl_gl$(SO_EXT) $(RELSYSDIR)/priv/
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv"
+	$(INSTALL_DATA) ../priv/erlang-logo32.png "$(RELSYSDIR)/priv/"
+	$(INSTALL_DATA) ../priv/erlang-logo64.png "$(RELSYSDIR)/priv/"
+	$(INSTALL_PROGRAM) $(TARGET_DIR)/wxe_driver$(SO_EXT) "$(RELSYSDIR)/priv/"
+	$(INSTALL_PROGRAM) $(TARGET_DIR)/erl_gl$(SO_EXT) "$(RELSYSDIR)/priv/"
 
 release_docs_spec:

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -54,7 +54,7 @@ from_type(M,Typename,Type) when is_record(Type,type) ->
 	{notype,_} ->
 	    true;
 	{primitive,bif} ->
-	    from_type_prim(Type,get_encoding_rule(M));
+	    from_type_prim(M, Type);
 	'ASN1_OPEN_TYPE' ->
 	    case  Type#type.constraint of
 		[#'Externaltypereference'{type=TrefConstraint}] ->
@@ -65,7 +65,7 @@ from_type(M,Typename,Type) when is_record(Type,type) ->
 	    end;
 	{constructed,bif} when Typename == ['EXTERNAL'] ->
 	    Val=from_type_constructed(M,Typename,InnerType,Type),
-	    asn1rt_check:transform_to_EXTERNAL1994(Val);
+	    asn1ct_eval_ext:transform_to_EXTERNAL1994(Val);
 	{constructed,bif} ->
 	    from_type_constructed(M,Typename,InnerType,Type)
     end;
@@ -164,7 +164,7 @@ gen_list(_,_,_,0) ->
 gen_list(M,Typename,Oftype,N) ->
     [from_type(M,Typename,Oftype)|gen_list(M,Typename,Oftype,N-1)].
     
-from_type_prim(D,Erule) ->
+from_type_prim(M, D) ->
     C = D#type.constraint,
     case D#type.def of
 	'INTEGER' ->
@@ -212,18 +212,7 @@ from_type_prim(D,Erule) ->
 	    NN = [X||{X,_} <- NamedNumberList],
 	    case NN of
 		[] ->
-		    Bl1 =lists:reverse(adjust_list(size_random(C),[1,0,1,1])),
-		    Bl2 = lists:reverse(lists:dropwhile(fun(0)->true;(1)->false end,Bl1)),
-		    case {length(Bl2),get_constraint(C,'SizeConstraint')} of
-			{Len,Len} ->
-			    Bl2;
-			{_Len,Int} when is_integer(Int) ->
-			    Bl1;
-			{Len,{Min,_}} when Min > Len ->
-			    Bl1;
-			_ ->
-			    Bl2
-		    end;
+		    random_unnamed_bit_string(M, C);
 		_ ->
 		    [lists:nth(random(length(NN)),NN)]
 	    end;
@@ -303,12 +292,7 @@ from_type_prim(D,Erule) ->
 	    adjust_list(size_random(C),c_string(C,"BMPString"));
 	'UTF8String' ->
 	    {ok,Res}=asn1rt:utf8_list_to_binary(adjust_list(random(50),[$U,$T,$F,$8,$S,$t,$r,$i,$n,$g,16#ffff,16#fffffff,16#ffffff,16#fffff,16#fff])),
-	    case Erule of
-		per ->
-		    binary_to_list(Res);
-		_ ->
-		    Res
-	    end;
+	    Res;
 	'UniversalString' ->
 	    adjust_list(size_random(C),c_string(C,"UniversalString"));
 	XX ->
@@ -323,6 +307,32 @@ c_string(C,Default) ->
 	    [V];
 	no ->
 	    Default
+    end.
+
+random_unnamed_bit_string(M, C) ->
+    Bl1 = lists:reverse(adjust_list(size_random(C), [1,0,1,1])),
+    Bl2 = lists:reverse(lists:dropwhile(fun(0)-> true;
+					   (1) -> false
+					end,Bl1)),
+    Val = case {length(Bl2),get_constraint(C, 'SizeConstraint')} of
+	      {Len,Len} ->
+		  Bl2;
+	      {_Len,Int} when is_integer(Int) ->
+		  Bl1;
+	      {Len,{Min,_}} when Min > Len ->
+		  Bl1;
+	      _ ->
+		  Bl2
+	  end,
+    case M:bit_string_format() of
+	legacy ->
+	    Val;
+	bitstring ->
+	    << <<B:1>> || B <- Val >>;
+	compact ->
+	    BitString = << <<B:1>> || B <- Val >>,
+	    PadLen = (8 - (bit_size(BitString) band 7)) band 7,
+	    {PadLen,<<BitString/bitstring,0:PadLen>>}
     end.
 
 %% FIXME:
@@ -440,20 +450,9 @@ get_encoding_rule(M) ->
     end.
 
 open_type_value(ber) ->
-    [4,9,111,112,101,110,95,116,121,112,101];
-open_type_value(ber_bin) ->
-%    [4,9,111,112,101,110,95,116,121,112,101];
     <<4,9,111,112,101,110,95,116,121,112,101>>;
-open_type_value(ber_bin_v2) ->
-%    [4,9,111,112,101,110,95,116,121,112,101];
-    <<4,9,111,112,101,110,95,116,121,112,101>>;
-open_type_value(per) ->
-    "\n\topen_type"; %octet string value "open_type"
-open_type_value(per_bin) ->
-    <<"\n\topen_type">>;
-%    <<10,9,111,112,101,110,95,116,121,112,101>>;
 open_type_value(_) ->
-    [4,9,111,112,101,110,95,116,121,112,101].
+    <<"\n\topen_type">>.	       %octet string value "open_type"
 
 to_textual_order({Root,Ext}) ->
     {to_textual_order(Root),Ext};

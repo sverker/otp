@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -78,89 +78,89 @@ obsolete_1(snmp, N, A) ->
     end;
 
 obsolete_1(snmpm, agent_info, 3) ->
-    {deprecated, {snmpm, agent_info, 2}, "R16B"};
+    {removed, {snmpm, agent_info, 2}, "R16B"};
 obsolete_1(snmpm, update_agent_info, 5) ->
-    {deprecated, {snmpm, update_agent_info, 4}, "R16B"};
+    {removed, {snmpm, update_agent_info, 4}, "R16B"};
 obsolete_1(snmpm, g, 3) ->
-    {deprecated, {snmpm, sync_get, 3}, "R16B"};
+    {removed, {snmpm, sync_get, 3}, "R16B"};
 obsolete_1(snmpm, g, 4) ->
-    {deprecated, {snmpm, sync_get, [3,4]}, "R16B"};
+    {removed, {snmpm, sync_get, [3,4]}, "R16B"};
 obsolete_1(snmpm, g, 5) ->
-    {deprecated, {snmpm, sync_get, [4,5]}, "R16B"};
+    {removed, {snmpm, sync_get, [4,5]}, "R16B"};
 obsolete_1(snmpm, g, 6) ->
-    {deprecated, {snmpm, sync_get, [5,6]}, "R16B"};
+    {removed, {snmpm, sync_get, [5,6]}, "R16B"};
 obsolete_1(snmpm, g, 7) ->
-    {deprecated, {snmpm, sync_get, 6}, "R16B"};
+    {removed, {snmpm, sync_get, 6}, "R16B"};
 obsolete_1(snmpm, ag, 3) ->
-    {deprecated, {snmpm, async_get, 3}, "R16B"};
+    {removed, {snmpm, async_get, 3}, "R16B"};
 obsolete_1(snmpm, ag, 4) ->
-    {deprecated, {snmpm, async_get, [3,4]}, "R16B"};
+    {removed, {snmpm, async_get, [3,4]}, "R16B"};
 obsolete_1(snmpm, ag, 5) ->
-    {deprecated, {snmpm, async_get, [4,5]}, "R16B"};
+    {removed, {snmpm, async_get, [4,5]}, "R16B"};
 obsolete_1(snmpm, ag, 6) ->
-    {deprecated, {snmpm, async_get, [5,6]}, "R16B"};
+    {removed, {snmpm, async_get, [5,6]}, "R16B"};
 obsolete_1(snmpm, ag, 7) ->
-    {deprecated, {snmpm, async_get, 6}, "R16B"};
+    {removed, {snmpm, async_get, 6}, "R16B"};
 obsolete_1(snmpm, gn, 3) ->
-    {deprecated, {snmpm, sync_get_next, 3}, "R16B"};
+    {removed, {snmpm, sync_get_next, 3}, "R16B"};
 obsolete_1(snmpm, gn, 4) ->
-    {deprecated, {snmpm, sync_get_next, [3,4]}, "R16B"};
+    {removed, {snmpm, sync_get_next, [3,4]}, "R16B"};
 obsolete_1(snmpm, gn, 5) ->
-    {deprecated, {snmpm, sync_get_next, [4,5]}, "R16B"};
+    {removed, {snmpm, sync_get_next, [4,5]}, "R16B"};
 obsolete_1(snmpm, gn, 6) ->
-    {deprecated, {snmpm, sync_get_next, [5,6]}, "R16B"};
+    {removed, {snmpm, sync_get_next, [5,6]}, "R16B"};
 obsolete_1(snmpm, gn, 7) ->
-    {deprecated, {snmpm, sync_get_next, 6}, "R16B"};
+    {removed, {snmpm, sync_get_next, 6}, "R16B"};
 obsolete_1(snmpm, agn, 3) ->
-    {deprecated, {snmpm, async_get_next, 3}, "R16B"};
+    {removed, {snmpm, async_get_next, 3}, "R16B"};
 obsolete_1(snmpm, agn, 4) ->
-    {deprecated, {snmpm, async_get_next, [3,4]}, "R16B"};
+    {removed, {snmpm, async_get_next, [3,4]}, "R16B"};
 obsolete_1(snmpm, agn, 5) ->
-    {deprecated, {snmpm, async_get_next, [4,5]}, "R16B"};
+    {removed, {snmpm, async_get_next, [4,5]}, "R16B"};
 obsolete_1(snmpm, agn, 6) ->
-    {deprecated, {snmpm, async_get_next, [5,6]}, "R16B"};
+    {removed, {snmpm, async_get_next, [5,6]}, "R16B"};
 obsolete_1(snmpm, agn, 7) ->
-    {deprecated, {snmpm, async_get_next, 6}, "R16B"};
+    {removed, {snmpm, async_get_next, 6}, "R16B"};
 obsolete_1(snmpm, s, 3) ->
-    {deprecated, {snmpm, sync_set, 3}, "R16B"};
+    {removed, {snmpm, sync_set, 3}, "R16B"};
 obsolete_1(snmpm, s, 4) ->
-    {deprecated, {snmpm, sync_set, [3,4]}, "R16B"};
+    {removed, {snmpm, sync_set, [3,4]}, "R16B"};
 obsolete_1(snmpm, s, 5) ->
-    {deprecated, {snmpm, sync_set, [4,5]}, "R16B"};
+    {removed, {snmpm, sync_set, [4,5]}, "R16B"};
 obsolete_1(snmpm, s, 6) ->
-    {deprecated, {snmpm, sync_set, [5,6]}, "R16B"};
+    {removed, {snmpm, sync_set, [5,6]}, "R16B"};
 obsolete_1(snmpm, s, 7) ->
-    {deprecated, {snmpm, sync_set, 6}, "R16B"};
+    {removed, {snmpm, sync_set, 6}, "R16B"};
 obsolete_1(snmpm, as, 3) ->
-    {deprecated, {snmpm, async_set, 3}, "R16B"};
+    {removed, {snmpm, async_set, 3}, "R16B"};
 obsolete_1(snmpm, as, 4) ->
-    {deprecated, {snmpm, async_set, [3,4]}, "R16B"};
+    {removed, {snmpm, async_set, [3,4]}, "R16B"};
 obsolete_1(snmpm, as, 5) ->
-    {deprecated, {snmpm, async_set, [4,5]}, "R16B"};
+    {removed, {snmpm, async_set, [4,5]}, "R16B"};
 obsolete_1(snmpm, as, 6) ->
-    {deprecated, {snmpm, async_set, [5,6]}, "R16B"};
+    {removed, {snmpm, async_set, [5,6]}, "R16B"};
 obsolete_1(snmpm, as, 7) ->
-    {deprecated, {snmpm, async_set, 6}, "R16B"};
+    {removed, {snmpm, async_set, 6}, "R16B"};
 obsolete_1(snmpm, gb, 5) ->
-    {deprecated, {snmpm, sync_get_bulk, 5}, "R16B"};
+    {removed, {snmpm, sync_get_bulk, 5}, "R16B"};
 obsolete_1(snmpm, gb, 6) ->
-    {deprecated, {snmpm, sync_get_bulk, [5,6]}, "R16B"};
+    {removed, {snmpm, sync_get_bulk, [5,6]}, "R16B"};
 obsolete_1(snmpm, gb, 7) ->
-    {deprecated, {snmpm, sync_get_bulk, [6,7]}, "R16B"};
+    {removed, {snmpm, sync_get_bulk, [6,7]}, "R16B"};
 obsolete_1(snmpm, gb, 8) ->
-    {deprecated, {snmpm, sync_get_bulk, [7,8]}, "R16B"};
+    {removed, {snmpm, sync_get_bulk, [7,8]}, "R16B"};
 obsolete_1(snmpm, gb, 9) ->
-    {deprecated, {snmpm, sync_get_bulk, 8}, "R16B"};
+    {removed, {snmpm, sync_get_bulk, 8}, "R16B"};
 obsolete_1(snmpm, agb, 5) ->
-    {deprecated, {snmpm, async_get_bulk, 5}, "R16B"};
+    {removed, {snmpm, async_get_bulk, 5}, "R16B"};
 obsolete_1(snmpm, agb, 6) ->
-    {deprecated, {snmpm, async_get_bulk, [5,6]}, "R16B"};
+    {removed, {snmpm, async_get_bulk, [5,6]}, "R16B"};
 obsolete_1(snmpm, agb, 7) ->
-    {deprecated, {snmpm, async_get_bulk, [6,7]}, "R16B"};
+    {removed, {snmpm, async_get_bulk, [6,7]}, "R16B"};
 obsolete_1(snmpm, agb, 8) ->
-    {deprecated, {snmpm, async_get_bulk, [7,8]}, "R16B"};
+    {removed, {snmpm, async_get_bulk, [7,8]}, "R16B"};
 obsolete_1(snmpm, agb, 9) ->
-    {deprecated, {snmpm, async_get_bulk, 8}, "R16B"};
+    {removed, {snmpm, async_get_bulk, 8}, "R16B"};
 
 
 %% *** MEGACO ***
@@ -347,18 +347,57 @@ obsolete_1(docb_xml_check, _, _) ->
 obsolete_1(asn1rt, F, _) when F == load_driver; F == unload_driver ->
     {deprecated,"deprecated (will be removed in R16A); has no effect as drivers are no longer used."};
 obsolete_1(ssl, pid, 1) ->
-    {deprecated,"deprecated (will be removed in R17); is no longer needed"};
+    {removed,"was removed in R16; is no longer needed"};
 obsolete_1(inviso, _, _) ->
-    {deprecated,"the inviso application has been deprecated and will be removed in R16"};
+    {removed,"the inviso application was removed in R16"};
 
 %% Added in R15B01.
 obsolete_1(gs, _, _) ->
-    {deprecated,"the gs application has been deprecated and will be removed in R16; use the wx application instead"};
+    {deprecated,"the gs application has been deprecated and will be removed in R17; use the wx application instead"};
 obsolete_1(ssh, sign_data, 2) ->
     {deprecated,"deprecated (will be removed in R16A); use public_key:pem_decode/1, public_key:pem_entry_decode/1 "
      "and public_key:sign/3 instead"};
 obsolete_1(ssh, verify_data, 3) ->
     {deprecated,"deprecated (will be removed in R16A); use public_key:ssh_decode/1, and public_key:verify/4 instead"};
+
+%% Added in R16
+obsolete_1(wxCalendarCtrl, enableYearChange, _) -> %% wx bug documented?
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxDC, computeScaleAndOrigin, 1) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxClientDC, new, 0) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxPaintDC, new, 0) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxWindowDC, new, 0) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxGraphicsContext, createLinearGradientBrush, 7) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxGraphicsContext, createRadialGradientBrush, 8) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxGraphicsRenderer, createLinearGradientBrush, 7) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxGraphicsRenderer, createRadialGradientBrush, 8) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxGridCellEditor, endEdit, 4) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxGridCellEditor, paintBackground, 3) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxIdleEvent, canSend, 1) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxMDIClientWindow, new, 1) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxMDIClientWindow, new, 2) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxPostScriptDC, getResolution, 0) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxPostScriptDC, setResolution, 1) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxCursor, new, 3) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+obsolete_1(wxCursor, new, 4) ->
+    {deprecated,"deprecated function not available in wxWidgets-2.9 and later"};
+
 obsolete_1(_, _, _) ->
     no.
 

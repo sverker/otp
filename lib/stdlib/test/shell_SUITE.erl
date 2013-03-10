@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -28,8 +28,8 @@
 	 refman_bit_syntax/1, 
 	 progex_bit_syntax/1, progex_records/1, 
 	 progex_lc/1, progex_funs/1,
-	 otp_5990/1, otp_6166/1, otp_6554/1, otp_6785/1,
-	 otp_7184/1, otp_7232/1, otp_8393/1]).
+	 otp_5990/1, otp_6166/1, otp_6554/1,
+	 otp_7184/1, otp_7232/1, otp_8393/1, otp_10302/1]).
 
 -export([ start_restricted_from_shell/1, 
 	  start_restricted_on_command_line/1,restricted_local/1]).
@@ -92,8 +92,8 @@ groups() ->
       [progex_bit_syntax, progex_records, progex_lc,
        progex_funs]},
      {tickets, [],
-      [otp_5990, otp_6166, otp_6554, otp_6785, otp_7184,
-       otp_7232, otp_8393]}].
+      [otp_5990, otp_6166, otp_6554, otp_7184,
+       otp_7232, otp_8393, otp_10302]}].
 
 init_per_suite(Config) ->
     Config.
@@ -108,7 +108,7 @@ end_per_group(_GroupName, Config) ->
     Config.
 
 
--record(state, {bin, reply, leader}).
+-record(state, {bin, reply, leader, unic = latin1}).
 
 
 start_restricted_from_shell(doc) ->
@@ -374,15 +374,18 @@ records(Config) when is_list(Config) ->
     MS = ?MODULE_STRING,
     RR1 = "rr(" ++ MS ++ "). #state{}.",
     ?line "[state]\n"
-          "#state{bin = undefined,reply = undefined,leader = undefined}.\n" =
+          "#state{bin = undefined,reply = undefined,leader = undefined,\n"
+          "       unic = latin1}.\n" =
         t(RR1),
     RR2 = "rr(" ++ MS ++ ",[state]). #state{}.",
     ?line "[state]\n"
-          "#state{bin = undefined,reply = undefined,leader = undefined}.\n" =
+          "#state{bin = undefined,reply = undefined,leader = undefined,\n"
+          "       unic = latin1}.\n" =
         t(RR2),
     RR3 = "rr(" ++ MS ++ ",'_'). #state{}.",
     ?line "[state]\n"
-          "#state{bin = undefined,reply = undefined,leader = undefined}.\n" =
+          "#state{bin = undefined,reply = undefined,leader = undefined,\n"
+          "       unic = latin1}.\n" =
         t(RR3),
     RR4 = "rr(" ++ MS ++ ", '_', {d,test1}).",
     ?line [[state]] = scan(RR4),
@@ -816,9 +819,6 @@ otp_5916(Config) when is_list(Config) ->
 
         true = if is_record(#r1{},r1,3) -> true; true ->  false end,
         false = if is_record(#r2{},r1,3) -> true; true ->  false end,
-
-        true = if {erlang,is_record}(#r1{},r1,3) -> true; true ->  false end,
-        false = if {erlang,is_record}(#r2{},r1,3) -> true; true ->  false end,
 
         ok.">>,
     [ok] = scan(C),
@@ -2282,12 +2282,6 @@ otp_5990(doc) ->
 otp_5990(suite) -> [];
 otp_5990(Config) when is_list(Config) ->
     ?line [true] = 
-        scan(<<"rd(foo,{bar}), {erlang,is_record}(#foo{}, foo).">>),
-    ?line [3] =
-        scan(<<"rd(foo,{bar}), A = #foo{}, "
-               "{if {erlang,is_record}(A, foo) -> erlang; "
-               "true -> not_a_module end, length}([1,2,3]).">>),
-    ?line [true] = 
         scan(<<"rd('OrdSet', {orddata = {},ordtype = type}), "
                "S = #'OrdSet'{ordtype = {}}, "
                "if tuple(S#'OrdSet'.ordtype) -> true; true -> false end.">>),
@@ -2549,19 +2543,6 @@ otp_6554(Config) when is_list(Config) ->
 
     ok.
 
-otp_6785(doc) ->
-    "OTP-6785. Parameterized modules.";
-otp_6785(suite) -> [];
-otp_6785(Config) when is_list(Config) ->
-    MFile = filename:join(?config(priv_dir, Config), "parameterized.erl"),
-    Contents = <<"-module(parameterized, [A]). "
-                 "-export([test/0]). "
-                 "test() -> A. ">>,
-    ?line ok = compile_file(Config, MFile, Contents, []),
-    ?line (parameterized:new(adsf)):test(),
-    file:delete(MFile),
-    ok.
-
 otp_7184(doc) ->
     "OTP-7184. Propagate exit signals from dying evaluator process.";
 otp_7184(suite) -> [];
@@ -2757,6 +2738,149 @@ prompt_err(B) ->
     S = string:strip(S2, both, $"),
     string:strip(S, right, $.).
 
+otp_10302(doc) ->
+    "OTP-10302. Unicode.";
+otp_10302(suite) -> [];
+otp_10302(Config) when is_list(Config) ->
+    {ok,Node} = start_node(shell_suite_helper_2,
+			   "-pa "++?config(priv_dir,Config)++
+			   " +pc unicode"),
+    Test1 =
+        <<"begin
+               io:setopts([{encoding,utf8}]),
+               [1024] = \"\\x{400}\",
+               rd(rec, {a = \"\\x{400}\"}),
+               ok = rl(rec)
+            end.">>,
+    "-record(rec,{a = \"\x{400}\"}).\nok.\n" = t({Node,Test1}),
+
+    Test3 =
+        <<"io:setopts([{encoding,utf8}]).
+           rd(rec, {a = \"\\x{400}\"}).
+           ok = rp(#rec{}).">>,
+    "ok.\nrec\n#rec{a = \"\x{400}\"}.\nok.\n" = t({Node,Test3}),
+
+    Test4 =
+        <<"io:setopts([{encoding,utf8}]).
+           A = [1024] = \"\\x{400}\".
+           b().
+           h().">>,
+
+    "ok.\n\"\x{400}\"\nA = \"\x{400}\".\nok.\n"
+    "1: io:setopts([{encoding,utf8}])\n-> ok.\n"
+    "2: A = [1024] = \"\x{400}\"\n-> \"\x{400}\"\n"
+    "3: b()\n-> ok.\nok.\n" = t({Node,Test4}),
+
+    Test5 =
+        <<"begin
+               io:setopts([{encoding,utf8}]),
+               results(0),
+               A = [1024] = \"\\x{400}\",
+               b(),
+               h()
+           end.">>,
+    "A = \"\x{400}\".\nok.\n" = t({Node,Test5}),
+
+    %% One $" is "lost":
+    true =
+       "\x{400}\": command not found" =:=
+       prompt_err({Node,
+                   <<"io:setopts([{encoding,utf8}]). v(\"\x{400}\")."/utf8>>,
+                   unicode}),
+
+    "ok.\ndefault\n* Bad prompt function: \"\x{400}\".\n" =
+        t({Node,<<"io:setopts([{encoding,utf8}]). "
+             "shell:prompt_func(\"\x{400}\")."/utf8>>,
+           unicode}),
+    rpc:call(Node,shell, prompt_func, [default]),
+    _ = shell:prompt_func(default),
+
+    %% Test lib:format_exception() (cf. OTP-6554)
+    Test6 =
+        <<"begin
+               A = <<\"\\xaa\">>,
+               S = lists:flatten(io_lib:format(\"~p/~p.\", [A, A])),
+               {ok, Ts, _} = erl_scan:string(S, 1, [unicode]),
+               {ok, Es} = erl_parse:parse_exprs(Ts),
+               B = erl_eval:new_bindings(),
+               erl_eval:exprs(Es, B)
+           end.">>,
+
+    "** exception error: an error occurred when evaluating"
+        " an arithmetic expression\n     in operator  '/'/2\n"
+        "        called as <<\"\xaa\">> / <<\"\xaa\">>.\n" = t(Test6),
+    Test7 =
+        <<"io:setopts([{encoding,utf8}]).
+           A = <<\"\\xaa\">>,
+           S = lists:flatten(io_lib:format(\"~p/~p.\", [A, A])),
+           {ok, Ts, _} = erl_scan:string(S, 1, [unicode]),
+           {ok, Es} = erl_parse:parse_exprs(Ts),
+           B = erl_eval:new_bindings(),
+           erl_eval:exprs(Es, B).">>,
+    
+    "ok.\n** exception error: an error occurred when evaluating"
+        " an arithmetic expression\n     in operator  '/'/2\n"
+        "        called as <<\"ª\">> / <<\"ª\">>.\n" = t({Node,Test7}),
+    Test8 =
+        <<"begin
+               A = [1089],
+               S = lists:flatten(io_lib:format(\"~tp/~tp.\", [A, A])),
+               {ok, Ts, _} = erl_scan:string(S, 1, [unicode]),
+               {ok, Es} = erl_parse:parse_exprs(Ts),
+               B = erl_eval:new_bindings(),
+               erl_eval:exprs(Es, B)
+           end.">>,
+    "** exception error: an error occurred when evaluating"
+        " an arithmetic expression\n     in operator  '/'/2\n"
+        "        called as [1089] / [1089].\n" = t(Test8),
+    Test9 =
+        <<"io:setopts([{encoding,utf8}]).
+           A = [1089],
+           S = lists:flatten(io_lib:format(\"~tp/~tp.\", [A, A])),
+           {ok, Ts, _} = erl_scan:string(S, 1, [unicode]),
+           {ok, Es} = erl_parse:parse_exprs(Ts),
+           B = erl_eval:new_bindings(),
+           erl_eval:exprs(Es, B).">>,
+
+    "ok.\n** exception error: an error occurred when evaluating"
+        " an arithmetic expression\n     in operator  '/'/2\n"
+        "        called as \"\x{441}\" / \"\x{441}\".\n" = t({Node,Test9}),
+    Test10 =
+        <<"A = {\"1\\xaa\",
+           $\\xaa,
+           << <<\"hi\">>/binary >>,
+           <<\"1\xaa\">>},
+           fun(a) -> true end(A).">>,
+    "** exception error: no function clause matching \n"
+    "                    erl_eval:'-inside-an-interpreted-fun-'"
+    "({\"1\xc2\xaa\",170,<<\"hi\">>,\n                                    "
+    "                        <<\"1\xc2\xaa\">>}) .\n" = t(Test10),
+    Test11 =
+        <<"io:setopts([{encoding,utf8}]).
+           A = {\"1\\xaa\",
+           $\\xaa,
+           << <<\"hi\">>/binary >>,
+           <<\"1\xaa\">>},
+           fun(a) -> true end(A).">>,
+
+    "ok.\n** exception error: no function clause matching \n"
+    "                    erl_eval:'-inside-an-interpreted-fun-'"
+    "({\"1\xaa\",170,<<\"hi\">>,\n                                           "
+    "                 <<\"1\xaa\"/utf8>>}) .\n"  = t({Node,Test11}),
+    Test12 = <<"fun(a, b) -> false end(65, [1089]).">>,
+    "** exception error: no function clause matching \n"
+    "                    erl_eval:'-inside-an-interpreted-fun-'(65,[1089])"
+    " .\n" = t(Test12),
+    Test13 =
+        <<"io:setopts([{encoding,utf8}]).
+           fun(a, b) -> false end(65, [1089]).">>,
+    "ok.\n** exception error: no function clause matching \n"
+    "                    erl_eval:'-inside-an-interpreted-fun-'(65,\"\x{441}\")"
+    " .\n" = t({Node,Test13}),
+
+    test_server:stop_node(Node),
+    ok.
+
 scan(B) ->
     F = fun(Ts) -> 
                 case erl_parse:parse_term(Ts) of
@@ -2770,36 +2894,45 @@ scan(B) ->
     scan(t(B), F).
 
 scan(S0, F) ->
-    case erl_scan:tokens([], S0, 1) of
+    case erl_scan:tokens([], S0, 1, [unicode]) of
         {done,{ok,Ts,_},S} ->
             [F(Ts) | scan(S, F)];
         _Else ->
             []
     end.
 
+t({Node,Bin,Enc}) when is_atom(Node),is_binary(Bin), is_atom(Enc) ->
+    t0({Bin,Enc}, fun() -> start_new_shell(Node) end);
 t({Node,Bin}) when is_atom(Node),is_binary(Bin) ->
-    t0(Bin, fun() -> start_new_shell(Node) end);
+    t0({Bin,latin1}, fun() -> start_new_shell(Node) end);
 t(Bin) when is_binary(Bin) ->
-    t0(Bin, fun() -> start_new_shell() end);
+    t0({Bin,latin1}, fun() -> start_new_shell() end);
+t({Bin,Enc}) when is_binary(Bin), is_atom(Enc) ->
+    t0({Bin,Enc}, fun() -> start_new_shell() end);
 t(L) ->
     t(list_to_binary(L)).
 
-t0(Bin, F) ->
+t0({Bin,Enc}, F) ->
     %% Spawn a process so that io_request messages do not interfer.
     P = self(),
-    C = spawn(fun() -> t1(P, Bin, F) end),
+    C = spawn(fun() -> t1(P, {Bin, Enc}, F) end),
     receive {C, R} -> R end.
 
-t1(Parent, Bin, F) ->
-    %% io:format("*** Testing ~s~n", [binary_to_list(Bin)]),
-    S = #state{bin = Bin, reply = [], leader = group_leader()},
+t1(Parent, {Bin,Enc}, F) ->
+    io:format("*** Testing ~s~n", [binary_to_list(Bin)]),
+    S = #state{bin = Bin, unic = Enc, reply = [], leader = group_leader()},
     group_leader(self(), self()),
     _Shell = F(),
     try 
         server_loop(S)
     catch exit:R -> Parent ! {self(), R};
-          throw:{?MODULE,LoopReply} ->
+          throw:{?MODULE,LoopReply,latin1} ->
                    L0 = binary_to_list(list_to_binary(LoopReply)),
+                   [$\n | L1] = lists:dropwhile(fun(X) -> X =/= $\n end, L0),
+                   Parent ! {self(), dotify(L1)};
+          throw:{?MODULE,LoopReply,_Uni} ->
+                   Tmp = unicode:characters_to_binary(LoopReply),
+                   L0 = unicode:characters_to_list(Tmp),
                    [$\n | L1] = lists:dropwhile(fun(X) -> X =/= $\n end, L0),
                    Parent ! {self(), dotify(L1)}
     after group_leader(S#state.leader, self())
@@ -2844,7 +2977,7 @@ do_io_request(Req, From, S, ReplyAs) ->
     case io_requests([Req], [], S) of
         {_Status,{eof,_},S1} ->
 	    io_reply(From, ReplyAs, {error,terminated}),
-	    throw({?MODULE,S1#state.reply});
+	    throw({?MODULE,S1#state.reply,S1#state.unic});
 	{_Status,Reply,S1} ->
 	    io_reply(From, ReplyAs, Reply),
 	    S1
@@ -2867,13 +3000,34 @@ io_requests([], [Rs|Cont], S) ->
 io_requests([], [], S) -> 
     {ok,ok,S}.
 
+io_request({setopts, Opts}, S) ->
+    #state{unic = OldEnc, bin = Bin} = S,
+    NewEnc = case proplists:get_value(encoding, Opts) of
+                 undefined -> OldEnc;
+                 utf8 -> unicode;
+                 New -> New
+             end,
+    NewBin = case {OldEnc, NewEnc} of
+                 {E, E} -> Bin;
+                 {latin1, _} ->
+                     unicode:characters_to_binary(Bin, latin1, unicode);
+                 {_, latin1} ->
+                     unicode:characters_to_binary(Bin, unicode, latin1);
+                 {_, _} -> Bin
+             end,
+    {ok, ok, S#state{unic = NewEnc, bin = NewBin}};
+io_request(getopts, S) ->
+    {ok,[{encoding,S#state.unic}],S};
 io_request({get_geometry,columns}, S) ->
     {ok,80,S};
 io_request({get_geometry,rows}, S) ->
     {ok,24,S};
 io_request({put_chars,Chars}, S) ->
     {ok,ok,S#state{reply = [S#state.reply | Chars]}};
-io_request({put_chars,_,Chars}, S) ->
+io_request({put_chars,latin1,Chars}, S) ->
+    {ok,ok,S#state{reply = [S#state.reply | Chars]}};
+io_request({put_chars,unicode,Chars0}, S) ->
+    Chars = unicode:characters_to_list(Chars0),
     {ok,ok,S#state{reply = [S#state.reply | Chars]}};
 io_request({put_chars,Mod,Func,Args}, S) ->
     case catch apply(Mod, Func, Args) of
@@ -2899,9 +3053,12 @@ get_until_loop(M, F, As, S, {more,Cont}, Enc) ->
         0 ->
             get_until_loop(M, F, As, S, 
                            catch apply(M, F, [Cont,eof|As]), Enc);
+	_ when S#state.unic =:= latin1 ->
+	    get_until_loop(M, F, As, S#state{bin = <<>>},
+			   catch apply(M, F, [Cont,binary_to_list(Bin)|As]), Enc);
 	_ ->
 	    get_until_loop(M, F, As, S#state{bin = <<>>},
-			   catch apply(M, F, [Cont,binary_to_list(Bin)|As]), Enc)
+			   catch apply(M, F, [Cont,unicode:characters_to_list(Bin)|As]), Enc)
     end;
 get_until_loop(_M, _F, _As, S, {done,Res,Buf}, Enc) ->
     {ok,Res,S#state{bin = buf2bin(Buf, Enc)}};
@@ -2912,6 +3069,8 @@ buf2bin(eof,_) ->
     <<>>;
 buf2bin(Buf,latin1) ->
     list_to_binary(Buf);
+buf2bin(Buf,utf8) ->
+    unicode:characters_to_binary(Buf,unicode,unicode);
 buf2bin(Buf,unicode) ->
     unicode:characters_to_binary(Buf,unicode,unicode).
 

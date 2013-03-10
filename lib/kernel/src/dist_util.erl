@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -115,7 +115,8 @@ make_this_flags(RequestType, OtherNode) ->
 	 ?DFLAG_NEW_FLOATS bor
 	 ?DFLAG_UNICODE_IO bor
 	 ?DFLAG_DIST_HDR_ATOM_CACHE bor
-	 ?DFLAG_SMALL_ATOM_TAGS).
+	 ?DFLAG_SMALL_ATOM_TAGS bor
+	 ?DFLAG_UTF8_ATOMS).
 
 handshake_other_started(#hs_data{request_type=ReqType}=HSData0) ->
     {PreOtherFlags,Node,Version} = recv_name(HSData0),
@@ -757,7 +758,8 @@ setup_timer(Pid, Timeout) ->
     end.
 
 reset_timer(Timer) ->
-    Timer ! {self(), reset}.
+    Timer ! {self(), reset},
+    ok.
 
 cancel_timer(Timer) ->
     unlink(Timer),

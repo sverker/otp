@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -97,6 +97,9 @@
 -record(monitor, {mref = make_ref() :: reference(),
                   service}). %% name
 
+%% The default sequence mask.
+-define(NOMASK, {0,32}).
+
 %% Time to lay low before restarting a dead service.
 -define(RESTART_SLEEP, 2000).
 
@@ -110,14 +113,21 @@
 
 -define(VALUES(Rec), tl(tuple_to_list(Rec))).
 
+%% The RFC 3588 common dictionary is used to validate capabilities
+%% configuration. That a given transport may use the RFC 6733
+%% dictionary is of no consequence.
+-define(BASE, diameter_gen_base_rfc3588).
+
 %%% The return values below assume the server diameter_config is started.
 %%% The functions will exit if it isn't.
 
 %% --------------------------------------------------------------------------
-%% # start_service(SvcName, Opts)
-%%
-%% Output: ok | {error, Reason}
+%% # start_service/2
 %% --------------------------------------------------------------------------
+
+-spec start_service(diameter:service_name(), [diameter:service_opt()])
+   -> ok
+    | {error, term()}.
 
 start_service(SvcName, Opts)
   when is_list(Opts)  ->
@@ -131,21 +141,22 @@ start_rc(timeout) ->
     {error, application_not_started}.
 
 %% --------------------------------------------------------------------------
-%% # stop_service(SvcName)
-%%
-%% Output: ok
+%% # stop_service/1
 %% --------------------------------------------------------------------------
+
+-spec stop_service(diameter:service_name())
+   -> ok.
 
 stop_service(SvcName) ->
     sync(SvcName, {stop_service, SvcName}).
 
 %% --------------------------------------------------------------------------
-%% # add_transport(SvcName, {Type, Opts})
-%%
-%% Input:  Type = connect | listen
-%%
-%% Output: {ok, Ref} | {error, Reason}
+%% # add_transport/2
 %% --------------------------------------------------------------------------
+
+-spec add_transport(diameter:service_name(), {connect|listen, [diameter:transport_opt()]})
+   -> {ok, diameter:transport_ref()}
+    | {error, term()}.
 
 add_transport(SvcName, {T, Opts})
   when is_list(Opts), (T == connect orelse T == listen) ->
@@ -167,6 +178,10 @@ add_transport(SvcName, {T, Opts})
 %%
 %% Output: ok | {error, Reason}
 %% --------------------------------------------------------------------------
+
+-spec remove_transport(diameter:service_name(), diameter:transport_pred())
+   -> ok
+    | {error, term()}.
 
 remove_transport(SvcName, Pred) ->
     try
@@ -470,6 +485,10 @@ stop(SvcName) ->
 
 %% add/3
 
+%% Can't check for a single common dictionary since a transport may
+%% restrict applications so that that there's one while the service
+%% has many.
+
 add(SvcName, Type, Opts) ->
     %% Ensure usable capabilities. diameter_service:merge_service/2
     %% depends on this.
@@ -519,6 +538,7 @@ rm(SvcName, L) ->
     Refs = lists:map(fun(#transport{ref = R}) -> R end, L),
     case stop_transport(SvcName, Refs) of
         ok ->
+            diameter_stats:flush(Refs),
             lists:foreach(fun delete_object/1, L);
         {error, _} = No ->
             No
@@ -541,16 +561,18 @@ make_config(SvcName, Opts) ->
     [] == Apps andalso ?THROW(no_apps),
 
     %% Use the fact that diameter_caps has the same field names as CER.
-    Fields = diameter_gen_base_rfc3588:'#info-'(diameter_base_CER) -- ['AVP'],
+    Fields = ?BASE:'#info-'(diameter_base_CER) -- ['AVP'],
 
     COpts = [T || {K,_} = T <- Opts, lists:member(K, Fields)],
     Caps = make_caps(#diameter_caps{}, COpts),
 
     ok = encode_CER(COpts),
 
-    Os = split(Opts, [{[fun erlang:is_boolean/1], false, share_peers},
-                      {[fun erlang:is_boolean/1], false, use_shared_peers},
-                      {[fun erlang:is_pid/1, false], false, monitor}]),
+    Os = split(Opts, fun opt/2, [{false, share_peers},
+                                 {false, use_shared_peers},
+                                 {false, monitor},
+                                 {?NOMASK, sequence},
+                                 {nodes, restrict_connections}]),
     %% share_peers and use_shared_peers are currently undocumented.
 
     #service{name = SvcName,
@@ -558,17 +580,73 @@ make_config(SvcName, Opts) ->
                                      capabilities = Caps},
              options = Os}.
 
+split(Opts, F, Defs) ->
+    [{K, F(K, get_opt(K, Opts, D))} || {D,K} <- Defs].
+
+opt(K, false = B)
+  when K /= sequence ->
+    B;
+
+opt(K, true = B)
+  when K == share_peer;
+       K == use_shared_peers ->
+    B;
+
+opt(monitor, P)
+  when is_pid(P) ->
+    P;
+
+opt(restrict_connections, T)
+  when T == node;
+       T == nodes;
+       T == [];
+       is_atom(hd(T)) ->
+    T;
+
+opt(restrict_connections = K, F) ->
+    try diameter_lib:eval(F) of  %% no guarantee that it won't fail later
+        Nodes when is_list(Nodes) ->
+            F;
+        V ->
+            ?THROW({value, {K,V}})
+    catch
+        E:R ->
+            ?THROW({value, {K, E, R, ?STACK}})
+    end;
+
+opt(sequence, {_,_} = T) ->
+    sequence(T);
+
+opt(sequence = K, F) ->
+    try diameter_lib:eval(F) of
+        T -> sequence(T)
+    catch
+        E:R ->
+            ?THROW({value, {K, E, R, ?STACK}})
+    end;
+
+opt(K, _) ->
+    ?THROW({value, K}).
+
+sequence({H,N} = T)
+  when 0 =< N, N =< 32, 0 =< H, 0 == H bsr N ->
+    T;
+
+sequence(_) ->
+    ?THROW({value, sequence}).
+
 make_caps(Caps, Opts) ->
     case diameter_capx:make_caps(Caps, Opts) of
         {ok, T} ->
             T;
-        {error, {Reason, _}} ->
+        {error, Reason} ->
             ?THROW(Reason)
     end.
 
 %% Validate types by encoding a CER.
 encode_CER(Opts) ->
-    {ok, CER} = diameter_capx:build_CER(make_caps(?EXAMPLE_CAPS, Opts)),
+    {ok, CER} = diameter_capx:build_CER(make_caps(?EXAMPLE_CAPS, Opts),
+                                        ?BASE),
 
     Hdr = #diameter_header{version = ?DIAMETER_VERSION,
                            end_to_end_id = 0,
@@ -592,15 +670,17 @@ app_acc({application, Opts}, Acc) ->
     [Dict, Mod] = get_opt([dictionary, module], Opts),
     Alias = get_opt(alias, Opts, Dict),
     ModS  = get_opt(state, Opts, Alias),
-    M = get_opt(call_mutates_state, Opts, false),
-    A = get_opt(answer_errors, Opts, report),
+    M = get_opt(call_mutates_state, Opts, false, [true]),
+    A = get_opt(answer_errors, Opts, report, [callback, discard]),
+    P = get_opt(request_errors, Opts, answer_3xxx, [answer, callback]),
     [#diameter_app{alias = Alias,
                    dictionary = Dict,
                    id = cb(Dict, id),
                    module = init_mod(Mod),
                    init_state = ModS,
-                   mutable = init_mutable(M),
-                   answer_errors = init_answers(A)}
+                   mutable = M,
+                   options = [{answer_errors, A},
+                              {request_errors, P}]}
      | Acc];
 app_acc(_, Acc) ->
     Acc.
@@ -629,20 +709,16 @@ init_cb(List) ->
                    V <- [proplists:get_value(F, List, D)]],
     #diameter_callback{} = list_to_tuple([diameter_callback | Values]).
 
-init_mutable(M)
-  when M == true;
-       M == false ->
-    M;
-init_mutable(M) ->
-    ?THROW({call_mutates_state, M}).
+%% Retreive and validate.
+get_opt(Key, List, Def, Other) ->
+    init_opt(Key, get_opt(Key, List, Def), [Def|Other]).
 
-init_answers(A)
-  when callback == A;
-       report == A;
-       discard == A ->
-    A;
-init_answers(A) ->
-    ?THROW({answer_errors, A}).
+init_opt(_, V, [V|_]) ->
+    V;
+init_opt(Name, V, [_|Vals]) ->
+    init_opt(Name, V, Vals);
+init_opt(Name, V, []) ->
+    ?THROW({Name, V}).
 
 %% Get a single value at the specified key.
 get_opt(Keys, List)
@@ -661,21 +737,6 @@ get_opt(Key, List, Def) ->
         [V] -> V;
         _   -> ?THROW({arity, Key})
     end.
-
-split(Opts, Defs) ->
-    [{K, value(D, Opts)} || {_,_,K} = D <- Defs].
-
-value({Preds, Def, Key}, Opts) ->
-    V = get_opt(Key, Opts, Def),
-    lists:any(fun(P) -> pred(P,V) end, Preds)
-        orelse ?THROW({value, Key}),
-    V.
-
-pred(F, V)
-  when is_function(F) ->
-    F(V);
-pred(T, V) ->
-    T == V.
 
 cb(M,F) ->
     try M:F() of

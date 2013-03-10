@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -125,7 +125,7 @@
 
 -define(THROWN_ERROR, {?MODULE, throw_error, _, _}).
 
--export_type([query_handle/0]).
+-export_type([query_cursor/0, query_handle/0]).
 
 %%% A query handle is a tuple {qlc_handle, Handle} where Handle is one
 %%% of #qlc_append, #qlc_table, #qlc_sort, and #qlc_lc.
@@ -386,25 +386,25 @@ format_error(nomatch_pattern) ->
 format_error(nomatch_filter) ->
     io_lib:format("filter evaluates to 'false'", []);
 format_error({Line, Mod, Reason}) when is_integer(Line) ->
-    io_lib:format("~p: ~s~n", 
+    io_lib:format("~p: ~ts~n", 
                   [Line, lists:flatten(Mod:format_error(Reason))]);
 %% file_sorter errors
 format_error({bad_object, FileName}) ->
-    io_lib:format("the temporary file \"~s\" holding answers is corrupt",
+    io_lib:format("the temporary file \"~ts\" holding answers is corrupt",
                  [FileName]);
 format_error(bad_object) ->
     io_lib:format("the keys could not be extracted from some term", []);
 format_error({file_error, FileName, Reason}) ->
-    io_lib:format("\"~s\": ~p~n",[FileName, file:format_error(Reason)]);
+    io_lib:format("\"~ts\": ~tp~n",[FileName, file:format_error(Reason)]);
 format_error({premature_eof, FileName}) ->
-    io_lib:format("\"~s\": end-of-file was encountered inside some binary term", 
+    io_lib:format("\"~ts\": end-of-file was encountered inside some binary term", 
                   [FileName]);
 format_error({tmpdir_usage, Why}) ->
     io_lib:format("temporary file was needed for ~w~n", [Why]);
 format_error({error, Module, Reason}) ->
     Module:format_error(Reason);
 format_error(E) ->
-    io_lib:format("~p~n", [E]).
+    io_lib:format("~tp~n", [E]).
 
 -spec(info(QH) -> Info when
       QH :: query_handle_or_list(),
@@ -3709,7 +3709,7 @@ maybe_error_logger(Name, Why) ->
     Trimmer = fun(M, _F, _A) -> M =:= erl_eval end,
     Formater = fun(Term, I) -> io_lib:print(Term, I, 80, -1) end,
     X = lib:format_stacktrace(1, Stacktrace, Trimmer, Formater),
-    error_logger:Name("qlc: temporary file was needed for ~w\n~s\n", 
+    error_logger:Name("qlc: temporary file was needed for ~w\n~ts\n",
                       [Why, lists:flatten(X)]).
 
 expand_stacktrace() ->

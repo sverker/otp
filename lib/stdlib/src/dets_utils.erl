@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2001-2009. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -395,7 +395,7 @@ corrupt_reason(Head, Reason0) ->
 corrupt(Head, Error) ->
     case get(verbose) of
 	yes -> 
-	    error_logger:format("** dets: Corrupt table ~p: ~p\n", 
+	    error_logger:format("** dets: Corrupt table ~p: ~tp\n", 
 				[Head#head.name, Error]);
 	_ -> ok
     end,

@@ -4,7 +4,7 @@
 <comref>
   <header>
     <copyright>
-      <year>1996</year><year>2011</year>
+      <year>1996</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -442,11 +442,7 @@
 	  system with SMP support is available. <c>-smp auto</c> starts
 	  the Erlang runtime system with SMP support enabled if it is
 	  available and more than one logical processor are detected.
-	  <c>-smp disable</c> starts a runtime system without SMP support.
-	  By default <c>-smp auto</c> will be used unless a conflicting
-	  parameter has been passed, then <c>-smp disable</c> will be
-	  used. Currently only the <c>-hybrid</c> parameter conflicts
-	  with <c>-smp auto</c>.</p>
+	  <c>-smp disable</c> starts a runtime system without SMP support.</p>
         <p><em>NOTE</em>: The runtime system with SMP support will not
           be available on all supported platforms. See also the
           <seealso marker="#+S">+S</seealso> flag.</p>
@@ -483,7 +479,7 @@
       <tag><marker id="async_thread_pool_size"><c><![CDATA[+A size]]></c></marker></tag>
       <item>
         <p>Sets the number of threads in async thread pool, valid range
-          is 0-1024. Default is 0.</p>
+          is 0-1024. If thread support is available, the default is 10.</p>
       </item>
       <tag><c><![CDATA[+B [c | d | i]]]></c></tag>
       <item>
@@ -537,7 +533,7 @@
         <p>Force the <c>compressed</c> option on all ETS tables.
               Only intended for test and evaluation.</p>
       </item>
-      <tag><c><![CDATA[+fnl]]></c></tag>
+      <tag><marker id="file_name_encoding"></marker><c><![CDATA[+fnl]]></c></tag>
       <item>
         <p>The VM works with file names as if they are encoded using the ISO-latin-1 encoding, disallowing Unicode characters with codepoints beyond 255. This is default on operating systems that have transparent file naming, i.e. all Unixes except MacOSX.</p>
       </item>
@@ -586,13 +582,95 @@
           <seealso marker="erts_alloc">erts_alloc(3)</seealso> for
           further information.</p>
       </item>
-      <tag><marker id="max_processes"><c><![CDATA[+P Number]]></c></marker></tag>
+      <tag><marker id="+n"/><c><![CDATA[+n Behavior]]></c></tag>
       <item>
-        <p>Sets the maximum number of concurrent processes for this
-          system. <c><![CDATA[Number]]></c> must be in the range 16..134217727.
-	  Default is 32768.</p>
-        <p><em>NOTE</em>: It is possible to choose any value in the range
-	  but powers of 2 perform best.</p>
+	<p>Control behavior of signals to ports.</p>
+	<p>As of OTP-R16 signals to ports are truly asynchronously
+	   delivered. Note that signals always have been documented as
+	   asynchronous. The underlying implementation has, however,
+	   previously delivered these signals synchronously. Correctly
+	   written Erlang programs should be able to handle this without
+	   any issues. Bugs in existing Erlang programs that make false
+	   assumptions about signals to ports may, however, be tricky to
+	   find. This switch has been introduced in order to at least
+	   make it easier to compare behaviors during a transition period.
+	   Note that <em>this flag is deprecated</em> as of its
+	   introduction, and is scheduled for removal in OTP-R17.
+	   <c>Behavior</c> should be one of the following characters:</p>
+	   <taglist>
+	     <tag><c>d</c></tag>
+	     <item>The default. Asynchronous signals. A process that sends
+	     a signal to a port may continue execution before the signal
+	     has been delivered to the port.</item>
+	     <tag><c>s</c></tag>
+	     <item>Synchronous signals. A processes that sends a signal
+	     to a port will not continue execution until the signal has
+	     been delivered. Should <em>only</em> be used for testing and
+	     debugging.</item>
+	     <tag><c>a</c></tag>
+	     <item>Asynchronous signals. As the default, but a processes
+	     that sends a signal will even more frequently continue
+	     execution before the signal has been delivered to the
+	     port. Should <em>only</em> be used for testing and
+	     debugging.</item>
+	   </taglist>
+      </item>
+      <tag><marker id="+pc"/><marker id="max_processes"><c><![CDATA[+pc Range]]></c></marker></tag>
+      <item>
+	<p>Sets the range of characters that the system will consider printable in heuristic detection of strings. This typically affects the shell, debugger and io:format functions (when ~tp is used in the format string).</p> 
+	<p>Currently two values for the <c>Range</c> are supported:
+	<taglist>
+	  <tag><c>latin1</c></tag> <item>The default. Only characters
+	  in the ISO-latin-1 range can be considered printable, which means
+	  that a character with a code point &gt; 255 will never be
+	  considered printable and that lists containing such
+	  characters will be displayed as lists of integers rather
+	  than text strings by tools.</item>
+	  <tag><c>unicode</c></tag>
+	  <item>All printable Unicode characters are considered when
+	  determining if a list of integers is to be displayed in
+	  string syntax. This may give unexpected results if for
+	  example your font does not cover all Unicode
+	  characters.</item>
+	</taglist>
+	</p>
+	<p>Se also <seealso marker="stdlib:io#printable_range/0">
+	io:printable_range/0</seealso>.</p>
+      </item>
+      <tag><marker id="+P"/><marker id="max_processes"><c><![CDATA[+P Number]]></c></marker></tag>
+      <item>
+	<p>Sets the maximum number of simultaneously existing processes for this
+          system. Valid range for <c>Number</c> is <c>[1024-134217727]</c></p>
+	<p><em>NOTE</em>: The actual maximum chosen may be much larger than
+	the <c>Number</c> passed. Currently the runtime system often,
+	but not always, chooses a value that is a power of 2. This might,
+	however, be changed in the future. The actual value chosen can be
+	checked by calling
+	<seealso marker="erlang#system_info_process_limit">erlang:system_info(process_limit)</seealso>.</p>
+	<p>The default value is <c>262144</c></p>
+      </item>
+      <tag><marker id="+Q"/><marker id="max_ports"><c><![CDATA[+Q Number]]></c></marker></tag>
+      <item>
+	<p>Sets the maximum number of simultaneously existing ports for this
+          system. Valid range for <c>Number</c> is <c>[1024-134217727]</c></p>
+	<p><em>NOTE</em>: The actual maximum chosen may be much larger than
+	the actual <c>Number</c> passed. Currently the runtime system often,
+	but not always, chooses a value that is a power of 2. This might,
+	however, be changed in the future. The actual value chosen can be
+	checked by calling
+	<seealso marker="erlang#system_info_port_limit">erlang:system_info(port_limit)</seealso>.</p>
+	<p>The default value used is normally <c>65536</c>. However, if
+	the runtime system is able to determine maximum amount of file
+	descriptors that it is allowed to open and this value is larger
+	than <c>65536</c>, the chosen value will increased to a value
+	larger or equal to the maximum amount of file descriptors that
+	can be opened.</p>
+	<p>On Windows the default value is set to <c>8196</c> because the 
+	normal OS limitations are set higher than most machines can handle.</p>
+	<p>Previously the environment variable <c>ERL_MAX_PORTS</c> was used
+	for setting the maximum number of simultaneously existing ports. This
+	environment variable is deprecated, and scheduled for removal in
+	OTP-R17, but can still be used.</p>
       </item>
       <tag><marker id="compat_rel"><c><![CDATA[+R ReleaseNumber]]></c></marker></tag>
       <item>
@@ -601,21 +679,14 @@
           default. This flags sets the emulator in compatibility mode
           with an earlier Erlang/OTP release <c><![CDATA[ReleaseNumber]]></c>.
           The release number must be in the range
-          <c><![CDATA[7..<current release>]]></c>. This limits the emulator,
-          making it possible for it to communicate with Erlang nodes
-          (as well as C- and Java nodes) running that earlier release.</p>
-        <p>For example, an R10 node is not automatically compatible
-          with an R9 node, but R10 nodes started with the <c><![CDATA[+R 9]]></c>
-          flag can co-exist with R9 nodes in the same distributed
-          Erlang system, they are R9-compatible.</p>
+          <c><![CDATA[<current release>-2..<current release>]]></c>. This
+	  limits the emulator, making it possible for it to communicate
+	  with Erlang nodes (as well as C- and Java nodes) running that
+	earlier release.</p>
         <p>Note: Make sure all nodes (Erlang-,  C-, and Java nodes) of
           a distributed Erlang system is of the same Erlang/OTP release,
           or from two different Erlang/OTP releases X and Y, where
           <em>all</em> Y nodes have compatibility mode X.</p>
-        <p>For example: A distributed Erlang system can consist of
-          R10 nodes, or of R9 nodes and R9-compatible R10 nodes, but
-          not of R9 nodes, R9-compatible R10 nodes and "regular" R10
-          nodes, as R9 and "regular" R10 nodes are not compatible.</p>
       </item>
       <tag><c><![CDATA[+r]]></c></tag>
       <item>
@@ -625,7 +696,7 @@
       <item>
         <p>Limits the amount of reader groups used by read/write locks
 	   optimized for read operations in the Erlang runtime system. By
-	   default the reader groups limit equals 8.</p>
+	   default the reader groups limit equals 64.</p>
 	<p>When the amount of schedulers is less than or equal to the reader
 	   groups limit, each scheduler has its own reader group. When the
 	   amount of schedulers is larger than the reader groups limit,
@@ -663,7 +734,24 @@
         <taglist>
           <tag><marker id="+sbt"><c>+sbt BindType</c></marker></tag>
           <item>
-            <p>Set scheduler bind type. Currently valid <c>BindType</c>s:
+            <p>Set scheduler bind type.</p>
+	    <p>Schedulers can also be bound using the
+	    <seealso marker="#+stbt">+stbt</seealso> flag. The only difference
+	    between these two flags is how the following errors are handled:</p>
+	    <list>
+	      <item>Binding of schedulers is not supported on the specific
+	      platform.</item>
+	      <item>No available CPU topology. That is the runtime system
+	      was not able to automatically detected the CPU topology, and
+	      no <seealso marker="#+sct">user defined CPU topology</seealso>
+	      was set.</item>
+	    </list>
+	    <p>If any of these errors occur when <c>+sbt</c> has been passed,
+	    the runtime system will print an error message, and refuse to
+	    start. If any of these errors occur when <c>+stbt</c> has been
+	    passed, the runtime system will silently ignore the error, and
+	    start up using unbound schedulers.</p>
+	    <p>Currently valid <c>BindType</c>s:
 	    </p>
 	    <taglist>
 	      <tag><c>u</c></tag>
@@ -913,15 +1001,20 @@
 	    <p>For more information, see
 	    <seealso marker="erlang#system_info_cpu_topology">erlang:system_info(cpu_topology)</seealso>.</p>
           </item>
-	  <tag><marker id="+sws"><c>+sws default|legacy|proposal</c></marker></tag>
+          <tag><marker id="+stbt"><c>+stbt BindType</c></marker></tag>
+          <item>
+            <p>Try to set scheduler bind type. The same as the
+	    <seealso marker="#+sbt">+sbt</seealso> flag with the exception of
+	    how some errors are handled. For more information, see the
+	    documentation of the <seealso marker="#+sbt">+sbt</seealso> flag.
+	    </p>
+	  </item>
+	  <tag><marker id="+sws"><c>+sws default|legacy</c></marker></tag>
 	  <item>
-             <p>Set scheduler wakeup strategy. Default is <c>legacy</c> (has been
-	        used since OTP-R13B). The <c>proposal</c> strategy is the currently
-		proposed strategy for OTP-R16. Note that the <c>proposal</c> strategy
-		might change during OTP-R15.
+             <p>
+	       Set scheduler wakeup strategy. Default strategy changed in erts-5.10/OTP-R16A. This strategy was previously known as <c>proposal</c> in OTP-R15. The <c>legacy</c> strategy was used as default from R13 up to and including R15.
 	     </p>
-             <p><em>NOTE:</em> This flag may be removed or changed at any time
-	        without prior notice.
+             <p><em>NOTE:</em> This flag may be removed or changed at any time without prior notice.
 	     </p>
 	  </item>
 	  <tag><marker id="+swt"><c>+swt very_low|low|medium|high|very_high</c></marker></tag>
@@ -937,6 +1030,22 @@
              <p><em>NOTE:</em> This flag may be removed or changed at any time
 	        without prior notice.
 	     </p>
+	  </item>
+          <tag><marker id="+spp"><c>+spp Bool</c></marker></tag>
+          <item>
+	    <p>Set default scheduler hint for port parallelism. If set to
+	    <c>true</c>, the VM will schedule port tasks when it by this can
+	    improve the parallelism in the system. If set to <c>false</c>,
+	    the VM will try to perform port tasks immediately and by this
+	    improve latency at the expense of parallelism. If this
+	    flag has not been passed, the default scheduler hint for port
+	    parallelism is currently <c>false</c>. The default used can be
+	    inspected in runtime by calling
+	    <seealso marker="erlang#system_info_port_parallelism">erlang:system_info(port_parallelism)</seealso>.
+	    The default can be overriden on port creation by passing the
+	    <seealso marker="erlang#open_port_parallelism">parallelism</seealso>
+	    option to
+	    <seealso marker="erlang#open_port/2">open_port/2</seealso></p>.
 	  </item>
 	  <tag><marker id="sched_thread_stack_size"><c><![CDATA[+sss size]]></c></marker></tag>
 	  <item>
@@ -1046,8 +1155,39 @@
           the emulator will be allowed to spend writing a crash dump. When
           the given number of seconds have elapsed, the emulator will be
           terminated by a SIGALRM signal.</p>
+
+	  <p> If the environment variable is <em>not</em> set or it is set to zero seconds, <c><![CDATA[ERL_CRASH_DUMP_SECONDS=0]]></c>,
+		  the runtime system will not even attempt to write the crash dump file. It will just terminate.
+	  </p>
+	  <p> If the environment variable is set to negative valie, e.g. <c><![CDATA[ERL_CRASH_DUMP_SECONDS=-1]]></c>,
+		  the runtime system will wait indefinitely for the crash dump file to be written.
+	  </p>
+	  <p> This environment variable is used in conjuction with
+		  <seealso marker="kernel:heart"><c>heart</c></seealso> if <c>heart</c> is running:
+	  </p>
+	  <taglist>
+		  <tag><c><![CDATA[ERL_CRASH_DUMP_SECONDS=0]]></c></tag>
+		  <item><p>
+				  Suppresses the writing a crash dump file entirely,
+				  thus rebooting the runtime system immediately.
+				  This is the same as not setting the environment variable.
+			  </p>
+		  </item>
+		  <tag><c><![CDATA[ERL_CRASH_DUMP_SECONDS=-1]]></c></tag>
+		  <item><p>Setting the environment variable to a negative value will cause the
+				  termination of the runtime system to wait until the crash dump file
+				  has been completly written.
+			  </p>
+		  </item>
+		  <tag><c><![CDATA[ERL_CRASH_DUMP_SECONDS=S]]></c></tag>
+		  <item><p>
+				  Will wait for <c>S</c> seconds to complete the crash dump file and
+				  then terminate the runtime system.
+			  </p>
+		  </item>
+	  </taglist>
       </item>
-      <tag><c><![CDATA[ERL_AFLAGS]]></c></tag>
+      <tag><marker id="ERL_AFLAGS"><c><![CDATA[ERL_AFLAGS]]></c></marker></tag>
       <item>
         <p>The content of this environment variable will be added to the
           beginning of the command line for <c><![CDATA[erl]]></c>.</p>
@@ -1057,7 +1197,7 @@
           the <c><![CDATA[-extra]]></c> section, i.e. the end of the command line
           following after an <c><![CDATA[-extra]]></c> flag.</p>
       </item>
-      <tag><c><![CDATA[ERL_ZFLAGS]]></c> and <c><![CDATA[ERL_FLAGS]]></c></tag>
+      <tag><marker id="ERL_ZFLAGS"><c><![CDATA[ERL_ZFLAGS]]></c></marker> and <marker id="ERL_FLAGS"><c><![CDATA[ERL_FLAGS]]></c></marker></tag>
       <item>
         <p>The content of these environment variables will be added to the
           end of the command line for <c><![CDATA[erl]]></c>.</p>

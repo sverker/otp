@@ -63,7 +63,8 @@ cases() ->
      instructions, eval_appup, eval_appup_with_restart,
      supervisor_which_children_timeout,
      release_handler_which_releases, install_release_syntax_check,
-     upgrade_supervisor, upgrade_supervisor_fail, otp_9864].
+     upgrade_supervisor, upgrade_supervisor_fail, otp_9864,
+     otp_10463_upgrade_script_regexp].
 
 groups() ->
     [{release,[],
@@ -937,7 +938,7 @@ otp_9417(cleanup,_Conf) ->
 
 %% OTP-9395 - performance problems when there are MANY processes
 %% Test that the procedure of checking for old code before an upgrade
-%% can be started is "very much faster" when there is no old code in
+%% can be started is faster when there is no old code in
 %% the system.
 otp_9395_check_old_code(Conf) when is_list(Conf) ->
 
@@ -977,8 +978,8 @@ otp_9395_check_old_code(Conf) when is_list(Conf) ->
 		   "\tAfter purge: ~.2f sec~n"
 		   "\tT1/T2: ~.2f",
 		   [NProcs,length(Modules),T1/1000000,T2/1000000,X]),
-	    if X < 1000 ->
-		    ct:fail({not_enough_improvement_after_purge,round(X)});
+	    if X < 1 ->
+		    ct:fail({no_improvement_after_purge,X});
 	       true ->
 		    ok
 	    end;
@@ -1206,12 +1207,25 @@ otp_9395_rm_many_mods(cleanup,_Conf) ->
     stop_node(node_name(otp_9395_rm_many_mods)).
 
 otp_9864(Conf) ->
+    case os:type() of
+	{win32,_} ->
+	    {skip,"Testing handling of symlinks - skipped on windows"};
+	_ ->
+	    do_otp_9864(Conf)
+    end.
+do_otp_9864(Conf) ->
     %% Set some paths
     PrivDir = priv_dir(Conf),
     Dir = filename:join(PrivDir,"otp_9864"),
     RelDir = filename:join(?config(data_dir, Conf), "app1_app2"),
-    LibDir1 = filename:join(RelDir, "lib1"),
-    LibDir2 = filename:join(RelDir, "lib2"),
+
+    %% Copy libs to priv_dir because remove_release will remove some
+    %% of these again, and we don't want to remove anything from
+    %% data_dir
+    copy_tree(Conf,filename:join(RelDir, "lib1"),Dir),
+    copy_tree(Conf,filename:join(RelDir, "lib2"),Dir),
+    LibDir1 = filename:join(Dir, "lib1"),
+    LibDir2 = filename:join(Dir, "lib2"),
 
     %% Create the releases
     Rel1 = create_and_install_fake_first_release(Dir,
@@ -1229,10 +1243,6 @@ otp_9864(Conf) ->
     {ok, Node} = t_start_node(otp_9864, Rel1, filename:join(Rel1Dir,"sys.config")),
     
     %% Unpack rel2 (make sure it does not work if an AppDir is bad)
-    LibDir3 = filename:join(RelDir, "lib3"),
-    {error, {no_such_directory, _}} =
-	rpc:call(Node, release_handler, set_unpacked,
-		 [Rel2++".rel", [{app1,"2.0",LibDir2}, {app2,"1.0",LibDir3}]]),
     {ok, RelVsn2} =
 	rpc:call(Node, release_handler, set_unpacked,
 		 [Rel2++".rel", [{app1,"2.0",LibDir2}, {app2,"1.0",LibDir2}]]),
@@ -1243,21 +1253,26 @@ otp_9864(Conf) ->
     ok = rpc:call(Node, release_handler, install_file,
 			[RelVsn2, filename:join(Rel2Dir, "sys.config")]),
 
-    %% Install RelVsn2 without {update_paths, true} option
+    %% Install RelVsn2
     {ok, RelVsn1, []} =
 	rpc:call(Node, release_handler, install_release, [RelVsn2]),
 
-    %% Install RelVsn1 again
+    %% Create a symlink inside release 2
+    Releases2Dir = filename:join([Dir,"releases","2"]),
+    Link = filename:join(Releases2Dir,"foo_symlink_dir"),
+    file:make_symlink(Releases2Dir,Link),
+
+    %% Back down to RelVsn1
     {ok, RelVsn1, []} =
 	rpc:call(Node, release_handler, install_release, [RelVsn1]),
-
-    TempRel2Dir = filename:join(Dir,"releases/2"),
-    file:make_symlink(TempRel2Dir, filename:join(TempRel2Dir, "foo_symlink_dir")),
 
     %% This will fail if symlinks are not handled
     ok = rpc:call(Node, release_handler, remove_release, [RelVsn2]),
 
     ok.
+
+otp_9864(cleanup,_Conf) ->
+    stop_node(node_name(otp_9864)).
 
 
 upgrade_supervisor(Conf) when is_list(Conf) ->
@@ -1646,6 +1661,15 @@ upgrade_gg(cleanup,Config) ->
     ok = stop_nodes(NodeNames).
 
 
+%%%-----------------------------------------------------------------
+%%% OTP-10463, Bug - release_handler could not handle regexp in appup
+%%% files.
+otp_10463_upgrade_script_regexp(_Config) ->
+    %% Assuming that kernel always has a regexp in it's appup
+    KernelVsn = vsn(kernel,current),
+    {ok,KernelVsn,_} =
+	release_handler:upgrade_script(kernel,code:lib_dir(kernel)),
+    ok.
 
 
 %%%=================================================================

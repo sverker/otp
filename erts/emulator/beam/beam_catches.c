@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2000-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2000-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -160,10 +160,9 @@ void beam_catches_delmod(unsigned head, BeamInstr *code, unsigned code_bytes,
 	}
 	if( (char*)p->beam_catches[i].cp - (char*)code >= code_bytes ) {
 	    erl_exit(1,
-		    "beam_catches_delmod: item %#x has cp %#lx which is not "
-		    "in module's range [%#lx,%#lx[\r\n",
-		    i, (long)p->beam_catches[i].cp,
-		    (long)code, (long)((char*)code + code_bytes));
+		    "beam_catches_delmod: item %#x has cp %p which is not "
+		    "in module's range [%p,%p[\r\n",
+		    i, p->beam_catches[i].cp, code, ((char*)code + code_bytes));
 	}
 	p->beam_catches[i].cp = 0;
 	cdr = p->beam_catches[i].cdr;

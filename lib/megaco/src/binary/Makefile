@@ -1,7 +1,7 @@
 # 
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 2000-2009. All Rights Reserved.
+# Copyright Ericsson AB 2000-2012. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -50,46 +50,22 @@ ASN1_SPECS = $(ASN1_V1_SPEC) \
 ASN1_FILES = $(ASN1_SPECS:%=%.asn)
 
 V1_SPECS = $(BER_ASN1_V1_SPEC)         \
-           $(BER_BIN_ASN1_V1_SPEC)     \
-           $(BER_BIN_DRV_ASN1_V1_SPEC) \
-           $(PER_ASN1_V1_SPEC)         \
-           $(PER_BIN_ASN1_V1_SPEC)     \
-           $(PER_BIN_DRV_ASN1_V1_SPEC) 
+           $(PER_ASN1_V1_SPEC)
 
 V2_SPECS = $(BER_ASN1_V2_SPEC)         \
-           $(BER_BIN_ASN1_V2_SPEC)     \
-           $(BER_BIN_DRV_ASN1_V2_SPEC) \
-           $(PER_ASN1_V2_SPEC)         \
-           $(PER_BIN_ASN1_V2_SPEC)     \
-           $(PER_BIN_DRV_ASN1_V2_SPEC) 
+           $(PER_ASN1_V2_SPEC)
 
 PREV3A_SPECS = $(BER_ASN1_PREV3A_SPEC)         \
-               $(BER_BIN_ASN1_PREV3A_SPEC)     \
-               $(BER_BIN_DRV_ASN1_PREV3A_SPEC) \
-               $(PER_ASN1_PREV3A_SPEC)         \
-               $(PER_BIN_ASN1_PREV3A_SPEC)     \
-               $(PER_BIN_DRV_ASN1_PREV3A_SPEC) 
+               $(PER_ASN1_PREV3A_SPEC)
 
 PREV3B_SPECS = $(BER_ASN1_PREV3B_SPEC)         \
-               $(BER_BIN_ASN1_PREV3B_SPEC)     \
-               $(BER_BIN_DRV_ASN1_PREV3B_SPEC) \
-               $(PER_ASN1_PREV3B_SPEC)         \
-               $(PER_BIN_ASN1_PREV3B_SPEC)     \
-               $(PER_BIN_DRV_ASN1_PREV3B_SPEC) 
+               $(PER_ASN1_PREV3B_SPEC)
 
 PREV3C_SPECS = $(BER_ASN1_PREV3C_SPEC)         \
-               $(BER_BIN_ASN1_PREV3C_SPEC)     \
-               $(BER_BIN_DRV_ASN1_PREV3C_SPEC) \
-               $(PER_ASN1_PREV3C_SPEC)         \
-               $(PER_BIN_ASN1_PREV3C_SPEC)     \
-               $(PER_BIN_DRV_ASN1_PREV3C_SPEC) 
+               $(PER_ASN1_PREV3C_SPEC)
 
 V3_SPECS = $(BER_ASN1_V3_SPEC)         \
-           $(BER_BIN_ASN1_V3_SPEC)     \
-           $(BER_BIN_DRV_ASN1_V3_SPEC) \
            $(PER_ASN1_V3_SPEC)         \
-           $(PER_BIN_ASN1_V3_SPEC)     \
-           $(PER_BIN_DRV_ASN1_V3_SPEC) \
            $(PREV3A_SPECS) $(PREV3B_SPECS) $(PREV3C_SPECS)
 
 SPECS = $(V1_SPECS) $(V2_SPECS) $(V3_SPECS)
@@ -153,12 +129,13 @@ opt: prebuild $(TARGET_FILES)
 prebuild: prebuild.skip
 
 prebuild.skip: 
-	@echo "Building prebuild.skip\c"
+	$(gen_verbose)
+	$(V_colon)@echo "Building prebuild.skip\c"
 	@touch prebuild.skip
 	@for a in $(SPEC_ASN1DB); do \
 		echo $$a >> prebuild.skip; \
 	done
-	@echo ""
+	$(V_colon)@echo ""
 
 v1: $(V2_SPEC_BINS)
 
@@ -194,11 +171,11 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 
 
 release_spec: opt
-	$(INSTALL_DIR)  $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(TARGET_FILES) $(RELSYSDIR)/ebin
-	$(INSTALL_DIR)  $(RELSYSDIR)/src
-	$(INSTALL_DIR)  $(RELSYSDIR)/src/binary
-	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(ASN1_FILES) $(RELSYSDIR)/src/binary
+	$(INSTALL_DIR)  "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(TARGET_FILES) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DIR)  "$(RELSYSDIR)/src"
+	$(INSTALL_DIR)  "$(RELSYSDIR)/src/binary"
+	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(ASN1_FILES) "$(RELSYSDIR)/src/binary"
 
 
 release_docs_spec:

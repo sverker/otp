@@ -14,10 +14,8 @@
 %% Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %% USA
 %%
-%% $Id$
-%%
 %% @copyright 1997-2006 Richard Carlsson
-%% @author Richard Carlsson <richardc@it.uu.se>
+%% @author Richard Carlsson <carlsson.richard@gmail.com>
 %% @end
 %% =====================================================================
 
@@ -2225,11 +2223,6 @@ module_name_to_atom(M) ->
     case erl_syntax:type(M) of
 	atom ->
 	    erl_syntax:atom_value(M);
-	qualified_name ->
-	    list_to_atom(packages:concat(
-			   [erl_syntax:atom_value(A)
-			    || A <- erl_syntax:qualified_name_segments(M)])
-			);
 	_ ->
 	    throw(syntax_error)
     end.

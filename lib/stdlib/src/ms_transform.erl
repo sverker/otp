@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2002-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -100,7 +100,7 @@ format_error({?ERR_GUARDREMOTECALL, Module, Name, Arithy}) ->
 				[Module,Name,Arithy]));
 format_error({?ERR_GUARDELEMENT, Str}) ->
     lists:flatten(
-      io_lib:format("the language element ~s (in guard) cannot be translated "
+      io_lib:format("the language element ~ts (in guard) cannot be translated "
 		    "into match_spec", [Str]));
 format_error({?ERR_GUARDBINCONSTRUCT, Var}) ->
     lists:flatten(
@@ -126,7 +126,7 @@ format_error({?ERR_BODYREMOTECALL, Module, Name, Arithy}) ->
 				[Module,Name,Arithy]));
 format_error({?ERR_BODYELEMENT, Str}) ->
     lists:flatten(
-      io_lib:format("the language element ~s (in body) cannot be translated "
+      io_lib:format("the language element ~ts (in body) cannot be translated "
 		    "into match_spec", [Str]));
 format_error({?ERR_BODYBINCONSTRUCT, Var}) ->
     lists:flatten(

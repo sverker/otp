@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1999-2011. All Rights Reserved.
+# Copyright Ericsson AB 1999-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -52,11 +52,11 @@ MODULES= \
 	ssl_cipher \
 	ssl_connection \
 	ssl_connection_sup \
-	ssl_debug \
 	ssl_handshake \
 	ssl_manager \
 	ssl_session \
 	ssl_session_cache \
+	ssl_socket \
 	ssl_record \
 	ssl_ssl2 \
 	ssl_ssl3 \
@@ -64,7 +64,6 @@ MODULES= \
 	ssl_tls_dist_proxy
 
 INTERNAL_HRL_FILES = \
-	 ssl_debug.hrl \
 	 ssl_alert.hrl ssl_cipher.hrl ssl_handshake.hrl ssl_internal.hrl \
 	 ssl_record.hrl
 
@@ -108,10 +107,10 @@ clean:
 	rm -f errs core *~
 
 $(APP_TARGET):	$(APP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(APPUP_TARGET):	$(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 docs:
 
@@ -122,11 +121,31 @@ docs:
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(ERL_FILES) $(INTERNAL_HRL_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(ERL_FILES) $(INTERNAL_HRL_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
 	$(INSTALL_DATA) $(BEHAVIOUR_TARGET_FILES) $(TARGET_FILES) $(APP_TARGET) \
-	$(APPUP_TARGET) $(RELSYSDIR)/ebin
+	$(APPUP_TARGET) "$(RELSYSDIR)/ebin"
 
 release_docs_spec:
+
+# ----------------------------------------------------
+# Dependencies
+# ----------------------------------------------------
+$(EBIN)/inet_tls_dist.$(EMULATOR): ../../kernel/include/net_address.hrl  ../../kernel/include/dist.hrl  ../../kernel/include/dist_util.hrl
+$(EBIN)/ssl.$(EMULATOR): ssl_internal.hrl ssl_record.hrl ssl_cipher.hrl ssl_handshake.hrl ../../public_key/include/public_key.hrl
+$(EBIN)/ssl_alert.$(EMULATOR): ssl_alert.hrl ssl_record.hrl  
+$(EBIN)/ssl_certificate.$(EMULATOR): ssl_internal.hrl ssl_alert.hrl ssl_handshake.hrl ../../public_key/include/public_key.hrl
+$(EBIN)/ssl_certificate_db.$(EMULATOR): ssl_internal.hrl ../../public_key/include/public_key.hrl ../../kernel/include/file.hrl
+$(EBIN)/ssl_cipher.$(EMULATOR): ssl_internal.hrl ssl_record.hrl ssl_cipher.hrl ssl_handshake.hrl ssl_alert.hrl ../../public_key/include/public_key.hrl
+$(EBIN)/ssl_connection.$(EMULATOR): ssl_internal.hrl ssl_record.hrl ssl_cipher.hrl ssl_handshake.hrl ssl_alert.hrl ../../public_key/include/public_key.hrl
+$(EBIN)/ssl_handshake.$(EMULATOR): ssl_internal.hrl ssl_record.hrl ssl_cipher.hrl ssl_handshake.hrl ssl_alert.hrl ../../public_key/include/public_key.hrl
+$(EBIN)/ssl_manager.$(EMULATOR): ssl_internal.hrl ssl_handshake.hrl ../../kernel/include/file.hrl
+$(EBIN)/ssl_record.$(EMULATOR):  ssl_internal.hrl ssl_record.hrl ssl_cipher.hrl ssl_handshake.hrl ssl_alert.hrl
+$(EBIN)/ssl_session.$(EMULATOR):  ssl_internal.hrl ssl_handshake.hrl
+$(EBIN)/ssl_session_cache.$(EMULATOR):  ssl_internal.hrl ssl_handshake.hrl
+$(EBIN)/ssl_session_cache_api.$(EMULATOR):  ssl_internal.hrl ssl_handshake.hrl
+$(EBIN)/ssl_ssl3.$(EMULATOR): ssl_internal.hrl ssl_record.hrl ssl_cipher.hrl
+$(EBIN)/ssl_tls1.$(EMULATOR): ssl_internal.hrl ssl_record.hrl ssl_cipher.hrl
+
 

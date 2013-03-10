@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -403,6 +403,9 @@ http_request(Msg) ->
 	 {"Other-Field: with some text\r\n",
 	  {http_header,0,  "Other-Field"  ,undefined,  "with some text"},
 	  {http_header,0,<<"Other-Field">>,undefined,<<"with some text">>}},
+	 {"Make-sure-a-LONG-HEaDer-fIeLd-is-fORMATTED-NicelY: with some text\r\n",
+	  {http_header,0,  "Make-Sure-A-Long-Header-Field-Is-Formatted-Nicely"  ,undefined,  "with some text"},
+	  {http_header,0,<<"Make-Sure-A-Long-Header-Field-Is-Formatted-Nicely">>,undefined,<<"with some text">>}},
 	 {"Multi-Line: Once upon a time in a land far far away,\r\n"
 	  " there lived a princess imprisoned in the highest tower\r\n"
 	  " of the most haunted castle.\r\n",

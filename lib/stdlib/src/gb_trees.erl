@@ -1,7 +1,8 @@
+%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2001-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -19,7 +20,7 @@
 %% =====================================================================
 %% General Balanced Trees - highly efficient dictionaries.
 %%
-%% Copyright (C) 1999-2001 Sven-Olof Nyström, Richard Carlsson
+%% Copyright (C) 1999-2001 Sven-Olof NystrÃ¶m, Richard Carlsson
 %%
 %% An efficient implementation of Prof. Arne Andersson's General
 %% Balanced Trees. These have no storage overhead compared to plain
@@ -151,6 +152,8 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Some types.
+
+-export_type([iter/0]).
 
 -type gb_tree_node() :: 'nil' | {_, _, _, _}.
 -opaque iter() :: [gb_tree_node()].

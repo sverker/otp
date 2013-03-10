@@ -14,10 +14,8 @@
 %% Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %% USA
 %%
-%% $Id$
-%%
 %% @copyright 2001-2006 Richard Carlsson
-%% @author Richard Carlsson <richardc@it.uu.se>
+%% @author Richard Carlsson <carlsson.richard@gmail.com>
 %% @end
 %% =====================================================================
 
@@ -188,6 +186,7 @@ quick_parse_file(File, Options) ->
 parse_file(File, Parser, Options) ->
     case file:open(File, [read]) of
         {ok, Dev} ->
+            _ = epp:set_encoding(Dev),
             try Parser(Dev, 1, Options)
             after ok = file:close(Dev)
 	    end;
@@ -421,6 +420,7 @@ parse_form(Dev, L0, Parser, Options) ->
                     {ok, F, L1}
             end;
         {error, _IoErr, _L1} = Err -> Err;
+        {error, _Reason} -> {eof, L0}; % This is probably encoding problem
         {eof, _L1} = Eof -> Eof
     end.
 

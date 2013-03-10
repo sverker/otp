@@ -2,7 +2,7 @@
 
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2010-2011. All Rights Reserved.
+# Copyright Ericsson AB 2010-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -22,24 +22,28 @@ COVER_SPEC_FILE = diameter.cover
 
 MODULES = \
 	diameter_ct \
-	diameter_util \
 	diameter_enum \
-	diameter_compiler_SUITE \
+	diameter_util \
+	diameter_3xxx_SUITE \
+	diameter_app_SUITE \
+	diameter_capx_SUITE \
 	diameter_codec_SUITE \
 	diameter_codec_test \
-	diameter_app_SUITE \
+	diameter_compiler_SUITE \
 	diameter_dict_SUITE \
-	diameter_reg_SUITE \
-	diameter_sync_SUITE \
-	diameter_stats_SUITE \
-	diameter_watchdog_SUITE \
+	diameter_dpr_SUITE \
+	diameter_event_SUITE \
+	diameter_failover_SUITE \
 	diameter_gen_sctp_SUITE \
-	diameter_transport_SUITE \
-	diameter_capx_SUITE \
-	diameter_traffic_SUITE \
+	diameter_length_SUITE \
+	diameter_reg_SUITE \
 	diameter_relay_SUITE \
+	diameter_stats_SUITE \
+	diameter_sync_SUITE \
 	diameter_tls_SUITE \
-	diameter_failover_SUITE
+	diameter_traffic_SUITE \
+	diameter_transport_SUITE \
+	diameter_watchdog_SUITE
 
 HRL_FILES = \
 	diameter_ct.hrl

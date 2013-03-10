@@ -2,7 +2,7 @@
 %%-----------------------------------------------------------------------
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2006-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2006-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -1007,7 +1007,7 @@ msg(Msg) ->
       port_command(P, Msg),
       true = port_close(P),
       ok;
-    _ ->  % win32, vxworks
+    _ ->  % win32
       io:format("~s", [Msg])
   end.
 

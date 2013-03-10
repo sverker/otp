@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -122,12 +122,12 @@
                   {capabilities, Caps}]}).
 
 -define(SUCCESS, 2001).
--define(LOGOUT, ?'DIAMETER_BASE_TERMINATION-CAUSE_DIAMETER_LOGOUT').
+-define(LOGOUT, ?'DIAMETER_BASE_TERMINATION-CAUSE_LOGOUT').
 
 %% ===========================================================================
 
 suite() ->
-    [{timetrap, {seconds, 10}}].
+    [{timetrap, {seconds, 60}}].
 
 all() ->
     [start_ssl,

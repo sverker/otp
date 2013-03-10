@@ -462,6 +462,10 @@ When a variable has been set, no warning will be issued.
     `configure` will fail unless this variable is set. Since no default
     value is used, `configure` will try to figure this out automatically.
 
+*   `erl_xcomp_double_middle` - `yes|no`. Defaults to `no`. 
+	If `yes`, the target system must have doubles in "middle-endian" format. If
+    `no`, it has "regular" endianness. 
+
 *   `erl_xcomp_clock_gettime_cpu_time` - `yes|no`. Defaults to `no`. If `yes`,
     the target system must have a working `clock_gettime()` implementation
     that can be used for retrieving process CPU time.
@@ -523,7 +527,7 @@ Copyright and License
 
 %CopyrightBegin%
 
-Copyright Ericsson AB 2009-2010. All Rights Reserved.
+Copyright Ericsson AB 2009-2012. All Rights Reserved.
 
 The contents of this file are subject to the Erlang Public License,
 Version 1.1, (the "License"); you may not use this file except in

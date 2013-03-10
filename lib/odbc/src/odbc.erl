@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -451,7 +451,7 @@ init(Args) ->
     %% Start the port program (a c program) that utilizes the odbc driver 
     case os:find_executable(?SERVERPROG, ?SERVERDIR) of
 	FileName when is_list(FileName)->
-	    Port  = open_port({spawn, FileName},
+	    Port  = open_port({spawn, "\""++FileName++"\""},
 			      [{packet, ?LENGTH_INDICATOR_SIZE}, binary,
 			       exit_status]),
 	    State = #state{listen_sockets = 
@@ -755,7 +755,10 @@ handle_info({'DOWN', _Ref, _Type, _Process, shutdown}, State) ->
 handle_info({'DOWN', _Ref, _Type, Process, Reason}, State) ->
     {stop, {stopped, {'EXIT', Process, Reason}}, 
      State#state{reply_to = undefined}};
-    
+
+handle_info({tcp_closed, Socket}, State = #state{odbc_socket=Socket,
+						 state = disconnecting}) ->
+    {stop, normal, State};
 %---------------------------------------------------------------------------
 %% Catch all - throws away unknown messages (This could happen by "accident"
 %% so we do not want to crash, but we make a log entry as it is an
@@ -807,10 +810,11 @@ connect(ConnectionReferense, ConnectionStr, Options) ->
     {C_TupleRow, _} = 
 	connection_config(tuple_row, Options),
     {BinaryStrings, _} = connection_config(binary_strings, Options),
+    {ExtendedErrors, _} = connection_config(extended_errors, Options),
 
     ODBCCmd = 
 	[?OPEN_CONNECTION, C_AutoCommitMode, C_TraceDriver, 
-	 C_SrollableCursors, C_TupleRow, BinaryStrings, ConnectionStr],
+	 C_SrollableCursors, C_TupleRow, BinaryStrings, ExtendedErrors, ConnectionStr],
     
     %% Send request, to open a database connection, to the control process.
     case call(ConnectionReferense, 
@@ -857,6 +861,8 @@ connection_default(trace_driver) ->
 connection_default(scrollable_cursors) ->
     {?ON, on};
 connection_default(binary_strings) ->
+    {?OFF, off};
+connection_default(extended_errors) ->
     {?OFF, off}.
 
 %%-------------------------------------------------------------------------
@@ -896,7 +902,9 @@ param_values(Params) ->
 	[{_, Values} | _] -> 
 	    Values;
 	[{_, _, Values} | _] -> 
-	    Values
+	    Values;
+	[] -> 
+	    []
     end.
 
 %%-------------------------------------------------------------------------
@@ -942,9 +950,11 @@ fix_params({sql_bit, InOut, Values}) ->
 fix_params({'sql_timestamp', InOut, Values}) ->
     NewValues =
  	case (catch 
-		  lists:map(fun({{Year,Month,Day},{Hour,Minute,Second}}) -> 
-                                {Year,Month,Day,Hour,Minute,Second}
-                        end, Values)) of
+		  lists:map(
+		    fun({{Year,Month,Day},{Hour,Minute,Second}}) ->
+			    {Year,Month,Day,Hour,Minute,Second};
+		       (null) -> null
+		    end, Values)) of
  	    Result ->
  		Result
  	end,
@@ -960,15 +970,15 @@ fix_inout(out) ->
 fix_inout(inout) ->
     ?INOUT.
 
-string_terminate([Value| _ ] = Values) when is_list(Value)->
-    case (catch 
- 	      lists:map(fun(Str) -> Str ++ [?STR_TERMINATOR] end, Values)) of
-	Result ->
-	    Result
-    end;
-string_terminate([Value| _ ] = Values) when is_binary(Value)->
-    case (catch 
-  	      lists:map(fun(B) -> <<B/binary,0:16>> end, Values)) of
+string_terminate(Values) ->
+    case (catch lists:map(fun string_terminate_value/1, Values)) of
 	Result ->
 	    Result
     end.
+
+string_terminate_value(String) when is_list(String) ->
+    String ++ [?STR_TERMINATOR];
+string_terminate_value(Binary) when is_binary(Binary) ->
+    <<Binary/binary,0:16>>;
+string_terminate_value(null) ->
+    null.

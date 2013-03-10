@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2001-2009. All Rights Reserved.
+ * Copyright Ericsson AB 2001-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -35,7 +35,7 @@ int ei_encode_fun(char *buf, int *index, const erlang_fun *p)
 	ix += sizeof(char) + 4;
 	if (ei_encode_pid(buf, &ix, &p->pid) < 0)
 	    return -1;
-	if (ei_encode_atom(buf, &ix, p->module) < 0)
+	if (ei_encode_atom_as(buf, &ix, p->module, ERLANG_UTF8, p->module_org_enc) < 0)
 	    return -1;
 	if (ei_encode_long(buf, &ix, p->index) < 0)
 	    return -1;
@@ -60,7 +60,7 @@ int ei_encode_fun(char *buf, int *index, const erlang_fun *p)
 	} else
 	    size_p = NULL;
 	ix += 1 + 4 + 1 + sizeof(p->md5) + 4 + 4;
-	if (ei_encode_atom(buf, &ix, p->module) < 0)
+	if (ei_encode_atom_as(buf, &ix, p->module, ERLANG_UTF8, p->module_org_enc) < 0)
 	    return -1;
 	if (ei_encode_long(buf, &ix, p->old_index) < 0)
 	    return -1;

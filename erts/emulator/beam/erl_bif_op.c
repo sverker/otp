@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1999-2010. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -259,11 +259,6 @@ Eterm erl_is_function(Process* p, Eterm arg1, Eterm arg2)
 	Export* exp = (Export *) EXPAND_POINTER((export_val(arg1))[1]);
 
 	if (exp->code[2] == (Uint) arity) {
-	    BIF_RET(am_true);
-	}
-    } else if (is_tuple(arg1)) {
-	Eterm* tp = tuple_val(arg1);
-	if (tp[0] == make_arityval(2) && is_atom(tp[1]) && is_atom(tp[2])) {
 	    BIF_RET(am_true);
 	}
     }

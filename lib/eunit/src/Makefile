@@ -104,10 +104,10 @@ $(OBJECTS): $(PARSE_TRANSFORM_BIN)
 # ----------------------------------------------------
 
 $(APP_TARGET): $(APP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 # ----------------------------------------------------
 # Release Target
@@ -115,12 +115,12 @@ $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(PARSE_TRANSFORM_BIN) $(OBJECTS) $(RELSYSDIR)/ebin
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(PARSE_TRANSFORM) $(SOURCES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DATA) $(INCLUDE_DELIVERABLES) $(RELSYSDIR)/include
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(PARSE_TRANSFORM_BIN) $(OBJECTS) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(PARSE_TRANSFORM) $(SOURCES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DATA) $(INCLUDE_DELIVERABLES) "$(RELSYSDIR)/include"
 
 release_docs_spec:
 

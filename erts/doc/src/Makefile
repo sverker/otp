@@ -1,7 +1,7 @@
 # 
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1997-2011. All Rights Reserved.
+# Copyright Ericsson AB 1997-2012. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -55,7 +55,6 @@ XML_REF3_EFILES = \
 XML_REF3_FILES = \
 	driver_entry.xml \
 	erl_nif.xml \
-	erl_set_memory_block.xml \
 	erl_driver.xml \
 	erl_prim_loader.xml \
 	erlang.xml \
@@ -78,6 +77,7 @@ XML_CHAPTER_FILES = \
 	inet_cfg.xml \
 	erl_ext_dist.xml \
 	erl_dist_protocol.xml \
+	communication.xml \
 	notes.xml \
 	notes_history.xml
 
@@ -158,9 +158,6 @@ $(SPECDIR)/specs_driver_entry.xml:
 $(SPECDIR)/specs_erl_nif.xml:
 	escript $(SPECS_EXTRACTOR) $(SPECS_FLAGS) \
                 -o$(dir $@) -module erl_nif
-$(SPECDIR)/specs_erl_set_memory_block.xml:
-	escript $(SPECS_EXTRACTOR) $(SPECS_FLAGS) \
-                -o$(dir $@) -module erl_set_memory_block
 $(SPECDIR)/specs_erl_driver.xml:
 	escript $(SPECS_EXTRACTOR) $(SPECS_FLAGS) \
                 -o$(dir $@) -module erl_driver
@@ -174,15 +171,15 @@ $(SPECDIR)/specs_erts_alloc.xml:
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_docs_spec: docs
-	$(INSTALL_DIR) $(RELSYSDIR)/doc/pdf
-	$(INSTALL_DATA) $(TOP_PDF_FILE) $(RELSYSDIR)/doc/pdf
-	$(INSTALL_DIR) $(RELSYSDIR)/doc/html
+	$(INSTALL_DIR) "$(RELSYSDIR)/doc/pdf"
+	$(INSTALL_DATA) $(TOP_PDF_FILE) "$(RELSYSDIR)/doc/pdf"
+	$(INSTALL_DIR) "$(RELSYSDIR)/doc/html"
 	$(INSTALL_DATA) $(HTMLDIR)/* \
-		$(RELSYSDIR)/doc/html
-	$(INSTALL_DATA) $(INFO_FILE) $(RELSYSDIR)
-	$(INSTALL_DIR) $(RELEASE_PATH)/man/man3
-	$(INSTALL_DATA) $(MAN3DIR)/* $(RELEASE_PATH)/man/man3
-	$(INSTALL_DIR) $(RELEASE_PATH)/man/man1
-	$(INSTALL_DATA) $(MAN1_FILES) $(RELEASE_PATH)/man/man1
+		"$(RELSYSDIR)/doc/html"
+	$(INSTALL_DATA) $(INFO_FILE) "$(RELSYSDIR)"
+	$(INSTALL_DIR) "$(RELEASE_PATH)/man/man3"
+	$(INSTALL_DATA) $(MAN3DIR)/* "$(RELEASE_PATH)/man/man3"
+	$(INSTALL_DIR) "$(RELEASE_PATH)/man/man1"
+	$(INSTALL_DATA) $(MAN1_FILES) "$(RELEASE_PATH)/man/man1"
 
 release_spec:

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -19,7 +19,6 @@
 
 %%
 -module(dbg_wx_trace_win).
--compile([{nowarn_deprecated_function,{gs,config,2}}]).
 
 %% External exports
 -export([init/0, stop/1]).
@@ -431,8 +430,8 @@ clear_breaks(WinInfo, Mod) ->
 %%--------------------------------------------------------------------
 %% display(Arg)
 %%   Arg = idle | {Status,Mod,Line} | {running,Mod}
-%%       ¦ {exit,Where,Reason} | {text,Text}
-%%     Status = break | wait ¦ Level
+%%       | {exit,Where,Reason} | {text,Text}
+%%     Status = break | wait | Level
 %%       Level = int()
 %%     Mod = atom()
 %%     Line = integer()
@@ -481,13 +480,9 @@ display(#winInfo{window=Win, sb=Sb},Arg) ->
 %%   Contents = string()
 %% Note: remove_code/2 should not be used for currently shown module.
 %%--------------------------------------------------------------------
-is_shown(WinInfo, Mod) ->
-    case lists:keyfind(Mod, 1, WinInfo#winInfo.editors) of
-	{Mod, Editor} ->
-	    gs:config(Editor, raise),  %% BUGBUG
-	    {true, WinInfo#winInfo{editor={Mod, Editor}}};
-	false -> false
-    end.
+is_shown(_WinInfo, _Mod) ->
+    %% Previously cached modules here, nyi so return false
+    false.
 
 show_code(WinInfo = #winInfo{editor={_, Ed}}, Mod, Contents) ->
     %% Insert code and update breakpoints, if any
@@ -572,7 +567,7 @@ update_bindings(#winInfo{bind=#sub{out=BA}}, Bs) ->
     wx:foldl(fun({Var,Val},Row) ->
 		     wxListCtrl:insertItem(BA, Row, ""), 
 		     wxListCtrl:setItem(BA, Row, 0, dbg_wx_win:to_string(Var)),
-		     wxListCtrl:setItem(BA, Row, 1, dbg_wx_win:to_string("~500P",[Val, 80])),
+		     wxListCtrl:setItem(BA, Row, 1, dbg_wx_win:to_string("~99999tP",[Val, 20])),
 		     Row+1
 	     end, 0, Bs),
     put(bindings,Bs),
@@ -858,7 +853,7 @@ handle_event(#wx{id=?EVAL_ENTRY, event=#wxCommand{type=command_text_enter}},
 handle_event(#wx{event=#wxList{type=command_list_item_selected, itemIndex=Row}},Wi) ->
     Bs = get(bindings),
     {Var,Val} = lists:nth(Row+1, Bs),
-    Str = io_lib:format("< ~s = ~p~n", [Var, Val]),
+    Str = io_lib:format("< ~s = ~lp~n", [Var, Val]),
     eval_output(Wi, Str, bold),
     ignore;
 handle_event(#wx{event=#wxList{type=command_list_item_activated, itemIndex=Row}},_Wi) ->    

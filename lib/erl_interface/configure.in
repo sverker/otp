@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2000-2011. All Rights Reserved.
+# Copyright Ericsson AB 2000-2012. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -79,7 +79,7 @@ AC_ARG_ENABLE(threads,
     no) threads_disabled=yes ;;
     *)  threads_disabled=no ;;
   esac ],
-[ threads_disabled=no ])
+[ threads_disabled=maybe ])
 
 dnl ----------------------------------------------------------------------
 dnl Checks for programs
@@ -237,12 +237,16 @@ AC_SUBST(THR_DEFS)
 AC_SUBST(EI_THREADS)
 
 case "$threads_disabled" in
-    no)
+    no|maybe)
 	LM_CHECK_THR_LIB
 
 	case "$THR_LIB_NAME" in
 	    "")
 	        EI_THREADS="false"
+		# Fail if --enable-threads given and no threads found
+		if test "x$threads_disabled" = "xno"; then
+		    AC_MSG_ERROR(No threads support found)
+		fi
 	        ;;
 	    win32_threads)
 		EI_THREADS="true"	
@@ -269,6 +273,8 @@ esac
 AC_SUBST(WFLAGS)
 
 if test "x$GCC" = xyes; then
+  # Treat certain GCC warnings as errors
+  LM_TRY_ENABLE_CFLAG([-Werror=return-type], [WERRORFLAGS])
   WFLAGS="-Wall -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wnested-externs -Winline"
   # check which GCC version
   GCC_VERSION=`$CC -v 2>&1 | sed -n 's/gcc version //p'`
@@ -283,8 +289,10 @@ if test "x$GCC" = xyes; then
     *)
         WFLAGS="$WFLAGS -fno-strict-aliasing";;
   esac
+  CFLAGS="$WERRORFLAGS $CFLAGS"
 else
   WFLAGS=""
+  WERRORFLAGS=""
 fi
 
 # ---------------------------------------------------------------------------

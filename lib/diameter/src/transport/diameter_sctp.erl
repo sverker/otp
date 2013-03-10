@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -37,11 +37,17 @@
          code_change/3,
          terminate/2]).
 
+-export([info/1]).  %% service_info callback
+
 -export([ports/0,
          ports/1]).
 
 -include_lib("kernel/include/inet_sctp.hrl").
 -include_lib("diameter/include/diameter.hrl").
+
+%% Keys into process dictionary.
+-define(INFO_KEY, info).
+-define(REF_KEY,  ref).
 
 -define(ERROR(T), erlang:error({T, ?MODULE, ?LINE})).
 
@@ -62,6 +68,7 @@
 -record(transport,
         {parent  :: pid(),
          mode :: {accept, pid()}
+               | accept
                | {connect, {list(inet:ip_address()), uint(), list()}}
                         %% {RAs, RP, Errors}
                | connect,
@@ -134,6 +141,24 @@ start_link(T) ->
                         diameter_lib:spawn_opts(server, [])).
 
 %% ---------------------------------------------------------------------------
+%% # info/1
+%% ---------------------------------------------------------------------------
+
+info({gen_sctp, Sock}) ->
+    lists:flatmap(fun(K) -> info(K, Sock) end,
+                  [{socket, sockname},
+                   {peer, peername},
+                   {statistics, getstat}]).
+
+info({K,F}, Sock) ->
+    case inet:F(Sock) of
+        {ok, V} ->
+            [{K,V}];
+        _ ->
+            []
+    end.
+
+%% ---------------------------------------------------------------------------
 %% # init/1
 %% ---------------------------------------------------------------------------
 
@@ -157,31 +182,27 @@ i({connect, Pid, Opts, Addrs, Ref}) ->
     RAs  = [diameter_lib:ipaddr(A) || {raddr, A} <- As],
     [RP] = [P || {rport, P} <- Ps] ++ [P || P <- [?DEFAULT_PORT], [] == Ps],
     {LAs, Sock} = open(Addrs, Rest, 0),
-    putr(ref, Ref),
+    putr(?REF_KEY, Ref),
     proc_lib:init_ack({ok, self(), LAs}),
     erlang:monitor(process, Pid),
     #transport{parent = Pid,
                mode = {connect, connect(Sock, RAs, RP, [])},
                socket = Sock};
-i({connect, _, _, _} = T) ->  %% from old code
-    x(T);
 
 %% An accepting transport spawned by diameter.
 i({accept, Pid, LPid, Sock, Ref})
   when is_pid(Pid) ->
-    putr(ref, Ref),
+    putr(?REF_KEY, Ref),
     proc_lib:init_ack({ok, self()}),
     erlang:monitor(process, Pid),
     erlang:monitor(process, LPid),
     #transport{parent = Pid,
                mode = {accept, LPid},
                socket = Sock};
-i({accept, _, _, _} = T) ->  %% from old code
-    x(T);
 
 %% An accepting transport spawned at association establishment.
 i({accept, Ref, LPid, Sock, Id}) ->
-    putr(ref, Ref),
+    putr(?REF_KEY, Ref),
     proc_lib:init_ack({ok, self()}),
     MRef = erlang:monitor(process, LPid),
     %% Wait for a signal that the transport has been started before
@@ -268,7 +289,7 @@ ports() ->
     Ts = diameter_reg:match({?MODULE, '_', '_'}),
     [{type(T), N, Pid} || {{?MODULE, T, {_, {_, S}}}, Pid} <- Ts,
                           {ok, N} <- [inet:port(S)]].
-    
+
 ports(Ref) ->
     Ts = diameter_reg:match({?MODULE, '_', {Ref, '_'}}),
     [{type(T), N, Pid} || {{?MODULE, T, {R, {_, S}}}, Pid} <- Ts,
@@ -325,6 +346,11 @@ terminate(_, #transport{assoc_id = undefined}) ->
     ok;
 
 terminate(_, #transport{socket = Sock,
+                        mode = accept,
+                        assoc_id = Id}) ->
+    close(Sock, Id);
+
+terminate(_, #transport{socket = Sock,
                         mode = {accept, _},
                         assoc_id = Id}) ->
     close(Sock, Id);
@@ -356,13 +382,16 @@ start_timer(S) ->
 
 %% Incoming message from SCTP.
 l({sctp, Sock, _RA, _RP, Data} = Msg, #listener{socket = Sock} = S) ->
-    setopts(Sock),
-    case find(Data, S) of
+    Id = assoc_id(Data),
+
+    try find(Id, Data, S) of
         {TPid, NewS} ->
-            TPid ! Msg,
+            TPid ! {peeloff, peeloff(Sock, Id, TPid), Msg},
             NewS;
         false ->
             S
+    after
+        setopts(Sock)
     end;
 
 %% Transport is asking message to be sent. See send/3 for why the send
@@ -430,15 +459,19 @@ t(T,S) ->
 
 %% transition/2
 
-%% Incoming message.
-transition({sctp, Sock, _RA, _RP, Data}, #transport{socket = Sock,
-                                                    mode = {accept, _}}
-                                         = S) ->
-    recv(Data, S);
+%% Listening process is transfering ownership of an association.
+transition({peeloff, Sock, {sctp, LSock, _RA, _RP, _Data} = Msg},
+           #transport{mode = {accept, _},
+                      socket = LSock}
+           = S) ->
+    transition(Msg, S#transport{socket = Sock});
 
-transition({sctp, Sock, _RA, _RP, Data}, #transport{socket = Sock} = S) ->
+%% Incoming message.
+transition({sctp, _Sock, _RA, _RP, Data}, #transport{socket = Sock} = S) ->
     setopts(Sock),
     recv(Data, S);
+%% Don't match on Sock since in R15B01 it can be the listening socket
+%% in the (peeled-off) accept case, which is likely a bug.
 
 %% Outgoing message.
 transition({diameter, {send, Msg}}, S) ->
@@ -451,18 +484,23 @@ transition({diameter, {close, Pid}}, #transport{parent = Pid}) ->
 %% TLS over SCTP is described in RFC 3436 but has limitations as
 %% described in RFC 6083. The latter describes DTLS over SCTP, which
 %% addresses these limitations, DTLS itself being described in RFC
-%% 4347. TLS is primarily used over TCP, which the current RFC 3588
-%% draft acknowledges by equating TLS with TLS/TCP and DTLS/SCTP.
+%% 4347. TLS is primarily used over TCP, which RFC 6733 acknowledges
+%% by equating TLS with TLS/TCP and DTLS/SCTP.
 transition({diameter, {tls, _Ref, _Type, _Bool}}, _) ->
+    stop;
+
+%% Parent process has died.
+transition({'DOWN', _, process, Pid, _}, #transport{parent = Pid}) ->
     stop;
 
 %% Listener process has died.
 transition({'DOWN', _, process, Pid, _}, #transport{mode = {accept, Pid}}) ->
     stop;
 
-%% Parent process has died.
-transition({'DOWN', _, process, Pid, _}, #transport{parent = Pid}) ->
-    stop;
+%% Ditto but we have ownership of the association. It might be that
+%% we'll go down anyway though.
+transition({'DOWN', _, process, _Pid, _}, #transport{mode = accept}) ->
+    ok;
 
 %% Request for the local port number.
 transition({resolve_port, Pid}, #transport{socket = Sock})
@@ -521,14 +559,6 @@ send(Bin, #transport{streams = {_, OS},
 
 %% send/3
 
-%% Messages have to be sent from the controlling process, which is
-%% probably a bug. Sending from here causes an inet_reply, Sock,
-%% Status} message to be sent to the controlling process while
-%% gen_sctp:send/4 here hangs.
-send(StreamId, Bin, #transport{assoc_id = AId,
-                               mode = {accept, LPid}}) ->
-    LPid ! {send, AId, StreamId, Bin};
-
 send(StreamId, Bin, #transport{socket = Sock,
                                assoc_id = AId}) ->
     send(Sock, AId, StreamId, Bin).
@@ -554,10 +584,8 @@ recv({_, #sctp_assoc_change{state = comm_up,
                 mode = {T, _},
                 socket = Sock}
      = S) ->
-    Ref = getr(ref),
-    is_reference(Ref)  %% started in new code
-        andalso
-        (true = diameter_reg:add_new({?MODULE, T, {Ref, {Id, Sock}}})),
+    Ref = getr(?REF_KEY),
+    publish(T, Ref, Id, Sock),
     up(S#transport{assoc_id = Id,
                    streams = {IS, OS}});
 
@@ -599,6 +627,10 @@ recv({_, #sctp_paddr_change{}}, _) ->
 recv({_, #sctp_pdapi_event{}}, _) ->
     ok.
 
+publish(T, Ref, Id, Sock) ->
+    true = diameter_reg:add_new({?MODULE, T, {Ref, {Id, Sock}}}),
+    putr(?INFO_KEY, {gen_sctp, Sock}).  %% for info/1
+
 %% up/1
 
 up(#transport{parent = Pid,
@@ -608,21 +640,15 @@ up(#transport{parent = Pid,
     S#transport{mode = C};
 
 up(#transport{parent = Pid,
-              mode = {accept, _}}
+              mode = {accept = A, _}}
    = S) ->
     diameter_peer:up(Pid),
-    S.
+    S#transport{mode = A}.
 
-%% find/2
+%% find/3
 
-find({[#sctp_sndrcvinfo{assoc_id = Id}], _}
-     = Data,
-     #listener{tmap = T}
-     = S) ->
-    f(ets:lookup(T, Id), Data, S);
-
-find({_, Rec} = Data, #listener{tmap = T} = S) ->
-    f(ets:lookup(T, assoc_id(Rec)), Data, S).
+find(Id, Data, #listener{tmap = T} = S) ->
+    f(ets:lookup(T, Id), Data, S).
 
 %% New association and a transport waiting for one: use it.
 f([],
@@ -663,16 +689,28 @@ f([], _, _) ->
 
 %% assoc_id/1
 
-assoc_id(#sctp_shutdown_event{assoc_id = Id}) ->
+assoc_id({[#sctp_sndrcvinfo{assoc_id = Id}], _}) ->
     Id;
-assoc_id(#sctp_assoc_change{assoc_id = Id}) ->
+assoc_id({_, Rec}) ->
+    id(Rec).
+
+id(#sctp_shutdown_event{assoc_id = Id}) ->
     Id;
-assoc_id(#sctp_sndrcvinfo{assoc_id = Id}) ->
+id(#sctp_assoc_change{assoc_id = Id}) ->
     Id;
-assoc_id(#sctp_paddr_change{assoc_id = Id}) ->
+id(#sctp_sndrcvinfo{assoc_id = Id}) ->
     Id;
-assoc_id(#sctp_adaptation_event{assoc_id = Id}) ->
+id(#sctp_paddr_change{assoc_id = Id}) ->
+    Id;
+id(#sctp_adaptation_event{assoc_id = Id}) ->
     Id.
+
+%% peeloff/3
+
+peeloff(LSock, Id, TPid) ->
+    {ok, Sock} = gen_sctp:peeloff(LSock, Id),
+    ok = gen_sctp:controlling_process(Sock, TPid),
+    Sock.
 
 %% connect/4
 

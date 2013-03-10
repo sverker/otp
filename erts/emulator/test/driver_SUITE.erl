@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -77,7 +77,9 @@
 	 thread_mseg_alloc_cache_clean/1,
 	 otp_9302/1,
 	 thr_free_drv/1,
-	 async_blast/1]).
+	 async_blast/1,
+	 thr_msg_blast/1,
+	 consume_timeslice/1]).
 
 -export([bin_prefix/2]).
 
@@ -147,7 +149,9 @@ all() ->
      thread_mseg_alloc_cache_clean,
      otp_9302,
      thr_free_drv,
-     async_blast].
+     async_blast,
+     thr_msg_blast,
+     consume_timeslice].
 
 groups() -> 
     [{timer, [],
@@ -1136,7 +1140,9 @@ check_driver_system_info_result(Result) ->
 	      {{1, 1}, _} ->
 		  ?line ExpNs = lists:sort(?EXPECTED_SYSTEM_INFO_NAMES
 					   -- ?EXPECTED_SYSTEM_INFO_NAMES2),
-		  ?line ExpNs = lists:sort(Ns)
+		  ?line ExpNs = lists:sort(Ns);
+	      {{2, 0}, _} ->
+		  ?line [] = Ns
 	  end.
 
 chk_sis(SIs, Ns) ->
@@ -2010,11 +2016,387 @@ async_blast(Config) when is_list(Config) ->
     ?line erlang:display({async_blast_time, AsyncBlastTime}),
     ?line ok.
 
+thr_msg_blast_receiver(_Port, N, N) ->
+    ok;
+thr_msg_blast_receiver(Port, N, Max) ->
+    receive
+	{Port, hi} ->
+	    thr_msg_blast_receiver(Port, N+1, Max)
+    end.
 
+thr_msg_blast_receiver_proc(Port, Max, Parent, Done) ->
+    case port_control(Port, 0, "") of
+	"receiver" ->
+	    spawn(fun () ->
+			  thr_msg_blast_receiver_proc(Port, Max+1, Parent, Done)
+		  end),
+	    thr_msg_blast_receiver(Port, 0, Max);
+	"done" ->
+	    Parent ! Done
+    end.
 
+thr_msg_blast(Config) when is_list(Config) ->
+    case erlang:system_info(smp_support) of
+	false ->
+	    {skipped, "Non-SMP emulator; nothing to test..."};
+	true ->
+	    Path = ?config(data_dir, Config),
+	    erl_ddll:start(),
+	    ok = load_driver(Path, thr_msg_blast_drv),
+	    MemBefore = driver_alloc_size(),
+	    Start = os:timestamp(),
+	    Port = open_port({spawn, thr_msg_blast_drv}, []),
+	    true = is_port(Port),
+	    Done = make_ref(),
+	    Me = self(),
+	    spawn(fun () ->
+			  thr_msg_blast_receiver_proc(Port, 1, Me, Done)
+		  end),
+	    receive
+		Done -> ok
+	    end,
+	    ok = thr_msg_blast_receiver(Port, 0, 32*10000),
+	    port_close(Port),
+	    End = os:timestamp(),
+	    receive
+		Garbage ->
+		    ?t:fail({received_garbage, Port, Garbage})
+	    after 2000 ->
+		    ok
+	    end,
+	    MemAfter = driver_alloc_size(),
+	    io:format("MemBefore=~p, MemAfter=~p~n",
+		      [MemBefore, MemAfter]),
+	    ThrMsgBlastTime = timer:now_diff(End,Start)/1000000,
+	    io:format("ThrMsgBlastTime=~p~n", [ThrMsgBlastTime]),
+	    MemBefore = MemAfter,
+	    Res = {thr_msg_blast_time, ThrMsgBlastTime},
+	    erlang:display(Res),
+	    Res
+    end.
+
+consume_timeslice(Config) when is_list(Config) ->
+    %%
+    %% Verify that erl_drv_consume_timeslice() works.
+    %%
+    %% The first four cases expect that the command signal is
+    %% delivered immediately, i.e., isn't scheduled. Since there
+    %% are no conflicts these signals should normally be delivered
+    %% immediately. However some builds and configurations may
+    %% schedule these ops anyway, in these cases we do not verify
+    %% scheduling counts.
+    %%
+    %% When signal is delivered immediately we must take into account
+    %% that process and port are "virtualy" scheduled out and in
+    %% in the trace generated.
+    %%
+    %% Port ! {_, {command, _}, and port_command() differs. The send
+    %% instruction needs to check if the caller is out of reductions
+    %% at the end of the instruction, since no erlang function call
+    %% is involved. Otherwise, a sequence of send instructions would
+    %% not be scheduled out even when out of reductions. port_commond()
+    %% doesn't do that since it will always (since R16A) be called via
+    %% the erlang wrappers in the erlang module.
+    %%
+    %% The last two cases tests scheduled operations. We create
+    %% a conflict by executing at the same time on different
+    %% schedulers. When only one scheduler we enable parallelism on
+    %% the port instead.
+    %%
+
+    Path = ?config(data_dir, Config),
+    erl_ddll:start(),
+    ok = load_driver(Path, consume_timeslice_drv),
+    Port = open_port({spawn, consume_timeslice_drv}, [{parallelism, false}]),
+
+    Parent = self(),
+    Go = make_ref(),
+
+    "enabled" = port_control(Port, $E, ""),
+    Proc1 = spawn_link(fun () ->
+			       receive Go -> ok end,
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}}
+		       end),
+    receive after 100 -> ok end,
+    count_pp_sched_start(),
+    Proc1 ! Go,
+    wait_command_msgs(Port, 10),
+    [{Port, Sprt1}, {Proc1, Sproc1}] = count_pp_sched_stop([Port, Proc1]),
+    case Sprt1 of
+	10 ->
+	    true = in_range(5, Sproc1-10, 7);
+	_ ->
+	    case erlang:system_info(lock_checking) of
+		true -> ?t:format("Ignore bad sched count due to lock checking", []);
+		false -> ?t:fail({unexpected_sched_counts, Sprt1, Sproc1})
+	    end
+    end,
+
+    "disabled" = port_control(Port, $D, ""),
+    Proc2 = spawn_link(fun () ->
+			       receive Go -> ok end,
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}},
+			       Port ! {Parent, {command, ""}}
+		       end),
+    receive after 100 -> ok end,
+    count_pp_sched_start(),
+    Proc2 ! Go,
+    wait_command_msgs(Port, 10),
+    [{Port, Sprt2}, {Proc2, Sproc2}] = count_pp_sched_stop([Port, Proc2]),
+    case Sprt2 of
+	10 ->
+	    true = in_range(1, Sproc2-10, 2);
+	_ ->
+	    case erlang:system_info(lock_checking) of
+		true -> ?t:format("Ignore bad sched count due to lock checking", []);
+		false -> ?t:fail({unexpected_sched_counts, Sprt2, Sproc2})
+	    end
+    end,
+
+    "enabled" = port_control(Port, $E, ""),
+    Proc3 = spawn_link(fun () ->
+			       receive Go -> ok end,
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, "")
+		       end),
+    count_pp_sched_start(),
+    Proc3 ! Go,
+    wait_command_msgs(Port, 10),
+    [{Port, Sprt3}, {Proc3, Sproc3}] = count_pp_sched_stop([Port, Proc3]),
+    case Sprt3 of
+	10 ->
+	    true = in_range(5, Sproc3-10, 7);
+	_ ->
+	    case erlang:system_info(lock_checking) of
+		true -> ?t:format("Ignore bad sched count due to lock checking", []);
+		false -> ?t:fail({unexpected_sched_counts, Sprt3, Sproc3})
+	    end
+    end,
+
+    "disabled" = port_control(Port, $D, ""),
+    Proc4 = spawn_link(fun () ->
+			       receive Go -> ok end,
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, ""),
+			       port_command(Port, "")
+		       end),
+    count_pp_sched_start(),
+    Proc4 ! Go,
+    wait_command_msgs(Port, 10),
+    [{Port, Sprt4}, {Proc4, Sproc4}] = count_pp_sched_stop([Port, Proc4]),
+    case Sprt4 of
+	10 ->
+	    true = in_range(1, Sproc4-10, 2);
+	_ ->
+	    case erlang:system_info(lock_checking) of
+		true -> ?t:format("Ignore bad sched count due to lock checking", []);
+		false -> ?t:fail({unexpected_sched_counts, Sprt4, Sproc4})
+	    end
+    end,
+
+    SOnl = erlang:system_info(schedulers_online),
+    %% If only one scheduler use port with parallelism set to true,
+    %% in order to trigger scheduling of command signals
+    Port2 = case SOnl of
+		1 ->
+		    Port ! {self(), close},
+		    receive {Port, closed} -> ok end,
+		    open_port({spawn, consume_timeslice_drv},
+			      [{parallelism, true}]);
+		_ ->
+		    process_flag(scheduler, 1),
+		    1 = erlang:system_info(scheduler_id),
+		    Port
+	    end,
+    count_pp_sched_start(),
+    "enabled" = port_control(Port2, $E, ""),
+    W5 = case SOnl of
+	     1 ->
+		 false;
+	     _ ->
+		 W1= spawn_opt(fun () ->
+				       2 = erlang:system_info(scheduler_id),
+				       "sleeped" = port_control(Port2, $S, "")
+			       end, [link,{scheduler,2}]),
+		 receive after 100 -> ok end,
+		 W1
+	 end,
+    Proc5 = spawn_opt(fun () ->
+			      receive Go -> ok end,
+			      1 = erlang:system_info(scheduler_id),
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}}
+		      end, [link,{scheduler,1}]),
+    receive after 100 -> ok end,
+    Proc5 ! Go,
+    wait_procs_exit([W5, Proc5]),
+    wait_command_msgs(Port2, 10),
+    [{Port2, Sprt5}, {Proc5, Sproc5}] = count_pp_sched_stop([Port2, Proc5]),
+    true = in_range(2, Sproc5, 3),
+    true = in_range(7, Sprt5, 20),
+		  
+    count_pp_sched_start(),
+    "disabled" = port_control(Port2, $D, ""),
+    W6 = case SOnl of
+	     1 ->
+		 false;
+	     _ ->
+		 W2= spawn_opt(fun () ->
+				       2 = erlang:system_info(scheduler_id),
+				       "sleeped" = port_control(Port2, $S, "")
+			       end, [link,{scheduler,2}]),
+		 receive after 100 -> ok end,
+		 W2
+	 end,
+    Proc6 = spawn_opt(fun () ->
+			      receive Go -> ok end,
+			      1 = erlang:system_info(scheduler_id),
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}},
+			      Port2 ! {Parent, {command, ""}}
+		      end, [link,{scheduler,1}]),
+    receive after 100 -> ok end,
+    Proc6 ! Go,
+    wait_procs_exit([W6, Proc6]),
+    wait_command_msgs(Port2, 10),
+    [{Port2, Sprt6}, {Proc6, Sproc6}] = count_pp_sched_stop([Port2, Proc6]),
+    true = in_range(2, Sproc6, 3),
+    true = in_range(3, Sprt6, 6),
+
+    process_flag(scheduler, 0),
+
+    Port2 ! {self(), close},
+    receive {Port2, closed} -> ok end,
+    ok.
+
+wait_command_msgs(_, 0) ->
+    ok;
+wait_command_msgs(Port, N) ->
+    receive
+	{Port, command} ->
+	    wait_command_msgs(Port, N-1)
+    end.
+
+in_range(Low, Val, High) when is_integer(Low),
+			      is_integer(Val),
+			      is_integer(High),
+			      Low =< Val,
+			      Val =< High ->
+    true;
+in_range(Low, Val, High) when is_integer(Low),
+			      is_integer(Val),
+			      is_integer(High) ->
+    false.
+
+count_pp_sched_start() ->
+    erlang:trace(all, true, [running_procs, running_ports, {tracer, self()}]),
+    ok.
+
+count_pp_sched_stop(Ps) ->
+    Td = erlang:trace_delivered(all),
+    erlang:trace(all, false, [running_procs, running_ports, {tracer, self()}]),
+    PNs = lists:map(fun (P) -> {P, 0} end, Ps),
+    receive {trace_delivered, all, Td} -> ok end,
+    Res = count_proc_sched(Ps, PNs),
+    ?t:format("Scheduling counts: ~p~n", [Res]),
+    erlang:display({scheduling_counts, Res}),
+    Res.
+
+do_inc_pn(_P, []) ->
+    throw(undefined);
+do_inc_pn(P, [{P,N}|PNs]) ->
+    [{P,N+1}|PNs];
+do_inc_pn(P, [PN|PNs]) ->
+    [PN|do_inc_pn(P, PNs)].
+
+inc_pn(P, PNs) ->
+    try
+	do_inc_pn(P, PNs)
+    catch
+	throw:undefined -> PNs
+    end.
+
+count_proc_sched(Ps, PNs) ->
+    receive
+	TT when element(1, TT) == trace, element(3, TT) == in ->
+%	    erlang:display(TT),
+	    count_proc_sched(Ps, inc_pn(element(2, TT), PNs));
+	TT when element(1, TT) == trace, element(3, TT) == out ->
+	    count_proc_sched(Ps, PNs)
+    after 0 ->
+	    PNs
+    end.
+    
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 		Utilities
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%flush_msgs() ->
+%    receive
+%	M ->
+%	    erlang:display(M),
+%	    flush_msgs()
+%    after 0 ->
+%	    ok
+%    end.
+
+wait_procs_exit([]) ->
+    ok;
+wait_procs_exit([P|Ps]) when is_pid(P) ->
+    Mon = erlang:monitor(process, P),
+    receive
+	{'DOWN', Mon, process, P, _} ->
+	    wait_procs_exit(Ps)
+    end;
+wait_procs_exit([_|Ps]) ->
+    wait_procs_exit(Ps).
 
 get_port_msg(Port, Timeout) ->
     receive

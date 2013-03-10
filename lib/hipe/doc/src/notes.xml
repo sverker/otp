@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2006</year><year>2011</year>
+      <year>2006</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -29,6 +29,136 @@
     <file>notes.xml</file>
   </header>
   <p>This document describes the changes made to HiPE.</p>
+
+<section><title>Hipe 3.10.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Bug fixed in hipe to where it did not allow unicode code
+	    points 16#FFFE and 16#FFFF in bit syntax in natively
+	    compiled modules.</p>
+          <p>
+	    Own Id: OTP-10867</p>
+        </item>
+        <item>
+          <p>
+	    Fix bug in hipe compiled code related to the handling of
+	    <c>is_number/1</c>. (Thanks to Sebastian Egner and
+	    Johannes Weiﬂl for minimal test code and Kostis for quick
+	    patch)</p>
+          <p>
+	    Own Id: OTP-10897</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Hipe 3.10</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p> The type <c>ascii_string()</c> in the <c>base64</c>
+	    module has been corrected. The type
+	    <c>file:file_info()</c> has been cleaned up. The type
+	    <c>file:fd()</c> has been made opaque in the
+	    documentation. </p>
+          <p>
+	    Own Id: OTP-10624 Aux Id: kunagi-352 [263] </p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+	    <p> Support for Unicode has been implemented. </p>
+          <p>
+	    Own Id: OTP-10302</p>
+        </item>
+        <item>
+	    <p>Where necessary a comment stating encoding has been
+	    added to Erlang files. The comment is meant to be removed
+	    in Erlang/OTP R17B when UTF-8 becomes the default
+	    encoding. </p>
+          <p>
+	    Own Id: OTP-10630</p>
+        </item>
+        <item>
+          <p>
+	    Update .gitignore (lib/hipe/boot_ebin). Thanks to Tuncer
+	    Ayaz.</p>
+          <p>
+	    Own Id: OTP-10705</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Hipe 3.9.3</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    A faulty spec for process_info/2 could cause false
+	    dialyzer warnings. The spec is corrected.</p>
+          <p>
+	    Own Id: OTP-10584</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Hipe 3.9.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p> Correct handling of type names in contracts. Fix
+	    crash related to contract checking. Do not rewrite
+	    unchanged PLT. </p>
+          <p>
+	    Own Id: OTP-10083</p>
+        </item>
+        <item>
+          <p>
+	    Changes in comments and minor code cleanups</p>
+          <p>
+	    Thanks to Kostis Sagonas.</p>
+          <p>
+	    Own Id: OTP-10230</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Remove all code, documentation, options and diagnostic
+	    functions which were related to the experimental hybrid
+	    heap implementation.</p>
+          <p>
+	    Own Id: OTP-10105</p>
+        </item>
+        <item>
+	    <p> Bugs in <c>erl_types:t_inf()</c> (HiPE) and in
+	    <c>dialyzer_dataflow</c> (Dialyzer) have been fixed. </p>
+          <p>
+	    Own Id: OTP-10191</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Hipe 3.9.1</title>
 

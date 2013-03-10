@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -31,9 +31,6 @@
 %% Also in qlc.erl.
 -define(QLC_Q(L1, L2, L3, L4, LC, Os), 
         {call,L1,{remote,L2,{atom,L3,?APIMOD},{atom,L4,?Q}},[LC | Os]}).
--define(QLC_QQ(L1, L2, L3, L4, L5, L6, LC, Os), % packages...
-        {call,L1,{remote,L2,{record_field,L3,{atom,L4,''},
-                             {atom,L5,?APIMOD}},{atom,L6,?Q}},[LC | Os]}).
 -define(IMP_Q(L1, L2, LC, Os), {call,L,{atom,L2,?Q},[LC | Os]}).
 
 %% Also in qlc.erl.
@@ -217,7 +214,7 @@ compile_messages(Forms, FormsNoShadows, Options, State) ->
             end,
     {_,BGens} = qual_fold(BGenF, [], [], FormsNoShadows, State),
     GenForm = used_genvar_check(FormsNoShadows, State),
-    ?DEBUG("GenForm = ~s~n", [catch erl_pp:form(GenForm)]),
+    ?DEBUG("GenForm = ~ts~n", [catch erl_pp:form(GenForm)]),
     WarnFun = fun(Id, LC, A) -> {tag_lines(LC, get_lcid_no(Id)), A} end,
     {WForms,ok} = qlc_mapfold(WarnFun, ok, Forms, State),
     {Es,Ws} = compile_forms(WForms ++ [GenForm], Options),
@@ -340,7 +337,7 @@ compile_errors(FormsNoShadows) ->
         {[], _Warnings} ->
             [];
         {Errors, _Warnings} ->
-            ?DEBUG("got errors ~p~n", [Errors]),
+            ?DEBUG("got errors ~tp~n", [Errors]),
             lists:flatmap(fun({_File,Es}) -> Es end, Errors)
     end.
 
@@ -2475,13 +2472,6 @@ qlcmf(?QLC_Q(L1, L2, L3, L4, LC0, Os0), F, Imp, A0, No0) when length(Os0) < 2 ->
     NL = make_lcid(L1, No),
     {T, A} = F(NL, LC, A2),
     {?QLC_Q(L1, L2, L3, L4, T, Os), A, No + 1};
-qlcmf(?QLC_QQ(L1, L2, L3, L4, L5, L6, LC0, Os0),
-      F, Imp, A0, No0) when length(Os0) < 2 ->
-    {Os, A1, No1} = qlcmf(Os0, F, Imp, A0, No0),
-    {LC, A2, No} = qlcmf(LC0, F, Imp, A1, No1), % nested...
-    NL = make_lcid(L1, No),
-    {T, A} = F(NL, LC, A2),
-    {?QLC_QQ(L1, L2, L3, L4, L5, L6, T, Os), A, No + 1};
 qlcmf(?IMP_Q(L1, L2, LC0, Os0), F, Imp=true, A0, No0) when length(Os0) < 2 ->
     {Os, A1, No1} = qlcmf(Os0, F, Imp, A0, No0),
     {LC, A2, No} = qlcmf(LC0, F, Imp, A1, No1), % nested...
@@ -2752,7 +2742,7 @@ family(L) ->
 display_forms(Forms) ->
     io:format("Forms ***~n"),
     lists:foreach(fun(Form) ->
-                          io:format("~s~n", [catch erl_pp:form(Form)])
+                          io:format("~ts~n", [catch erl_pp:form(Form)])
                   end, Forms),
     io:format("End Forms ***~n").
 -else.

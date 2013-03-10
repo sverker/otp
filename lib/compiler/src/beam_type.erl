@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -29,10 +29,17 @@ module({Mod,Exp,Attr,Fs0,Lc}, _Opts) ->
     {ok,{Mod,Exp,Attr,Fs,Lc}}.
 
 function({function,Name,Arity,CLabel,Asm0}) ->
-    Asm1 = beam_utils:live_opt(Asm0),
-    Asm2 = opt(Asm1, [], tdb_new()),
-    Asm = beam_utils:delete_live_annos(Asm2),
-    {function,Name,Arity,CLabel,Asm}.
+    try
+	Asm1 = beam_utils:live_opt(Asm0),
+	Asm2 = opt(Asm1, [], tdb_new()),
+	Asm = beam_utils:delete_live_annos(Asm2),
+	{function,Name,Arity,CLabel,Asm}
+    catch
+	Class:Error ->
+	    Stack = erlang:get_stacktrace(),
+	    io:fwrite("Function: ~w/~w\n", [Name,Arity]),
+	    erlang:raise(Class, Error, Stack)
+    end.
 
 %% opt([Instruction], Accumulator, TypeDb) -> {[Instruction'],TypeDb'}
 %%  Keep track of type information; try to simplify.
@@ -135,9 +142,11 @@ simplify_float(Is0, Ts0) ->
 	throw:not_possible -> not_possible
     end.
 
-simplify_float_1([{set,[D0],[A],{alloc,_,{gc_bif,'-',{f,0}}}}=I|Is]=Is0, Ts0, Rs0, Acc0) ->
-    case tdb_find(A, Ts0) of
+simplify_float_1([{set,[D0],[A0],{alloc,_,{gc_bif,'-',{f,0}}}}=I|Is]=Is0,
+		 Ts0, Rs0, Acc0) ->
+    case tdb_find(A0, Ts0) of
 	float ->
+	    A = coerce_to_float(A0),
 	    {Rs1,Acc1} = load_reg(A, Ts0, Rs0, Acc0),
 	    {D,Rs} = find_dest(D0, Rs1),
 	    Areg = fetch_reg(A, Rs),
@@ -149,13 +158,16 @@ simplify_float_1([{set,[D0],[A],{alloc,_,{gc_bif,'-',{f,0}}}}=I|Is]=Is0, Ts0, Rs
 	    {Rs,Acc} = flush(Rs0, Is0, Acc0),
 	    simplify_float_1(Is, Ts, Rs, [I|checkerror(Acc)])
     end;
-simplify_float_1([{set,[D0],[A,B],{alloc,_,{gc_bif,Op0,{f,0}}}}=I|Is]=Is0, Ts0, Rs0, Acc0) ->
-    case float_op(Op0, A, B, Ts0) of
+simplify_float_1([{set,[D0],[A0,B0],{alloc,_,{gc_bif,Op0,{f,0}}}}=I|Is]=Is0,
+		 Ts0, Rs0, Acc0) ->
+    case float_op(Op0, A0, B0, Ts0) of
 	no ->
 	    Ts = update(I, Ts0),
 	    {Rs,Acc} = flush(Rs0, Is0, Acc0),
 	    simplify_float_1(Is, Ts, Rs, [I|checkerror(Acc)]);
 	{yes,Op} ->
+	    A = coerce_to_float(A0),
+	    B = coerce_to_float(B0),
 	    {Rs1,Acc1} = load_reg(A, Ts0, Rs0, Acc0),
 	    {Rs2,Acc2} = load_reg(B, Ts0, Rs1, Acc1),
 	    {D,Rs} = find_dest(D0, Rs2),
@@ -179,6 +191,16 @@ simplify_float_1([], Ts, Rs, Acc0) ->
     Is0 = reverse(flush_all(Rs, [], Acc)),
     Is = opt_fmoves(Is0, []),
     {Is,Ts}.
+
+coerce_to_float({integer,I}=Int) ->
+    try float(I) of
+	F ->
+	    {float,F}
+    catch _:_ ->
+	    %% Let the overflow happen at run-time.
+	    Int
+    end;
+coerce_to_float(Other) -> Other.
 
 opt_fmoves([{set,[{x,_}=R],[{fr,_}]=Src,fmove}=I1,
 	    {set,[_]=Dst,[{x,_}=R],move}=I2|Is], Acc) ->

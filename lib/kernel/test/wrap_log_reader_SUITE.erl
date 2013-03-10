@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1998-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -557,7 +557,7 @@ rec(M, Where) ->
         M ->
             ok;
         Else -> ?t:fail({error, {Where, Else}})
-    after 1000 -> ?t:fail({error, {Where, time_out}})
+    after 5000 -> ?t:fail({error, {Where, time_out}})
     end.
 	    
 pps() ->

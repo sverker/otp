@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -20,85 +20,19 @@
 %%
 -module(public_key_SUITE).
 
+-include_lib("common_test/include/ct.hrl").
+-include_lib("public_key/include/public_key.hrl").
+
 %% Note: This directive should only be used in test suites.
 -compile(export_all).
 
-%%-include_lib("common_test/include/ct.hrl").
--include_lib("test_server/include/test_server.hrl").
-
--include_lib("public_key/include/public_key.hrl").
-
 -define(TIMEOUT, 120000). % 2 min
 
-%% Test server callback functions
-%%--------------------------------------------------------------------
-%% Function: init_per_suite(Config) -> Config
-%% Config - [tuple()]
-%%   A list of key/value pairs, holding the test case configuration.
-%% Description: Initialization before the whole suite
-%%
-%% Note: This function is free to add any key/value pairs to the Config
-%% variable, but should NOT alter/remove any existing entries.
-%%--------------------------------------------------------------------
-init_per_suite(Config) ->
-    try crypto:start() of
-	ok ->
-	    Config
-    catch _:_ ->
-	    {skip, "Crypto did not start"}
-    end.
-%%--------------------------------------------------------------------
-%% Function: end_per_suite(Config) -> _
-%% Config - [tuple()]
-%%   A list of key/value pairs, holding the test case configuration.
-%% Description: Cleanup after the whole suite
-%%--------------------------------------------------------------------
-end_per_suite(_Config) ->
-    application:stop(crypto).
 
 %%--------------------------------------------------------------------
-%% Function: init_per_testcase(TestCase, Config) -> Config
-%% Case - atom()
-%%   Name of the test case that is about to be run.
-%% Config - [tuple()]
-%%   A list of key/value pairs, holding the test case configuration.
-%%
-%% Description: Initialization before each test case
-%%
-%% Note: This function is free to add any key/value pairs to the Config
-%% variable, but should NOT alter/remove any existing entries.
-%% Description: Initialization before each test case
+%% Common Test interface functions -----------------------------------
 %%--------------------------------------------------------------------
-init_per_testcase(_TestCase, Config0) ->
-    Config = lists:keydelete(watchdog, 1, Config0),
-    Dog = test_server:timetrap(?TIMEOUT),
-    [{watchdog, Dog} | Config].
 
-%%--------------------------------------------------------------------
-%% Function: end_per_testcase(TestCase, Config) -> _
-%% Case - atom()
-%%   Name of the test case that is about to be run.
-%% Config - [tuple()]
-%%   A list of key/value pairs, holding the test case configuration.
-%% Description: Cleanup after each test case
-%%--------------------------------------------------------------------
-end_per_testcase(_TestCase, Config) ->
-    Dog = ?config(watchdog, Config),
-    case Dog of 
-	undefined ->
-	    ok;
-	_ ->
-	    test_server:timetrap_cancel(Dog)
-    end.
-
-%%--------------------------------------------------------------------
-%% Function: all(Clause) -> TestCases
-%% Clause - atom() - suite | doc
-%% TestCases - [Case] 
-%% Case - atom()
-%%   Name of a test case.
-%% Description: Returns a list of all test cases in this test suite
-%%--------------------------------------------------------------------
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
@@ -107,11 +41,11 @@ all() ->
      {group, ssh_public_key_decode_encode},
      encrypt_decrypt,
      {group, sign_verify},
-     pkix, pkix_path_validation].
+     pkix, pkix_countryname, pkix_path_validation].
 
 groups() -> 
     [{pem_decode_encode, [], [dsa_pem, rsa_pem, encrypted_pem,
-			      dh_pem, cert_pem]},
+			      dh_pem, cert_pem, pkcs10_pem]},
      {ssh_public_key_decode_encode, [],
       [ssh_rsa_public_key, ssh_dsa_public_key, ssh_rfc4716_rsa_comment,
        ssh_rfc4716_dsa_comment, ssh_rfc4716_rsa_subject, ssh_known_hosts,
@@ -119,30 +53,46 @@ groups() ->
        ssh_openssh_public_key_long_header]},
      {sign_verify, [], [rsa_sign_verify, dsa_sign_verify]}
     ].
+%%-------------------------------------------------------------------
+init_per_suite(Config) ->
+    try crypto:start() of
+	ok ->
+	    Config
+    catch _:_ ->
+	    {skip, "Crypto did not start"}
+    end.
 
+end_per_suite(_Config) ->
+    application:stop(crypto).
+
+%%-------------------------------------------------------------------
 init_per_group(_GroupName, Config) ->
     Config.
 
 end_per_group(_GroupName, Config) ->
     Config.
+%%-------------------------------------------------------------------
+init_per_testcase(_TestCase, Config0) ->
+    Config = lists:keydelete(watchdog, 1, Config0),
+    Dog = ct:timetrap(?TIMEOUT),
+    [{watchdog, Dog} | Config].
 
 
-%% Test cases starts here.
+end_per_testcase(_TestCase, _Config) ->
+    ok.
+%%--------------------------------------------------------------------
+%% Test Cases --------------------------------------------------------
 %%--------------------------------------------------------------------
 
-app(doc) ->
-    "Test that the public_key app file is ok";
-app(suite) ->
-    [];
+app() ->
+    [{doc, "Test that the public_key app file is ok"}].
 app(Config) when is_list(Config) ->
-    ok = test_server:app_test(public_key).
+    ok = ?t:app_test(public_key).
 
 %%--------------------------------------------------------------------
 
-dsa_pem(doc) ->
-    [""];
-dsa_pem(suite) ->
-    [];
+dsa_pem() ->
+    [{doc, "DSA PEM-file decode/encode"}].
 dsa_pem(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -164,10 +114,8 @@ dsa_pem(Config) when is_list(Config) ->
 
 %%--------------------------------------------------------------------
 
-rsa_pem(doc) ->
-    [""];
-rsa_pem(suite) ->
-    [];
+rsa_pem() ->
+    [{doc, "RSA PEM-file decode/encode"}].
 rsa_pem(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
     [{'RSAPrivateKey', DerRSAKey, not_encrypted} =  Entry0 ] =
@@ -201,10 +149,8 @@ rsa_pem(Config) when is_list(Config) ->
 
 %%--------------------------------------------------------------------
 
-encrypted_pem(doc) ->
-    [""];
-encrypted_pem(suite) ->
-    [];
+encrypted_pem() ->
+    [{doc, "Encrypted PEM-file decode/encode"}].
 encrypted_pem(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -234,10 +180,8 @@ encrypted_pem(Config) when is_list(Config) ->
     
 %%--------------------------------------------------------------------
 
-dh_pem(doc) ->
-    [""];
-dh_pem(suite) ->
-    [];
+dh_pem() ->
+    [{doc, "DH parametrs PEM-file decode/encode"}].
 dh_pem(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
     [{'DHParameter', DerDH, not_encrypted} = Entry] =
@@ -249,12 +193,41 @@ dh_pem(Config) when is_list(Config) ->
     DHParameter = public_key:pem_entry_decode(Entry),
 
     Entry = public_key:pem_entry_encode('DHParameter', DHParameter).
-   
+
 %%--------------------------------------------------------------------
-cert_pem(doc) ->
-    [""];
-cert_pem(suite) ->
-    [];
+
+pkcs10_pem() ->
+   [{doc, "PKCS-10 PEM-file decode/encode"}].
+pkcs10_pem(Config) when is_list(Config) ->
+    Datadir = ?config(data_dir, Config),
+    [{'CertificationRequest', DerPKCS10, not_encrypted} = Entry] =
+	erl_make_certs:pem_to_der(filename:join(Datadir, "req.pem")),
+
+    erl_make_certs:der_to_pem(filename:join(Datadir, "new_req.pem"), [Entry]),
+
+    PKCS10 = public_key:der_decode('CertificationRequest', DerPKCS10),
+    PKCS10 = public_key:pem_entry_decode(Entry),
+
+    Entry = public_key:pem_entry_encode('CertificationRequest', PKCS10).
+
+%%--------------------------------------------------------------------
+pkcs7_pem() ->
+    [{doc, "PKCS-7 PEM-file decode/encode"}].
+pkcs7_pem(Config) when is_list(Config) ->
+    Datadir = ?config(data_dir, Config),
+    [{'ContentInfo', DerPKCS7, not_encrypted} = Entry] =
+	erl_make_certs:pem_to_der(filename:join(Datadir, "pkcs7_cert.pem")),
+
+    erl_make_certs:der_to_pem(filename:join(Datadir, "new_pkcs7_cert.pem"), [Entry]),
+
+    PKCS7 = public_key:der_decode('ContentInfo', DerPKCS7),
+    PKCS7 = public_key:pem_entry_decode(Entry),
+
+    Entry = public_key:pem_entry_encode('ContentInfo', PKCS7).
+
+%%--------------------------------------------------------------------
+cert_pem() ->
+    [{doc, "Certificate PEM-file decode/encode"}].
 cert_pem(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -280,10 +253,8 @@ cert_pem(Config) when is_list(Config) ->
     [Entry0] = erl_make_certs:pem_to_der(filename:join(Datadir, "wdsa.pem")).
 
 %%--------------------------------------------------------------------
-ssh_rsa_public_key(doc) ->
-    "";
-ssh_rsa_public_key(suite) ->
-    [];
+ssh_rsa_public_key() ->
+    [{doc, "ssh rsa public key decode/encode"}].
 ssh_rsa_public_key(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -308,10 +279,8 @@ ssh_rsa_public_key(Config) when is_list(Config) ->
 
 %%--------------------------------------------------------------------
 
-ssh_dsa_public_key(doc) ->
-    "";
-ssh_dsa_public_key(suite) ->
-    [];
+ssh_dsa_public_key() ->
+    [{doc, "ssh dsa public key decode/encode"}].
 ssh_dsa_public_key(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -335,10 +304,8 @@ ssh_dsa_public_key(Config) when is_list(Config) ->
 	public_key:ssh_decode(EncodedOpenSsh, public_key).
 
 %%--------------------------------------------------------------------
-ssh_rfc4716_rsa_comment(doc) ->
-       "Test comment header and rsa key";
-ssh_rfc4716_rsa_comment(suite) ->
-    [];
+ssh_rfc4716_rsa_comment() ->
+    [{doc, "Test comment header and rsa key"}].
 ssh_rfc4716_rsa_comment(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -353,10 +320,8 @@ ssh_rfc4716_rsa_comment(Config) when is_list(Config) ->
     RSARawSsh2 = public_key:ssh_encode([{PubKey, Attributes}], rfc4716_public_key).
 
 %%--------------------------------------------------------------------
-ssh_rfc4716_dsa_comment(doc) ->
-       "Test comment header and dsa key";
-ssh_rfc4716_dsa_comment(suite) ->
-    [];
+ssh_rfc4716_dsa_comment() ->
+     [{doc, "Test comment header and dsa key"}].
 ssh_rfc4716_dsa_comment(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -375,10 +340,8 @@ ssh_rfc4716_dsa_comment(Config) when is_list(Config) ->
         public_key:ssh_decode(Encoded, public_key).
 
 %%--------------------------------------------------------------------
-ssh_rfc4716_rsa_subject(doc) ->
-       "Test another header value than comment";
-ssh_rfc4716_rsa_subject(suite) ->
-    [];
+ssh_rfc4716_rsa_subject() ->
+    [{doc,  "Test another header value than comment"}].
 ssh_rfc4716_rsa_subject(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -397,16 +360,25 @@ ssh_rfc4716_rsa_subject(Config) when is_list(Config) ->
         public_key:ssh_decode(Encoded, public_key).
 
 %%--------------------------------------------------------------------
-ssh_known_hosts(doc) ->
-    "";
-ssh_known_hosts(suite) ->
-    [];
+ssh_known_hosts() ->
+    [{doc, "ssh known hosts file encode/decode"}].
 ssh_known_hosts(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
     {ok, SshKnownHosts} = file:read_file(filename:join(Datadir, "known_hosts")),
-    [{#'RSAPublicKey'{}, Attributes1}, {#'RSAPublicKey'{}, Attributes2}] = Decoded =
+    [{#'RSAPublicKey'{}, Attributes1}, {#'RSAPublicKey'{}, Attributes2},
+     {#'RSAPublicKey'{}, Attributes3}, {#'RSAPublicKey'{}, Attributes4}] = Decoded =
         public_key:ssh_decode(SshKnownHosts, known_hosts),
+
+    Comment1 = undefined,
+    Comment2 = "foo@bar.com",
+    Comment3 = "Comment with whitespaces",
+    Comment4 = "foo@bar.com Comment with whitespaces",
+    	
+    Comment1 = proplists:get_value(comment, Attributes1, undefined),
+    Comment2 = proplists:get_value(comment, Attributes2),
+    Comment3 = proplists:get_value(comment, Attributes3),
+    Comment4 = proplists:get_value(comment, Attributes4),	
 
     Value1 = proplists:get_value(hostnames, Attributes1, undefined),
     Value2 = proplists:get_value(hostnames, Attributes2, undefined),
@@ -417,66 +389,82 @@ ssh_known_hosts(Config) when is_list(Config) ->
 
 %%--------------------------------------------------------------------
 
-ssh1_known_hosts(doc) ->
-    "";
-ssh1_known_hosts(suite) ->
-    [];
+ssh1_known_hosts() ->
+    [{doc, "ssh (ver 1) known hosts file encode/decode"}].
 ssh1_known_hosts(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
     {ok, SshKnownHosts} = file:read_file(filename:join(Datadir, "ssh1_known_hosts")),
-    [{#'RSAPublicKey'{}, Attributes1}, {#'RSAPublicKey'{}, Attributes2}] = Decoded =
-        public_key:ssh_decode(SshKnownHosts, known_hosts),
+    [{#'RSAPublicKey'{}, Attributes1}, {#'RSAPublicKey'{}, Attributes2},{#'RSAPublicKey'{}, Attributes3}] 
+	= Decoded = public_key:ssh_decode(SshKnownHosts, known_hosts),
 
     Value1 = proplists:get_value(hostnames, Attributes1, undefined),
     Value2 = proplists:get_value(hostnames, Attributes2, undefined),
     true = (Value1 =/= undefined) and (Value2 =/= undefined),
 
+    Comment ="dhopson@VMUbuntu-DSH comment with whitespaces",
+    Comment = proplists:get_value(comment, Attributes3),
+
     Encoded = public_key:ssh_encode(Decoded, known_hosts),
     Decoded = public_key:ssh_decode(Encoded, known_hosts).
 
 %%--------------------------------------------------------------------
-ssh_auth_keys(doc) ->
-    "";
-ssh_auth_keys(suite) ->
-    [];
+ssh_auth_keys() ->
+    [{doc, "ssh authorized keys file encode/decode"}].
 ssh_auth_keys(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
     {ok, SshAuthKeys} = file:read_file(filename:join(Datadir, "auth_keys")),
-    [{#'RSAPublicKey'{}, Attributes1}, {{_, #'Dss-Parms'{}}, _Attributes2}] = Decoded =
+    [{#'RSAPublicKey'{}, Attributes1}, {{_, #'Dss-Parms'{}}, Attributes2},
+     {#'RSAPublicKey'{}, Attributes3}, {{_, #'Dss-Parms'{}}, Attributes4}
+    ] = Decoded =
         public_key:ssh_decode(SshAuthKeys, auth_keys),
 
     Value1 = proplists:get_value(options, Attributes1, undefined),
     true = Value1 =/= undefined,
 
+    Comment1 = Comment2 = "dhopson@VMUbuntu-DSH",
+    Comment3 = Comment4 ="dhopson@VMUbuntu-DSH comment with whitespaces",
+    
+    Comment1 = proplists:get_value(comment, Attributes1),
+    Comment2 = proplists:get_value(comment, Attributes2),
+    Comment3 = proplists:get_value(comment, Attributes3),
+    Comment4 = proplists:get_value(comment, Attributes4),
+
     Encoded = public_key:ssh_encode(Decoded, auth_keys),
     Decoded = public_key:ssh_decode(Encoded, auth_keys).
 
 %%--------------------------------------------------------------------
-ssh1_auth_keys(doc) ->
-    "";
-ssh1_auth_keys(suite) ->
-    [];
+ssh1_auth_keys() ->
+    [{doc, "ssh (ver 1) authorized keys file encode/decode"}].
 ssh1_auth_keys(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
     {ok, SshAuthKeys} = file:read_file(filename:join(Datadir, "ssh1_auth_keys")),
-    [{#'RSAPublicKey'{}, Attributes1}, {#'RSAPublicKey'{}, Attributes2}] = Decoded =
+    [{#'RSAPublicKey'{}, Attributes1},
+     {#'RSAPublicKey'{}, Attributes2}, {#'RSAPublicKey'{}, Attributes3},
+     {#'RSAPublicKey'{}, Attributes4}, {#'RSAPublicKey'{}, Attributes5}] = Decoded =
         public_key:ssh_decode(SshAuthKeys, auth_keys),
 
-    Value1 = proplists:get_value(bits, Attributes1, undefined),
-    Value2 = proplists:get_value(bits, Attributes2, undefined),
+    Value1 = proplists:get_value(bits, Attributes2, undefined),
+    Value2 = proplists:get_value(bits, Attributes3, undefined),
     true = (Value1 =/= undefined) and (Value2 =/= undefined),
+
+    Comment2 = Comment3 = "dhopson@VMUbuntu-DSH",
+    Comment4 = Comment5 ="dhopson@VMUbuntu-DSH comment with whitespaces",
+    
+    undefined = proplists:get_value(comment, Attributes1, undefined),
+    Comment2 = proplists:get_value(comment, Attributes2),
+    Comment3 = proplists:get_value(comment, Attributes3),
+    Comment4 = proplists:get_value(comment, Attributes4),
+    Comment5 = proplists:get_value(comment, Attributes5),
 
     Encoded = public_key:ssh_encode(Decoded, auth_keys),
     Decoded = public_key:ssh_decode(Encoded, auth_keys).
 
 %%--------------------------------------------------------------------
-ssh_openssh_public_key_with_comment(doc) ->
-    "Test that emty lines and lines starting with # are ignored";
-ssh_openssh_public_key_with_comment(suite) ->
-    [];
+ssh_openssh_public_key_with_comment() ->
+    [{doc, "Test that emty lines and lines starting with # are ignored"}].
 ssh_openssh_public_key_with_comment(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -484,10 +472,8 @@ ssh_openssh_public_key_with_comment(Config) when is_list(Config) ->
     [{{_, #'Dss-Parms'{}}, _}] = public_key:ssh_decode(DSARawOpenSsh, openssh_public_key).
 
 %%--------------------------------------------------------------------
-ssh_openssh_public_key_long_header(doc) ->
-    "Test that long headers are handled";
-ssh_openssh_public_key_long_header(suite) ->
-    [];
+ssh_openssh_public_key_long_header() ->
+  [{doc, "Test that long headers are handled"}].
 ssh_openssh_public_key_long_header(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
 
@@ -498,10 +484,8 @@ ssh_openssh_public_key_long_header(Config) when is_list(Config) ->
     Decoded = public_key:ssh_decode(Encoded, rfc4716_public_key).
 
 %%--------------------------------------------------------------------
-encrypt_decrypt(doc) -> 
-    [""];
-encrypt_decrypt(suite) -> 
-    [];
+encrypt_decrypt() ->
+    [{doc, "Test public_key:encrypt_private and public_key:decrypt_public"}].
 encrypt_decrypt(Config) when is_list(Config) -> 
     {PrivateKey, _DerKey} = erl_make_certs:gen_rsa(64),
     #'RSAPrivateKey'{modulus=Mod, publicExponent=Exp} = PrivateKey,
@@ -518,10 +502,8 @@ encrypt_decrypt(Config) when is_list(Config) ->
     ok.
        
 %%--------------------------------------------------------------------
-rsa_sign_verify(doc) ->
-    ["Checks that we can sign and verify rsa signatures."];
-rsa_sign_verify(suite) ->
-    [];
+rsa_sign_verify() ->
+    [{doc, "Checks that we can sign and verify rsa signatures."}].
 rsa_sign_verify(Config) when is_list(Config) ->
     Ca = {_, CaKey} = erl_make_certs:make_cert([]),
     {Cert1, _} = erl_make_certs:make_cert([{key, dsa}, {issuer, Ca}]),
@@ -541,10 +523,8 @@ rsa_sign_verify(Config) when is_list(Config) ->
     
 %%--------------------------------------------------------------------
 
-dsa_sign_verify(doc) ->
-    ["Checks that we can sign and verify dsa signatures."];
-dsa_sign_verify(suite) ->
-    [];
+dsa_sign_verify() ->
+    [{doc, "Checks that we can sign and verify dsa signatures."}].
 dsa_sign_verify(Config) when is_list(Config) ->
     Ca = erl_make_certs:make_cert([]),
     CertInfo = {_,CertKey1} = erl_make_certs:make_cert([{key, dsa}, {issuer, Ca}]),
@@ -580,10 +560,8 @@ dsa_sign_verify(Config) when is_list(Config) ->
 			      {DSAPublicKey, DSAParams}).
 
 %%--------------------------------------------------------------------
-pkix(doc) ->
-    "Misc pkix tests not covered elsewhere";
-pkix(suite) ->
-    [];
+pkix() ->
+    [{doc, "Misc pkix tests not covered elsewhere"}].
 pkix(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
     Certs0 = erl_make_certs:pem_to_der(filename:join(Datadir, "cacerts.pem")),
@@ -621,16 +599,27 @@ pkix(Config) when is_list(Config) ->
 		 [[{'AttributeTypeAndValue', {2,5,4,3},{printableString,"ERLANGCA"}}],
 		  [{'AttributeTypeAndValue', {2,5,4,3},{printableString," erlang  ca "}}]]},
     VerifyStr = {rdnSequence, 
-		 [[{'AttributeTypeAndValue', {2,5,4,3},{printableString,"erlang ca"}}],
-		  [{'AttributeTypeAndValue', {2,5,4,3},{printableString,"erlangca"}}]]},
+		 [[{'AttributeTypeAndValue', {2,5,4,3},{printableString,"erlangca"}}],
+		  [{'AttributeTypeAndValue', {2,5,4,3},{printableString,"erlang ca"}}]]},
     VerifyStr = public_key:pkix_normalize_name(TestStr),
 
     ok.
+
 %%--------------------------------------------------------------------
-pkix_path_validation(doc) ->
-    "Misc pkix tests not covered elsewhere";
-pkix_path_validation(suite) ->
-    [];
+pkix_countryname() ->
+ [{doc, "Test workaround for certs that code x509countryname as utf8"}].
+pkix_countryname(Config) when is_list(Config) ->
+    Cert = incorrect_pkix_cert(),
+    OTPCert = public_key:pkix_decode_cert(Cert, otp),
+    TBSCert = OTPCert#'OTPCertificate'.tbsCertificate,
+    Issuer = TBSCert#'OTPTBSCertificate'.issuer,
+    Subj   = TBSCert#'OTPTBSCertificate'.subject,
+    check_countryname(Issuer),
+    check_countryname(Subj).
+
+%%--------------------------------------------------------------------
+pkix_path_validation() ->
+    [{doc, "Test PKIX path validation"}].
 pkix_path_validation(Config) when is_list(Config) ->
     CaK = {Trusted,_} = 
 	erl_make_certs:make_cert([{key, dsa},
@@ -661,7 +650,8 @@ pkix_path_validation(Config) when is_list(Config) ->
 
     CertK3 = {Cert3,_}  = erl_make_certs:make_cert([{issuer, CertK1}, 
 					       {extensions, [{basic_constraints, false}]}]),
-    {Cert4,_}  = erl_make_certs:make_cert([{issuer, CertK3}]),
+    {Cert4,_}  = erl_make_certs:make_cert([{issuer, CertK3}, {extensions, [{key_usage, undefined}]}]),
+
     {error, {bad_cert,missing_basic_constraint}} =
 	public_key:pkix_path_validation(Trusted, [Cert1, Cert3,Cert4], []),
 
@@ -698,6 +688,21 @@ pkix_path_validation(Config) when is_list(Config) ->
 	public_key:pkix_path_validation(unknown_ca, [Cert1], [{verify_fun,
 							      VerifyFunAndState1}]),
     ok.
+%%--------------------------------------------------------------------
+%% Internal functions ------------------------------------------------
+%%--------------------------------------------------------------------
+check_countryname({rdnSequence,DirName}) ->
+    do_check_countryname(DirName).
+do_check_countryname([]) ->
+    ok;
+do_check_countryname([#'AttributeTypeAndValue'{type = ?'id-at-countryName',
+					       value = "US"}|_]) ->
+    ok;
+do_check_countryname([#'AttributeTypeAndValue'{type = ?'id-at-countryName',
+					       value =  Value}|_]) ->
+    ct:fail({incorrect_cuntry_name, Value});
+do_check_countryname([_| Rest]) ->
+    do_check_countryname(Rest).
 
 check_entry_type(#'DSAPrivateKey'{}, 'DSAPrivateKey') ->
     true;
@@ -716,3 +721,6 @@ check_entry_type(_,_) ->
 
 strip_ending_newlines(Bin) ->
     string:strip(binary_to_list(Bin), right, 10).
+
+incorrect_pkix_cert() ->
+    <<48,130,5,186,48,130,4,162,160,3,2,1,2,2,7,7,250,61,63,6,140,137,48,13,6,9,42, 134,72,134,247,13,1,1,5,5,0,48,129,220,49,11,48,9,6,3,85,4,6,19,2,85,83,49, 16,48,14,6,3,85,4,8,19,7,65,114,105,122,111,110,97,49,19,48,17,6,3,85,4,7,19, 10,83,99,111,116,116,115,100,97,108,101,49,37,48,35,6,3,85,4,10,19,28,83,116, 97,114,102,105,101,108,100,32,84,101,99,104,110,111,108,111,103,105,101,115, 44,32,73,110,99,46,49,57,48,55,6,3,85,4,11,19,48,104,116,116,112,58,47,47,99, 101,114,116,105,102,105,99,97,116,101,115,46,115,116,97,114,102,105,101,108, 100,116,101,99,104,46,99,111,109,47,114,101,112,111,115,105,116,111,114,121, 49,49,48,47,6,3,85,4,3,19,40,83,116,97,114,102,105,101,108,100,32,83,101,99, 117,114,101,32,67,101,114,116,105,102,105,99,97,116,105,111,110,32,65,117, 116,104,111,114,105,116,121,49,17,48,15,6,3,85,4,5,19,8,49,48,54,56,56,52,51, 53,48,30,23,13,49,48,49,48,50,51,48,49,51,50,48,53,90,23,13,49,50,49,48,50, 51,48,49,51,50,48,53,90,48,122,49,11,48,9,6,3,85,4,6,12,2,85,83,49,11,48,9,6, 3,85,4,8,12,2,65,90,49,19,48,17,6,3,85,4,7,12,10,83,99,111,116,116,115,100, 97,108,101,49,38,48,36,6,3,85,4,10,12,29,83,112,101,99,105,97,108,32,68,111, 109,97,105,110,32,83,101,114,118,105,99,101,115,44,32,73,110,99,46,49,33,48, 31,6,3,85,4,3,12,24,42,46,108,111,103,105,110,46,115,101,99,117,114,101,115, 101,114,118,101,114,46,110,101,116,48,130,1,34,48,13,6,9,42,134,72,134,247, 13,1,1,1,5,0,3,130,1,15,0,48,130,1,10,2,130,1,1,0,185,136,240,80,141,36,124, 245,182,130,73,19,188,74,166,117,72,228,185,209,43,129,244,40,44,193,231,11, 209,12,234,88,43,142,1,162,48,122,17,95,230,105,171,131,12,147,46,204,36,80, 250,171,33,253,35,62,83,22,71,212,186,141,14,198,89,89,121,204,224,122,246, 127,110,188,229,162,67,95,6,74,231,127,99,131,7,240,85,102,203,251,50,58,58, 104,245,103,181,183,134,32,203,121,232,54,32,188,139,136,112,166,126,14,91, 223,153,172,164,14,61,38,163,208,215,186,210,136,213,143,70,147,173,109,217, 250,169,108,31,211,104,238,103,93,182,59,165,43,196,189,218,241,30,148,240, 109,90,69,176,194,52,116,173,151,135,239,10,209,179,129,192,102,75,11,25,168, 223,32,174,84,223,134,70,167,55,172,143,27,130,123,226,226,7,34,142,166,39, 48,246,96,231,150,84,220,106,133,193,55,95,159,227,24,249,64,36,1,142,171,16, 202,55,126,7,156,15,194,22,116,53,113,174,104,239,203,120,45,131,57,87,84, 163,184,27,83,57,199,91,200,34,43,98,61,180,144,76,65,170,177,2,3,1,0,1,163, 130,1,224,48,130,1,220,48,15,6,3,85,29,19,1,1,255,4,5,48,3,1,1,0,48,29,6,3, 85,29,37,4,22,48,20,6,8,43,6,1,5,5,7,3,1,6,8,43,6,1,5,5,7,3,2,48,14,6,3,85, 29,15,1,1,255,4,4,3,2,5,160,48,56,6,3,85,29,31,4,49,48,47,48,45,160,43,160, 41,134,39,104,116,116,112,58,47,47,99,114,108,46,115,116,97,114,102,105,101, 108,100,116,101,99,104,46,99,111,109,47,115,102,115,50,45,48,46,99,114,108, 48,83,6,3,85,29,32,4,76,48,74,48,72,6,11,96,134,72,1,134,253,110,1,7,23,2,48, 57,48,55,6,8,43,6,1,5,5,7,2,1,22,43,104,116,116,112,115,58,47,47,99,101,114, 116,115,46,115,116,97,114,102,105,101,108,100,116,101,99,104,46,99,111,109, 47,114,101,112,111,115,105,116,111,114,121,47,48,129,141,6,8,43,6,1,5,5,7,1, 1,4,129,128,48,126,48,42,6,8,43,6,1,5,5,7,48,1,134,30,104,116,116,112,58,47, 47,111,99,115,112,46,115,116,97,114,102,105,101,108,100,116,101,99,104,46,99, 111,109,47,48,80,6,8,43,6,1,5,5,7,48,2,134,68,104,116,116,112,58,47,47,99, 101,114,116,105,102,105,99,97,116,101,115,46,115,116,97,114,102,105,101,108, 100,116,101,99,104,46,99,111,109,47,114,101,112,111,115,105,116,111,114,121, 47,115,102,95,105,110,116,101,114,109,101,100,105,97,116,101,46,99,114,116, 48,31,6,3,85,29,35,4,24,48,22,128,20,73,75,82,39,209,27,188,242,161,33,106, 98,123,81,66,122,138,215,213,86,48,59,6,3,85,29,17,4,52,48,50,130,24,42,46, 108,111,103,105,110,46,115,101,99,117,114,101,115,101,114,118,101,114,46,110, 101,116,130,22,108,111,103,105,110,46,115,101,99,117,114,101,115,101,114,118, 101,114,46,110,101,116,48,29,6,3,85,29,14,4,22,4,20,138,233,191,208,157,203, 249,85,242,239,20,195,48,10,148,49,144,101,255,116,48,13,6,9,42,134,72,134, 247,13,1,1,5,5,0,3,130,1,1,0,82,31,121,162,49,50,143,26,167,202,143,61,71, 189,201,199,57,81,122,116,90,192,88,24,102,194,174,48,157,74,27,87,210,223, 253,93,3,91,150,109,120,1,110,27,11,200,198,141,222,246,14,200,71,105,41,138, 13,114,122,106,63,17,197,181,234,121,61,89,74,65,41,231,248,219,129,83,176, 219,55,107,55,211,112,98,38,49,69,77,96,221,108,123,152,12,210,159,157,141, 43,226,55,187,129,3,82,49,136,66,81,196,91,234,196,10,82,48,6,80,163,83,71, 127,102,177,93,209,129,26,104,2,84,24,255,248,161,3,244,169,234,92,122,110, 43,4,17,113,185,235,108,219,210,236,132,216,177,227,17,169,58,162,159,182, 162,93,160,229,200,9,163,229,110,121,240,168,232,14,91,214,188,196,109,210, 164,222,0,109,139,132,113,91,16,118,173,178,176,80,132,34,41,199,51,206,250, 224,132,60,115,192,94,107,163,219,212,226,225,65,169,148,108,213,46,174,173, 103,110,189,229,166,149,254,31,51,44,144,108,187,182,11,251,201,206,86,138, 208,59,51,86,132,235,81,225,88,34,190,8,184>>.

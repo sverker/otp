@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1999-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2012. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -1005,8 +1005,13 @@ erts_new_bs_put_float(Process *c_p, Eterm arg, Uint num_bits, int flags)
 
 	    if (is_float(arg)) {
 		FloatDef *fdp = (FloatDef*)(float_val(arg) + 1);
+#ifdef DOUBLE_MIDDLE_ENDIAN
+		a = fdp->fw[1];
+		b = fdp->fw[0];
+#else
 		a = fdp->fw[0];
 		b = fdp->fw[1];
+#endif
 	    } else if (is_small(arg)) {
 		u.f64 = (double) signed_val(arg);
 		a = u.i32[0];
@@ -1015,8 +1020,13 @@ erts_new_bs_put_float(Process *c_p, Eterm arg, Uint num_bits, int flags)
 		if (big_to_double(arg, &u.f64) < 0) {
 		    return 0;
 		}
+#ifdef DOUBLE_MIDDLE_ENDIAN
+		a = u.i32[1];
+		b = u.i32[0];
+#else
 		a = u.i32[0];
 		b = u.i32[1];
+#endif
 	    } else {
 		return 0;
 	    }
@@ -1237,6 +1247,12 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
      */
 
     erts_bin_offset = 8*sb->size + sb->bitsize;
+    if (unit > 1) {
+	if ((unit == 8 && (erts_bin_offset & 7) != 0) ||
+	    (erts_bin_offset % unit) != 0) {
+	    goto badarg;
+	}
+    }
     used_size_in_bits = erts_bin_offset + build_size_in_bits;
     sb->is_writable = 0;	/* Make sure that no one else can write. */
     pb->size = NBYTES(used_size_in_bits);
@@ -1306,6 +1322,12 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
 	 */
 	ERTS_GET_BINARY_BYTES(bin, src_bytes, bitoffs, bitsize);
 	erts_bin_offset = 8*binary_size(bin) + bitsize;
+	if (unit > 1) {
+	    if ((unit == 8 && (erts_bin_offset & 7) != 0) ||
+		(erts_bin_offset % unit) != 0) {
+		goto badarg;
+	    }
+	}
 	used_size_in_bits = erts_bin_offset + build_size_in_bits;
 	used_size_in_bytes = NBYTES(used_size_in_bits);
 	bin_size = 2*used_size_in_bytes;
@@ -1353,12 +1375,6 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
 	/*
 	 * Now copy the data into the binary.
 	 */
-	if (unit > 1) {
-	    if ((unit == 8 && (erts_bin_offset & 7) != 0) ||
-		(erts_bin_offset % unit) != 0) {
-		return THE_NON_VALUE;
-	    }
-	}
 	copy_binary_to_buffer(erts_current_bin, 0, src_bytes, bitoffs, erts_bin_offset);
 
 	return make_binary(sb);

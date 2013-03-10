@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -58,7 +58,6 @@
 #define __DARWIN__ 1
 #endif
 
-
 #ifdef USE_THREADS
 #include "erl_threads.h"
 #endif
@@ -71,7 +70,6 @@ static erts_smp_rwmtx_t environ_rwmtx;
 #define MAX_VSIZE 16		/* Max number of entries allowed in an I/O
 				 * vector sock_sendv().
 				 */
-
 /*
  * Don't need global.h, but bif_table.h (included by bif.h),
  * won't compile otherwise
@@ -122,6 +120,16 @@ struct ErtsSysReportExit_ {
     int status;
 #endif
 };
+
+/* This data is shared by these drivers - initialized by spawn_init() */
+static struct driver_data {
+    ErlDrvPort port_num;
+    int ofd, packet_bytes;
+    ErtsSysReportExit *report_exit;
+    int pid;
+    int alive;
+    int status;
+} *driver_data;			/* indexed by fd */
 
 static ErtsSysReportExit *report_exit_list;
 #if CHLDWTHR && !defined(ERTS_SMP)
@@ -551,7 +559,7 @@ erl_sys_init(void)
     size_t bindirsz = sizeof(bindir);
     Uint csp_path_sz;
 
-    res = erts_sys_getenv("BINDIR", bindir, &bindirsz);
+    res = erts_sys_getenv_raw("BINDIR", bindir, &bindirsz);
     if (res != 0) {
 	if (res < 0)
 	    erl_exit(-1,
@@ -570,7 +578,7 @@ erl_sys_init(void)
 		   + 1);
     child_setup_prog = erts_alloc(ERTS_ALC_T_CS_PROG_PATH, csp_path_sz);
     erts_smp_atomic_add_nob(&sys_misc_mem_sz, csp_path_sz);
-    sprintf(child_setup_prog,
+    erts_snprintf(child_setup_prog, csp_path_sz,
             "%s%c%s",
             bindir,
             DIR_SEPARATOR_CHAR,
@@ -679,18 +687,58 @@ static RETSIGTYPE break_handler(int sig)
 }
 #endif /* 0 */
 
-static ERTS_INLINE void
-prepare_crash_dump(void)
+static ERTS_INLINE int
+prepare_crash_dump(int secs)
 {
+#define NUFBUF (3)
     int i, max;
     char env[21]; /* enough to hold any 64-bit integer */
     size_t envsz;
+    DeclareTmpHeapNoproc(heap,NUFBUF);
+    Port *heart_port;
+    Eterm *hp = heap;
+    Eterm list = NIL;
+    int heart_fd[2] = {-1,-1};
+    int has_heart = 0;
+
+    UseTmpHeapNoproc(NUFBUF);
 
     if (ERTS_PREPARED_CRASH_DUMP)
-	return; /* We have already been called */
+	return 0; /* We have already been called */
+
+    heart_port = erts_get_heart_port();
+
+    /* Positive secs means an alarm must be set
+     * 0 or negative means no alarm
+     *
+     * Set alarm before we try to write to a port
+     * we don't want to hang on a port write with
+     * no alarm.
+     *
+     */
+
+    if (secs >= 0) {
+	alarm((unsigned int)secs);
+    }
+
+    if (heart_port) {
+	/* hearts input fd
+	 * We "know" drv_data is the in_fd since the port is started with read|write
+	 */
+	heart_fd[0] = (int)heart_port->drv_data;
+	heart_fd[1] = (int)driver_data[heart_fd[0]].ofd;
+	has_heart   = 1;
+
+	list = CONS(hp, make_small(8), list); hp += 2;
+
+	/* send to heart port, CMD = 8, i.e. prepare crash dump =o */
+	erts_port_output(NULL, ERTS_PORT_SIG_FLG_FORCE_IMM_CALL, heart_port,
+			 heart_port->common.id, list, NULL);
+    }
 
     /* Make sure we unregister at epmd (unknown fd) and get at least
        one free filedescriptor (for erl_crash.dump) */
+
     max = max_files;
     if (max < 1024)
 	max = 1024;
@@ -704,11 +752,15 @@ prepare_crash_dump(void)
 	if (i == async_fd[0] || i == async_fd[1])
 	    continue;
 #endif
+	/* We don't want to close our heart yet ... */
+	if (i == heart_fd[0] || i == heart_fd[1])
+	    continue;
+
 	close(i);
     }
 
     envsz = sizeof(env);
-    i = erts_sys_getenv("ERL_CRASH_DUMP_NICE", env, &envsz);
+    i = erts_sys_getenv__("ERL_CRASH_DUMP_NICE", env, &envsz);
     if (i >= 0) {
 	int nice_val;
 	nice_val = i != 0 ? 0 : atoi(env);
@@ -717,21 +769,15 @@ prepare_crash_dump(void)
 	}
 	erts_silence_warn_unused_result(nice(nice_val));
     }
-    
-    envsz = sizeof(env);
-    i = erts_sys_getenv("ERL_CRASH_DUMP_SECONDS", env, &envsz);
-    if (i >= 0) {
-	unsigned sec;
-	sec = (unsigned) i != 0 ? 0 : atoi(env);
-	alarm(sec);
-    }
 
+    UnUseTmpHeapNoproc(NUFBUF);
+#undef NUFBUF
+    return has_heart;
 }
 
-void
-erts_sys_prepare_crash_dump(void)
+int erts_sys_prepare_crash_dump(int secs)
 {
-    prepare_crash_dump();
+    return prepare_crash_dump(secs);
 }
 
 static ERTS_INLINE void
@@ -768,12 +814,22 @@ static RETSIGTYPE request_break(int signum)
 static ERTS_INLINE void
 sigusr1_exit(void)
 {
-   /* We do this at interrupt level, since the main reason for
-      wanting to generate a crash dump in this way is that the emulator
-      is hung somewhere, so it won't be able to poll any flag we set here.
-      */
+    char env[21]; /* enough to hold any 64-bit integer */
+    size_t envsz;
+    int i, secs = -1;
+
+    /* We do this at interrupt level, since the main reason for
+     * wanting to generate a crash dump in this way is that the emulator
+     * is hung somewhere, so it won't be able to poll any flag we set here.
+     */
     ERTS_SET_GOT_SIGUSR1;
-    prepare_crash_dump();
+
+    envsz = sizeof(env);
+    if ((i = erts_sys_getenv_raw("ERL_CRASH_DUMP_SECONDS", env, &envsz)) >= 0) {
+	secs = i != 0 ? 0 : atoi(env);
+    }
+
+    prepare_crash_dump(secs);
     erl_exit(1, "Received SIGUSR1\n");
 }
 
@@ -1021,15 +1077,6 @@ void fini_getenv_state(GETENV_STATE *state)
 
 #define ERTS_SYS_READ_BUF_SZ (64*1024)
 
-/* This data is shared by these drivers - initialized by spawn_init() */
-static struct driver_data {
-    int port_num, ofd, packet_bytes;
-    ErtsSysReportExit *report_exit;
-    int pid;
-    int alive;
-    int status;
-} *driver_data;			/* indexed by fd */
-
 /* Driver interfaces */
 static ErlDrvData spawn_start(ErlDrvPort, char*, SysDriverOpts*);
 static ErlDrvData fd_start(ErlDrvPort, char*, SysDriverOpts*);
@@ -1137,7 +1184,7 @@ static RETSIGTYPE onchld(int signum)
 #endif
 }
 
-static int set_driver_data(int port_num,
+static int set_driver_data(ErlDrvPort port_num,
 			   int ifd,
 			   int ofd,
 			   int packet_bytes,
@@ -1145,6 +1192,7 @@ static int set_driver_data(int port_num,
 			   int exit_status,
 			   int pid)
 {
+    Port *prt;
     ErtsSysReportExit *report_exit;
 
     if (!exit_status)
@@ -1153,7 +1201,7 @@ static int set_driver_data(int port_num,
 	report_exit = erts_alloc(ERTS_ALC_T_PRT_REP_EXIT,
 				 sizeof(ErtsSysReportExit));
 	report_exit->next = report_exit_list;
-	report_exit->port = erts_port[port_num].id;
+	report_exit->port = erts_drvport2id(port_num);
 	report_exit->pid = pid;
 	report_exit->ifd = read_write & DO_READ ? ifd : -1;
 	report_exit->ofd = read_write & DO_WRITE ? ofd : -1;
@@ -1163,7 +1211,9 @@ static int set_driver_data(int port_num,
 	report_exit_list = report_exit;
     }
 
-    erts_port[port_num].os_pid = pid;
+    prt = erts_drvport2port(port_num);
+    if (prt != ERTS_INVALID_ERL_DRV_PORT)
+	prt->os_pid = pid;
 
     if (read_write & DO_READ) {
 	driver_data[ifd].packet_bytes = packet_bytes;
@@ -1236,7 +1286,7 @@ static void close_pipes(int ifd[2], int ofd[2], int read_write)
     }
 }
 
-static void init_fd_data(int fd, int prt)
+static void init_fd_data(int fd, ErlDrvPort port_num)
 {
     fd_data[fd].buf = NULL;
     fd_data[fd].cpos = NULL;
@@ -1356,9 +1406,9 @@ static ErlDrvData spawn_start(ErlDrvPort port_num, char* name, SysDriverOpts* op
     int no_vfork;
     size_t no_vfork_sz = sizeof(no_vfork);
 
-    no_vfork = (erts_sys_getenv("ERL_NO_VFORK",
-				(char *) &no_vfork,
-				&no_vfork_sz) >= 0);
+    no_vfork = (erts_sys_getenv_raw("ERL_NO_VFORK",
+				    (char *) &no_vfork,
+				    &no_vfork_sz) >= 0);
 #endif
 
     switch (opts->read_write) {
@@ -1532,12 +1582,13 @@ static ErlDrvData spawn_start(ErlDrvPort port_num, char* name, SysDriverOpts* op
 	}
 #if !DISABLE_VFORK
     }
+#define ENOUGH_BYTES (44)
     else { /* Use vfork() */
 	char **cs_argv= erts_alloc(ERTS_ALC_T_TMP,(CS_ARGV_NO_OF_ARGS + 1)*
 				   sizeof(char *));
-	char fd_close_range[44];                  /* 44 bytes are enough to  */
-	char dup2_op[CS_ARGV_NO_OF_DUP2_OPS][44]; /* hold any "%d:%d" string */
-                                                  /* on a 64-bit machine.    */
+	char fd_close_range[ENOUGH_BYTES];                  /* 44 bytes are enough to  */
+	char dup2_op[CS_ARGV_NO_OF_DUP2_OPS][ENOUGH_BYTES]; /* hold any "%d:%d" string */
+                                                            /* on a 64-bit machine.    */
 
 	/* Setup argv[] for the child setup program (implemented in
 	   erl_child_setup.c) */
@@ -1545,23 +1596,23 @@ static ErlDrvData spawn_start(ErlDrvPort port_num, char* name, SysDriverOpts* op
 	if (opts->use_stdio) {
 	    if (opts->read_write & DO_READ){
 		/* stdout for process */
-		sprintf(&dup2_op[i++][0], "%d:%d", ifd[1], 1);
+		erts_snprintf(&dup2_op[i++][0], ENOUGH_BYTES, "%d:%d", ifd[1], 1);
 		if(opts->redir_stderr)
 		    /* stderr for process */
-		    sprintf(&dup2_op[i++][0], "%d:%d", ifd[1], 2);
+		    erts_snprintf(&dup2_op[i++][0], ENOUGH_BYTES, "%d:%d", ifd[1], 2);
 	    }
 	    if (opts->read_write & DO_WRITE)
 		/* stdin for process */
-		sprintf(&dup2_op[i++][0], "%d:%d", ofd[0], 0);
+		erts_snprintf(&dup2_op[i++][0], ENOUGH_BYTES, "%d:%d", ofd[0], 0);
 	} else {	/* XXX will fail if ofd[0] == 4 (unlikely..) */
 	    if (opts->read_write & DO_READ)
-		sprintf(&dup2_op[i++][0], "%d:%d", ifd[1], 4);
+		erts_snprintf(&dup2_op[i++][0], ENOUGH_BYTES, "%d:%d", ifd[1], 4);
 	    if (opts->read_write & DO_WRITE)
-		sprintf(&dup2_op[i++][0], "%d:%d", ofd[0], 3);
+		erts_snprintf(&dup2_op[i++][0], ENOUGH_BYTES, "%d:%d", ofd[0], 3);
 	}
 	for (; i < CS_ARGV_NO_OF_DUP2_OPS; i++)
 	    strcpy(&dup2_op[i][0], "-");
-	sprintf(fd_close_range, "%d:%d", opts->use_stdio ? 3 : 5, max_files-1);
+	erts_snprintf(fd_close_range, ENOUGH_BYTES, "%d:%d", opts->use_stdio ? 3 : 5, max_files-1);
 
 	cs_argv[CS_ARGV_PROGNAME_IX] = child_setup_prog;
 	cs_argv[CS_ARGV_WD_IX] = opts->wd ? opts->wd : ".";
@@ -1612,6 +1663,7 @@ static ErlDrvData spawn_start(ErlDrvPort port_num, char* name, SysDriverOpts* op
 	}
 	erts_free(ERTS_ALC_T_TMP,cs_argv);
     }
+#undef ENOUGH_BYTES
 #endif
 
     erts_sched_bind_atfork_parent(unbind);
@@ -1924,7 +1976,7 @@ static void clear_fd_data(int fd)
     fd_data[fd].psz = 0;
 }
 
-static void nbio_stop_fd(int prt, int fd)
+static void nbio_stop_fd(ErlDrvPort prt, int fd)
 {
     driver_select(prt,fd,DO_READ|DO_WRITE,0);
     clear_fd_data(fd);
@@ -1972,7 +2024,8 @@ static ErlDrvData vanilla_start(ErlDrvPort port_num, char* name,
 
 static void stop(ErlDrvData fd)
 {
-    int prt, ofd;
+    ErlDrvPort prt;
+    int ofd;
 
     prt = driver_data[(int)(long)fd].port_num;
     nbio_stop_fd(prt, (int)(long)fd);
@@ -1985,7 +2038,7 @@ static void stop(ErlDrvData fd)
 
     CHLD_STAT_LOCK;
 
-    /* Mark as unused. Maybe resetting the 'port_num' slot is better? */
+    /* Mark as unused. */
     driver_data[(int)(long)fd].pid = -1;
 
     CHLD_STAT_UNLOCK;
@@ -2001,7 +2054,7 @@ static void stop(ErlDrvData fd)
 static void outputv(ErlDrvData e, ErlIOVec* ev)
 {
     int fd = (int)(long)e;
-    int ix = driver_data[fd].port_num;
+    ErlDrvPort ix = driver_data[fd].port_num;
     int pb = driver_data[fd].packet_bytes;
     int ofd = driver_data[fd].ofd;
     ssize_t n;
@@ -2051,7 +2104,7 @@ static void outputv(ErlDrvData e, ErlIOVec* ev)
 static void output(ErlDrvData e, char* buf, ErlDrvSizeT len)
 {
     int fd = (int)(long)e;
-    int ix = driver_data[fd].port_num;
+    ErlDrvPort ix = driver_data[fd].port_num;
     int pb = driver_data[fd].packet_bytes;
     int ofd = driver_data[fd].ofd;
     ssize_t n;
@@ -2102,7 +2155,7 @@ static void output(ErlDrvData e, char* buf, ErlDrvSizeT len)
     return; /* 0; */
 }
 
-static int port_inp_failure(int port_num, int ready_fd, int res)
+static int port_inp_failure(ErlDrvPort port_num, int ready_fd, int res)
 				/* Result: 0 (eof) or -1 (error) */
 {
     int err = errno;
@@ -2152,7 +2205,7 @@ static int port_inp_failure(int port_num, int ready_fd, int res)
 static void ready_input(ErlDrvData e, ErlDrvEvent ready_fd)
 {
     int fd = (int)(long)e;
-    int port_num;
+    ErlDrvPort port_num;
     int packet_bytes;
     int res;
     Uint h;
@@ -2275,7 +2328,7 @@ static void ready_input(ErlDrvData e, ErlDrvEvent ready_fd)
 static void ready_output(ErlDrvData e, ErlDrvEvent ready_fd)
 {
     int fd = (int)(long)e;
-    int ix = driver_data[fd].port_num;
+    ErlDrvPort ix = driver_data[fd].port_num;
     int n;
     struct iovec* iv;
     int vsize;
@@ -2355,28 +2408,38 @@ void erts_do_break_handling(void)
 ** no interpretatione of this should be done by the rest of the
 ** emulator. The buffer should be at least 21 bytes long.
 */
-void sys_get_pid(char *buffer){
+void sys_get_pid(char *buffer, size_t buffer_size){
     pid_t p = getpid();
     /* Assume the pid is scalar and can rest in an unsigned long... */
-    sprintf(buffer,"%lu",(unsigned long) p);
+    erts_snprintf(buffer, buffer_size, "%lu",(unsigned long) p);
 }
 
 int
-erts_sys_putenv(char *buffer, int sep_ix)
+erts_sys_putenv_raw(char *key, char *value) {
+    return erts_sys_putenv(key, value);
+}
+int
+erts_sys_putenv(char *key, char *value)
 {
     int res;
     char *env;
+    Uint need = strlen(key) + strlen(value) + 2;
+
 #ifdef HAVE_COPYING_PUTENV
-    env = buffer;
+    env = erts_alloc(ERTS_ALC_T_TMP, need);
 #else
-    Uint sz = strlen(buffer)+1;
-    env = erts_alloc(ERTS_ALC_T_PUTENV_STR, sz);
-    erts_smp_atomic_add_nob(&sys_misc_mem_sz, sz);
-    strcpy(env,buffer);
+    env = erts_alloc(ERTS_ALC_T_PUTENV_STR, need);
+    erts_smp_atomic_add_nob(&sys_misc_mem_sz, need);
 #endif
+    strcpy(env,key);
+    strcat(env,"=");
+    strcat(env,value);
     erts_smp_rwmtx_rwlock(&environ_rwmtx);
     res = putenv(env);
     erts_smp_rwmtx_rwunlock(&environ_rwmtx);
+#ifdef HAVE_COPYING_PUTENV
+    erts_free(ERTS_ALC_T_TMP, env);
+#endif
     return res;
 }
 
@@ -2401,6 +2464,20 @@ erts_sys_getenv__(char *key, char *value, size_t *size)
     }
     return res;
 }
+
+int
+erts_sys_getenv_raw(char *key, char *value, size_t *size) {
+    return erts_sys_getenv(key, value, size);
+}
+
+/*
+ * erts_sys_getenv
+ * returns:
+ *  -1, if environment key is not set with a value
+ *   0, if environment key is set and value fits into buffer size
+ *   1, if environment key is set but does not fit into buffer size
+ *      size is set with the needed buffer size value
+ */
 
 int
 erts_sys_getenv(char *key, char *value, size_t *size)
@@ -2560,19 +2637,20 @@ report_exit_status(ErtsSysReportExit *rep, int status)
     Port *pp;
 #ifdef ERTS_SMP
     CHLD_STAT_UNLOCK;
-#endif
+    pp = erts_thr_id2port_sflgs(rep->port,
+				ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP);
+    CHLD_STAT_LOCK;
+#else
     pp = erts_id2port_sflgs(rep->port,
 			    NULL,
 			    0,
 			    ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP);
-#ifdef ERTS_SMP
-    CHLD_STAT_LOCK;
 #endif
     if (pp) {
 	if (rep->ifd >= 0) {
 	    driver_data[rep->ifd].alive = 0;
 	    driver_data[rep->ifd].status = status;
-	    (void) driver_select((ErlDrvPort) internal_port_index(pp->id),
+	    (void) driver_select(ERTS_Port2ErlDrvPort(pp),
 				 rep->ifd,
 				 (ERL_DRV_READ|ERL_DRV_USE),
 				 1);
@@ -2580,12 +2658,16 @@ report_exit_status(ErtsSysReportExit *rep, int status)
 	if (rep->ofd >= 0) {
 	    driver_data[rep->ofd].alive = 0;
 	    driver_data[rep->ofd].status = status;
-	    (void) driver_select((ErlDrvPort) internal_port_index(pp->id),
+	    (void) driver_select(ERTS_Port2ErlDrvPort(pp),
 				 rep->ofd,
 				 (ERL_DRV_WRITE|ERL_DRV_USE),
 				 1);
 	}
+#ifdef ERTS_SMP
+	erts_thr_port_release(pp);
+#else
 	erts_port_release(pp);
+#endif
     }
     erts_free(ERTS_ALC_T_PRT_REP_EXIT, rep);
 }
@@ -3001,7 +3083,7 @@ erl_sys_args(int* argc, char** argv)
     if (erts_use_kernel_poll) {
 	char no_kp[10];
 	size_t no_kp_sz = sizeof(no_kp);
-	int res = erts_sys_getenv("ERL_NO_KERNEL_POLL", no_kp, &no_kp_sz);
+	int res = erts_sys_getenv_raw("ERL_NO_KERNEL_POLL", no_kp, &no_kp_sz);
 	if (res > 0
 	    || (res == 0
 		&& sys_strcmp("false", no_kp) != 0

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1996-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -574,10 +574,22 @@ static int ematch(ETERM *p, ETERM *t)
 
   switch (type_p) {
 
-  case ERL_ATOM:
-    return p->uval.aval.len == t->uval.aval.len &&
-      memcmp(p->uval.aval.a, t->uval.aval.a, p->uval.aval.len) == 0;
-	
+  case ERL_ATOM: {
+      Erl_Atom_data* pa = &p->uval.aval.d;
+      Erl_Atom_data* ta = &t->uval.aval.d;
+      if (pa->utf8 && ta->utf8) {
+	  return pa->lenU == ta->lenU && memcmp(pa->utf8, ta->utf8, pa->lenU)==0; 
+      }
+      else if (pa->latin1 && ta->latin1) {
+	  return pa->lenL == ta->lenL && memcmp(pa->latin1, ta->latin1, pa->lenL)==0; 
+      }
+      else if (pa->latin1) {
+	  return cmp_latin1_vs_utf8(pa->latin1, pa->lenL, ta->utf8, ta->lenU)==0;
+      }
+      else {
+	  return cmp_latin1_vs_utf8(ta->latin1, ta->lenL, pa->utf8, pa->lenU)==0;
+      }
+  }
   case ERL_VARIABLE:
     if (strcmp(p->uval.vval.name, "_") == 0) /* anon. variable */
       return ERL_TRUE;

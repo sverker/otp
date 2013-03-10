@@ -4,7 +4,7 @@
 <erlref>
   <header>
     <copyright>
-      <year>1997</year><year>2012</year>
+      <year>1997</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -323,8 +323,11 @@ fe80::204:acff:fe17:bf38
       <type name="stat_option"/>
       <desc>
         <p>Gets one or more statistic options for a socket.</p>
+
 	<p><c>getstat(<anno>Socket</anno>)</c> is equivalent to
-	<c>getstat(<anno>Socket</anno>,&nbsp;[recv_avg,&nbsp;recv_cnt,&nbsp;recv_dvi,&nbsp;recv_max,&nbsp;recv_oct,&nbsp;send_avg,&nbsp;send_cnt,&nbsp;send_dvi,&nbsp;send_max,&nbsp;send_oct])</c></p>
+	  <c>getstat(<anno>Socket</anno>, [recv_avg, recv_cnt, recv_dvi,
+	  recv_max, recv_oct, send_avg, send_cnt, send_dvi, send_max,
+	  send_oct])</c>.</p>
 	  <p>The following options are available:</p>
         <taglist>
 	  <tag><c>recv_avg</c></tag>
@@ -371,7 +374,51 @@ fe80::204:acff:fe17:bf38
         </taglist>
       </desc>
     </func>
-
+    <func>
+      <name name="parse_ipv4_address" arity="1" />
+      <fsummary>Parse an IPv4 address</fsummary>
+      <desc>
+	<p>Parses an IPv4 address string and returns an <a href="#type-ip4_address">ip4_address()</a>.
+	 Accepts a shortened IPv4 shortened address string.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="parse_ipv4strict_address" arity="1" />
+      <fsummary>Parse an IPv4 address strict.</fsummary>
+      <desc>
+	<p>Parses an IPv4 address string containing four fields, i.e <b>not</b> shortened, and returns an <a href="#type-ip4_adress">ip4_address()</a>.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="parse_ipv6_address" arity="1" />
+      <fsummary>Parse an IPv6 address</fsummary>
+      <desc>
+	<p>Parses an IPv6 address string and returns an <a href="#type-ip6_address">ip6_address()</a>.
+	 If an IPv4 address string is passed, an IPv4-mapped IPv6 address is returned.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="parse_ipv6strict_address" arity="1" />
+      <fsummary>Parse an IPv6 address strict.</fsummary>
+      <desc>
+	<p>Parses an IPv6 address string and returns an <a href="#type-ip6_address">ip6_address()</a>. 
+	Does <b>not</b> accept IPv4 adresses.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="parse_address" arity="1" />
+      <fsummary>Parse an IPv4 or IPv6 address.</fsummary>
+      <desc>
+	<p>Parses an IPv4 or IPv6 address string and returns an <a href="#type-ip4_address">ip4_address()</a> or <a href="#type-ip6_address">ip6_address()</a>. Accepts a shortened IPv4 address string.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="parse_strict_address" arity="1" />
+      <fsummary>Parse an IPv4 or IPv6 address strict.</fsummary>
+      <desc>
+	<p>Parses an IPv4 or IPv6 address string and returns an <a href="#type-ip4_address">ip4_address()</a> or <a href="#type-ip6_adress">ip6_address()</a>. Does <b>not</b> accept a shortened IPv4 address string.</p>
+      </desc>
+    </func>
     <func>
       <name name="peername" arity="1"/>
       <fsummary>Return the address and port for the other end of a connection</fsummary>
@@ -512,13 +559,100 @@ fe80::204:acff:fe17:bf38
               <c>[Byte1,Byte2|Binary]</c>.</p>
           </item>
 
-		  <tag><c>{high_watermark, Size}</c></tag>
-		  <item> <p>
-				  Sender is forced busy if sent and enqueued data
-				  reaches the highwater mark.
-				  <br /> Default: 8192 kB. 
-			  </p>
-		  </item>
+          <tag><c>{high_msgq_watermark, Size}</c> (TCP/IP sockets)</tag>
+          <item>
+	    <p>The socket message queue will be set into a busy
+	    state when the amount of data queued on the message
+	    queue reaches this limit. Note that this limit only
+	    concerns data that have not yet reached the ERTS internal
+	    socket implementation. Default value used is 8 kB.</p>
+	    <p>Senders of data to the socket will be suspended if
+	    either the socket message queue is busy, or the socket
+	    itself is busy.</p>
+	    <p>For more information see the <c>low_msgq_watermark</c>,
+	    <c>high_watermark</c>, and <c>low_watermark</c> options.</p>
+	    <p>Note that distribution sockets will disable the use of
+	    <c>high_msgq_watermark</c> and <c>low_msgq_watermark</c>,
+	    and will instead use the
+	    <seealso marker="erts:erlang#system_info_dist_buf_busy_limit">distribution
+	    buffer busy limit</seealso> which is a similar feature.</p>
+          </item>
+
+          <tag><c>{high_watermark, Size}</c> (TCP/IP sockets)</tag>
+          <item>
+	    <p>The socket will be set into a busy state when the amount
+	    of data queued internally by the ERTS socket implementation
+	    reaches this limit. Default value used is 8 kB.</p>
+	    <p>Senders of data to the socket will be suspended if
+	    either the socket message queue is busy, or the socket
+	    itself is busy.</p>
+	    <p>For more information see the <c>low_watermark</c>,
+	    <c>high_msgq_watermark</c>, and <c>low_msqg_watermark</c>
+	    options.</p>
+          </item>
+
+	  <tag><c>{ipv6_v6only, Boolean}</c></tag>
+	  <item>
+	    <p>
+	      Restricts the socket to only use IPv6, prohibiting any
+	      IPv4 connections. This is only applicable for
+	      IPv6 sockets (option <c>inet6</c>).
+	    </p>
+	    <p>
+	      On most platforms this option has to be set on the socket
+	      before associating it to an address. Therefore it is only
+	      reasonable to give it when creating the socket and not
+	      to use it when calling the function
+	      (<seealso marker="#setopts/2">setopts/2</seealso>)
+	      containing this description.
+	    </p>
+	    <p>
+	      The behaviour of a socket with this socket option set to
+	      <c>true</c> is becoming the only portable one. The original
+	      idea when IPv6 was new of using IPv6 for all traffic
+	      is now not recommended by FreeBSD (you can use
+	      <c>{ipv6_v6only,false}</c> to override the recommended
+	      system default value),
+	      forbidden by OpenBSD (the supported GENERIC kernel)
+	      and impossible on Windows (that has separate
+	      IPv4 and IPv6 protocol stacks). Most Linux distros
+	      still have a system default value of <c>false</c>.
+	      This policy shift among operating systems towards
+	      separating IPv6 from IPv4 traffic has evolved since
+	      it gradually proved hard and complicated to get
+	      a dual stack implementation correct and secure.
+	    </p>
+	    <p>
+	      On some platforms the only allowed value for this option
+	      is <c>true</c>, e.g. OpenBSD and Windows. Trying to set
+	      this option to <c>false</c> when creating the socket
+	      will in this case fail.
+	    </p>
+	    <p>
+	      Setting this option on platforms where it does not exist
+	      is ignored and getting this option with
+	      <seealso marker="#getopts/2">getopts/2</seealso>
+	      returns no value i.e the returned list will not contain an
+	      <c>{ipv6_v6only,_}</c> tuple. On Windows the option acually
+	      does not exist, but it is emulated as being a
+	      read-only option with the value <c>true</c>.
+	    </p>
+	    <p>
+	      So it boils down to that setting this option to <c>true</c>
+	      when creating a socket will never fail except possibly
+	      (at the time of this writing) on a platform where you
+	      have customized the kernel to only allow <c>false</c>,
+	      which might be doable (but weird) on e.g. OpenBSD.
+	    </p>
+	    <p>
+	      If you read back the option value using
+	      <seealso marker="#getopts/2">getopts/2</seealso>
+	      and get no value the option does not exist in the host OS
+	      and all bets are off regarding the behaviour of both
+	      an IPv6 and an IPv4 socket listening on the same port
+	      as well as for an IPv6 socket getting IPv4 traffic.
+	    </p>
+	  </item>
 
           <tag><c>{keepalive, Boolean}</c>(TCP/IP sockets)</tag>
           <item>
@@ -540,14 +674,41 @@ fe80::204:acff:fe17:bf38
 				  the flushing time-out in seconds.</p>
 		  </item>
 
-		  <tag><c>{low_watermark, Size}</c></tag>
-		  <item> <p>
-				  If the port has reached its <c>high_watermark</c> it will
-				  force busy onto senders. When the port data queue reaches the
-				  <c>low_watermark</c> callers are no longer forced busy.
-				  <br /> Default: 4096 kB. 
-			  </p>
-		  </item>
+          <tag><c>{low_msgq_watermark, Size}</c> (TCP/IP sockets)</tag>
+          <item>
+	    <p>If the socket message queue is in a busy state, the
+	    socket message queue will be set in a not busy state when
+	    the amount of data queued in the message queue falls
+	    below this limit. Note that this limit only concerns data
+	    that have not yet reached the ERTS internal socket
+	    implementation. Default value used is 4 kB.</p>
+	    <p>Senders that have been suspended due to either a
+	    busy message queue or a busy socket, will be resumed
+	    when neither the socket message queue, nor the socket
+	    are busy.</p>
+	    <p>For more information see the <c>high_msgq_watermark</c>,
+	    <c>high_watermark</c>, and <c>low_watermark</c> options.</p>
+	    <p>Note that distribution sockets will disable the use of
+	    <c>high_msgq_watermark</c> and <c>low_msgq_watermark</c>,
+	    and will instead use the
+	    <seealso marker="erts:erlang#system_info_dist_buf_busy_limit">distribution
+	    buffer busy limit</seealso> which is a similar feature.</p>
+          </item>
+
+          <tag><c>{low_watermark, Size}</c> (TCP/IP sockets)</tag>
+          <item>
+	    <p>If the socket is in a busy state, the socket will
+	    be set in a not busy state when the amount of data
+	    queued internally by the ERTS socket implementation
+	    falls below this limit. Default value used is 4 kB.</p>
+	    <p>Senders that have been suspended due to either a
+	    busy message queue or a busy socket, will be resumed
+	    when neither the socket message queue, nor the socket
+	    are busy.</p>
+	    <p>For more information see the <c>high_watermark</c>,
+	    <c>high_msgq_watermark</c>, and <c>low_msgq_watermark</c>
+	    options.</p>
+          </item>
 
 		  <tag><c>{mode, Mode :: binary | list}</c></tag>
           <item>

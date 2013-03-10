@@ -1,7 +1,7 @@
 # 
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 2003-2011. All Rights Reserved.
+# Copyright Ericsson AB 2003-2012. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -44,14 +44,14 @@ TARGET_DIR = $(RELEASE_PATH)
 ifeq ($(MSYSTEM),MINGW32)
 
   MAKENSISFLAGS = //V2
-  WTESTROOT=$(shell (msys2win_path.sh $(RELEASE_PATH)))
-  WTARGET_DIR=$(shell (msys2win_path.sh $(TARGET_DIR)))
+  WTESTROOT=$(shell (msys2win_path.sh "$(RELEASE_PATH)"))
+  WTARGET_DIR=$(shell (msys2win_path.sh "$(TARGET_DIR)"))
 
 else
 
   MAKENSISFLAGS = /V2
-  WTESTROOT=$(shell (cygpath -d $(RELEASE_PATH) 2>/dev/null || cygpath -w $(RELEASE_PATH)))
-  WTARGET_DIR=$(shell (cygpath -d $(TARGET_DIR) 2>/dev/null || cygpath -d $(TARGET_DIR)))
+  WTESTROOT=$(shell (cygpath -d "$(RELEASE_PATH)" 2>/dev/null || cygpath -w "$(RELEASE_PATH)"))
+  WTARGET_DIR=$(shell (cygpath -d "$(TARGET_DIR)" 2>/dev/null || cygpath -d "$(TARGET_DIR)"))
 
 endif
 
@@ -62,9 +62,15 @@ else
 endif
 
 REDIST_FILE=$(shell (sh ./find_redist.sh || echo ""))
+ifeq ($(MSYSTEM),MINGW32)
+	NICEREDISTFILE=$(shell (msys2win_path.sh -m "$(REDIST_FILE)" 2>/dev/null || echo ""))
+else
+	NICEREDISTFILE=$(shell (cygpath -d -m "$(REDIST_FILE)" 2>/dev/null || echo ""))
+endif
+
 REDIST_TARGET=$(shell (sh ./find_redist.sh -n || echo ""))
-REDIST_DLL_VERSION=$(shell (sh ./dll_version_helper.sh || echo ""))
-REDIST_DLL_NAME=$(shell (sh ./dll_version_helper.sh -n || echo ""))
+REDIST_DLL_VERSION=$(shell (sh ./dll_version_helper.sh $(NICEREDISTFILE) || echo ""))
+REDIST_DLL_NAME=$(shell (sh ./dll_version_helper.sh -n $(NICEREDISTFILE) || echo ""))
 
 release_spec:
 	@NSIS_VER=`makensis /hdrinfo | head -1 | awk '{print $$2}'`; \
@@ -74,7 +80,7 @@ release_spec:
 	  echo '!define ERTS_VERSION "$(VSN)"' >> $(VERSION_HEADER);\
 	  echo '!define TESTROOT "$(WTESTROOT)"' >> $(VERSION_HEADER);\
 	  echo '!define OUTFILEDIR "$(WTARGET_DIR)"' >> $(VERSION_HEADER);\
-	  if [ -f $(RELEASE_PATH)/docs/doc/index.html ];\
+	  if [ -f "$(RELEASE_PATH)/docs/doc/index.html" ];\
 	  then\
 		echo '!define HAVE_DOCS 1' >> $(VERSION_HEADER); \
 	  fi;\
@@ -91,13 +97,13 @@ release_spec:
 	  fi;\
 	  if [ '!' -z "$(REDIST_FILE)" -a '!' -z "$(REDIST_DLL_VERSION)" ];\
 	  then \
-		cp $(REDIST_FILE) $(RELEASE_PATH)/$(REDIST_TARGET);\
+		cp $(REDIST_FILE) "$(RELEASE_PATH)/$(REDIST_TARGET)";\
 		echo '!define HAVE_REDIST_FILE 1'  >> $(VERSION_HEADER); \
 		echo '!define REDIST_DLL_VERSION "$(REDIST_DLL_VERSION)"' >> $(VERSION_HEADER);\
 		echo '!define REDIST_DLL_NAME "$(REDIST_DLL_NAME)"' >> $(VERSION_HEADER);\
 		echo '!define REDIST_EXECUTABLE "$(REDIST_TARGET)"' >> $(VERSION_HEADER);\
 	  fi;\
-	  if [ -f $(RELEASE_PATH)/docs/doc/index.html ];\
+	  if [ -f "$(RELEASE_PATH)/docs/doc/index.html" ];\
 	  then \
 		echo '!define HAVE_DOCS 1' >> $(VERSION_HEADER); \
 	  fi;\

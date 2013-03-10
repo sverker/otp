@@ -1,6 +1,7 @@
+%% -*- coding: utf-8 -*-
 %% ========================== -*-Erlang-*- =============================
 %% EDoc type specification grammar for the Yecc parser generator,
-%% adapted from Sven-Olof Nyström's type specification parser.
+%% adapted from Sven-Olof NystrÃ¶m's type specification parser.
 %%
 %% Also contains entry points for parsing things like typedefs,
 %% references, and throws-declarations.
@@ -100,9 +101,7 @@ ptype -> '[' utype ',' '...' ']' : #t_nonempty_list{type = '$2'}.
 ptype -> utype_list:
 	if length(element(1, '$1')) == 1 ->
 		%% there must be exactly one utype in the list
-		hd(element(1, '$1'));
-                %% Replace last line when releasing next major release:
-                %% #t_paren{type = hd(element(1, '$1'))};
+                #t_paren{type = hd(element(1, '$1'))};
 	   length(element(1, '$1')) == 0 ->
 		return_error(element(2, '$1'), "syntax error before: ')'");
 	   true ->
@@ -319,10 +318,7 @@ tok_val(T) -> element(3, T).
 
 tok_line(T) -> element(2, T).
 
-qname([A]) ->
-    A;    % avoid unnecessary call to packages:concat/1.
-qname(List) ->
-    list_to_atom(packages:concat(lists:reverse(List))).
+qname([A]) -> A.
 
 union(Ts) ->
     case Ts of
@@ -466,4 +462,4 @@ throw_error({parse_throws, E}, L) ->
 throw_error(parse_param, L) ->
     throw({error, L, "missing parameter name"});
 throw_error({Where, E}, L) when is_list(Where) ->
-    throw({error,L,{"unknown error parsing ~s: ~P.",[Where,E,15]}}).
+    throw({error,L,{"unknown error parsing ~ts: ~P.",[Where,E,15]}}).

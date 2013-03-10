@@ -2,7 +2,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2003-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2003-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -736,9 +736,6 @@ type(erlang, is_tuple, 1, Xs) ->
 %% Guard bif, needs to be here.
 type(erlang, length, 1, Xs) ->
   strict(arg_types(erlang, length, 1), Xs, fun (_) -> t_non_neg_fixnum() end);
-type(erlang, list_to_integer, 2, Xs) ->
-  strict(arg_types(erlang, list_to_integer, 2), Xs,
-	 fun (_) -> t_integer() end);
 type(erlang, make_tuple, 2, Xs) ->
   strict(arg_types(erlang, make_tuple, 2), Xs,
 	 fun ([Int, _]) ->
@@ -765,38 +762,6 @@ type(erlang, node, 0, _) -> t_node();
 %% Guard bif, needs to be here.
 type(erlang, node, 1, Xs) ->
   strict(arg_types(erlang, node, 1), Xs, fun (_) -> t_node() end);
-type(erlang, nodes, 0, _) -> t_list(t_node());
-type(erlang, port_call, Arity, Xs) when Arity =:= 2; Arity =:= 3 ->
-  strict(arg_types(erlang, port_call, Arity), Xs, fun (_) -> t_any() end);
-type(erlang, port_info, 1, Xs) ->
-  strict(arg_types(erlang, port_info, 1), Xs,
-	 fun (_) -> t_sup(t_atom('undefined'), t_list()) end);
-type(erlang, port_info, 2, Xs) ->
-  strict(arg_types(erlang, port_info, 2), Xs,
-	 fun ([_Port, Item]) ->
-	     t_sup(t_atom('undefined'),
-		   case t_atom_vals(Item) of
-		     ['connected'] -> t_tuple([Item, t_pid()]);
-		     ['id'] -> t_tuple([Item, t_integer()]);
-		     ['input'] -> t_tuple([Item, t_integer()]);
-		     ['links'] -> t_tuple([Item, t_list(t_pid())]);
-		     ['name'] -> t_tuple([Item, t_string()]);
-		     ['output'] -> t_tuple([Item, t_integer()]);
-		     ['os_pid'] -> t_tuple([Item, t_sup(t_non_neg_integer(),t_atom('undefined'))]);
-		     ['registered_name'] -> t_tuple([Item, t_atom()]);
-		     List when is_list(List) ->
-		       t_tuple([t_sup([t_atom(A) || A <- List]),
-				t_sup([t_atom(), t_integer(),
-				       t_pid(), t_list(t_pid()),
-				       t_string()])]);
-		     unknown ->
-		       [_, PosItem] = arg_types(erlang, port_info, 2),
-		       t_tuple([PosItem,
-				t_sup([t_atom(), t_integer(),
-				       t_pid(), t_list(t_pid()),
-				       t_string()])])		       
-		   end)
-	 end);
 %% Guard bif, needs to be here.
 type(erlang, round, 1, Xs) ->
   strict(arg_types(erlang, round, 1), Xs, fun (_) -> t_integer() end);
@@ -883,7 +848,7 @@ type(erlang, system_info, 1, Xs) ->
 		   ['dist'] ->
 		     t_binary();
 		   ['dist_ctrl'] ->
-		     t_list(t_tuple([t_atom(), t_sup([t_pid(), t_port])]));
+		     t_list(t_tuple([t_atom(), t_sup([t_pid(), t_port()])]));
 		   %% elib_malloc is intentionally not included,
 		   %% because it scheduled for removal in R15.
 		   ['endian'] ->
@@ -892,12 +857,10 @@ type(erlang, system_info, 1, Xs) ->
 		     t_tuple([t_atom('fullsweep_after'), t_non_neg_integer()]);
 		   ['garbage_collection'] ->
 		     t_list();
-		   ['global_heaps_size'] ->
-		     t_non_neg_integer();
 		   ['heap_sizes'] ->
 		     t_list(t_integer());
 		   ['heap_type'] ->
-		     t_sup([t_atom('private'), t_atom('hybrid')]);
+		     t_atom('private');
 		   ['hipe_architecture'] ->
 		     t_atoms(['amd64', 'arm', 'powerpc', 'ppc64',
 			      'undefined', 'ultrasparc', 'x86']);
@@ -917,7 +880,6 @@ type(erlang, system_info, 1, Xs) ->
 		     t_list(t_pid());
 		   ['os_type'] ->
 		     t_tuple([t_sup([t_atom('unix'),
-				     t_atom('vxworks'),
 				     t_atom('win32')]),
 			      t_atom()]);
 		   ['os_version'] ->
@@ -925,6 +887,14 @@ type(erlang, system_info, 1, Xs) ->
 				    t_non_neg_fixnum(),
 				    t_non_neg_fixnum()]),
 			   t_string());
+                   ['otp_release'] ->
+                     t_string();
+		   ['port_parallelism'] ->
+		     t_boolean();
+		   ['port_count'] ->
+		     t_non_neg_fixnum();
+		   ['port_limit'] ->
+		     t_non_neg_fixnum();
 		   ['process_count'] ->
 		     t_non_neg_fixnum();
 		   ['process_limit'] ->
@@ -1095,7 +1065,7 @@ type(hipe_bifs, ref_set, 2, Xs) ->
   strict(arg_types(hipe_bifs, ref_set, 2), Xs, fun (_) -> t_nil() end);
 type(hipe_bifs, remove_refs_from, 1, Xs) ->
   strict(arg_types(hipe_bifs, remove_refs_from, 1), Xs,
-	 fun (_) -> t_nil() end);
+	 fun (_) -> t_atom('ok') end);
 type(hipe_bifs, set_funinfo_native_address, 3, Xs) ->
   strict(arg_types(hipe_bifs, set_funinfo_native_address, 3), Xs,
 	 fun (_) -> t_nil() end);
@@ -2252,8 +2222,6 @@ arg_types(erlang, is_tuple, 1) ->
 %% Guard bif, needs to be here.
 arg_types(erlang, length, 1) ->
   [t_list()];
-arg_types(erlang, list_to_integer, 2) ->
-  [t_list(t_byte()), t_from_range(2, 36)];
 arg_types(erlang, make_tuple, 2) ->
   [t_non_neg_fixnum(), t_any()];  % the value 0 is OK as first argument
 arg_types(erlang, make_tuple, 3) ->
@@ -2270,18 +2238,6 @@ arg_types(erlang, node, 0) ->
 %% Guard bif, needs to be here.
 arg_types(erlang, node, 1) ->
   [t_identifier()];
-arg_types(erlang, nodes, 0) ->
-  [];
-arg_types(erlang, port_call, 2) ->
-  [t_sup(t_port(), t_atom()), t_any()];
-arg_types(erlang, port_call, 3) ->
-  [t_sup(t_port(), t_atom()), t_integer(), t_any()];
-arg_types(erlang, port_info, 1) ->
-  [t_sup(t_port(), t_atom())];
-arg_types(erlang, port_info, 2) ->
-  [t_sup(t_port(), t_atom()),
-   t_atoms(['registered_name', 'id', 'connected',
-	    'links', 'name', 'input', 'output', 'os_pid'])];
 %% Guard bif, needs to be here.
 arg_types(erlang, round, 1) ->
   [t_number()];
@@ -2410,7 +2366,7 @@ arg_types(hipe_bifs, ref_get, 1) ->
 arg_types(hipe_bifs, ref_set, 2) ->
   [t_hiperef(), t_immediate()];
 arg_types(hipe_bifs, remove_refs_from, 1) ->
-  [t_mfa()];
+  [t_sup([t_mfa(), t_atom('all')])];
 arg_types(hipe_bifs, set_funinfo_native_address, 3) ->
   arg_types(hipe_bifs, set_native_address, 3);
 arg_types(hipe_bifs, set_native_address, 3) ->

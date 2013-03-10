@@ -5,7 +5,7 @@
   <header>
     <copyright>
       <year>2008</year>
-      <year>2011</year>
+      <year>2013</year>
       <holder>Ericsson AB, All Rights Reserved</holder>
     </copyright>
     <legalnotice>
@@ -33,6 +33,115 @@
     <rev>A</rev>
     <file>notes.xml</file>
   </header>
+
+<section><title>Public_Key 0.18</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Fix subjectPublicKeyInfo type comment in public_key.
+	    Thanks to Ryosuke Nakai.</p>
+          <p>
+	    Own Id: OTP-10670</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    public_key now supports CRL validation and documents the
+	    function public_key:pkix_path_validation/3</p>
+          <p>
+	    Own Id: OTP-7045</p>
+        </item>
+        <item>
+	    <p> Some examples overflowing the width of PDF pages have
+	    been corrected. </p>
+          <p>
+	    Own Id: OTP-10665</p>
+        </item>
+        <item>
+          <p>
+	    Fixed typo's in public_key spec.</p>
+          <p>
+	    Own Id: OTP-10723</p>
+        </item>
+        <item>
+          <p>
+	    Corrected PKCS-10 documentation and added some PKCS-9
+	    support that is fairly commonly used by PKCS-10. Full
+	    support for PKCS-9 will be added later.</p>
+          <p>
+	    Own Id: OTP-10767</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Public_Key 0.17</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    ssh_decode now handles comments, at the end of the line,
+	    containing withe spaces correctly</p>
+          <p>
+	    Own Id: OTP-9361</p>
+        </item>
+        <item>
+          <p>
+	    Add missing references to sha224 and sha384</p>
+          <p>
+	    Own Id: OTP-9362 Aux Id: seq12116 </p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    public_key now supports PKCS-10 and includes exprimental
+	    support for PKCS-7</p>
+          <p>
+	    Own Id: OTP-10509 Aux Id: kunagi-291 [202] </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Public_Key 0.16</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Add crypto and public_key support for the hash functions
+	    SHA224, SHA256, SHA384 and SHA512 and also hmac and
+	    rsa_sign/verify support using these hash functions.
+	    Thanks to Andreas Schultz for making a prototype.</p>
+          <p>
+	    Own Id: OTP-9908</p>
+        </item>
+        <item>
+          <p>
+	    Optimize RSA private key handling in <c>crypto</c> and
+	    <c>public_key</c>.</p>
+          <p>
+	    Own Id: OTP-10065</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Public_Key 0.15</title>
 

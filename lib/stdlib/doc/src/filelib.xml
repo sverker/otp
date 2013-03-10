@@ -4,7 +4,7 @@
 <erlref>
   <header>
     <copyright>
-      <year>2003</year><year>2011</year>
+      <year>2003</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -36,8 +36,9 @@
   <description>
     <p>This module contains utilities on a higher level than the <c>file</c>
       module.</p>
-    <p>The module supports Unicode file names, so that it will match against regular expressions given in Unicode and that it will find and process raw file names (i.e. files named in a way that does not confirm to the expected encoding).</p>
-    <p>If the VM operates in Unicode file naming mode on a machine with transparent file naming, the <c>fun()</c> provided to <c>fold_files/5</c> needs to be prepared to handle binary file names.</p>
+    <p>This module does not support "raw" file names (i.e. files whose names
+    do not comply with the expected encoding). Such files will be ignored
+    by the functions in this module.</p>
     <p>For more information about raw file names, see the <seealso marker="kernel:file">file</seealso> module.</p>
   </description>
 
@@ -150,6 +151,11 @@
             <p>Matches any number of characters up to the end of
               the filename, the next dot, or the next slash.</p>
           </item>
+          <tag>**</tag>
+          <item>
+            <p>Two adjacent <c>*</c>'s used as a single pattern will
+        match all files and zero or more directories and subdirectories.</p>
+          </item>
           <tag>[Character1,Character2,...]</tag>
           <item>
             <p>Matches any of the characters listed. Two characters
@@ -192,6 +198,10 @@
           <c>src</c> or <c>include</c> directories, use:</p>
         <code type="none">
     filelib:wildcard("lib/*/{src,include}/*.{erl,hrl}")        </code>
+        <p>To find all <c>.erl</c> or <c>.hrl</c> files in any
+          subdirectory, use:</p>
+        <code type="none">
+    filelib:wildcard("lib/**/*.{erl,hrl}")        </code>
       </desc>
     </func>
     <func>

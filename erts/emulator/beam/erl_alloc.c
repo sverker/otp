@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2002-2012. All Rights Reserved.
+ * Copyright Ericsson AB 2002-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -310,9 +310,9 @@ set_default_ll_alloc_opts(struct au_init *ip)
     ip->init.util.name_prefix	= "ll_";
     ip->init.util.alloc_no	= ERTS_ALC_A_LONG_LIVED;
 #ifndef SMALL_MEMORY
-    ip->init.util.mmbcs 	= 2*1024*1024; /* Main carrier size */
+    ip->init.util.mmbcs 	= 2*1024*1024 - 40; /* Main carrier size */
 #else
-    ip->init.util.mmbcs 	= 1*1024*1024; /* Main carrier size */
+    ip->init.util.mmbcs 	= 1*1024*1024 - 40; /* Main carrier size */
 #endif
     ip->init.util.ts 		= ERTS_ALC_MTA_LONG_LIVED;
     ip->init.util.asbcst	= 0;
@@ -1173,6 +1173,11 @@ handle_au_arg(struct au_init *auip,
 	break;
     case 'e':
 	auip->enable = get_bool_value(sub_param+1, argv, ip);
+#if !HAVE_ERTS_SBMBC
+	if (auip->init.util.alloc_no == ERTS_ALC_A_SBMBC) {
+	    auip->enable = 0;
+	}
+#endif
 	break;
     case 'l':
 	if (has_prefix("lmbcs", sub_param)) {
@@ -1233,10 +1238,16 @@ handle_au_arg(struct au_init *auip,
 	    auip->init.util.sbct = get_kb_value(sub_param + 4, argv, ip);
 	}
 	else if (has_prefix("sbmbcs", sub_param)) {
-	    auip->init.util.sbmbcs = get_byte_value(sub_param + 6, argv, ip);
+#if HAVE_ERTS_SBMBC
+	    auip->init.util.sbmbcs =
+#endif
+		get_byte_value(sub_param + 6, argv, ip);
 	}
 	else if (has_prefix("sbmbct", sub_param)) {
-	    auip->init.util.sbmbct = get_byte_value(sub_param + 6, argv, ip);
+#if HAVE_ERTS_SBMBC
+	    auip->init.util.sbmbct =
+#endif
+		get_byte_value(sub_param + 6, argv, ip);
 	}
 	else if (has_prefix("smbcs", sub_param)) {
 	    auip->default_.smbcs = 0;
@@ -1403,6 +1414,9 @@ handle_args(int *argc, char **argv, erts_alc_hndl_args_init_t *init)
 			else if (strcmp("max", arg) == 0) {
 			    for (a = 0; a < aui_sz; a++)
 				aui[a]->enable = 1;
+#if !HAVE_ERTS_SBMBC
+			    init->sbmbc_alloc.enable = 0;
+#endif
 			}
 			else if (strcmp("config", arg) == 0) {
 			    init->erts_alloc_config = 1;
@@ -1675,7 +1689,7 @@ erts_alc_fatal_error(int error, int func, ErtsAlcType_t n, ...)
 
     t_str = type_no_str(n);
     if (!t_str) {
-	sprintf(buf, "%d", (int) n);
+	erts_snprintf(buf, sizeof(buf), "%d", (int) n);
 	t_str = buf;
     }
 
@@ -2128,6 +2142,7 @@ erts_memory(int *print_to_p, void *print_to_arg, void *proc, Eterm earg)
 
 
     if (want_tot_or_sys || want.processes || want.processes_used) {
+	int max_processes = erts_ptab_max(&erts_proc);
 	UWord tmp;
 
 	if (ERTS_MEM_NEED_ALL_ALCU)
@@ -2137,10 +2152,7 @@ erts_memory(int *print_to_p, void *print_to_arg, void *proc, Eterm earg)
 		      fi, ERTS_ALC_NO_FIXED_SIZES);
 	    tmp = alcu_size(ERTS_ALC_A_EHEAP, NULL, 0);
 	}
-	tmp += erts_max_processes*sizeof(Process*);
-#ifdef HYBRID
-	tmp += erts_max_processes*sizeof(Process*);
-#endif
+	tmp += max_processes*sizeof(erts_smp_atomic_t);
 	tmp += erts_bif_timer_memory_size();
 	tmp += erts_tot_link_lh_size();
 
@@ -2271,6 +2283,8 @@ erts_allocated_areas(int *print_to_p, void *print_to_arg, void *proc)
     Eterm res = THE_NON_VALUE;
     int i, length;
     Uint reserved_atom_space, atom_space;
+    int max_processes = erts_ptab_max(&erts_proc);
+    int max_ports = erts_ptab_max(&erts_port);
 
     if (proc) {
 	ERTS_SMP_LC_ASSERT(ERTS_PROC_LOCK_MAIN
@@ -2302,12 +2316,8 @@ erts_allocated_areas(int *print_to_p, void *print_to_arg, void *proc)
     values[i].arity = 2;
     values[i].name = "static";
     values[i].ui[0] = 
-	erts_max_ports*sizeof(Port)		/* Port table */
-	+ erts_timer_wheel_memory_size()	/* Timer wheel */
-#ifdef SYS_TMP_BUF_SIZE
-	+ SYS_TMP_BUF_SIZE		/* tmp_buf in sys on vxworks & ose */
-#endif
-	;
+	max_ports*sizeof(erts_smp_atomic_t)	/* Port table */
+	+ erts_timer_wheel_memory_size();	/* Timer wheel */
     i++;
 
     erts_atom_get_text_space_sizes(&reserved_atom_space, &atom_space);
@@ -2385,7 +2395,7 @@ erts_allocated_areas(int *print_to_p, void *print_to_arg, void *proc)
 
     values[i].arity = 2;
     values[i].name = "process_table";
-    values[i].ui[0] = erts_max_processes*sizeof(Process*);
+    values[i].ui[0] = max_processes*sizeof(Process*);
     i++;
 
     values[i].arity = 2;
@@ -3052,13 +3062,13 @@ erts_request_alloc_info(struct process *c_p,
 	Eterm alloc = CAR(consp);
 
 	for (ai = ERTS_ALC_A_MIN; ai <= ERTS_ALC_A_MAX; ai++)
-	    if (erts_is_atom_str((char *) erts_alc_a2ad[ai], alloc))
+	    if (erts_is_atom_str(erts_alc_a2ad[ai], alloc, 0))
 		goto save_alloc;
-	if (erts_is_atom_str("mseg_alloc", alloc)) {
+	if (erts_is_atom_str("mseg_alloc", alloc, 0)) {
 	    ai = ERTS_ALC_INFO_A_MSEG_ALLOC;
 	    goto save_alloc;
 	}
-	if (erts_is_atom_str("alloc_util", alloc)) {
+	if (erts_is_atom_str("alloc_util", alloc, 0)) {
 	    ai = ERTS_ALC_INFO_A_ALLOC_UTIL;
 	save_alloc:
 	    if (req_ai[ai])
@@ -3579,12 +3589,12 @@ check_memory_fence(void *ptr, Uint *size, ErtsAlcType_t n, int func)
 
 	ftype = type_no_str(found_type);
 	if (!ftype) {
-	    sprintf(fbuf, "%d", (int) found_type);
+	    erts_snprintf(fbuf, sizeof(fbuf), "%d", (int) found_type);
 	    ftype = fbuf;
 	}
 	otype = type_no_str(n);
 	if (!otype) {
-	    sprintf(obuf, "%d", (int) n);
+	    erts_snprintf(obuf, sizeof(obuf), "%d", (int) n);
 	    otype = obuf;
 	}
 

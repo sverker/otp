@@ -1,10 +1,10 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="iso-8859-1" ?>
 <!DOCTYPE chapter SYSTEM "chapter.dtd">
 
 <chapter>
   <header>
     <copyright>
-      <year>2004</year><year>2011</year>
+      <year>2004</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -28,6 +28,248 @@
     <rev>%VSN%</rev>
     <file>notes.xml</file>
   </header>
+
+<section><title>Ssh 2.1.4</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Better quality on the error messages for when key
+	    exchange failed.</p>
+          <p>
+	    Own Id: OTP-10553 Aux Id: seq12152 </p>
+        </item>
+        <item>
+          <p>
+	    Fix link to documentation for ssh:connect/3,4. Thanks to
+	    Martin Hässler.</p>
+          <p>
+	    Own Id: OTP-10862</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Ssh 2.1.3</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    It is now possible to send an empty binary using
+	    ssh_connection:send/3, this corner case previously caused
+	    ssh_connection:send to hang.</p>
+          <p>
+	    Own Id: OTP-9478 Aux Id: kunagi-226 [137] </p>
+        </item>
+        <item>
+          <p>
+	    Fix typo in keyboard-interactive string. Thanks to Daniel
+	    Goertzen</p>
+          <p>
+	    Own Id: OTP-10456</p>
+        </item>
+        <item>
+          <p>
+	    ssh_connectino:send/3 will not return until all data has
+	    been sent. Previously it could return too early,
+	    resulting in things such premature close of the
+	    connection. Also improved error handling of closed SSH
+	    channels.</p>
+          <p>
+	    Own Id: OTP-10467</p>
+        </item>
+        <item>
+	    <p>Fixed ssh_cli.erl crashes because #state.buf is yet
+	    'undefined'.</p> <p>Fixed Client terminateing connections
+	    due to channel_request message response is sent to the
+	    wrong id.</p> <p>Affected SSH clients: - all clients
+	    based on SSH-2.0-TrileadSSH2Java_213 (problem #1) - SSH
+	    Term Pro (problem #2)</p> <p>Thanks to Stefan Zegenhagen
+	    </p>
+          <p>
+	    Own Id: OTP-10475</p>
+        </item>
+        <item>
+          <p>
+	    Fixed various syntax errors in SSH appup file</p>
+          <p>
+	    Own Id: OTP-10657</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    SSH_FX_FILE_IS_A_DIRECTORY message for sftp implemented</p>
+          <p>
+	    Own Id: OTP-6406 Aux Id: kunagi-218 [129] </p>
+        </item>
+        <item>
+          <p>
+	    SSH Rekeying fixed</p>
+          <p>
+	    Own Id: OTP-7785 Aux Id: kunagi-220 [131] </p>
+        </item>
+        <item>
+          <p>
+	    Added User Guide for the SSH application</p>
+          <p>
+	    Own Id: OTP-7786 Aux Id: kunagi-221 [132] </p>
+        </item>
+        <item>
+          <p>
+	    Documentation regarding failfun, connectfun and
+	    disconnectfun provided</p>
+          <p>
+	    Own Id: OTP-7792 Aux Id: kunagi-222 [133] </p>
+        </item>
+        <item>
+          <p>
+	    SSH connection timer implementation</p>
+          <p>
+	    New option, {idle_time, integer()}, sets a timeout on
+	    connection when no channels are active, defaults to
+	    infinity</p>
+          <p>
+	    Own Id: OTP-10514 Aux Id: seq12020 </p>
+        </item>
+        <item>
+	    <p> Some examples overflowing the width of PDF pages have
+	    been corrected. </p>
+          <p>
+	    Own Id: OTP-10665</p>
+        </item>
+        <item>
+          <p>
+	    Fixed internal error on when client and server can not
+	    agree o which authmethod to use.</p>
+          <p>
+	    Own Id: OTP-10731 Aux Id: seq12237 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Ssh 2.1.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    SSH quiet mode</p>
+          <p>
+	    A new option to ssh:connect/3,4, quiet_mode. If true, the
+	    client will not print out anything on authorization.</p>
+          <p>
+	    Own Id: OTP-10429 Aux Id: kunagi-273 [184] </p>
+        </item>
+        <item>
+          <p>
+	    Restrict which key algorithms to use</p>
+          <p>
+	    A new option to ssh:connect/3,4 is introduced,
+	    public_key_algs, where you can restrict which key
+	    algorithms to use and in which order to try them.</p>
+          <p>
+	    Own Id: OTP-10498 Aux Id: kunagi-289 [200] </p>
+        </item>
+        <item>
+          <p>
+	    Confidentiality of client password</p>
+          <p>
+	    Unsets clients password after authentication.</p>
+          <p>
+	    Own Id: OTP-10511 Aux Id: kunagi-292 [203] </p>
+        </item>
+        <item>
+          <p>
+	    Fixed user interaction for SSH</p>
+          <p>
+	    It's now available to accept hosts and input password</p>
+          <p>
+	    Own Id: OTP-10513 Aux Id: kunagi-293 [204] </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Ssh 2.1.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Ssh now only sends one channel close message under all
+	    circumstances, before it would sometimes incorrectly send
+	    two.</p>
+          <p>
+	    Own Id: OTP-10060</p>
+        </item>
+        <item>
+          <p>
+	    The options check mistreated the ip_v6_disable-option,
+	    and did not handle some, at the moment, undocumented
+	    options correctly.</p>
+          <p>
+	    Own Id: OTP-10061</p>
+        </item>
+        <item>
+          <p>
+	    The channel id in a channel failure message, sent to the
+	    peer, is now in all cases the remote channel id</p>
+          <p>
+	    Own Id: OTP-10062</p>
+        </item>
+        <item>
+          <p>
+	    Improved handling of multiple closes to avoid occasional
+	    crashes when a channel is closed more than once.</p>
+          <p>
+	    Own Id: OTP-10112</p>
+        </item>
+        <item>
+          <p>
+	    Fix lib/src/test/ssh_basic_SUITE.erl to fix IPv6 option
+	    typos</p>
+          <p>
+	    Fixed incorrect option "ipv6_disable" to "ipv6_disabled"
+	    as documented in the ssh manual.</p>
+          <p>
+	    Own Id: OTP-10219</p>
+        </item>
+        <item>
+          <p>
+	    SSH: Make "auth_methods" server option re-usable</p>
+          <p>
+	    The 'auth_methods' option is used by the server side of
+	    the SSH code to tell a connecting SSH client about the
+	    authentication methods that are supported by the server.
+	    The code still extracts and handles the 'auth_methods'
+	    option from Opts in appropriate places, but the Opts
+	    checking code in ssh.erl didn't allow that option to be
+	    specified.</p>
+          <p>
+	    Own Id: OTP-10224</p>
+        </item>
+        <item>
+          <p>
+	    Use the correct channel id when adjusting the channel
+	    window</p>
+          <p>
+	    Own Id: OTP-10232</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Ssh 2.1</title>
 
@@ -666,7 +908,7 @@
       <list>
         <item>
           <p>
-            Ssh timeouts will now behave as expected e.i. defaults to
+            Ssh timeouts will now behave as expected i.e. defaults to
             infinity only the user of the ssh application can know of
             a reasonable timeout value for their application.</p>
           <p>
@@ -719,7 +961,7 @@
 	caused the ssh daemon to close the connections to all
 	currently logged in users if one user logged out. Another
 	problem related to the supervision tree caused the closing
-	down of clients to leak processes e.i. all processes was
+	down of clients to leak processes i.e. all processes was
       not shutdown correctly.</p>
       <p>
       Own Id: OTP-7676</p>
@@ -811,7 +1053,7 @@
 	slightly changes the options to the API function
 	ssh:daemon/[1,2,3] deprecating all no longer documented
 	options. Note that the new API enforces the "logical way"
-	of using the old API e.i. making the subsystem process
+	of using the old API i.e. making the subsystem process
 	part of the ssh applications supervisor tree, so missuses
       of the old API are not compatible with the new API.</p>
       <p>

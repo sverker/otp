@@ -83,7 +83,8 @@ module(Module, Entries, Env, Opts) ->
     AllTags = get_all_tags(Entries),
     Functions = function_filter(Entries, Opts),
     Out = {module, ([{name, Name},
-		     {root, Env#env.root}]
+		     {root, Env#env.root},
+                     {encoding, Module#module.encoding}]
 		    ++ case is_private(HeaderTags) of
 			   true -> [{private, "yes"}];
 			   false -> []
@@ -167,7 +168,10 @@ callbacks(Es, Module, Env, Opts) ->
     case lists:any(fun (#entry{name = {behaviour_info, 1}}) -> true;
 		       (_) -> false
 		   end,
-		   Es) of
+		   Es)
+	orelse
+	lists:keymember(callback, 1, Module#module.attributes)
+    of
 	true ->
 	    try (Module#module.name):behaviour_info(callbacks) of
 		Fs ->

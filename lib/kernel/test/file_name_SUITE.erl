@@ -1,8 +1,9 @@
 -module(file_name_SUITE).
+%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -74,7 +75,7 @@
 	 init_per_suite/1,end_per_suite/1,
 	 init_per_group/2,end_per_group/2,
 	 init_per_testcase/2, end_per_testcase/2]).
--export([normal/1,icky/1,very_icky/1,normalize/1]).
+-export([normal/1,icky/1,very_icky/1,normalize/1,home_dir/1]).
 
 
 init_per_testcase(_Func, Config) ->
@@ -88,7 +89,7 @@ end_per_testcase(_Func, Config) ->
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [normal, icky, very_icky, normalize].
+    [normal, icky, very_icky, normalize, home_dir].
 
 groups() -> 
     [].
@@ -104,6 +105,54 @@ init_per_group(_GroupName, Config) ->
 
 end_per_group(_GroupName, Config) ->
 	Config.
+
+home_dir(suite) ->
+    [];
+home_dir(doc) ->
+    ["Check that Erlang can be started with unicode named home directory"];
+home_dir(Config) when is_list(Config) ->
+    try
+	Name=[960,945,964,961,953,954],
+	Priv = ?config(priv_dir, Config),
+	UniMode = file:native_name_encoding() =/= latin1,
+	if 
+	    not UniMode ->
+		throw(need_unicode_mode);
+	    true ->
+		ok
+	end,
+	NewHome=filename:join(Priv,Name),
+	file:make_dir(NewHome),
+	{SaveOldName,SaveOldValue} = case os:type() of
+					 {win32,nt} ->
+					     HomePath=re:replace(filename:nativename(NewHome),"^[a-zA-Z]:","",[{return,list},unicode]),
+					     Save = os:getenv("HOMEPATH"),
+					     os:putenv("HOMEPATH",HomePath),
+					     {"HOMEPATH",Save};
+					 {unix,_} ->
+					     Save = os:getenv("HOME"),
+					     os:putenv("HOME",NewHome),
+					     {"HOME",Save};
+					 _ ->
+					     rm_rf(prim_file,NewHome),
+					     throw(unsupported_os)
+				     end,
+	try
+	    {ok,Node} = test_server:start_node(test_unicode_homedir,slave,[{args,"-setcookie "++atom_to_list(erlang:get_cookie())}]),
+	    test_server:stop_node(Node),
+	    ok
+	after
+	    os:putenv(SaveOldName,SaveOldValue),
+	    rm_rf(prim_file,NewHome)
+	end
+    catch
+	throw:need_unicode_mode ->
+	    io:format("Sorry, can only run in unicode mode.~n"),
+	    {skipped,"VM needs to be started in Unicode filename mode"};
+	throw:unsupported_os ->
+	    io:format("Sorry, can only run on Unix/Windows.~n"),
+	    {skipped,"Runs only on Unix/Windows"}
+    end.
 
 normalize(suite) ->
     [];
@@ -288,12 +337,12 @@ check_normal(Mod) ->
 check_icky(Mod) -> 
     {ok,Dir} = Mod:get_cwd(),
     try
-	?line true=(length("åäö") =:= 3),
+	?line true=(length("Ã¥Ã¤Ã¶") =:= 3),
 	?line UniMode = file:native_name_encoding() =/= latin1,
 	?line make_icky_dir(Mod),
- 	?line {ok, L0} = Mod:list_dir("."),
+ 	{ok, L0} = Mod:list_dir_all("."),
  	?line L1 = lists:sort(L0),
-	io:format("~p ~p~n",[L1,list(icky_dir())]),
+	io:format("~p~n~p~n~n",[L1,lists:sort(list(icky_dir()))]),
  	?line L1 = lists:sort(convlist(list(icky_dir()))),
  	?line {ok,D2} = Mod:get_cwd(),
  	?line true = is_list(D2),
@@ -308,66 +357,59 @@ check_icky(Mod) ->
  	?line Syms = [ {S,conv(Targ),list_to_binary(get_data(Targ,icky_dir()))} 
  		 || {T,S,Targ} <- icky_dir(), T =:= symlink ],
  	?line [ {ok, Cont} = Mod:read_file(SymL) || {SymL,_,Cont} <- Syms ],
- 	?line [ {ok, Targ} = fixlink(Mod:read_link(SymL)) || {SymL,Targ,_} <- Syms ],
- 	?line chk_cre_dir(Mod,[{directory,"åäö_dir",icky_dir()}]),
+ 	[ {ok, Targ} = fixlink(Mod:read_link_all(SymL)) ||
+	    {SymL,Targ,_} <- Syms ],
+        ?line chk_cre_dir(Mod,[{directory,"Ã¥Ã¤Ã¶_dir",icky_dir()}]),
  	?line {ok,BeginAt} = Mod:get_cwd(),
  	?line true = is_list(BeginAt),
- 	?line {error,enoent} = Mod:set_cwd("åä_dir"),
-	?line ok = Mod:set_cwd("åäö_dir"),
+        ?line {error,enoent} = Mod:set_cwd("Ã¥Ã¤_dir"),
+	?line ok = Mod:set_cwd("Ã¥Ã¤Ã¶_dir"),
  	?line {ok, NowAt} = Mod:get_cwd(),
  	?line true = is_list(NowAt),
  	?line true = BeginAt =/= NowAt,
  	?line ok = Mod:set_cwd(".."),
  	?line {ok,BeginAt} = Mod:get_cwd(),
- 	?line rm_r2(Mod,"åäö_dir"),
-	{OS,TYPE} = os:type(),
+        ?line rm_r2(Mod,"Ã¥Ã¤Ã¶_dir"),
+	{OS,_} = os:type(),
 	% Check that treat_icky really converts to the same as the OS
 	case UniMode of
 	    true ->
-		?line chk_cre_dir(Mod,[{directory,"åäö_dir",[]}]),
-		?line ok = Mod:set_cwd("åäö_dir"),
-		?line ok = Mod:write_file(<<"ååå">>,<<"hello">>),
-		?line Treated = treat_icky(<<"ååå">>),
-		?line {ok,[Treated]} = Mod:list_dir("."),
-		?line ok = Mod:delete(<<"ååå">>),
+		?line chk_cre_dir(Mod,[{directory,"Ã¥Ã¤Ã¶_dir",[]}]),
+		?line ok = Mod:set_cwd("Ã¥Ã¤Ã¶_dir"),
+		?line ok = Mod:write_file(<<"Ã¥Ã¥Ã¥">>,<<"hello">>),
+		?line Treated = treat_icky(<<"Ã¥Ã¥Ã¥">>),
+		{ok,[Treated]} = Mod:list_dir_all("."),
+		?line ok = Mod:delete(<<"Ã¥Ã¥Ã¥">>),
 		?line {ok,[]} = Mod:list_dir("."),
 		?line ok = Mod:set_cwd(".."),
-		?line rm_r2(Mod,"åäö_dir");
+		?line rm_r2(Mod,"Ã¥Ã¤Ã¶_dir");
 	    false ->
 		ok
 	end,
 
- 	?line chk_cre_dir(Mod,[{directory,treat_icky(<<"åäö_dir">>),icky_dir()}]),
+        ?line chk_cre_dir(Mod,[{directory,treat_icky(<<"Ã¥Ã¤Ã¶_dir">>),icky_dir()}]),
 	if 
 	    UniMode and (OS =/= win32) ->
-		?line {error,enoent} = Mod:set_cwd("åäö_dir");
+		?line {error,enoent} = Mod:set_cwd("Ã¥Ã¤Ã¶_dir");
 	    true ->
 		ok
 	end,
-	?line ok = Mod:set_cwd(treat_icky(<<"åäö_dir">>)),
- 	?line {ok, NowAt2} = Mod:get_cwd(),
-	io:format("~p~n",[NowAt2]),
-	% Cannot create raw unicode-breaking filenames on windows or macos
- 	?line true = ((((not UniMode) or (OS =:= win32) or (TYPE=:=darwin)) and is_list(NowAt2)) orelse ((UniMode) and is_binary(NowAt2))),
- 	?line true = BeginAt =/= NowAt2,
- 	?line ok = Mod:set_cwd(".."),
  	?line {ok,BeginAt} = Mod:get_cwd(),
- 	?line rm_r2(Mod,conv(treat_icky(<<"åäö_dir">>))),
 	case has_links() of
 	    true ->
-		?line ok = Mod:make_link("fil1","nisseö"),
-		?line {ok, <<"fil1">>} = Mod:read_file("nisseö"),
-		?line {ok, #file_info{type = regular}} = Mod:read_link_info("nisseö"),
-		?line ok = Mod:delete("nisseö"),
-		?line ok = Mod:make_link("fil1",treat_icky(<<"nisseö">>)),
-		?line {ok, <<"fil1">>} = Mod:read_file(treat_icky(<<"nisseö">>)),
-		?line {ok, #file_info{type = regular}} = Mod:read_link_info(treat_icky(<<"nisseö">>)),
-		?line ok = Mod:delete(treat_icky(<<"nisseö">>)),
+		?line ok = Mod:make_link("fil1","nisseÃ¶"),
+		?line {ok, <<"fil1">>} = Mod:read_file("nisseÃ¶"),
+		?line {ok, #file_info{type = regular}} = Mod:read_link_info("nisseÃ¶"),
+		?line ok = Mod:delete("nisseÃ¶"),
+		?line ok = Mod:make_link("fil1",treat_icky(<<"nisseÃ¶">>)),
+		?line {ok, <<"fil1">>} = Mod:read_file(treat_icky(<<"nisseÃ¶">>)),
+		?line {ok, #file_info{type = regular}} = Mod:read_link_info(treat_icky(<<"nisseÃ¶">>)),
+		?line ok = Mod:delete(treat_icky(<<"nisseÃ¶">>)),
 		?line {ok, <<"fil1">>} = Mod:read_file("fil1"),
-		?line {error,enoent} = Mod:read_file("nisseö"),
-		?line {error,enoent} = Mod:read_link_info("nisseö"),
-		?line {error,enoent} = Mod:read_file(treat_icky(<<"nisseö">>)),
-		?line {error,enoent} = Mod:read_link_info(treat_icky(<<"nisseö">>));
+		?line {error,enoent} = Mod:read_file("nisseÃ¶"),
+		?line {error,enoent} = Mod:read_link_info("nisseÃ¶"),
+		?line {error,enoent} = Mod:read_file(treat_icky(<<"nisseÃ¶">>)),
+		?line {error,enoent} = Mod:read_link_info(treat_icky(<<"nisseÃ¶">>));
 	    false ->
 		ok
 	end,
@@ -382,42 +424,42 @@ check_icky(Mod) ->
  	      ?line {ok, BC} = Mod:read(FD,1024),
  	      ?line ok = file:close(FD)
  	  end || {regular,Name,Content} <- icky_dir() ],
- 	?line Mod:rename("åäö2","åäö_fil1"),
- 	?line {ok, <<"åäö2">>} = Mod:read_file("åäö_fil1"),
- 	?line {error,enoent} = Mod:read_file("åäö2"),
- 	?line Mod:rename("åäö_fil1","åäö2"),
- 	?line {ok, <<"åäö2">>} = Mod:read_file("åäö2"),
- 	?line {error,enoent} = Mod:read_file("åäö_fil1"),
+        ?line Mod:rename("Ã¥Ã¤Ã¶2","Ã¥Ã¤Ã¶_fil1"),
+        ?line {ok, <<"Ã¥Ã¤Ã¶2">>} = Mod:read_file("Ã¥Ã¤Ã¶_fil1"),
+        ?line {error,enoent} = Mod:read_file("Ã¥Ã¤Ã¶2"),
+        ?line Mod:rename("Ã¥Ã¤Ã¶_fil1","Ã¥Ã¤Ã¶2"),
+        ?line {ok, <<"Ã¥Ã¤Ã¶2">>} = Mod:read_file("Ã¥Ã¤Ã¶2"),
+        ?line {error,enoent} = Mod:read_file("Ã¥Ã¤Ã¶_fil1"),
 
- 	?line Mod:rename("åäö2",treat_icky(<<"åäö_fil1">>)),
- 	?line {ok, <<"åäö2">>} = Mod:read_file(treat_icky(<<"åäö_fil1">>)),
+        ?line Mod:rename("Ã¥Ã¤Ã¶2",treat_icky(<<"Ã¥Ã¤Ã¶_fil1">>)),
+        ?line {ok, <<"Ã¥Ã¤Ã¶2">>} = Mod:read_file(treat_icky(<<"Ã¥Ã¤Ã¶_fil1">>)),
 	if
 	    UniMode and (OS =/= win32) ->
-		{error,enoent} = Mod:read_file("åäö_fil1");
+		{error,enoent} = Mod:read_file("Ã¥Ã¤Ã¶_fil1");
 	    true ->
 		ok
 	end,
- 	?line {error,enoent} = Mod:read_file("åäö2"),
- 	?line Mod:rename(treat_icky(<<"åäö_fil1">>),"åäö2"),
- 	?line {ok, <<"åäö2">>} = Mod:read_file("åäö2"),
- 	?line {error,enoent} = Mod:read_file("åäö_fil1"),
- 	?line {error,enoent} = Mod:read_file(treat_icky(<<"åäö_fil1">>)),
+        ?line {error,enoent} = Mod:read_file("Ã¥Ã¤Ã¶2"),
+        ?line Mod:rename(treat_icky(<<"Ã¥Ã¤Ã¶_fil1">>),"Ã¥Ã¤Ã¶2"),
+        ?line {ok, <<"Ã¥Ã¤Ã¶2">>} = Mod:read_file("Ã¥Ã¤Ã¶2"),
+        ?line {error,enoent} = Mod:read_file("Ã¥Ã¤Ã¶_fil1"),
+        ?line {error,enoent} = Mod:read_file(treat_icky(<<"Ã¥Ã¤Ã¶_fil1">>)),
 
- 	?line {ok,FI} = Mod:read_file_info("åäö2"),
+        ?line {ok,FI} = Mod:read_file_info("Ã¥Ã¤Ã¶2"),
 	?line NewMode = FI#file_info.mode band (bnot 8#333),
 	?line NewMode2 = NewMode bor 8#222,
  	?line true = NewMode2 =/= NewMode,
- 	?line ok = Mod:write_file_info("åäö2",FI#file_info{mode = NewMode}),
- 	?line {ok,#file_info{mode = NewMode}} = Mod:read_file_info("åäö2"),
- 	?line ok = Mod:write_file_info("åäö2",FI#file_info{mode = NewMode2}),
- 	?line {ok,#file_info{mode = NewMode2}} = Mod:read_file_info("åäö2"),
+        ?line ok = Mod:write_file_info("Ã¥Ã¤Ã¶2",FI#file_info{mode = NewMode}),
+        ?line {ok,#file_info{mode = NewMode}} = Mod:read_file_info("Ã¥Ã¤Ã¶2"),
+        ?line ok = Mod:write_file_info("Ã¥Ã¤Ã¶2",FI#file_info{mode = NewMode2}),
+        ?line {ok,#file_info{mode = NewMode2}} = Mod:read_file_info("Ã¥Ã¤Ã¶2"),
 
- 	?line {ok,FII} = Mod:read_file_info(treat_icky(<<"åäö5">>)),
+        ?line {ok,FII} = Mod:read_file_info(treat_icky(<<"Ã¥Ã¤Ã¶5">>)),
  	?line true = NewMode2 =/= NewMode,
- 	?line ok = Mod:write_file_info(treat_icky(<<"åäö5">>),FII#file_info{mode = NewMode}),
- 	?line {ok,#file_info{mode = NewMode}} = Mod:read_file_info(treat_icky(<<"åäö5">>)),
- 	?line ok = Mod:write_file_info(<<"åäö5">>,FII#file_info{mode = NewMode2}),
- 	?line {ok,#file_info{mode = NewMode2}} = Mod:read_file_info(treat_icky(<<"åäö5">>)),
+        ?line ok = Mod:write_file_info(treat_icky(<<"Ã¥Ã¤Ã¶5">>),FII#file_info{mode = NewMode}),
+        ?line {ok,#file_info{mode = NewMode}} = Mod:read_file_info(treat_icky(<<"Ã¥Ã¤Ã¶5">>)),
+        ?line ok = Mod:write_file_info(<<"Ã¥Ã¤Ã¶5">>,FII#file_info{mode = NewMode2}),
+        ?line {ok,#file_info{mode = NewMode2}} = Mod:read_file_info(treat_icky(<<"Ã¥Ã¤Ã¶5">>)),
 	ok
     after
 	Mod:set_cwd(Dir),
@@ -427,7 +469,7 @@ check_icky(Mod) ->
 check_very_icky(Mod) -> 
     {ok,Dir} = Mod:get_cwd(),
     try
-	?line true=(length("åäö") =:= 3),
+	?line true=(length("Ã¥Ã¤Ã¶") =:= 3),
 	?line UniMode = file:native_name_encoding() =/= latin1,
 	if
 	    not UniMode ->
@@ -436,7 +478,7 @@ check_very_icky(Mod) ->
 		ok
 	end,
 	?line make_very_icky_dir(Mod),
- 	?line {ok, L0} = Mod:list_dir("."),
+ 	{ok, L0} = Mod:list_dir_all("."),
  	?line L1 = lists:sort(L0),
  	?line L1 = lists:sort(convlist(list(very_icky_dir()))),
  	?line {ok,D2} = Mod:get_cwd(),
@@ -445,11 +487,12 @@ check_very_icky(Mod) ->
  	?line Syms = [ {S,conv(Targ),list_to_binary(get_data(Targ,very_icky_dir()))} 
  		 || {T,S,Targ} <- very_icky_dir(), T =:= symlink ],
  	?line [ {ok, Cont} = Mod:read_file(SymL) || {SymL,_,Cont} <- Syms ],
- 	?line [ {ok, Targ} = fixlink(Mod:read_link(SymL)) || {SymL,Targ,_} <- Syms ],
+ 	?line [ {ok, Targ} = fixlink(Mod:read_link_all(SymL)) ||
+		  {SymL,Targ,_} <- Syms ],
  	?line chk_cre_dir(Mod,[{directory,[1088,1079,1091]++"_dir",very_icky_dir()}]),
  	?line {ok,BeginAt} = Mod:get_cwd(),
  	?line true = is_list(BeginAt),
- 	?line {error,enoent} = Mod:set_cwd("åä_dir"),
+        ?line {error,enoent} = Mod:set_cwd("Ã¥Ã¤_dir"),
 	?line ok = Mod:set_cwd([1088,1079,1091]++"_dir"),
  	?line {ok, NowAt} = Mod:get_cwd(),
  	?line true = is_list(NowAt),
@@ -466,16 +509,16 @@ check_very_icky(Mod) ->
 		?line {ok, #file_info{type = regular}} = 
 		    Mod:read_link_info("nisse"++[1088,1079,1091]),
 		?line ok = Mod:delete("nisse"++[1088,1079,1091]),
-		?line ok = Mod:make_link("fil1",<<"nisseö">>),
-		?line {ok, <<"fil1">>} = Mod:read_file(<<"nisseö">>),
+		?line ok = Mod:make_link("fil1",<<"nisseÃ¶">>),
+		?line {ok, <<"fil1">>} = Mod:read_file(<<"nisseÃ¶">>),
 		?line {ok, #file_info{type = regular}} = 
-		    Mod:read_link_info(<<"nisseö">>),
-		?line ok = Mod:delete(<<"nisseö">>),
+		    Mod:read_link_info(<<"nisseÃ¶">>),
+		?line ok = Mod:delete(<<"nisseÃ¶">>),
 		?line {ok, <<"fil1">>} = Mod:read_file("fil1"),
 		?line {error,enoent} = Mod:read_file("nisse"++[1088,1079,1091]),
 		?line {error,enoent} = Mod:read_link_info("nisse"++[1088,1079,1091]),
-		?line {error,enoent} = Mod:read_file(<<"nisseö">>),
-		?line {error,enoent} = Mod:read_link_info(<<"nisseö">>);
+		?line {error,enoent} = Mod:read_file(<<"nisseÃ¶">>),
+		?line {error,enoent} = Mod:read_link_info(<<"nisseÃ¶">>);
 	    false ->
 		ok
 	end,
@@ -492,10 +535,10 @@ check_very_icky(Mod) ->
  	  end || {regular,Name,Content} <- very_icky_dir() ],
  	?line Mod:rename([956,965,963,954,959,49],
 			 [956,965,963,954,959]++"_fil1"),
- 	?line {ok, <<"åäö2">>} = Mod:read_file([956,965,963,954,959]++"_fil1"),
+        ?line {ok, <<"Ã¥Ã¤Ã¶2">>} = Mod:read_file([956,965,963,954,959]++"_fil1"),
  	?line {error,enoent} = Mod:read_file([956,965,963,954,959,49]),
  	?line Mod:rename([956,965,963,954,959]++"_fil1",[956,965,963,954,959,49]),
- 	?line {ok, <<"åäö2">>} = Mod:read_file([956,965,963,954,959,49]),
+        ?line {ok, <<"Ã¥Ã¤Ã¶2">>} = Mod:read_file([956,965,963,954,959,49]),
  	?line {error,enoent} = Mod:read_file([956,965,963,954,959]++"_fil1"),
 
  	?line {ok,FI} = Mod:read_file_info([956,965,963,954,959,49]),
@@ -510,33 +553,6 @@ check_very_icky(Mod) ->
 				       FI#file_info{mode = NewMode2}),
  	?line {ok,#file_info{mode = NewMode2}} = 
 	          Mod:read_file_info([956,965,963,954,959,49]),
-	?line NumOK0 = case has_links() of
-			  true -> 5;
-			  false -> 3
-		      end,
-	?line NumNOK0 = case has_links() of
-			   true -> 4;
-			   false -> 3
-		       end,
-	?line {NumOK,NumNOK} = case is_binary(treat_icky(<<"foo">>)) of
-				   false ->
-				       {NumOK0+NumNOK0,0};
-				   true ->
-				       {NumOK0,NumNOK0}
-			       end,
-	?line {NumOK,NumNOK} = filelib:fold_files(".",".*",true,fun(_F,{N,M}) when is_list(_F) ->  io:format("~ts~n",[_F]),{N+1,M}; (_F,{N,M}) ->  io:format("~p~n",[_F]),{N,M+1} end,{0,0}),
-	?line ok = filelib:fold_files(".",[1076,1089,1072,124,46,42],true,fun(_F,_) -> ok end,false),
-	?line SF3 = unicode:characters_to_binary("åäösubfil3",
-                                                 file:native_name_encoding()),
-	?line SF2 = case treat_icky(<<"åäösubfil2">>) of
-	                LF2 when is_list(LF2) ->
-			    unicode:characters_to_binary(LF2,
-			                      file:native_name_encoding());
-			BF2 ->
-			    BF2
-	            end,		      
-	?line Sorted = lists:sort([SF3,SF2]),
-	?line Sorted = lists:sort(filelib:wildcard("*",<<"åäösubdir2">>)),
 	ok
     catch
 	throw:need_unicode_mode ->
@@ -555,7 +571,7 @@ check_very_icky(Mod) ->
 rm_rf(Mod,Dir) ->
     case  Mod:read_link_info(Dir) of
 	{ok, #file_info{type = directory}} ->
-	    {ok, Content} = Mod:list_dir(Dir),
+	    {ok, Content} = Mod:list_dir_all(Dir),
 	    [ rm_rf(Mod,filename:join(Dir,C)) || C <- Content ],
 	    Mod:del_dir(Dir),
 	    ok;
@@ -570,7 +586,7 @@ rm_r(Mod,Dir) ->
     case  Mod:read_link_info(Dir) of
 	{ok, #file_info{type = directory}} ->
 	    {ok,#file_info{type = directory}} =  Mod:read_file_info(Dir),
-	    {ok, Content} = Mod:list_dir(Dir),
+	    {ok, Content} = Mod:list_dir_all(Dir),
 	    [ true = is_list(Part) || Part <- Content ],
 	    [ true = is_list(filename:join(Dir,Part)) || Part <- Content ],
 	    [ rm_r(Mod,filename:join(Dir,C)) || C <- Content ],
@@ -588,7 +604,7 @@ rm_r2(Mod,Dir) ->
     case  Mod:read_link_info(Dir) of
 	{ok, #file_info{type = directory}} ->
 	    {ok,#file_info{type = directory}} =  Mod:read_file_info(Dir),
-	    {ok, Content} = Mod:list_dir(Dir),
+	    {ok, Content} = Mod:list_dir_all(Dir),
 	    UniMode = file:native_name_encoding() =/= latin1,
 	    [ true = (is_list(Part) orelse UniMode) || Part <- Content ],
 	    [ true = (is_list(filename:join(Dir,Part)) orelse UniMode) || Part <- Content ],
@@ -696,26 +712,26 @@ hopeless_darwin() ->
 
 icky_dir() ->
     [{regular,"fil1","fil1"},
-     {regular,"åäö2","åäö2"}] ++
+     {regular,"Ã¥Ã¤Ã¶2","Ã¥Ã¤Ã¶2"}] ++
 	case has_links() of
 	    true ->
-		[{regular,"åäö3","åäö2"},
-		 {symlink,"åäö4","åäö2"}];
+		[{regular,"Ã¥Ã¤Ã¶3","Ã¥Ã¤Ã¶2"},
+		 {symlink,"Ã¥Ã¤Ã¶4","Ã¥Ã¤Ã¶2"}];
 	    false ->
 		[]
 	end ++
-	[{regular,treat_icky(<<"åäö5">>),"åäö5"}] ++
+	[{regular,treat_icky(<<"Ã¥Ã¤Ã¶5">>),"Ã¥Ã¤Ã¶5"}] ++
 	 case has_links() of
 	     true -> 
-		 [{symlink,treat_icky(<<"åäö6">>),treat_icky(<<"åäö5">>)}];
+		 [{symlink,treat_icky(<<"Ã¥Ã¤Ã¶6">>),treat_icky(<<"Ã¥Ã¤Ã¶5">>)}];
 	     false -> 
 		 []
 	 end ++
-	[{directory,treat_icky(<<"åäösubdir2">>),
-	  [{regular,treat_icky(<<"åäösubfil2">>),"åäösubfil12"},
-	   {regular,"åäösubfil3","åäösubfil13"}]},
-	 {directory,"åäösubdir",
-	  [{regular,"åäösubfil1","åäösubfil1"}]}].
+	[{directory,treat_icky(<<"Ã¥Ã¤Ã¶subdir2">>),
+	  [{regular,treat_icky(<<"Ã¥Ã¤Ã¶subfil2">>),"Ã¥Ã¤Ã¶subfil12"},
+	   {regular,"Ã¥Ã¤Ã¶subfil3","Ã¥Ã¤Ã¶subfil13"}]},
+	 {directory,"Ã¥Ã¤Ã¶subdir",
+	  [{regular,"Ã¥Ã¤Ã¶subfil1","Ã¥Ã¤Ã¶subfil1"}]}].
 
 make_very_icky_dir(Mod) ->
     rm_rf(Mod,"very_icky_dir"),
@@ -726,26 +742,26 @@ make_very_icky_dir(Mod) ->
 
 very_icky_dir() ->
     [{regular,"fil1","fil1"},
-     {regular,[956,965,963,954,959,49],"åäö2"}] ++
+     {regular,[956,965,963,954,959,49],"Ã¥Ã¤Ã¶2"}] ++
 	case has_links() of
 	    true ->
-		[{regular,[956,965,963,954,959,50],"åäö2"},
+		[{regular,[956,965,963,954,959,50],"Ã¥Ã¤Ã¶2"},
 		 {symlink,[956,965,963,954,959,51],[956,965,963,954,959,49]}];
 	    false ->
 		[]
 	end ++
-     [{regular,treat_icky(<<"åäö5">>),"åäö5"}] ++
+     [{regular,treat_icky(<<"Ã¥Ã¤Ã¶5">>),"Ã¥Ã¤Ã¶5"}] ++
 	case has_links() of
 	    true ->
-		[{symlink,treat_icky(<<"åäö6">>),treat_icky(<<"åäö5">>)}];
+		[{symlink,treat_icky(<<"Ã¥Ã¤Ã¶6">>),treat_icky(<<"Ã¥Ã¤Ã¶5">>)}];
 	    false -> 
 		[]
 	end ++
-      [{directory,treat_icky(<<"åäösubdir2">>),
-      [{regular,treat_icky(<<"åäösubfil2">>),"åäösubfil12"},
-       {regular,"åäösubfil3","åäösubfil13"}]},
+      [{directory,treat_icky(<<"Ã¥Ã¤Ã¶subdir2">>),
+      [{regular,treat_icky(<<"Ã¥Ã¤Ã¶subfil2">>),"Ã¥Ã¤Ã¶subfil12"},
+       {regular,"Ã¥Ã¤Ã¶subfil3","Ã¥Ã¤Ã¶subfil13"}]},
       {directory,[956,965,963,954,959]++"subdir1",
-       [{regular,[956,965,963,954,959]++"subfil1","åäösubfil1"}]}].
+       [{regular,[956,965,963,954,959]++"subfil1","Ã¥Ã¤Ã¶subfil1"}]}].
 
 %% Some OS'es simply do not allow non UTF8 filenames
 treat_icky(Bin) ->

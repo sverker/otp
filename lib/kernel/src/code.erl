@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -63,8 +63,9 @@
 	 which/1,
 	 where_is_file/1,
 	 where_is_file/2,
-	 set_primary_archive/3,
-	 clash/0]).
+	 set_primary_archive/4,
+	 clash/0,
+     get_mode/0]).
 
 -export_type([load_error_rsn/0, load_ret/0]).
 
@@ -293,6 +294,9 @@ replace_path(Name, Dir) when (is_atom(Name) orelse is_list(Name)),
 -spec rehash() -> 'ok'.
 rehash() -> call(rehash).
 
+-spec get_mode() -> 'embedded' | 'interactive'.
+get_mode() -> call(get_mode).
+
 %%-----------------------------------------------------------------
 
 call(Req) ->
@@ -359,7 +363,6 @@ load_code_server_prerequisites() ->
 	      hipe_unified_loader,
 	      lists,
 	      os,
-	      packages,
 	      unicode],
     [M = M:module_info(module) || M <- Needed],
     ok.
@@ -413,7 +416,7 @@ which(Module) when is_atom(Module) ->
     end.
 
 which2(Module) ->
-    Base = to_path(Module),
+    Base = atom_to_list(Module),
     File = filename:basename(Base) ++ objfile_extension(),
     Path = get_path(),
     which(File, filename:dirname(Base), Path).
@@ -474,13 +477,16 @@ where_is_file(Path, File) when is_list(Path), is_list(File) ->
 
 -spec set_primary_archive(ArchiveFile :: file:filename(),
 			  ArchiveBin :: binary(),
-			  FileInfo :: file:file_info())
+			  FileInfo :: file:file_info(),
+			  ParserFun :: fun())
 			 -> 'ok' | {'error', atom()}.
 
-set_primary_archive(ArchiveFile0, ArchiveBin, #file_info{} = FileInfo)
+set_primary_archive(ArchiveFile0, ArchiveBin, #file_info{} = FileInfo,
+		    ParserFun)
   when is_list(ArchiveFile0), is_binary(ArchiveBin) ->
     ArchiveFile = filename:absname(ArchiveFile0),
-    case call({set_primary_archive, ArchiveFile, ArchiveBin, FileInfo}) of
+    case call({set_primary_archive, ArchiveFile, ArchiveBin, FileInfo,
+	       ParserFun}) of
 	{ok, []} ->
 	    ok;
 	{ok, _Mode, Ebins} ->
@@ -509,7 +515,7 @@ search([{Dir, File} | Tail]) ->
 	false -> 
 	    search(Tail);
 	{Dir2, File} ->
-	    io:format("** ~s hides ~s~n",
+	    io:format("** ~ts hides ~ts~n",
 		      [filename:join(Dir, File),
 		       filename:join(Dir2, File)]),
 	    [clash | search(Tail)]
@@ -526,7 +532,7 @@ decorate([File|Tail], Dir) ->
     [{Dir, File} | decorate(Tail, Dir)].
 
 filter(_Ext, Dir, error) ->
-    io:format("** Bad path can't read ~s~n", [Dir]), [];
+    io:format("** Bad path can't read ~ts~n", [Dir]), [];
 filter(Ext, _, {ok,Files}) -> 
     filter2(Ext, length(Ext), Files).
 
@@ -543,9 +549,6 @@ has_ext(Ext, Extlen, File) ->
 	Ext -> true;
 	_ -> false
     end.
-
-to_path(X) ->
-    filename:join(packages:split(X)).
 
 -spec load_native_code_for_all_loaded() -> ok.
 load_native_code_for_all_loaded() ->

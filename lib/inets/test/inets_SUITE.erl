@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -363,8 +363,6 @@ start_ftpc(suite) ->
     [];
 start_ftpc(Config) when is_list(Config) ->
     process_flag(trap_exit, true),
-    inets:disable_trace(),
-    inets:enable_trace(max, io, ftpc), 
     ok = inets:start(),
     try
 	begin
@@ -393,16 +391,13 @@ start_ftpc(Config) when is_list(Config) ->
 			    tsf(stand_alone_not_shutdown)
 		    end,
 		    ok = inets:stop(),
-		    inets:disable_trace(),
 		    ok;
 		_ ->
-		    inets:disable_trace(),
 		    {skip, "Unable to reach selected FTP server " ++ FtpdHost}
 	    end
 	end
     catch
 	throw:{error, not_found} ->
-	    inets:disable_trace(),
 	    {skip, "No available FTP servers"}
     end.
 	    
@@ -461,8 +456,6 @@ httpd_reload(Config) when is_list(Config) ->
 		 {server_root,   PrivDir},
 		 {document_root, PrivDir}, 
 		 {bind_address,  "localhost"}],
-
-    inets:enable_trace(max, io),
 
     i("httpd_reload -> start inets"),
 

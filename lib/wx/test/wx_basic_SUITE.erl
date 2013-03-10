@@ -1,7 +1,8 @@
+%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2008-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -47,7 +48,7 @@ end_per_testcase(Func,Config) ->
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [create_window, several_apps, wx_api, wx_misc,
+    [silent_start, create_window, several_apps, wx_api, wx_misc,
      data_types, wx_object].
 
 groups() -> 
@@ -61,6 +62,25 @@ end_per_group(_GroupName, Config) ->
 
   
 %% The test cases
+
+%% test silent start of wx
+silent_start(TestInfo) when is_atom(TestInfo) -> wx_test_lib:tc_info(TestInfo);
+silent_start(_Config) ->
+    ?mr(wx_ref, wx:new([])),
+    wx:destroy(),
+
+    ?mr(wx_ref, wx:new([{silent_start, true}])),
+    wx:destroy(),
+
+    ?mr(wx_ref, wx:new([{silent_start, true}, {debug, verbose}])),
+    wx:destroy(),
+
+    ?mr(wx_ref, wx:new([{silent_start, false}])),
+    wx:destroy(),
+
+    ?mr('EXIT', catch wx:new([{silent_start, foo}])),
+    
+    ok.
 
 %% create and test creating a window
 create_window(TestInfo) when is_atom(TestInfo) -> wx_test_lib:tc_info(TestInfo);
@@ -109,7 +129,7 @@ wx_api(Config) ->
     ?m(true, wx:is_null(Wx)),
     Null = ?mr(wx_ref, wx:null()),
     ?m(true, wx:is_null(Null)),
-    Frame = ?mt(wxFrame, wxFrame:new(Wx, 1, "WX API: " ++ unicode:characters_to_list("åäöÅÄÖ"))),
+    Frame = ?mt(wxFrame, wxFrame:new(Wx, 1, "WX API: " ++ unicode:characters_to_list("Ã¥Ã¤Ã¶Ã…Ã„Ã–"))),
     ?m(false, wx:is_null(Frame)),
     ?m(wxFrame, wx:getObjectType(Frame)),
     Env = ?mr(wx_env, wx:get_env()),
@@ -288,12 +308,12 @@ data_types(_Config) ->
     ?m({_,_}, wxWindow:getSize(Frame)),
 
     %% DateTime 
-    DateTime = calendar:now_to_datetime(erlang:now()),
+    DateTime = {Date, _Time} = calendar:now_to_datetime(erlang:now()),
     io:format("DateTime ~p ~n",[DateTime]),
     Cal = ?mt(wxCalendarCtrl, wxCalendarCtrl:new(Frame, ?wxID_ANY, [{date,DateTime}])),
-    ?m(DateTime, wxCalendarCtrl:getDate(Cal)),
+    ?m({Date,_}, wxCalendarCtrl:getDate(Cal)),
     ?m(true, is_boolean(wxCalendarCtrl:setDate(Cal,DateTime))),
-    ?m(DateTime, wxCalendarCtrl:getDate(Cal)),
+    ?m({Date,_}, wxCalendarCtrl:getDate(Cal)),
 
     wxClientDC:destroy(CDC),
     %%wx_test_lib:wx_destroy(Frame,Config).

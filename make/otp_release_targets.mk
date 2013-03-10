@@ -1,7 +1,7 @@
 # 
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1997-2011. All Rights Reserved.
+# Copyright Ericsson AB 1997-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -32,7 +32,7 @@ endif
 
 ifeq ($(TOPDOC),)
 $(HTMLDIR)/index.html: $(XML_FILES) $(SPECS_FILES)
-	date=`date +"%B %e %Y"`; \
+	date=`date +"%B %e, %Y"`; \
 	$(XSLTPROC) --noout \
           --stringparam outdir $(HTMLDIR) \
           --stringparam docgen "$(DOCGEN)" \
@@ -42,25 +42,44 @@ $(HTMLDIR)/index.html: $(XML_FILES) $(SPECS_FILES)
           --stringparam gendate "$$date" \
           --stringparam appname "$(APPLICATION)" \
           --stringparam appver "$(VSN)" \
+	  --stringparam stylesheet "$(CSS_FILE)" \
+	  --stringparam winprefix "$(WINPREFIX)" \
+	  --stringparam logo "$(HTMLLOGO_FILE)" \
+	  --stringparam pdfname "$(PDFNAME)" \
           -path $(DOCGEN)/priv/dtd \
           -path $(DOCGEN)/priv/dtd_html_entities \
             $(DOCGEN)/priv/xsl/db_html.xsl book.xml
+
 endif
 
 $(HTMLDIR)/users_guide.html: $(XML_FILES)
-	date=`date +"%B %e %Y"`; \
-	$(XSLTPROC) --noout --stringparam outdir $(HTMLDIR) --stringparam docgen "$(DOCGEN)" --stringparam topdocdir "$(TOPDOCDIR)" \
+	date=`date +"%B %e, %Y"`; \
+	$(XSLTPROC) --noout  \
+		--stringparam outdir  $(HTMLDIR)  \
+		--stringparam docgen "$(DOCGEN)"  \
+		--stringparam topdocdir "$(TOPDOCDIR)" \
 		--stringparam pdfdir "$(PDFDIR)" \
-		--stringparam gendate "$$date" --stringparam appname "$(APPLICATION)" --stringparam appver "$(VSN)" --xinclude  \
-		-path $(DOCGEN)/priv/dtd -path $(DOCGEN)/priv/dtd_html_entities $(DOCGEN)/priv/xsl/db_html.xsl book.xml
+		--stringparam gendate "$$date" \
+	        --stringparam appname "$(APPLICATION)" \
+	        --stringparam appver "$(VSN)" \
+		--stringparam stylesheet "$(CSS_FILE)" \
+		--stringparam winprefix "$(WINPREFIX)" \
+		--stringparam logo "$(HTMLLOGO_FILE)" \
+		--stringparam pdfname "$(PDFNAME)" \
+	        --xinclude  \
+		-path $(DOCGEN)/priv/dtd \
+	        -path $(DOCGEN)/priv/dtd_html_entities \
+	        $(DOCGEN)/priv/xsl/db_html.xsl book.xml
 
 %.fo: $(XML_FILES) $(SPECS_FILES)
-	date=`date +"%B %e %Y"`; \
+	date=`date +"%B %e, %Y"`; \
 	$(XSLTPROC) \
          --stringparam docgen "$(DOCGEN)" \
          --stringparam gendate "$$date" \
          --stringparam appname "$(APPLICATION)" \
          --stringparam appver "$(VSN)" \
+	 --stringparam logo "$(PDFLOGO_FILE)" \
+	 --stringparam pdfcolor "$(PDFCOLOR)" \
          --xinclude $(TOP_SPECS_PARAM) \
          -path $(DOCGEN)/priv/dtd \
          -path $(DOCGEN)/priv/dtd_html_entities \
@@ -75,12 +94,20 @@ ifneq ($(XML_FILES),)
 # Generation of application index data
 # ----------------------------------------------------
 $(HTMLDIR)/$(APPLICATION).eix: $(XML_FILES) $(SPECS_FILES)
-	date=`date +"%B %e %Y"`; \
+	date=`date +"%B %e, %Y"`; \
 	$(XSLTPROC) --stringparam docgen "$(DOCGEN)" \
-		--stringparam gendate "$$date" --stringparam appname "$(APPLICATION)" --stringparam appver "$(VSN)" --xinclude $(TOP_SPECS_PARAM)  \
-		-path $(DOCGEN)/priv/dtd -path $(DOCGEN)/priv/dtd_html_entities $(DOCGEN)/priv/xsl/db_eix.xsl book.xml >  $@ 
+		--stringparam gendate "$$date" \
+	        --stringparam appname "$(APPLICATION)" \
+	        --stringparam appver "$(VSN)" \
+	        -xinclude $(TOP_SPECS_PARAM)  \
+		-path $(DOCGEN)/priv/dtd \
+	        -path $(DOCGEN)/priv/dtd_html_entities \
+	        $(DOCGEN)/priv/xsl/db_eix.xsl book.xml >  $@ 
 
 docs: $(HTMLDIR)/$(APPLICATION).eix
+
+xmllint: $(XML_FILES)
+	$(XMLLINT) --noout --valid --nodefdtd --loaddtd --path $(DOCGEN)/priv/dtd:$(DOCGEN)/priv/dtd_html_entities  $(XML_FILES)
 
 # ----------------------------------------------------
 # Local documentation target for testing 
@@ -110,12 +137,12 @@ endif
 ifeq ($(TESTROOT),)
 
 release release_docs release_tests release_html:
-	$(MAKE) $(MFLAGS) RELEASE_PATH=$(ERL_TOP)/release/$(TARGET) \
+	$(MAKE) $(MFLAGS) RELEASE_PATH="$(ERL_TOP)/release/$(TARGET)" \
 		$(TARGET_MAKEFILE)  $@_spec
 
 else
 
 release release_docs release_tests release_html:
-	$(MAKE) $(MFLAGS) RELEASE_PATH=$(TESTROOT) $(TARGET_MAKEFILE)  $@_spec 
+	$(MAKE) $(MFLAGS) RELEASE_PATH="$(TESTROOT)" $(TARGET_MAKEFILE)  $@_spec 
 
 endif

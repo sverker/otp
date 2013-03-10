@@ -3,7 +3,7 @@
      #
      # %CopyrightBegin%
      #
-     # Copyright Ericsson AB 2009-2011. All Rights Reserved.
+     # Copyright Ericsson AB 2009-2012. All Rights Reserved.
      #
      # The contents of this file are subject to the Erlang Public License,
      # Version 1.1, (the "License"); you may not use this file except in
@@ -52,7 +52,7 @@
 
   <!-- XSL-FO properties -->
   <xsl:attribute-set name="caption">
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">0.8em</xsl:attribute>
     <xsl:attribute name="font-weight">bold</xsl:attribute>
     <xsl:attribute name="keep-with-previous.within-page">always</xsl:attribute>
@@ -61,7 +61,7 @@
   </xsl:attribute-set>
 
   <xsl:attribute-set name="pre">
-    <xsl:attribute name="font-family">monospace</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSansMono, monospace</xsl:attribute>
     <xsl:attribute name="font-size">0.8em</xsl:attribute>
     <xsl:attribute name="keep-together.within-page">auto</xsl:attribute>
     <xsl:attribute name="linefeed-treatment">preserve</xsl:attribute>
@@ -87,7 +87,7 @@
   <xsl:attribute-set name="cover.title">
     <xsl:attribute name="border-before-style">solid</xsl:attribute>
     <xsl:attribute name="border-before-width">10pt</xsl:attribute>
-    <xsl:attribute name="border-color">#960003</xsl:attribute>
+    <xsl:attribute name="border-color"><xsl:value-of select="$pdfcolor"/></xsl:attribute>
     <xsl:attribute name="font-size">2.3em</xsl:attribute>
     <xsl:attribute name="padding-before">0.5em</xsl:attribute>
     <xsl:attribute name="text-align">end</xsl:attribute>
@@ -101,7 +101,7 @@
   <xsl:attribute-set name="cover.inner.copyright">
     <xsl:attribute name="border-before-style">solid</xsl:attribute>
     <xsl:attribute name="border-before-width">1pt</xsl:attribute>
-    <xsl:attribute name="border-color">#960003</xsl:attribute>
+    <xsl:attribute name="border-color"><xsl:value-of select="$pdfcolor"/></xsl:attribute>
     <xsl:attribute name="font-weight">bold</xsl:attribute>
     <xsl:attribute name="padding-before">0.5em</xsl:attribute>
     <xsl:attribute name="space-before">200mm</xsl:attribute>
@@ -160,9 +160,9 @@
   <xsl:attribute-set name="h1">
     <xsl:attribute name="border-after-style">solid</xsl:attribute>
     <xsl:attribute name="border-after-width">1pt</xsl:attribute>
-    <xsl:attribute name="border-color">#960003</xsl:attribute>
+    <xsl:attribute name="border-color"><xsl:value-of select="$pdfcolor"/></xsl:attribute>
     <xsl:attribute name="break-before">page</xsl:attribute>
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">1.83em</xsl:attribute>
     <xsl:attribute name="font-weight">normal</xsl:attribute>
     <xsl:attribute name="space-after">1em</xsl:attribute>
@@ -171,7 +171,7 @@
   </xsl:attribute-set>
 
   <xsl:attribute-set name="h2">
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">1.5em</xsl:attribute>
     <xsl:attribute name="font-weight">normal</xsl:attribute>
     <xsl:attribute name="keep-with-next.within-page">always</xsl:attribute>
@@ -180,7 +180,7 @@
   </xsl:attribute-set>
 
   <xsl:attribute-set name="h3">
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">1.33em</xsl:attribute>
     <xsl:attribute name="font-weight">normal</xsl:attribute>
     <xsl:attribute name="keep-with-next.within-page">always</xsl:attribute>
@@ -189,7 +189,7 @@
   </xsl:attribute-set>
 
   <xsl:attribute-set name="h4">
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">1.17em</xsl:attribute>
     <xsl:attribute name="font-weight">normal</xsl:attribute>
     <xsl:attribute name="keep-with-next.within-page">always</xsl:attribute>
@@ -198,7 +198,7 @@
   </xsl:attribute-set>
 
   <xsl:attribute-set name="h5">
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">1em</xsl:attribute>
     <xsl:attribute name="font-weight">bold</xsl:attribute>
     <xsl:attribute name="keep-with-next.within-page">always</xsl:attribute>
@@ -207,7 +207,7 @@
   </xsl:attribute-set>
 
   <xsl:attribute-set name="h6">
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">0.83em</xsl:attribute>
     <xsl:attribute name="font-weight">bold</xsl:attribute>
     <xsl:attribute name="keep-with-next.within-page">always</xsl:attribute>
@@ -226,21 +226,21 @@
   <xsl:attribute-set name="page-header">
     <xsl:attribute name="border-after-style">solid</xsl:attribute>
     <xsl:attribute name="border-after-width">2pt</xsl:attribute>
-    <xsl:attribute name="border-color">#960003</xsl:attribute>
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="border-color"><xsl:value-of select="$pdfcolor"/></xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">0.9em</xsl:attribute>
     <xsl:attribute name="font-weight">bold</xsl:attribute>
   </xsl:attribute-set>
 
   <xsl:attribute-set name="page-footer">
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">0.9em</xsl:attribute>
     <xsl:attribute name="font-weight">bold</xsl:attribute>
   </xsl:attribute-set>
 
   <xsl:attribute-set name="code">
     <xsl:attribute name="background-color">#e0e0ff</xsl:attribute>
-    <xsl:attribute name="font-family">monospace</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSansMono, monospace</xsl:attribute>
     <xsl:attribute name="font-size">0.8em</xsl:attribute>
     <xsl:attribute name="keep-together.within-page">auto</xsl:attribute>
     <xsl:attribute name="linefeed-treatment">preserve</xsl:attribute>
@@ -303,7 +303,7 @@
   <xsl:attribute-set name="module-name">
     <xsl:attribute name="border-after-style">solid</xsl:attribute>
     <xsl:attribute name="border-after-width">1pt</xsl:attribute>
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">1.5em</xsl:attribute>
     <xsl:attribute name="font-weight">normal</xsl:attribute>
     <xsl:attribute name="keep-with-next.within-page">always</xsl:attribute>
@@ -313,7 +313,7 @@
 
   <xsl:attribute-set name="function-name">
     <xsl:attribute name="font-weight">bold</xsl:attribute>
-    <xsl:attribute name="font-family">monospace</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSansMono, monospace</xsl:attribute>
     <!-- xsl:attribute name="font-size">0.8em</xsl:attribute -->
     <xsl:attribute name="keep-with-next.within-page">always</xsl:attribute>
     <xsl:attribute name="space-after">0.25em</xsl:attribute>
@@ -401,7 +401,7 @@
   </xsl:attribute-set>
 
   <xsl:attribute-set name="caption">
-    <xsl:attribute name="font-family">sans-serif</xsl:attribute>
+    <xsl:attribute name="font-family">DejaVuSans, sans-serif</xsl:attribute>
     <xsl:attribute name="font-size">0.8em</xsl:attribute>
     <xsl:attribute name="font-weight">bold</xsl:attribute>
     <xsl:attribute name="keep-with-previous.within-page">always</xsl:attribute>

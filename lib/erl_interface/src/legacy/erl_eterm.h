@@ -1,7 +1,7 @@
 /* 
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1996-2009. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -55,7 +55,9 @@ typedef struct _heapmark {
 } Erl_HeapMark;
 
 
-ETERM * __erl_mk_reference(const char *, size_t, unsigned int n[], unsigned char);
+void erl_mk_port_helper(ETERM* ep, unsigned number, unsigned char creation);
+void erl_mk_pid_helper(ETERM*, unsigned,unsigned, unsigned char);
+ETERM * __erl_mk_reference(ETERM*, const char *, size_t, unsigned int n[], unsigned char);
 int erl_current_fix_desc(void);
 
 #endif /* _ERL_ETERM_H */

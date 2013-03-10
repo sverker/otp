@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -912,11 +912,15 @@ static int insert_buf(byte *s, int n)
 		lbuf[lpos++] = (CONTROL_TAG | ((Uint32) ch));
 		ch = 0;
 	    } while (lpos % 8);
-	} else if (ch == '\n' || ch == '\r') {
+	} else if (ch == '\e' || ch == '\n' || ch == '\r') {
 	    write_buf(lbuf + buffpos, lpos - buffpos);
-	    outc('\r');
-	    if (ch == '\n')
-		outc('\n');
+            if (ch == '\e') {
+                outc('\e');
+            } else {
+                outc('\r');
+                if (ch == '\n')
+                    outc('\n');
+            }
 	    if (llen > lpos) {
 		memcpy(lbuf, lbuf + lpos, llen - lpos);
 	    }

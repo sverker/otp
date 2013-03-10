@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -32,7 +32,6 @@
 %% functions I guess. But I don't have time for that now.
 %%
 %% Expect it to run for at least 5-10 minutes!
-%% Except for VxWorks of course, where a couple of hours is more apropriate...
 
 
 %% The main test case in this module is "do_big_test", which
@@ -77,12 +76,7 @@ end_per_group(_GroupName, Config) ->
 do_big_test(TConfig) when is_list(TConfig) ->
     Dog = ?t:timetrap(?t:minutes(20)),
     Save = process_flag(trap_exit, true),
-    Result = case os:type() of
-		 vxworks ->
-		     big_test(10);
-		 _ ->
-		     big_test(200)
-	     end,
+    Result = big_test(200),
     process_flag(trap_exit, Save),
     ?t:timetrap_cancel(Dog),
     report_result(Result).

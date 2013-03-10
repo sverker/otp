@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -281,21 +281,12 @@ start12(Config) when is_list(Config) ->
 %% Check that time outs in calls work
 abnormal1(suite) -> [];
 abnormal1(Config) when is_list(Config) ->
-    ?line {ok, _Pid} = 
-	gen_fsm:start({local, my_fsm}, gen_fsm_SUITE, [], []),
+    {ok, _Pid} = gen_fsm:start({local, my_fsm}, gen_fsm_SUITE, [], []),
 
     %% timeout call.
-    case os:type() of
-	vxworks ->
-	    %% timeout call for VxWorks must be in 16ms increments.
-	    ?line delayed = gen_fsm:sync_send_event(my_fsm, {delayed_answer,1}, 17),
-	    ?line {'EXIT',{timeout,_}} =
-		(catch gen_fsm:sync_send_event(my_fsm, {delayed_answer,17}, 1));
-	_ ->
-	    ?line delayed = gen_fsm:sync_send_event(my_fsm, {delayed_answer,1}, 100),
-	    ?line {'EXIT',{timeout,_}} =
-		(catch gen_fsm:sync_send_event(my_fsm, {delayed_answer,10}, 1))
-    end,
+    delayed = gen_fsm:sync_send_event(my_fsm, {delayed_answer,1}, 100),
+    {'EXIT',{timeout,_}} =
+    (catch gen_fsm:sync_send_event(my_fsm, {delayed_answer,10}, 1)),
     test_server:messages_get(),
     ok.
 

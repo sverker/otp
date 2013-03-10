@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 1997-2011. All Rights Reserved.
+# Copyright Ericsson AB 1997-2012. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -104,8 +104,8 @@ docs:
 test: $(TEST_TARGET_FILES)
 
 IDL-GENERATED: stack.idl
-	erlc $(ERL_IDL_FLAGS) stack.idl
-	>IDL-GENERATED
+	$(gen_verbose)erlc $(ERL_IDL_FLAGS) stack.idl
+	$(V_at)>IDL-GENERATED
 
 $(GEN_FILES): IDL-GENERATED
 
@@ -118,8 +118,8 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/examples/Stack
-	$(INSTALL_DATA) $(ERL_FILES) $(JAVA_FILES) $(CPP_FILES) $(IDL_FILES) $(RELSYSDIR)/examples/Stack
+	$(INSTALL_DIR) "$(RELSYSDIR)/examples/Stack"
+	$(INSTALL_DATA) $(ERL_FILES) $(JAVA_FILES) $(CPP_FILES) $(IDL_FILES) "$(RELSYSDIR)/examples/Stack"
 
 
 release_docs_spec:

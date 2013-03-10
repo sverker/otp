@@ -61,16 +61,19 @@ extern char* erts_system_version[];
 static void
 port_info(int to, void *to_arg)
 {
-    int i;
-    for (i = 0; i < erts_max_ports; i++)
-	print_port_info(to, to_arg, i);
+    int i, max = erts_ptab_max(&erts_port);
+    for (i = 0; i < max; i++) {
+	Port *p = erts_pix2port(i);
+	if (p)
+	    print_port_info(p, to, to_arg);
+    }
 }
 
 void
 process_info(int to, void *to_arg)
 {
-    int i;
-    for (i = 0; i < erts_max_processes; i++) {
+    int i, max = erts_ptab_max(&erts_proc);
+    for (i = 0; i < max; i++) {
 	Process *p = erts_pix2proc(i);
 	if (p && p->i != ENULL) {
 	    if (!ERTS_PROC_IS_EXITING(p))
@@ -84,12 +87,12 @@ process_info(int to, void *to_arg)
 static void
 process_killer(void)
 {
-    int i, j;
+    int i, j, max = erts_ptab_max(&erts_proc);
     Process* rp;
 
     erts_printf("\n\nProcess Information\n\n");
     erts_printf("--------------------------------------------------\n");
-    for (i = erts_max_processes-1; i >= 0; i--) {
+    for (i = max-1; i >= 0; i--) {
 	rp = erts_pix2proc(i);
 	if (rp && rp->i != ENULL) {
 	    int br;
@@ -196,7 +199,7 @@ print_process_info(int to, void *to_arg, Process *p)
     erts_aint32_t state;
 
     /* display the PID */
-    erts_print(to, to_arg, "=proc:%T\n", p->id);
+    erts_print(to, to_arg, "=proc:%T\n", p->common.id);
 
     /* Display the state */
     erts_print(to, to_arg, "State: ");
@@ -226,8 +229,8 @@ print_process_info(int to, void *to_arg, Process *p)
      * If the process is registered as a global process, display the
      * registered name
      */
-    if (p->reg != NULL)
-	erts_print(to, to_arg, "Name: %T\n", p->reg->name);
+    if (p->common.u.alive.reg)
+	erts_print(to, to_arg, "Name: %T\n", p->common.u.alive.reg->name);
 
     /*
      * Display the initial function name
@@ -301,11 +304,11 @@ print_process_info(int to, void *to_arg, Process *p)
     }
 
     /* display the links only if there are any*/
-    if (p->nlinks != NULL || p->monitors != NULL) {
+    if (ERTS_P_LINKS(p) || ERTS_P_MONITORS(p)) {
 	PrintMonitorContext context = {1,to}; 
 	erts_print(to, to_arg,"Link list: [");
-	erts_doforall_links(p->nlinks, &doit_print_link, &context);	
-	erts_doforall_monitors(p->monitors, &doit_print_monitor, &context);
+	erts_doforall_links(ERTS_P_LINKS(p), &doit_print_link, &context);	
+	erts_doforall_monitors(ERTS_P_MONITORS(p), &doit_print_monitor, &context);
 	erts_print(to, to_arg,"]\n");
     }
 
@@ -625,9 +628,9 @@ bin_check(void)
 {
     Process  *rp;
     struct erl_off_heap_header* hdr;
-    int i, printed = 0;
+    int i, printed = 0, max = erts_ptab_max(&erts_proc);
 
-    for (i=0; i < erts_max_processes; i++) {
+    for (i=0; i < max; i++) {
 	rp = erts_pix2proc(i);
 	if (!rp)
 	    continue;
@@ -635,7 +638,7 @@ bin_check(void)
 	    if (hdr->thing_word == HEADER_PROC_BIN) {
 		ProcBin *bp = (ProcBin*) hdr;
 		if (!printed) {
-		    erts_printf("Process %T holding binary data \n", rp->id);
+		    erts_printf("Process %T holding binary data \n", rp->common.id);
 		    printed = 1;
 		}
 		erts_printf("%p orig_size: %bpd, norefs = %bpd\n",
@@ -663,10 +666,14 @@ erl_crash_dump_v(char *file, int line, char* fmt, va_list args)
     ErtsThrPrgrData tpd_buf; /* in case we aren't a managed thread... */
 #endif
     int fd;
+    size_t envsz;
     time_t now;
+    char env[21]; /* enough to hold any 64-bit integer */
     size_t dumpnamebufsize = MAXPATHLEN;
     char dumpnamebuf[MAXPATHLEN];
     char* dumpname;
+    int secs;
+    int env_erl_crash_dump_seconds_set = 1;
 
     if (ERTS_SOMEONE_IS_CRASH_DUMPING)
 	return;
@@ -689,9 +696,54 @@ erl_crash_dump_v(char *file, int line, char* fmt, va_list args)
     erts_writing_erl_crash_dump = 1;
 #endif
 
-    erts_sys_prepare_crash_dump();
+    envsz = sizeof(env);
+    /* ERL_CRASH_DUMP_SECONDS not set
+     * if we have a heart port, break immediately
+     * otherwise dump crash indefinitely (until crash is complete)
+     * same as ERL_CRASH_DUMP_SECONDS = 0
+     * - do not write dump
+     * - do not set an alarm
+     * - break immediately
+     *
+     * ERL_CRASH_DUMP_SECONDS = 0
+     * - do not write dump
+     * - do not set an alarm
+     * - break immediately
+     *
+     * ERL_CRASH_DUMP_SECONDS < 0
+     * - do not set alarm
+     * - write dump until done
+     *
+     * ERL_CRASH_DUMP_SECONDS = S (and S positive)
+     * - Don't dump file forever
+     * - set alarm (set in sys)
+     * - write dump until alarm or file is written completely
+     */
+	
+    if (erts_sys_getenv__("ERL_CRASH_DUMP_SECONDS", env, &envsz) != 0) {
+	env_erl_crash_dump_seconds_set = 0;
+	secs = -1;
+    } else {
+	env_erl_crash_dump_seconds_set = 1;
+	secs = atoi(env);
+    }
 
-    if (erts_sys_getenv("ERL_CRASH_DUMP",&dumpnamebuf[0],&dumpnamebufsize) != 0)
+    if (secs == 0) {
+	return;
+    }
+
+    /* erts_sys_prepare_crash_dump returns 1 if heart port is found, otherwise 0
+     * If we don't find heart (0) and we don't have ERL_CRASH_DUMP_SECONDS set
+     * we should continue writing a dump
+     *
+     * beware: secs -1 means no alarm
+     */
+
+    if (erts_sys_prepare_crash_dump(secs) && !env_erl_crash_dump_seconds_set ) {
+	return;
+    }
+
+    if (erts_sys_getenv__("ERL_CRASH_DUMP",&dumpnamebuf[0],&dumpnamebufsize) != 0)
 	dumpname = "erl_crash.dump";
     else
 	dumpname = &dumpnamebuf[0];
@@ -717,7 +769,7 @@ erl_crash_dump_v(char *file, int line, char* fmt, va_list args)
     erts_print_nif_taints(fd, NULL);
     erts_fdprintf(fd, "Atoms: %d\n", atom_table_size());
     info(fd, NULL); /* General system info */
-    if (erts_proc.tab)
+    if (erts_ptab_initialized(&erts_proc))
 	process_info(fd, NULL); /* Info about each process and port */
     db_info(fd, NULL, 0);
     erts_print_bif_timer_info(fd, NULL);

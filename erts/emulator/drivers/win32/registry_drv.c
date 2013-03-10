@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1997-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1997-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -344,7 +344,7 @@ fix_value_result(RegPort* rp, LONG result, DWORD type,
 #ifdef DEBUG
 	if (ok != ERROR_SUCCESS) {
 	    char buff[256];
-	    sprintf(buff,"Failure in registry_drv line %d, error = %d",
+	    erts_snprintf(buff, sizeof(buff), "Failure in registry_drv line %d, error = %d",
 		    __LINE__, GetLastError());
 	    MessageBox(NULL, buff, "Internal error", MB_OK);
 	    ASSERT(ok == ERROR_SUCCESS);

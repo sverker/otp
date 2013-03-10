@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2003-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2003-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -265,7 +265,7 @@ void *hipe_make_native_stub(void *beamAddress, unsigned int beamArity)
 void hipe_arch_print_pcb(struct hipe_process_state *p)
 {
 #define U(n,x) \
-    printf(" % 4d | %s | 0x%08x |            |\r\n", offsetof(struct hipe_process_state,x), n, (unsigned)p->x)
+    printf(" % 4d | %s | 0x%08x |            |\r\n", (int)offsetof(struct hipe_process_state,x), n, (unsigned)p->x)
     U("ncsp       ", ncsp);
     U("narity     ", narity);
 #undef U

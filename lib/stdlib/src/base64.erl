@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -29,6 +29,7 @@
 %%-------------------------------------------------------------------------
 
 -type ascii_string() :: [1..255].
+-type ascii_binary() :: binary().
 
 %%-------------------------------------------------------------------------
 %% encode_to_string(ASCII) -> Base64String
@@ -39,7 +40,7 @@
 %%-------------------------------------------------------------------------
 
 -spec encode_to_string(Data) -> Base64String when
-      Data :: string() | binary(),
+      Data :: ascii_string() | ascii_binary(),
       Base64String :: ascii_string().
 
 encode_to_string(Bin) when is_binary(Bin) ->
@@ -56,15 +57,15 @@ encode_to_string(List) when is_list(List) ->
 %%-------------------------------------------------------------------------
 
 -spec encode(Data) -> Base64 when
-      Data :: string() | binary(),
-      Base64 :: binary().
+      Data :: ascii_string() | ascii_binary(),
+      Base64 :: ascii_binary().
 
 encode(Bin) when is_binary(Bin) ->
     encode_binary(Bin);
 encode(List) when is_list(List) ->
     list_to_binary(encode_l(List)).
 
--spec encode_l(string()) -> ascii_string().
+-spec encode_l(ascii_string()) -> ascii_string().
 
 encode_l([]) ->
     [];
@@ -107,8 +108,8 @@ encode_binary(Bin) ->
 %%-------------------------------------------------------------------------
 
 -spec decode(Base64) -> Data when
-      Base64 :: string() | binary(),
-      Data :: binary().
+      Base64 :: ascii_string() | ascii_binary(),
+      Data :: ascii_binary().
 
 decode(Bin) when is_binary(Bin) ->
     decode_binary(<<>>, Bin);
@@ -116,21 +117,21 @@ decode(List) when is_list(List) ->
     list_to_binary(decode_l(List)).
 
 -spec mime_decode(Base64) -> Data when
-      Base64 :: string() | binary(),
-      Data :: binary().
+      Base64 :: ascii_string() | ascii_binary(),
+      Data :: ascii_binary().
 
 mime_decode(Bin) when is_binary(Bin) ->
     mime_decode_binary(<<>>, Bin);
 mime_decode(List) when is_list(List) ->
     mime_decode(list_to_binary(List)).
 
--spec decode_l(string()) -> string().
+-spec decode_l(ascii_string()) -> ascii_string().
 
 decode_l(List) ->
     L = strip_spaces(List, []),
     decode(L, []).
 
--spec mime_decode_l(string()) -> string().
+-spec mime_decode_l(ascii_string()) -> ascii_string().
 
 mime_decode_l(List) ->
     L = strip_illegal(List, [], 0),
@@ -148,8 +149,8 @@ mime_decode_l(List) ->
 %%-------------------------------------------------------------------------
 
 -spec decode_to_string(Base64) -> DataString when
-      Base64 :: string() | binary(),
-      DataString :: string().
+      Base64 :: ascii_string() | ascii_binary(),
+      DataString :: ascii_string().
 
 decode_to_string(Bin) when is_binary(Bin) ->
     decode_to_string(binary_to_list(Bin));
@@ -157,8 +158,8 @@ decode_to_string(List) when is_list(List) ->
     decode_l(List).
 
 -spec mime_decode_to_string(Base64) -> DataString when
-      Base64 :: string() | binary(),
-      DataString :: string().
+      Base64 :: ascii_string() | ascii_binary(),
+      DataString :: ascii_string().
 
 mime_decode_to_string(Bin) when is_binary(Bin) ->
     mime_decode_to_string(binary_to_list(Bin));

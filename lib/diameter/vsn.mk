@@ -2,7 +2,7 @@
 
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2010-2011. All Rights Reserved.
+# Copyright Ericsson AB 2010-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -18,8 +18,5 @@
 # %CopyrightEnd%
 
 APPLICATION  = diameter
-DIAMETER_VSN = 1.1
-PRE_VSN      =
-APP_VSN      = "$(APPLICATION)-$(DIAMETER_VSN)$(PRE_VSN)"
-
-TICKETS =
+DIAMETER_VSN = 1.4.1
+APP_VSN      = $(APPLICATION)-$(DIAMETER_VSN)$(PRE_VSN)

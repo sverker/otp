@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2009-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2009-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -399,12 +399,12 @@ loop(#state{sys = Sys} = S) ->
         {'EXIT', Pid, Reason} when Pid =:= S#state.parent_pid ->
             exit(Reason);
         {call, ReplyTo, Ref, Msg} when is_pid(ReplyTo), is_reference(Ref) ->
-            error_logger:format("~p~p got unexpected call:\n\t~p\n",
+            error_logger:format("~w~w got unexpected call:\n\t~p\n",
                                 [?MODULE, self(), Msg]),
             reltool_utils:reply(ReplyTo, Ref, {error, {invalid_call, Msg}}),
             ?MODULE:loop(S);
         Msg ->
-            error_logger:format("~p~p got unexpected message:\n\t~p\n",
+            error_logger:format("~w~w got unexpected message:\n\t~p\n",
                                 [?MODULE, self(), Msg]),
             ?MODULE:loop(S)
     end.
@@ -422,7 +422,7 @@ do_set_apps(#state{sys = Sys} = S, ChangedApps) ->
 %% 2) removing #app records if no configurable fields are set
 %% 3) keeping #app records that are not changed
 app_update_config([#app{name=Name,is_escript={inlined,Escript}}|_],_SysApps) ->
-    reltool_utils:throw_error("Application ~p is inlined in ~p. Can not change "
+    reltool_utils:throw_error("Application ~w is inlined in ~w. Can not change "
 			      "configuration for an inlined application.",
 			      [Name,Escript]);
 app_update_config([Config|Configs],SysApps) ->
@@ -580,8 +580,8 @@ apps_in_rel(#rel{name = RelName, rel_apps = RelApps}, Apps) ->
 					IA;
 				    false ->
 					reltool_utils:throw_error(
-					  "Release ~p uses non existing "
-					  "application ~p",
+					  "Release ~tp uses non existing "
+					  "application ~w",
 					  [RelName,RA#rel_app.name])
 				end;
 			    IA ->
@@ -602,7 +602,7 @@ more_apps_in_rels([{RelName, AppName} = RA | RelApps], Apps, Acc) ->
 		    more_apps_in_rels(RelApps, Apps, Acc2);
 		false ->
 		    reltool_utils:throw_error(
-		      "Release ~p uses non existing application ~p",
+		      "Release ~tp uses non existing application ~w",
 		      [RelName,AppName])
 	    end
     end;
@@ -640,7 +640,7 @@ app_init_is_included(#state{app_tab = AppTab, mod_tab = ModTab, sys=Sys},
 		{undefined, false, false, Status};
             {exclude, [RelName | _]} -> % App is included in at least one rel
 		reltool_utils:throw_error(
-		  "Application ~p is used in release ~p and cannot be excluded",
+		  "Application ~w is used in release ~tp and cannot be excluded",
 		  [AppName,RelName]);
             {derived, []} ->
 		{undefined, undefined, undefined, Status};
@@ -665,7 +665,7 @@ app_init_is_included(#state{app_tab = AppTab, mod_tab = ModTab, sys=Sys},
     Status3.
 
 mod_init_is_included(ModTab, M, ModCond, AppCond, Default, Status) ->
-    %% print(M#mod.name, hipe, "incl_cond -> ~p\n", [AppCond]),
+    %% print(M#mod.name, hipe, "incl_cond -> ~w\n", [AppCond]),
     IsIncl =
         case AppCond of
             include ->
@@ -674,8 +674,10 @@ mod_init_is_included(ModTab, M, ModCond, AppCond, Default, Status) ->
                         true;
                     exclude ->
                         false;
+		    derived ->
+			undefined;
                     undefined ->
-                        %% print(M#mod.name, hipe, "mod_cond -> ~p\n",
+                        %% print(M#mod.name, hipe, "mod_cond -> ~w\n",
 			%%       [ModCond]),
                         case ModCond of
                             all     -> true;
@@ -693,6 +695,8 @@ mod_init_is_included(ModTab, M, ModCond, AppCond, Default, Status) ->
                         true;
                     exclude ->
                         false;
+		    derived ->
+			undefined;
                     undefined ->
                         Default
                 end
@@ -707,23 +711,23 @@ mod_init_is_included(ModTab, M, ModCond, AppCond, Default, Status) ->
 		    {false,_} ->
 			ets:insert(ModTab, M2),
 			reltool_utils:add_warning(
-			  "Module ~p exists in applications ~p and ~p. "
-			  "Using module from application ~p.",
+			  "Module ~w exists in applications ~w and ~w. "
+			  "Using module from application ~w.",
 			  [M#mod.name, Existing#mod.app_name,
 			   M#mod.app_name, M#mod.app_name],
 			  Status);
 		    {_,false} ->
 			%% Don't insert in ModTab - using Existing
 			reltool_utils:add_warning(
-			  "Module ~p exists in applications ~p and ~p. "
-			  "Using module from application ~p.",
+			  "Module ~w exists in applications ~w and ~w. "
+			  "Using module from application ~w.",
 			  [M#mod.name, Existing#mod.app_name,
 			   M#mod.app_name,Existing#mod.app_name],
 			  Status);
 		    {_,_} ->
 			reltool_utils:throw_error(
-			  "Module ~p potentially included by two different "
-			  "applications: ~p and ~p.",
+			  "Module ~w potentially included by two different "
+			  "applications: ~w and ~w.",
 			  [M#mod.name,Existing#mod.app_name,M#mod.app_name])
 		end;
 	    [] ->
@@ -731,7 +735,7 @@ mod_init_is_included(ModTab, M, ModCond, AppCond, Default, Status) ->
 		Status
 	end,
 
-    %% print(M#mod.name, hipe, "~p -> ~p\n", [M2, IsIncl]),
+    %% print(M#mod.name, hipe, "~p -> ~w\n", [M2, IsIncl]),
     {M2,Status2}.
 
 false_to_undefined(Bool) ->
@@ -783,9 +787,10 @@ mod_mark_is_included(#state{app_tab=AppTab, mod_tab=ModTab, sys=Sys} = S,
                                     M#mod{is_pre_included = true,
 					  is_included = true};
                                 exclude ->
-                                    M#mod{is_pre_included = true,
-					  is_included = true};
-                                undefined ->
+                                    M#mod{is_pre_included = false,
+					  is_included = false};
+				ModInclCond when ModInclCond==undefined;
+						 ModInclCond==derived  ->
                                     M#mod{is_included = true}
                             end,
                         ets:insert(ModTab, M2),
@@ -883,7 +888,7 @@ mod_recap_dependencies(S, A, [#mod{name = ModName}=M1 | Mods], Acc, IsIncl) ->
     case ets:lookup(S#state.mod_tab, ModName) of
 	[M2] when M2#mod.app_name=:=A#app.name ->
 	    ModStatus = do_get_status(M2),
-	    %% print(M2#mod.name, hipe, "status -> ~p\n", [ModStatus]),
+	    %% print(M2#mod.name, hipe, "status -> ~w\n", [ModStatus]),
 	    {IsIncl2, M3} =
 		case M2#mod.is_included of
 		    true ->
@@ -905,8 +910,8 @@ mod_recap_dependencies(S, A, [#mod{name = ModName}=M1 | Mods], Acc, IsIncl) ->
 	    %% A module is potensially included by multiple
 	    %% applications. This is not allowed!
 	    reltool_utils:throw_error(
-	      "Module ~p potentially included by two different applications: "
-	      "~p and ~p", [ModName,A#app.name, " and ", M2#mod.app_name, "."])
+	      "Module ~w potentially included by two different applications: "
+	      "~w and ~w.", [ModName,A#app.name, M2#mod.app_name])
     end;
 mod_recap_dependencies(_S, _A, [], Acc, IsIncl) ->
     {lists:reverse(Acc), IsIncl}.
@@ -934,7 +939,7 @@ verify_config(#state{app_tab=AppTab, sys=#sys{boot_rel = BootRel, rels = Rels}},
 			Rels);
         false ->
 	    reltool_utils:throw_error(
-	      "Release ~p is mandatory (used as boot_rel)",[BootRel])
+	      "Release ~tp is mandatory (used as boot_rel)",[BootRel])
     end.
 
 check_app(AppTab, {RelName, AppName}, Status) ->
@@ -944,7 +949,7 @@ check_app(AppTab, {RelName, AppName}, Status) ->
 	    Status;
 	_ ->
 	    reltool_utils:throw_error(
-	      "Release ~p uses non included application ~p",[RelName,AppName])
+	      "Release ~tp uses non included application ~w",[RelName,AppName])
     end.
 
 check_rel(RelName, RelApps, Status) ->
@@ -955,8 +960,8 @@ check_rel(RelName, RelApps, Status) ->
                         Acc;
                     false ->
 			reltool_utils:throw_error(
-			  "Mandatory application ~p is not included in "
-			  "release ~p", [AppName,RelName])
+			  "Mandatory application ~w is not included in "
+			  "release ~tp", [AppName,RelName])
                 end
         end,
     Mandatory = [kernel, stdlib],
@@ -979,7 +984,7 @@ refresh_app(#app{name = AppName,
 
                         %% Add info from .app file
                         Base = get_base(AppName, ActiveDir),
-                        {_, DefaultVsn} = reltool_utils:split_app_name(Base),
+                        DefaultVsn = get_vsn_from_dir(AppName,Base),
                         Ebin = filename:join([ActiveDir, "ebin"]),
                         AppFile =
 			    filename:join([Ebin,
@@ -1010,8 +1015,8 @@ refresh_app(#app{name = AppName,
 			lists:foldl(
 			  fun(M,S) ->
 				  reltool_utils:add_warning(
-				    "Module ~p duplicated in app file for "
-				    "application ~p.", [M, AppName], S)
+				    "Module ~w duplicated in app file for "
+				    "application ~w.", [M, AppName], S)
 			  end,
 			  Status3,
 			  DuplicatedMods)
@@ -1069,18 +1074,18 @@ read_app_info(AppFileOrBin, AppFile, AppName, DefaultVsn, Status) ->
             parse_app_info(AppFile, Info, AI, Status);
         {ok, _BadApp} ->
             {missing_app_info(DefaultVsn),
-	     reltool_utils:add_warning("~p: Illegal contents in app file ~p, "
+	     reltool_utils:add_warning("~w: Illegal contents in app file ~tp, "
 				       "application tuple with arity 3 expected.",
 				       [AppName,AppFile],
 				       Status)};
         {error, Text} when Text =:= EnoentText ->
 	    {missing_app_info(DefaultVsn),
-	     reltool_utils:add_warning("~p: Missing app file ~p.",
+	     reltool_utils:add_warning("~w: Missing app file ~tp.",
 				       [AppName,AppFile],
 				       Status)};
         {error, Text} ->
             {missing_app_info(DefaultVsn),
-	     reltool_utils:add_warning("~p: Cannot parse app file ~p (~p).",
+	     reltool_utils:add_warning("~w: Cannot parse app file ~tp (~tp).",
 				       [AppName,AppFile,Text],
 				       Status)}
     end.
@@ -1117,7 +1122,7 @@ parse_app_info(File, [{Key, Val} | KeyVals], AI, Status) ->
 			   Status);
         _ ->
 	    Status2 =
-		reltool_utils:add_warning("Unexpected item ~p in app file ~p.",
+		reltool_utils:add_warning("Unexpected item ~p in app file ~tp.",
 					  [Key,File],
 					  Status),
 	    parse_app_info(File, KeyVals, AI, Status2)
@@ -1207,7 +1212,7 @@ wait_for_processto_die(Ref, Pid, File) ->
 	{'DOWN', Ref, _Type, _Object, _Info} ->
 	    ok
     after timer:seconds(30) ->
-	    error_logger:error_msg("~p(~p): Waiting for process ~p to die ~p\n",
+	    error_logger:error_msg("~w(~w): Waiting for process ~w to die ~tp\n",
 				   [?MODULE, ?LINE, Pid, File]),
 	    wait_for_processto_die(Ref, Pid, File)
     end.
@@ -1218,7 +1223,7 @@ add_missing_mods(AppName, EbinMods, AppModNames) ->
     [missing_mod(ModName, AppName) || ModName <- MissingModNames].
 
 missing_mod(ModName, AppName) ->
-    %% io:format("Missing: ~p -> ~p\n", [AppName, ModName]),
+    %% io:format("Missing: ~w -> ~w\n", [AppName, ModName]),
     #mod{name = ModName,
          app_name = AppName,
          incl_cond = undefined,
@@ -1318,7 +1323,7 @@ read_config(OldSys, Filename) when is_list(Filename) ->
         {ok, Content} ->
 	    reltool_utils:throw_error("Illegal file content: ~p",[Content]);
         {error, Reason} ->
-	    reltool_utils:throw_error("Illegal config file ~p: ~s",
+	    reltool_utils:throw_error("Illegal config file ~tp: ~ts",
 				      [Filename,file:format_error(Reason)])
     end;
 read_config(OldSys, {sys, KeyVals}) ->
@@ -1336,7 +1341,7 @@ read_config(OldSys, {sys, KeyVals}) ->
 	    NewSys2;
 	false ->
 	    reltool_utils:throw_error(
-	      "Release ~p is mandatory (used as boot_rel)",
+	      "Release ~tp is mandatory (used as boot_rel)",
 	      [NewSys2#sys.boot_rel])
     end;
 read_config(_OldSys, BadConfig) ->
@@ -1408,6 +1413,8 @@ decode(#sys{} = Sys, [{Key, Val} | KeyVals]) ->
 						  ExclApp,
 						  Sys#sys.excl_app_filters),
 			embedded_app_type = AppType};
+	    excl_lib when Val =:= otp_root ->
+		Sys#sys{excl_lib=Val};
             incl_sys_filters ->
                 Sys#sys{incl_sys_filters =
 			    dec_re(Key, Val, Sys#sys.incl_sys_filters)};
@@ -1503,7 +1510,7 @@ decode(#app{} = App, [{Key, Val} | KeyVals]) ->
 				active_dir = Dir,
 				sorted_dirs = [Dir]};
 		    false ->
-			reltool_utils:throw_error("Illegal lib dir for ~p: ~p",
+			reltool_utils:throw_error("Illegal lib dir for ~w: ~p",
 						  [App#app.name, Val])
 		end;
 	    SelectVsn when SelectVsn=:=vsn; SelectVsn=:=lib_dir ->
@@ -1635,7 +1642,7 @@ patch_erts_version(RootDir, Apps, Status) ->
             end;
         false ->
 	    reltool_utils:throw_error(
-	      "erts cannot be found in the root directory ~p", [RootDir])
+	      "erts cannot be found in the root directory ~tp", [RootDir])
     end.
 
 libs_to_dirs(RootDir, LibDirs) ->
@@ -1662,10 +1669,10 @@ libs_to_dirs(RootDir, LibDirs) ->
 						   lists:prefix("erts", F)],
                     app_dirs2(AllLibDirs, [ErtsFiles]);
                 [Duplicate | _] ->
-		    reltool_utils:throw_error("Duplicate library: ~p",[Duplicate])
+		    reltool_utils:throw_error("Duplicate library: ~tp",[Duplicate])
             end;
         {error, Reason} ->
-	    reltool_utils:throw_error("Missing root library ~p: ~s",
+	    reltool_utils:throw_error("Missing root library ~tp: ~ts",
 				      [RootDir,file:format_error(Reason)])
     end.
 
@@ -1678,8 +1685,7 @@ app_dirs2([Lib | Libs], Acc) ->
                         EbinDir = filename:join([AppDir, "ebin"]),
                         case filelib:is_dir(EbinDir, erl_prim_loader) of
                             true ->
-                                {Name, _Vsn} =
-				    reltool_utils:split_app_name(Base),
+				Name = find_app_name(Base,EbinDir),
                                 case Name of
                                     erts -> false;
                                     _    -> {true, {Name, AppDir}}
@@ -1691,23 +1697,80 @@ app_dirs2([Lib | Libs], Acc) ->
             Files2 = lists:zf(Filter, Files),
             app_dirs2(Libs, [Files2 | Acc]);
         {error, Reason} ->
-	    reltool_utils:throw_error("Illegal library ~p: ~s",
+	    reltool_utils:throw_error("Illegal library ~tp: ~ts",
 				      [Lib, file:format_error(Reason)])
     end;
 app_dirs2([], Acc) ->
     lists:sort(lists:append(Acc)).
 
+find_app_name(Base,EbinDir) ->
+    {ok,EbinFiles} = erl_prim_loader:list_dir(EbinDir),
+    AppFile =
+	case [F || F <- EbinFiles, filename:extension(F)=:=".app"] of
+	    [AF] ->
+		AF;
+	    _ ->
+		undefined
+	end,
+    find_app_name1(Base,AppFile).
+
+find_app_name1(Base,undefined) ->
+    {Name,_} = reltool_utils:split_app_name(Base),
+    Name;
+find_app_name1(_Base,AppFile) ->
+    list_to_atom(filename:rootname(AppFile)).
+
+get_vsn_from_dir(AppName,Base) ->
+    Prefix = atom_to_list(AppName) ++ "-",
+    case lists:prefix(Prefix,Base) of
+	true ->
+	    lists:nthtail(length(Prefix),Base);
+	false ->
+	    ""
+    end.
+
+
 escripts_to_apps([Escript | Escripts], Apps, Status) ->
     {EscriptAppName, _Label} = split_escript_name(Escript),
     Ext = code:objfile_extension(),
+
+    %% First find all .app files and associate the app name to the app
+    %% label - this is in order to now which application a module
+    %% belongs to in the next round.
+    AppFun = fun(FullName, _GetInfo, _GetBin, AppFiles) ->
+		     Components = filename:split(FullName),
+		     case Components of
+			 [AppLabel, "ebin", File] ->
+			     case filename:extension(File) of
+				 ".app" ->
+				     [{AppLabel,File}|AppFiles];
+				 _ ->
+				     AppFiles
+			     end;
+			 _ ->
+			     AppFiles
+		     end
+	     end,
+    AppFiles =
+	case reltool_utils:escript_foldl(AppFun, [], Escript) of
+	    {ok, AF} ->
+		AF;
+	    {error, Reason1} ->
+		reltool_utils:throw_error("Illegal escript ~tp: ~p",
+					  [Escript,Reason1])
+	end,
+
+    %% Next, traverse all files...
     Fun = fun(FullName, _GetInfo, GetBin, {FileAcc, StatusAcc}) ->
                   Components = filename:split(FullName),
                   case Components of
                       [AppLabel, "ebin", File] ->
                           case filename:extension(File) of
                               ".app" ->
-                                  {AppName, DefaultVsn} =
-				      reltool_utils:split_app_name(AppLabel),
+				  AppName =
+				      list_to_atom(filename:rootname(File)),
+                                  DefaultVsn =
+				      get_vsn_from_dir(AppName,AppLabel),
                                   AppFileName =
 				      filename:join([Escript, FullName]),
                                   {Info, StatusAcc2} =
@@ -1720,8 +1783,9 @@ escripts_to_apps([Escript | Escripts], Apps, Status) ->
                                   {[{AppName, app, Dir, Info} | FileAcc],
 				   StatusAcc2};
                               E when E =:= Ext ->
-                                  {AppName, _} =
-				      reltool_utils:split_app_name(AppLabel),
+				  AppFile =
+				      proplists:get_value(AppLabel,AppFiles),
+				  AppName = find_app_name1(AppLabel,AppFile),
                                   Mod = init_mod(AppName,
 						 File,
 						 {File, GetBin()},
@@ -1758,6 +1822,7 @@ escripts_to_apps([Escript | Escripts], Apps, Status) ->
                           {FileAcc, StatusAcc}
                   end
           end,
+
     case reltool_utils:escript_foldl(Fun, {[], Status}, Escript) of
 	{ok, {Files, Status2}} ->
 	    EscriptApp =
@@ -1772,8 +1837,9 @@ escripts_to_apps([Escript | Escripts], Apps, Status) ->
 				      Apps,
 				      Status2),
 	    escripts_to_apps(Escripts, Apps2, Status3);
-	{error, Reason} ->
-	    reltool_utils:throw_error("Illegal escript ~p: ~p", [Escript,Reason])
+	{error, Reason2} ->
+	    reltool_utils:throw_error("Illegal escript ~tp: ~p",
+				      [Escript,Reason2])
     end;
 escripts_to_apps([], Apps, Status) ->
     {Apps, Status}.
@@ -1835,7 +1901,7 @@ init_escript_app(AppName, EscriptAppName, Dir, Info, Mods, Apps, Status) ->
     case lists:keymember(AppName, #app.name, Apps) of
         true ->
 	    reltool_utils:throw_error(
-	      "~p: Application name clash. Escript ~p contains application ~p.",
+	      "~w: Application name clash. Escript ~tp contains application ~tp.",
 	      [AppName,Dir,AppName]);
         false ->
             {App2, Status}
@@ -1920,7 +1986,7 @@ ensure_app_info(#app{is_escript = IsEscript, active_dir = Dir, info = Info},
     %% Escript or application which is inlined in an escript
     {Info, Dir, Status};
 ensure_app_info(#app{name = Name, sorted_dirs = []}, _Status) ->
-    reltool_utils:throw_error("~p: : Missing application directory.",[Name]);
+    reltool_utils:throw_error("~w: : Missing application directory.",[Name]);
 ensure_app_info(#app{name = Name,
 		     vsn = Vsn,
 		     use_selected_vsn = UseSelectedVsn,
@@ -1932,7 +1998,7 @@ ensure_app_info(#app{name = Name,
         fun(Dir, StatusAcc) ->
                 Base = get_base(Name, Dir),
                 Ebin = filename:join([Dir, "ebin"]),
-                {_, DefaultVsn} = reltool_utils:split_app_name(Base),
+                DefaultVsn = get_vsn_from_dir(Name,Base),
                 AppFile = filename:join([Ebin, atom_to_list(Name) ++ ".app"]),
                 read_app_info(AppFile, AppFile, Name, DefaultVsn, StatusAcc)
         end,
@@ -1945,8 +2011,8 @@ ensure_app_info(#app{name = Name,
                 Status2;
             [BadVsn | _] ->
 		reltool_utils:throw_error(
-		  "~p: Application version clash. "
-		  "Multiple directories contains version ~p.",
+		  "~w: Application version clash. "
+		  "Multiple directories contains version ~tp.",
 		  [Name,BadVsn])
         end,
     FirstInfo = hd(AllInfo),
@@ -1968,8 +2034,8 @@ ensure_app_info(#app{name = Name,
 			    {Info, VsnDir, Status3};
 			false ->
 			    reltool_utils:throw_error(
-			      "~p: No application directory contains "
-			      "selected version ~p", [Name,Vsn])
+			      "~w: No application directory contains "
+			      "selected version ~tp", [Name,Vsn])
 		    end
 	    end;
 	true ->

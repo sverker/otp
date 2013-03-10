@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1999-2009. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -69,6 +69,8 @@ public class TermHelper {
 	break;
 
       case com.ericsson.otp.erlang.OtpExternal.atomTag:
+      case com.ericsson.otp.erlang.OtpExternal.atomUtf8Tag:
+      case com.ericsson.otp.erlang.OtpExternal.smallAtomUtf8Tag:
 	_in.reset();
 	_value.atomV = _in.read_atom();
 	break;

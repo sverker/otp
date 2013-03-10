@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2006-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2006-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -245,5 +245,7 @@ void		ERTS_POLL_EXPORT(erts_poll_init)(void);
 void		ERTS_POLL_EXPORT(erts_poll_get_selected_events)(ErtsPollSet,
 								ErtsPollEvents [],
 								int);
+
+int		ERTS_POLL_EXPORT(erts_poll_get_table_len)(int);
 
 #endif /* #ifndef ERL_POLL_H__ */

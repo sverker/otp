@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -103,7 +103,8 @@ init(Parent) ->
     end,
 
     mnesia_schema:purge_tmp_files(),
-    mnesia_recover:start_garb(),
+    mnesia_recover:next_garb(),
+    mnesia_recover:next_check_overload(),
 
     ?eval_debug_fun({?MODULE, init},  [{nodes, AllOthers}]),
 

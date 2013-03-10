@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -48,6 +48,7 @@
          send_loop/1,
          send_timeout_1/1,
          send_timeout_2/1,
+         info/1,
          disconnect/1,
          stop_services/1,
          stop/1]).
@@ -106,13 +107,13 @@
 -define(LOOP_DETECTED, 3005).
 -define(UNABLE_TO_DELIVER, 3002).
 
--define(LOGOUT, ?'DIAMETER_BASE_TERMINATION-CAUSE_DIAMETER_LOGOUT').
+-define(LOGOUT, ?'DIAMETER_BASE_TERMINATION-CAUSE_LOGOUT').
 -define(AUTHORIZE_ONLY, ?'DIAMETER_BASE_RE-AUTH-REQUEST-TYPE_AUTHORIZE_ONLY').
 
 %% ===========================================================================
 
 suite() ->
-    [{timetrap, {seconds, 10}}].
+    [{timetrap, {seconds, 60}}].
 
 all() ->
     [start,
@@ -136,7 +137,8 @@ tc() ->
      send4,
      send_loop,
      send_timeout_1,
-     send_timeout_2].
+     send_timeout_2,
+     info].
 
 %% ===========================================================================
 %% start/stop testcases
@@ -223,6 +225,9 @@ send_timeout(Tmo) ->
                   {'Auth-Application-Id', ?APP_ID},
                   {'Re-Auth-Request-Type', ?AUTHORIZE_ONLY}],
     call(Req, [{filter, realm}, {timeout, Tmo}]).
+
+info(_Config) ->
+    [] = ?util:info().
 
 %% ===========================================================================
 

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1999-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -36,3 +36,4 @@
 -define(DFLAG_UNICODE_IO,16#1000).
 -define(DFLAG_DIST_HDR_ATOM_CACHE,16#2000).
 -define(DFLAG_SMALL_ATOM_TAGS, 16#4000).
+-define(DFLAG_UTF8_ATOMS, 16#10000).

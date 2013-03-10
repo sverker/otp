@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -483,7 +483,7 @@ validate_properties(Properties) ->
     case mandatory_properties(Properties) of
 	ok -> 
 	    %% Second, check that property dependency are ok
-	    {ok, validate_properties2(Properties)};
+	    {ok, check_minimum_bytes_per_second(validate_properties2(Properties))};
 	Error ->
 	    throw(Error)
     end.
@@ -522,7 +522,18 @@ validate_properties2(Properties) ->
 		    throw(Error)
 	    end
     end.
-
+check_minimum_bytes_per_second(Properties) ->
+    case proplists:get_value(minimum_bytes_per_second, Properties, false) of
+	false ->
+	    Properties;
+	Nr ->
+	    case is_integer(Nr) of
+		false ->
+		    throw({error, {minimum_bytes_per_second, is_not_integer}});
+		_ ->
+		    Properties
+	    end
+    end.
 mandatory_properties(ConfigList) ->
     a_must(ConfigList, [server_name, port, server_root, document_root]).
 
@@ -571,11 +582,17 @@ validate_config_params([{server_tokens, {private, Value}} | Rest])
 validate_config_params([{server_tokens, Value} | _]) ->
     throw({server_tokens, Value});
 
-validate_config_params([{socket_type, Value} | Rest]) 
-  when (Value =:= ip_comm) orelse 
-       (Value =:= ssl) orelse 
-       (Value =:= essl) ->
+validate_config_params([{socket_type, ip_comm} | Rest]) ->
     validate_config_params(Rest);
+
+validate_config_params([{socket_type, Value} | Rest]) 
+  when Value == ssl; Value == essl ->
+    validate_config_params(Rest);
+
+validate_config_params([{socket_type, {Value, _}} | Rest])
+  when Value == essl orelse Value == ssl ->
+    validate_config_params(Rest);
+
 validate_config_params([{socket_type, Value} | _]) ->
     throw({socket_type, Value});
 
@@ -829,9 +846,7 @@ os_info(Info) ->
 	{OsFamily, _OsName} when Info =:= partial ->
 	    lists:flatten(io_lib:format("(~w)", [OsFamily]));
 	{OsFamily, OsName} ->
-	    lists:flatten(io_lib:format("(~w/~w)", [OsFamily, OsName]));
-	OsFamily ->
-	    lists:flatten(io_lib:format("(~w)", [OsFamily]))
+	    lists:flatten(io_lib:format("(~w/~w)", [OsFamily, OsName]))
     end.
 
 otp_release() ->
@@ -907,6 +922,8 @@ lookup_socket_type(ConfigDB) ->
     case httpd_util:lookup(ConfigDB, socket_type, ip_comm) of
 	ip_comm ->
 	    ip_comm;
+	{Tag, Conf} ->
+	    {Tag, Conf};
 	SSL when (SSL =:= ssl) orelse (SSL =:= essl) ->
 	    SSLTag = 
 		if

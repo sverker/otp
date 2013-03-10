@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -39,17 +39,18 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     test_lib:recompile(?MODULE),
-    [misc, const_cond, basic_not, complex_not, nested_nots,
-     semicolon, complex_semicolon, comma, or_guard,
-     more_or_guards, complex_or_guards, and_guard, xor_guard,
-     more_xor_guards, build_in_guard, old_guard_tests, gbif,
-     t_is_boolean, is_function_2, tricky, rel_ops,
-     literal_type_tests, basic_andalso_orelse, traverse_dcd,
-     check_qlc_hrl, andalso_semi, t_tuple_size, binary_part,
-     bad_constants].
+    [{group,p}].
 
 groups() -> 
-    [].
+    [{p,test_lib:parallel(),
+      [misc,const_cond,basic_not,complex_not,nested_nots,
+       semicolon,complex_semicolon,comma,or_guard,
+       more_or_guards,complex_or_guards,and_guard,xor_guard,
+       more_xor_guards,build_in_guard,old_guard_tests,gbif,
+       t_is_boolean,is_function_2,tricky,rel_ops,
+       literal_type_tests,basic_andalso_orelse,traverse_dcd,
+       check_qlc_hrl,andalso_semi,t_tuple_size,binary_part,
+       bad_constants]}].
 
 init_per_suite(Config) ->
     Config.

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1998-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -254,6 +254,9 @@ bif(binary_part, 2) -> true;
 bif(binary_part, 3) -> true;
 bif(binary_to_atom, 2) -> true;
 bif(binary_to_existing_atom, 2) -> true;
+bif(binary_to_integer, 1) -> true;
+bif(binary_to_integer, 2) -> true;
+bif(binary_to_float, 1) -> true;
 bif(binary_to_list, 1) -> true;
 bif(binary_to_list, 3) -> true;
 bif(binary_to_term, 1) -> true;
@@ -278,6 +281,9 @@ bif(exit, 1) -> true;
 bif(exit, 2) -> true;
 bif(float, 1) -> true;
 bif(float_to_list, 1) -> true;
+bif(float_to_list, 2) -> true;
+bif(float_to_binary, 1) -> true;
+bif(float_to_binary, 2) -> true;
 bif(garbage_collect, 0) -> true;
 bif(garbage_collect, 1) -> true;
 bif(get, 0) -> true;
@@ -289,6 +295,8 @@ bif(halt, 0) -> true;
 bif(halt, 1) -> true;
 bif(halt, 2) -> true;
 bif(hd, 1) -> true;
+bif(integer_to_binary, 1) -> true;
+bif(integer_to_binary, 2) -> true;
 bif(integer_to_list, 1) -> true;
 bif(integer_to_list, 2) -> true;
 bif(iolist_size, 1) -> true;

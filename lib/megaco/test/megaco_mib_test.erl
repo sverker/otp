@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2002-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -647,13 +647,13 @@ mk_recv_info([{text,udp}|ET], Acc) ->
 	  {port, 2944}],
     mk_recv_info(ET, [RI|Acc]);
 mk_recv_info([{binary,tcp}|ET], Acc) ->
-    RI = [{encoding_module, megaco_ber_bin_encoder},
+    RI = [{encoding_module, megaco_ber_encoder},
 	  {encoding_config, []},
 	  {transport_module, megaco_tcp},
 	  {port, 2945}],
     mk_recv_info(ET, [RI|Acc]);
 mk_recv_info([{binary,udp}|ET], Acc) ->
-    RI = [{encoding_module, megaco_ber_bin_encoder},
+    RI = [{encoding_module, megaco_ber_encoder},
 	  {encoding_config, []},
 	  {transport_module, megaco_udp},
 	  {port, 2945}],
@@ -1013,7 +1013,7 @@ start_mg(Node, Mid, Encoding, Transport, Verbosity) ->
 		 {encoding_config, []},
 		 {port,2944}];
 	    binary ->
-		[{encoding_module, megaco_ber_bin_encoder},
+		[{encoding_module, megaco_ber_encoder},
 		 {encoding_config, []},
 		 {port,2945}]
 	end,

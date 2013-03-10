@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2007-2012. All Rights Reserved.
+ * Copyright Ericsson AB 2007-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -264,7 +264,7 @@ append_shebang_args(char* scriptname)
 	static char linebuf[LINEBUFSZ];
 	char* ptr = fgets(linebuf, LINEBUFSZ, fd);
 
-	if (ptr != NULL && linebuf[0] == '#' && linebuf[1] == '!') {
+	if (ptr != NULL) {
 	    /* Try to find args on second or third line */
 	    ptr = fgets(linebuf, LINEBUFSZ, fd);
 	    if (ptr != NULL && linebuf[0] == '%' && linebuf[1] == '%' && linebuf[2] == '!') {

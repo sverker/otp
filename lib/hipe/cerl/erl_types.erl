@@ -2,7 +2,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2003-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2003-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -63,7 +63,6 @@
 	 t_boolean/0,
 	 t_byte/0,
 	 t_char/0,
-	 t_charlist/0,
 	 t_collect_vars/1,
 	 t_cons/0,
 	 t_cons/2,
@@ -197,7 +196,6 @@
 	 t_tuple_size/1,
 	 t_tuple_sizes/1,
 	 t_tuple_subtypes/1,
-	 t_unicode_string/0,
 	 t_unify/2,
 	 t_unify/3,
 	 t_unit/0,
@@ -207,7 +205,7 @@
 	 t_var/1,
 	 t_var_name/1,
 	 %% t_assign_variables_to_subtype/2,
-	 type_is_defined/3,
+	 type_is_defined/4,
 	 record_field_diffs_to_string/2,
 	 subst_all_vars_to_any/1,
 	 lift_list_to_pos_empty/1,
@@ -275,8 +273,8 @@
 
 -type tag()  :: ?atom_tag | ?binary_tag | ?function_tag | ?identifier_tag
               | ?list_tag | ?matchstate_tag | ?nil_tag | ?number_tag
-              | ?opaque_tag | ?product_tag | ?tuple_tag | ?tuple_set_tag
-              | ?union_tag | ?var_tag.
+              | ?opaque_tag | ?product_tag | ?remote_tag
+              | ?tuple_tag | ?tuple_set_tag | ?union_tag | ?var_tag.
 
 -define(float_qual,     float).
 -define(integer_qual,   integer).
@@ -546,12 +544,12 @@ t_opaque_from_records(RecDict) ->
   OpaqueRecDict =
     dict:filter(fun(Key, _Value) ->
 		    case Key of
-		      {opaque, _Name} -> true;
+		      {opaque, _Name, _Arity} -> true;
 		      _  -> false
 		    end
 		end, RecDict),
   OpaqueTypeDict =
-    dict:map(fun({opaque, Name}, {Module, Type, ArgNames}) ->
+    dict:map(fun({opaque, Name, _Arity}, {Module, Type, ArgNames}) ->
 		 case ArgNames of
 		   [] ->
 		     t_opaque(Module, Name, [], t_from_form(Type, RecDict));
@@ -687,8 +685,8 @@ t_solve_remote(?tuple(Types, _Arity, _Tag), ET, R, C)  ->
   {RL, RR} = list_solve_remote(Types, ET, R, C),
   {t_tuple(RL), RR};
 t_solve_remote(?tuple_set(Set), ET, R, C) ->
-  {NewSet, RR} = tuples_solve_remote(Set, ET, R, C),
-  {?tuple_set(NewSet), RR};
+  {NewTuples, RR} = tuples_solve_remote(Set, ET, R, C),
+  {t_sup(NewTuples), RR};
 t_solve_remote(?remote(Set), ET, R, C) ->
   RemoteList = ordsets:to_list(Set),
   {RL, RR} = list_solve_remote_type(RemoteList, ET, R, C),
@@ -709,8 +707,8 @@ t_solve_remote_type(#remote{mod = RemMod, name = Name, args = Args} = RemType,
       MFA = {RemMod, Name, ArgsLen},
       case sets:is_element(MFA, ET) of
         true ->
-          case lookup_type(Name, RemDict) of
-            {type, {_Mod, Type, ArgNames}} when ArgsLen =:= length(ArgNames) ->
+          case lookup_type(Name, ArgsLen, RemDict) of
+            {type, {_Mod, Type, ArgNames}} ->
               {NewType, NewCycle, NewRR} =
                 case can_unfold_more(RemType, C) of
                   true ->
@@ -728,7 +726,7 @@ t_solve_remote_type(#remote{mod = RemMod, name = Name, args = Args} = RemType,
                   false -> RT
                 end,
               {RT1, RetRR};
-            {opaque, {Mod, Type, ArgNames}} when ArgsLen =:= length(ArgNames) ->
+            {opaque, {Mod, Type, ArgNames}} ->
               List = lists:zip(ArgNames, Args),
               TmpVarDict = dict:from_list(List),
               {Rep, NewCycle, NewRR} =
@@ -748,12 +746,6 @@ t_solve_remote_type(#remote{mod = RemMod, name = Name, args = Args} = RemType,
               {t_from_form({opaque, -1, Name, {Mod, Args, RT1}},
                            RemDict, TmpVarDict),
                RetRR};
-            {type, _} ->
-              Msg = io_lib:format("Unknown remote type ~w\n", [Name]),
-              throw({error, Msg});
-            {opaque, _} ->
-              Msg = io_lib:format("Unknown remote opaque type ~w\n", [Name]),
-              throw({error, Msg});
             error ->
               Msg = io_lib:format("Unable to find remote type ~w:~w()\n",
                                   [RemMod, Name]),
@@ -788,10 +780,10 @@ opaques_solve_remote([#opaque{struct = Struct} = Remote|Tail], ET, R, C) ->
 
 tuples_solve_remote([], _ET, _R, _C) ->
   {[], []};
-tuples_solve_remote([{Sz, Tuples}|Tail], ET, R, C) ->
+tuples_solve_remote([{_Sz, Tuples}|Tail], ET, R, C) ->
   {RL, RR1} = list_solve_remote(Tuples, ET, R, C),
   {LSzTpls, RR2} = tuples_solve_remote(Tail, ET, R, C),
-  {[{Sz, RL}|LSzTpls], RR1 ++ RR2}.
+  {RL ++ LSzTpls, RR1 ++ RR2}.
 
 %%-----------------------------------------------------------------------------
 %% Unit type. Signals non termination.
@@ -1458,21 +1450,6 @@ t_is_tuple(_) -> false.
 t_bitstrlist() ->
   t_iolist(1, t_bitstr()).
 
--spec t_charlist() -> erl_type().
-
-t_charlist() ->
-  t_charlist(1).
-
--spec t_charlist(non_neg_integer()) -> erl_type().
-
-t_charlist(N) when N > 0 ->
-  t_maybe_improper_list(t_sup([t_unicode_char(),
-			       t_unicode_binary(),
-			       t_charlist(N-1)]),
-		        t_sup(t_unicode_binary(), t_nil()));
-t_charlist(0) ->
-  t_maybe_improper_list(t_any(), t_sup(t_unicode_binary(), t_nil())).
-
 -spec t_constant() -> erl_type().
 
 t_constant() ->
@@ -1567,21 +1544,6 @@ t_parameterized_module() ->
 
 t_timeout() ->
   t_sup(t_non_neg_integer(), t_atom('infinity')).
-
--spec t_unicode_binary() -> erl_type().
-
-t_unicode_binary() ->
-  t_binary().  % with characters encoded in UTF-8 coding standard
-
--spec t_unicode_char() -> erl_type().
-
-t_unicode_char() ->
-  t_integer(). % representing a valid unicode codepoint
-
--spec t_unicode_string() -> erl_type().
-
-t_unicode_string() ->
-  t_list(t_unicode_char()).
 
 %%-----------------------------------------------------------------------------
 %% Some built-in opaque types
@@ -2318,10 +2280,14 @@ t_inf(?product(_), _, _Mode) ->
   ?none;
 t_inf(_, ?product(_), _Mode) ->
   ?none;
-t_inf(?tuple(?any, ?any, ?any), ?tuple(_, _, _) = T, _Mode) -> T;
-t_inf(?tuple(_, _, _) = T, ?tuple(?any, ?any, ?any), _Mode) -> T;
-t_inf(?tuple(?any, ?any, ?any), ?tuple_set(_) = T, _Mode) -> T;
-t_inf(?tuple_set(_) = T, ?tuple(?any, ?any, ?any), _Mode) -> T;
+t_inf(?tuple(?any, ?any, ?any), ?tuple(_, _, _) = T, _Mode) ->
+  subst_all_vars_to_any(T);
+t_inf(?tuple(_, _, _) = T, ?tuple(?any, ?any, ?any), _Mode) ->
+  subst_all_vars_to_any(T);
+t_inf(?tuple(?any, ?any, ?any), ?tuple_set(_) = T, _Mode) ->
+  subst_all_vars_to_any(T);
+t_inf(?tuple_set(_) = T, ?tuple(?any, ?any, ?any), _Mode) ->
+  subst_all_vars_to_any(T);
 t_inf(?tuple(Elements1, Arity, _Tag1), ?tuple(Elements2, Arity, _Tag2), Mode) ->
   case t_inf_lists_strict(Elements1, Elements2, Mode) of
     bottom -> ?none;
@@ -3269,6 +3235,8 @@ t_to_string(?bitstr(0, 0), _RecDict) ->
   "<<>>";
 t_to_string(?bitstr(8, 0), _RecDict) ->
   "binary()";
+t_to_string(?bitstr(1, 0), _RecDict) ->
+  "bitstring()";
 t_to_string(?bitstr(0, B), _RecDict) ->
   lists:flatten(io_lib:format("<<_:~w>>", [B]));
 t_to_string(?bitstr(U, 0), _RecDict) ->
@@ -3428,7 +3396,7 @@ record_field_diffs_to_string(?tuple([_|Fs], Arity, Tag), RecDict) ->
 
 field_diffs([F|Fs], [{FName, DefType}|FDefs], RecDict, Acc) ->
   NewAcc =
-    case t_is_subtype(F, DefType) of
+    case not t_is_none(t_inf(F, DefType)) of
       true -> Acc;
       false ->
 	Str = atom_to_string(FName) ++ "::" ++ t_to_string(DefType, RecDict),
@@ -3562,7 +3530,7 @@ t_from_form({type, _L, function, []}, _TypeNames, _InOpaque, _RecDict,
 t_from_form({type, _L, 'fun', []}, _TypeNames, _InOpaque, _RecDict,
             _VarDict) ->
   {t_fun(), []};
-t_from_form({type, _L, 'fun', [{type, _, any, []}, Range]}, TypeNames,
+t_from_form({type, _L, 'fun', [{type, _, any}, Range]}, TypeNames,
             InOpaque, RecDict, VarDict) ->
   {T, R} = t_from_form(Range, TypeNames, InOpaque, RecDict, VarDict),
   {t_fun(T), R};
@@ -3708,8 +3676,9 @@ t_from_form({type, _L, union, Args}, TypeNames, InOpaque, RecDict, VarDict) ->
   {L, R} = list_from_form(Args, TypeNames, InOpaque, RecDict, VarDict),
   {t_sup(L), R};
 t_from_form({type, _L, Name, Args}, TypeNames, InOpaque, RecDict, VarDict) ->
-  case lookup_type(Name, RecDict) of
-    {type, {_Module, Type, ArgNames}} when length(Args) =:= length(ArgNames) ->
+  ArgsLen = length(Args),
+  case lookup_type(Name, ArgsLen, RecDict) of
+    {type, {_Module, Type, ArgNames}} ->
       case can_unfold_more({type, Name}, TypeNames) of
         true ->
           List = lists:zipwith(
@@ -3729,7 +3698,7 @@ t_from_form({type, _L, Name, Args}, TypeNames, InOpaque, RecDict, VarDict) ->
           end;
         false -> {t_any(), [{type, Name}]}
       end;
-    {opaque, {Module, Type, ArgNames}} when length(Args) =:= length(ArgNames) ->
+    {opaque, {Module, Type, ArgNames}} ->
       {Rep, Rret} =
         case can_unfold_more({opaque, Name}, TypeNames) of
           true ->
@@ -3758,12 +3727,9 @@ t_from_form({type, _L, Name, Args}, TypeNames, InOpaque, RecDict, VarDict) ->
                         RecDict, VarDict)
           end,
       {Tret, Rret};
-    {type, _} ->
-      throw({error, io_lib:format("Unknown type ~w\n", [Name])});
-    {opaque, _} ->
-      throw({error, io_lib:format("Unknown opaque type ~w\n", [Name])});
     error ->
-      throw({error, io_lib:format("Unable to find type ~w\n", [Name])}) 
+      Msg = io_lib:format("Unable to find type ~w/~w\n", [Name, ArgsLen]),
+      throw({error, Msg})
   end;
 t_from_form({opaque, _L, Name, {Mod, Args, Rep}}, _TypeNames, _InOpaque,
             _RecDict, _VarDict) ->
@@ -3898,14 +3864,16 @@ t_form_to_string({type, _L, binary, [Base, Unit]} = Type) ->
       case {U, B} of
 	{0, 0} -> "<<>>";
 	{8, 0} -> "binary()";
+	{1, 0} -> "bitstring()";
 	{0, B} -> lists:flatten(io_lib:format("<<_:~w>>", [B]));
 	{U, 0} -> lists:flatten(io_lib:format("<<_:_*~w>>", [U]));
 	{U, B} -> lists:flatten(io_lib:format("<<_:~w,_:_*~w>>", [B, U]))
       end;
     _ -> io_lib:format("Badly formed bitstr type ~w", [Type])
   end;
+t_form_to_string({type, _L, bitstring, []}) -> "bitstring()";
 t_form_to_string({type, _L, 'fun', []}) -> "fun()";
-t_form_to_string({type, _L, 'fun', [{type, _, any, []}, Range]}) -> 
+t_form_to_string({type, _L, 'fun', [{type, _, any}, Range]}) ->
   "fun(...) -> " ++ t_form_to_string(Range);
 t_form_to_string({type, _L, 'fun', [{type, _, product, Domain}, Range]}) ->
   "fun((" ++ string:join(t_form_to_string_list(Domain), ",") ++ ") -> "
@@ -3926,7 +3894,7 @@ t_form_to_string({type, _L, range, [From, To]} = Type) ->
   case {erl_eval:partial_eval(From), erl_eval:partial_eval(To)} of
     {{integer, _, FromVal}, {integer, _, ToVal}} ->
       io_lib:format("~w..~w", [FromVal, ToVal]);
-    _ -> io_lib:format("Bad formed type ~w",[Type])
+    _ -> io_lib:format("Badly formed type ~w",[Type])
   end;
 t_form_to_string({type, _L, record, [{atom, _, Name}]}) ->
   io_lib:format("#~w{}", [Name]);
@@ -4014,20 +3982,20 @@ lookup_record(Tag, Arity, RecDict) when is_atom(Tag) ->
     error -> error
   end.
 
-lookup_type(Name, RecDict) ->
-  case dict:find({type, Name}, RecDict) of
+lookup_type(Name, Arity, RecDict) ->
+  case dict:find({type, Name, Arity}, RecDict) of
     error ->
-      case dict:find({opaque, Name}, RecDict) of
+      case dict:find({opaque, Name, Arity}, RecDict) of
 	error -> error;
 	{ok, Found} -> {opaque, Found}
       end;
     {ok, Found} -> {type, Found}
   end.
 
--spec type_is_defined('type' | 'opaque', atom(), dict()) -> boolean().
+-spec type_is_defined('type' | 'opaque', atom(), arity(), dict()) -> boolean().
 
-type_is_defined(TypeOrOpaque, Name, RecDict) ->
-  dict:is_key({TypeOrOpaque, Name}, RecDict).
+type_is_defined(TypeOrOpaque, Name, Arity, RecDict) ->
+  dict:is_key({TypeOrOpaque, Name, Arity}, RecDict).
 
 can_unfold_more(TypeName, TypeNames) ->
   Fun = fun(E, Acc) -> case E of TypeName -> Acc + 1; _ -> Acc end end,

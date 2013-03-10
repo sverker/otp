@@ -30,7 +30,9 @@
 	 ifget/3, ifget/2, ifset/3, ifset/2,
 	 getstat/1, getstat/2,
 	 ip/1, stats/0, options/0, 
-	 pushf/3, popf/1, close/1, gethostname/0, gethostname/1]).
+	 pushf/3, popf/1, close/1, gethostname/0, gethostname/1, 
+	 parse_ipv4_address/1, parse_ipv6_address/1, parse_ipv4strict_address/1,
+	 parse_ipv6strict_address/1, parse_address/1, parse_strict_address/1]).
 
 -export([connect_options/2, listen_options/2, udp_options/2, sctp_options/2]).
 
@@ -527,14 +529,57 @@ getservbyname(Name, Protocol) when is_atom(Name) ->
 	Error -> Error
     end.
 
+-spec parse_ipv4_address(Address) ->
+	{ok, IPv4Address} | {error, einval} when
+      Address :: string(),
+      IPv4Address :: ip_address().
+parse_ipv4_address(Addr) ->
+    inet_parse:ipv4_address(Addr).
+
+-spec parse_ipv6_address(Address) ->
+	{ok, IPv6Address} | {error, einval} when
+      Address :: string(),
+      IPv6Address :: ip_address().
+parse_ipv6_address(Addr) ->
+    inet_parse:ipv6_address(Addr).
+
+-spec parse_ipv4strict_address(Address) ->
+	{ok, IPv4Address} | {error, einval} when
+      Address :: string(),
+      IPv4Address :: ip_address().
+parse_ipv4strict_address(Addr) ->
+    inet_parse:ipv4strict_address(Addr).
+
+-spec parse_ipv6strict_address(Address) ->
+	{ok, IPv6Address} | {error, einval} when
+      Address :: string(),
+      IPv6Address :: ip_address().
+parse_ipv6strict_address(Addr) ->
+    inet_parse:ipv6strict_address(Addr).
+
+-spec parse_address(Address) ->
+	{ok, IPAddress} | {error, einval} when
+      Address :: string(),
+      IPAddress :: ip_address().
+parse_address(Addr) ->
+    inet_parse:address(Addr).
+
+-spec parse_strict_address(Address) ->
+	{ok, IPAddress} | {error, einval} when
+      Address :: string(),
+      IPAddress :: ip_address().
+parse_strict_address(Addr) ->
+    inet_parse:strict_address(Addr).
+
 %% Return a list of available options
 options() ->
     [
      tos, priority, reuseaddr, keepalive, dontroute, linger,
-     broadcast, sndbuf, recbuf, nodelay,
+     broadcast, sndbuf, recbuf, nodelay, ipv6_v6only,
      buffer, header, active, packet, deliver, mode,
      multicast_if, multicast_ttl, multicast_loop,
      exit_on_close, high_watermark, low_watermark,
+     high_msgq_watermark, low_msgq_watermark,
      send_timeout, send_timeout_close
     ].
 
@@ -552,8 +597,8 @@ stats() ->
 connect_options() ->
     [tos, priority, reuseaddr, keepalive, linger, sndbuf, recbuf, nodelay,
      header, active, packet, packet_size, buffer, mode, deliver,
-     exit_on_close, high_watermark, low_watermark, send_timeout,
-     send_timeout_close, delay_send,raw].
+     exit_on_close, high_watermark, low_watermark, high_msgq_watermark,
+     low_msgq_watermark, send_timeout, send_timeout_close, delay_send, raw].
     
 connect_options(Opts, Family) ->
     BaseOpts = 
@@ -607,9 +652,10 @@ con_add(Name, Val, R, Opts, AllOpts) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 listen_options() ->
     [tos, priority, reuseaddr, keepalive, linger, sndbuf, recbuf, nodelay,
-     header, active, packet, buffer, mode, deliver, backlog,
-     exit_on_close, high_watermark, low_watermark, send_timeout,
-     send_timeout_close, delay_send, packet_size,raw].
+     header, active, packet, buffer, mode, deliver, backlog, ipv6_v6only,
+     exit_on_close, high_watermark, low_watermark, high_msgq_watermark,
+     low_msgq_watermark, send_timeout, send_timeout_close, delay_send,
+     packet_size, raw].
 
 listen_options(Opts, Family) ->
     BaseOpts = 
@@ -664,7 +710,7 @@ list_add(Name, Val, R, Opts, As) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 udp_options() ->
     [tos, priority, reuseaddr, sndbuf, recbuf, header, active, buffer, mode, 
-     deliver,
+     deliver, ipv6_v6only,
      broadcast, dontroute, multicast_if, multicast_ttl, multicast_loop,
      add_membership, drop_membership, read_packets,raw].
 
@@ -720,7 +766,7 @@ udp_add(Name, Val, R, Opts, As) ->
 sctp_options() ->
 [   % The following are generic inet options supported for SCTP sockets:
     mode, active, buffer, tos, priority, dontroute, reuseaddr, linger, sndbuf,
-    recbuf,
+    recbuf, ipv6_v6only,
 
     % Other options are SCTP-specific (though they may be similar to their
     % TCP and UDP counter-parts):
@@ -763,8 +809,12 @@ sctp_opt([Opt|Opts], Mod, R, As) ->
 	{Name,Val}	-> sctp_opt (Opts, Mod, R, As, Name, Val);
 	_ -> {error,badarg}
     end;
-sctp_opt([], _Mod, R, _SockOpts) ->
-    {ok, R}.
+sctp_opt([], _Mod, #sctp_opts{ifaddr=IfAddr}=R, _SockOpts) ->
+    if is_list(IfAddr) ->
+	    {ok, R#sctp_opts{ifaddr=lists:reverse(IfAddr)}};
+       true ->
+	    {ok, R}
+    end.
 
 sctp_opt(Opts, Mod, R, As, Name, Val) ->
     case add_opt(Name, Val, R#sctp_opts.opts, As) of
@@ -1015,11 +1065,7 @@ open(Fd, Addr, Port, Opts, Protocol, Family, Type, Module) when Fd < 0 ->
 	    case prim_inet:setopts(S, Opts) of
 		ok ->
 		    case if is_list(Addr) ->
-				 prim_inet:bind(S, add,
-						[case A of
-						     {_,_} -> A;
-						     _     -> {A,Port}
-						 end || A <- Addr]);
+				 bindx(S, Addr, Port);
 			    true ->
 				 prim_inet:bind(S, Addr, Port)
 			 end of
@@ -1039,6 +1085,34 @@ open(Fd, Addr, Port, Opts, Protocol, Family, Type, Module) when Fd < 0 ->
     end;
 open(Fd, _Addr, _Port, Opts, Protocol, Family, Type, Module) ->
     fdopen(Fd, Opts, Protocol, Family, Type, Module).
+
+bindx(S, [Addr], Port0) ->
+    {IP, Port} = set_bindx_port(Addr, Port0),
+    prim_inet:bind(S, IP, Port);
+bindx(S, Addrs, Port0) ->
+    [{IP, Port} | Rest] = [set_bindx_port(Addr, Port0) || Addr <- Addrs],
+    case prim_inet:bind(S, IP, Port) of
+	{ok, AssignedPort} when Port =:= 0 ->
+	    %% On newer Linux kernels, Solaris and FreeBSD, calling
+	    %% bindx with port 0 is ok, but on SuSE 10, it results in einval
+	    Rest2 = [change_bindx_0_port(Addr, AssignedPort) || Addr <- Rest],
+	    prim_inet:bind(S, add, Rest2);
+	{ok, _} ->
+	    prim_inet:bind(S, add, Rest);
+	Error ->
+	    Error
+    end.
+
+set_bindx_port({_IP, _Port}=Addr, _OtherPort) ->
+    Addr;
+set_bindx_port(IP, Port) ->
+    {IP, Port}.
+
+change_bindx_0_port({IP, 0}, AssignedPort) ->
+    {IP, AssignedPort};
+change_bindx_0_port({_IP, _Port}=Addr, _AssignedPort) ->
+    Addr.
+
 
 -spec fdopen(Fd :: non_neg_integer(),
 	     Opts :: [socket_setopt()],
@@ -1255,7 +1329,10 @@ tcp_controlling_process(S, NewOwner) when is_port(S), is_pid(NewOwner) ->
 	_ ->
 	    case prim_inet:getopt(S, active) of
 		{ok, A0} ->
-		    prim_inet:setopt(S, active, false),
+		    case A0 of
+			false -> ok;
+			_ -> prim_inet:setopt(S, active, false)
+		    end,
 		    case tcp_sync_input(S, NewOwner, false) of
 			true ->  %% socket already closed, 
 			    ok;
@@ -1263,7 +1340,10 @@ tcp_controlling_process(S, NewOwner) when is_port(S), is_pid(NewOwner) ->
 			    try erlang:port_connect(S, NewOwner) of
 				true -> 
 				    unlink(S), %% unlink from port
-				    prim_inet:setopt(S, active, A0),
+				    case A0 of
+					false -> ok;
+					_ -> prim_inet:setopt(S, active, A0)
+				    end,
 				    ok
 			    catch
 				error:Reason -> 

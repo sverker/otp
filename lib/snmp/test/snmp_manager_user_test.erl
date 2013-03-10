@@ -1,7 +1,7 @@
 %% 
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -36,7 +36,7 @@
 %% -compile(export_all).
 
 -export([
-all/0,groups/0,init_per_group/2,end_per_group/2,
+	 all/0,groups/0,init_per_group/2,end_per_group/2,
          init_per_testcase/2, end_per_testcase/2,
 	 
 	 

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -33,7 +33,7 @@
 	 purge_stacktrace/1, mult_lib_roots/1, bad_erl_libs/1,
 	 code_archive/1, code_archive2/1, on_load/1, on_load_binary/1,
 	 on_load_embedded/1, on_load_errors/1, big_boot_embedded/1,
-	 native_early_modules/1]).
+	 native_early_modules/1, get_mode/1]).
 
 -export([init_per_testcase/2, end_per_testcase/2, 
 	 init_per_suite/1, end_per_suite/1,
@@ -60,7 +60,7 @@ all() ->
      where_is_file_cached, purge_stacktrace, mult_lib_roots,
      bad_erl_libs, code_archive, code_archive2, on_load,
      on_load_binary, on_load_embedded, on_load_errors,
-     big_boot_embedded, native_early_modules].
+     big_boot_embedded, native_early_modules, get_mode].
 
 groups() -> 
     [].
@@ -553,7 +553,7 @@ sticky_dir(doc) -> ["Test that a module with the same name as a module in ",
 		    "a sticky directory cannot be loaded."];
 sticky_dir(Config) when is_list(Config) ->
     MyDir=filename:dirname(code:which(?MODULE)),
-    ?line {ok, Node}=?t:start_node(sticky_dir, slave,[{args, "-pa "++MyDir}]),
+    ?line {ok, Node}=?t:start_node(sticky_dir, slave,[{args, "-pa \""++MyDir++"\""}]),
     File=filename:join([?config(data_dir, Config), "calendar"]),
     ?line Ret=rpc:call(Node, ?MODULE, sticky_compiler, [File]),
     case Ret of
@@ -587,30 +587,25 @@ sticky_compiler(File) ->
 pa_pz_option(suite) -> [];
 pa_pz_option(doc) -> ["Test that the -pa and -pz options work as expected"];
 pa_pz_option(Config) when is_list(Config) ->
-    case os:type() of
-	vxworks ->
-	    {comment, "Slave nodes not supported on VxWorks"};
-	_ ->
-	    DDir = ?config(data_dir,Config),
-	    PaDir = filename:join(DDir,"pa"),
-	    PzDir = filename:join(DDir,"pz"),
-	    ?line {ok, Node}=?t:start_node(pa_pz1, slave,
-					   [{args,
-					     "-pa " ++ PaDir
-					     ++ " -pz " ++ PzDir}]),
-	    ?line Ret=rpc:call(Node, code, get_path, []),
-	    ?line [PaDir|Paths] = Ret,
-	    ?line [PzDir|_] = lists:reverse(Paths),
-	    ?t:stop_node(Node),
-	    ?line {ok, Node2}=?t:start_node(pa_pz2, slave,
-					    [{args,
-					      "-mode embedded " ++ "-pa "
-					      ++ PaDir ++ " -pz " ++ PzDir}]),
-	    ?line Ret2=rpc:call(Node2, code, get_path, []),
-	    ?line [PaDir|Paths2] = Ret2,
-	    ?line [PzDir|_] = lists:reverse(Paths2),
-	    ?t:stop_node(Node2)
-    end.
+    DDir = ?config(data_dir,Config),
+    PaDir = filename:join(DDir,"pa"),
+    PzDir = filename:join(DDir,"pz"),
+    {ok, Node}=?t:start_node(pa_pz1, slave,
+	[{args,
+		"-pa " ++ PaDir
+		++ " -pz " ++ PzDir}]),
+    Ret=rpc:call(Node, code, get_path, []),
+    [PaDir|Paths] = Ret,
+    [PzDir|_] = lists:reverse(Paths),
+    ?t:stop_node(Node),
+    {ok, Node2}=?t:start_node(pa_pz2, slave,
+	[{args,
+		"-mode embedded " ++ "-pa "
+		++ PaDir ++ " -pz " ++ PzDir}]),
+    Ret2=rpc:call(Node2, code, get_path, []),
+    [PaDir|Paths2] = Ret2,
+    [PzDir|_] = lists:reverse(Paths2),
+    ?t:stop_node(Node2).
 
 add_del_path(suite) ->
     [];
@@ -697,8 +692,8 @@ ext_mod_dep(Config) when is_list(Config) ->
     xref:set_default(s, [{verbose,false},{warnings,false},
 			 {builtins,true},{recurse,true}]),
     xref:set_library_path(s, code:get_path()),
-    xref:add_directory(s, filename:dirname(code:which(kernel))),
-    xref:add_directory(s, filename:dirname(code:which(lists))),
+    xref:add_directory(s, filename:join(code:lib_dir(kernel),"ebin")),
+    xref:add_directory(s, filename:join(code:lib_dir(stdlib),"ebin")),
     case catch ext_mod_dep2() of
 	{'EXIT', Reason} -> 
 	    xref:stop(s),
@@ -729,7 +724,7 @@ analyse([], [This={M,F,A}|Path], Visited, ErrCnt0) ->
     %% These modules should be loaded by code.erl before 
     %% the code_server is started.
     OK = [erlang, os, prim_file, erl_prim_loader, init, ets,
-	  code_server, lists, lists_sort, unicode, binary, filename, packages, 
+	  code_server, lists, lists_sort, unicode, binary, filename,
 	  gb_sets, gb_trees, hipe_unified_loader, hipe_bifs,
 	  prim_zip, zlib],
     ErrCnt1 = 
@@ -835,6 +830,10 @@ check_funs({'$M_EXPR','$F_EXPR',2},
 check_funs({'$M_EXPR','$F_EXPR',1},
 	   [{lists,foreach,2},
 	    {hipe_unified_loader,patch_consts,3} | _]) -> 0;
+check_funs({'$M_EXPR','$F_EXPR',1},
+	   [{lists,foreach,2},
+	    {hipe_unified_loader,mark_referred_from,1},
+	    {hipe_unified_loader,get_refs_from,2}| _]) -> 0;
 check_funs({'$M_EXPR',warning_msg,2},
 	   [{code_server,finish_on_load_report,2} | _]) -> 0;
 %% This is cheating! /raimo
@@ -874,7 +873,7 @@ load_cached(Config) when is_list(Config) ->
     ?line WD = filename:dirname(code:which(?MODULE)),
     ?line {ok,Node} = 
 	?t:start_node(code_cache_node, peer, [{args,
-					       "-pa " ++ WD},
+					       "-pa \"" ++ WD ++ "\""},
 					      {erl, [this]}]),
     CCTabCreated = fun(Tab) ->
 			   case ets:info(Tab, name) of
@@ -959,7 +958,7 @@ add_and_rehash(Config) when is_list(Config) ->
     ?line WD = filename:dirname(code:which(?MODULE)),
     ?line {ok,Node} = 
 	?t:start_node(code_cache_node, peer, [{args,
-					       "-pa " ++ WD},
+					       "-pa \"" ++ WD ++ "\""},
 					      {erl, [this]}]),
     CCTabCreated = fun(Tab) ->
 			   case ets:info(Tab, name) of
@@ -1602,9 +1601,15 @@ native_early_modules_1(Architecture) ->
         true ->
             ?line true = lists:all(fun code:is_module_native/1,
 				   [ets,file,filename,gb_sets,gb_trees,
-				    hipe_unified_loader,lists,os,packages]),
+				    %%hipe_unified_loader, no_native as workaround
+				    lists,os]),
             ok
     end.
+
+get_mode(suite) -> [];
+get_mode(doc) -> ["Test that the mode of the code server is properly retrieved"];
+get_mode(Config) when is_list(Config) ->
+    interactive = code:get_mode().
 
 %%-----------------------------------------------------------------
 %% error_logger handler.

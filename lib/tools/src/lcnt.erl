@@ -1,7 +1,8 @@
+%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -271,7 +272,7 @@ handle_call({locations, InOpts}, _From, #state{ locks = Locks } = State) when is
     Opts = options(InOpts, Default),
     Printables = filter_print([#print{
 	    name  = string_names(Names),
-	    entry = term2string("~p:~p", [Stats#stats.file, Stats#stats.line]),
+	    entry = term2string("~tp:~p", [Stats#stats.file, Stats#stats.line]),
 	    colls = Stats#stats.colls,
 	    tries = Stats#stats.tries,
 	    cr    = percent(Stats#stats.colls, Stats#stats.tries),
@@ -566,7 +567,7 @@ stats2print(Stats, Duration) ->
     lists:map(fun
 	(S) ->
 	    #print{
-		entry = term2string("~p:~p", [S#stats.file, S#stats.line]),
+		entry = term2string("~tp:~p", [S#stats.file, S#stats.line]),
 		colls = S#stats.colls,
 		tries = S#stats.tries,
 		cr    = percent(S#stats.colls, S#stats.tries),
@@ -797,20 +798,20 @@ options1([{Key, Value}|Opts], Defaults) ->
 
 %%% AUX STRING FORMATTING
 
-print(String) -> io:format("~s~n", [String]).
+print(String) -> io:format("~ts~n", [String]).
 
 kv(Key, Value) -> kv(Key, Value, 20).
 kv(Key, Value, Offset) -> term2string(term2string("~~~ps : ~~s", [Offset]),[Key, Value]).
 
 s(T) when is_float(T) -> term2string("~.4f", [T]);
-s(T) when is_list(T)  -> term2string("~s", [T]);
+s(T) when is_list(T)  -> term2string("~ts", [T]);
 s(T)                  -> term2string(T).
 
 strings(Strings) -> strings(Strings, []).
 strings([], Out) -> Out;
 strings([{space,  N,      S} | Ss], Out) -> strings(Ss, Out ++ term2string(term2string("~~~ps", [N]), [S]));
 strings([{format, Format, S} | Ss], Out) -> strings(Ss, Out ++ term2string(Format, [S]));
-strings([S|Ss], Out) -> strings(Ss, Out ++ term2string("~s", [S])).
+strings([S|Ss], Out) -> strings(Ss, Out ++ term2string("~ts", [S])).
 
 
 term2string({M,F,A}) when is_atom(M), is_atom(F), is_integer(A) -> term2string("~p:~p/~p", [M,F,A]);

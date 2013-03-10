@@ -1,7 +1,7 @@
 # 
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 1996-2009. All Rights Reserved.
+# Copyright Ericsson AB 1996-2013. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -22,10 +22,11 @@
 
 # FIXME let configure put in this last part TARGET
 
+include $(ERL_TOP)/make/output.mk
 include $(ERL_TOP)/make/target.mk
 
 debug opt shared purify quantify purecov gcov:
-	$(MAKE) -f $(TARGET)/Makefile TYPE=$@
+	$(make_verbose)$(MAKE) -f $(TARGET)/Makefile TYPE=$@
 
 clean depend docs release release_docs tests release_tests check:
-	$(MAKE) -f $(TARGET)/Makefile $@
+	$(make_verbose)$(MAKE) -f $(TARGET)/Makefile $@

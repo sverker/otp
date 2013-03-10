@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2001-2012. All Rights Reserved.
+ * Copyright Ericsson AB 2001-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -1423,14 +1423,6 @@ BIF_RETTYPE hipe_nonclosure_address(BIF_ALIST_2)
 	    goto badfun;
 	m = ep->code[0];
 	f = ep->code[1];
-    } else if (hdr == make_arityval(2)) {
-	Eterm *tp = tuple_val(BIF_ARG_1);
-	m = tp[1];
-	f = tp[2];
-	if (is_not_atom(m) || is_not_atom(f))
-	    goto badfun;
-	if (!erts_active_export_entry(m, f, BIF_ARG_2))
-	    goto badfun;
     } else
 	goto badfun;
     address = hipe_get_na_nofail(m, f, BIF_ARG_2, 1);
@@ -1589,8 +1581,40 @@ BIF_RETTYPE hipe_bifs_mark_referred_from_1(BIF_ALIST_1) /* get_refs_from */
     BIF_RET(NIL);
 }
 
+/* Called by init:restart after unloading all hipe compiled modules
+ * to work around bug causing execution of deallocated beam code.
+ * Can be removed when delete/purge of native modules works better.
+ * Test: Do init:restart in debug compiled vm with hipe compiled kernel. 
+ */
+static void hipe_purge_all_refs(void)
+{
+    struct hipe_mfa_info **bucket;
+    unsigned int i, nrbuckets;
+
+    hipe_mfa_info_table_lock();
+
+    bucket = hipe_mfa_info_table.bucket;
+    nrbuckets = 1 << hipe_mfa_info_table.log2size;
+    for (i = 0; i < nrbuckets; ++i) {	
+      ASSERT(bucket[i] == NULL); /*SVERK? */
+	while (bucket[i] != NULL) {
+	    struct hipe_mfa_info* mfa = bucket[i];
+	    bucket[i] = mfa->bucket.next;
+
+	    ASSERT(mfa->first_caller == NULL);
+	    erts_free(ERTS_ALC_T_HIPE, mfa);
+	}
+    }
+    hipe_mfa_info_table_unlock();
+}
+
 BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
 {
+    if (BIF_ARG_1 == am_all) {
+	hipe_purge_all_refs();
+	BIF_RET(am_ok);
+    }
+
     ASSERT(!"hipe_bifs_remove_refs_from_1() called");
     BIF_ERROR(BIF_P, BADARG);
 }

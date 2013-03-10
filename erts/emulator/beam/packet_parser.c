@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2008-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2008-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -67,7 +67,7 @@ static int my_strncasecmp(const char *s1, const char *s2, size_t n)
 
 #define HTTP_HDR_HASH_SIZE  53
 #define HTTP_METH_HASH_SIZE 13
-#define HTTP_MAX_NAME_LEN 20
+#define HTTP_MAX_NAME_LEN 50
 
 static char tspecial[128];
 
@@ -460,11 +460,9 @@ int packet_get_length(enum PacketParseType htype,
         hp = (struct tpkt_head*) ptr;
         if (hp->vrsn == TPKT_VRSN) {
             plen = get_int16(hp->packet_length) - hlen;
-            if (plen < 0)
-                goto error;
-        }
-        else
+        } else {
             goto error;
+	}
         goto remain;
     }
     

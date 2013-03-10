@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1997-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1997-2012. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -40,6 +40,8 @@
 
 #define IS_DOT_OR_DOTDOT(s) \
     ((s)[0] == L'.' && ((s)[1] == L'\0' || ((s)[1] == L'.' && (s)[2] == L'\0')))
+
+#define FILE_SHARE_FLAGS (FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
 
 #ifndef INVALID_FILE_ATTRIBUTES
 #define INVALID_FILE_ATTRIBUTES ((DWORD) 0xFFFFFFFF)
@@ -724,7 +726,7 @@ efile_openfile(Efile_error* errInfo,		/* Where to return error codes. */
 	crFlags = CREATE_NEW;
     }
     fd = CreateFileW(wname, access,
-		    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		    FILE_SHARE_FLAGS,
 		    NULL, crFlags, FILE_ATTRIBUTE_NORMAL, NULL);
 
     /*
@@ -897,7 +899,8 @@ efile_fileinfo(Efile_error* errInfo, Efile_info* pInfo,
 	     we should be able to find its target */
 	    WCHAR target_name[_MAX_PATH];
 	    if (efile_readlink(errInfo, (char *) name, 
-			       (char *) target_name,256) == 1) {
+			       (char *) target_name, 
+			       _MAX_PATH * sizeof(WCHAR)) == 1) {
 		FindClose(findhandle);
 		return efile_fileinfo(errInfo, pInfo,
 				      (char *) target_name, info_for_link);
@@ -908,7 +911,7 @@ efile_fileinfo(Efile_error* errInfo, Efile_info* pInfo,
 	{
 	    HANDLE handle;	/* Handle returned by CreateFile() */
 	    BY_HANDLE_FILE_INFORMATION fileInfo; /* from  CreateFile() */
-	    if (handle = CreateFileW(name, GENERIC_READ, 0,NULL,
+	    if (handle = CreateFileW(name, GENERIC_READ, FILE_SHARE_FLAGS, NULL,
 				    OPEN_EXISTING, 0, NULL)) {
 		GetFileInformationByHandle(handle, &fileInfo);
 		pInfo->links = fileInfo.nNumberOfLinks;
@@ -1020,7 +1023,7 @@ efile_write_info(Efile_error* errInfo,
     }
 
     fd = CreateFileW(wname, GENERIC_READ|GENERIC_WRITE,
-	    FILE_SHARE_READ | FILE_SHARE_WRITE,
+	    FILE_SHARE_FLAGS,
 	    NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (fd != INVALID_HANDLE_VALUE) {
 	BOOL result = SetFileTime(fd, &CreationFileTime, &AccessFileTime, &ModifyFileTime);
@@ -1156,8 +1159,11 @@ char* buf;			/* Buffer to read into. */
 size_t count;			/* Number of bytes to read. */
 size_t* pBytesRead;		/* Where to return number of bytes read. */
 {
-    if (!ReadFile((HANDLE) fd, buf, count, (DWORD *) pBytesRead, NULL))
+    DWORD nbytes = 0;
+    if (!ReadFile((HANDLE) fd, buf, count, &nbytes, NULL))
 	return set_error(errInfo);
+
+    *pBytesRead = nbytes;
     return 1;
 }
 
@@ -1383,10 +1389,10 @@ efile_readlink(Efile_error* errInfo, char* name, char* buffer, size_t size)
 	    DWORD fileAttributes =  GetFileAttributesW(wname);
 	    if ((fileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
 		BOOLEAN success = 0;
-		HANDLE h = CreateFileW(wname, GENERIC_READ, 0,NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+		HANDLE h = CreateFileW(wname, GENERIC_READ, FILE_SHARE_FLAGS, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
 		int len;
 		if(h != INVALID_HANDLE_VALUE) {
-		    success = pGetFinalPathNameByHandle(h, wbuffer, size,0);
+		    success = pGetFinalPathNameByHandle(h, wbuffer, size / sizeof(WCHAR),0);
 		    /* GetFinalPathNameByHandle prepends path with "\\?\": */
 		    len = wcslen(wbuffer);
 		    wmemmove(wbuffer,wbuffer+4,len-3);
@@ -1556,4 +1562,14 @@ efile_fadvise(Efile_error* errInfo, int fd, Sint64 offset,
     /* posix_fadvise is not available on Windows, do nothing */
     errno = ERROR_SUCCESS;
     return check_error(0, errInfo);
+}
+
+int
+efile_fallocate(Efile_error* errInfo, int fd, Sint64 offset, Sint64 length)
+{
+    /* No file preallocation method available in Windows. */
+    errno = errno_map(ERROR_NOT_SUPPORTED);
+    SetLastError(ERROR_NOT_SUPPORTED);
+
+    return check_error(-1, errInfo);
 }

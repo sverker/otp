@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1999-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -28,7 +28,7 @@
 	 mem_leak/1, coerce_to_float/1, bjorn/1,
 	 huge_float_field/1, huge_binary/1, system_limit/1, badarg/1,
 	 copy_writable_binary/1, kostis/1, dynamic/1, bs_add/1,
-	 otp_7422/1, zero_width/1]).
+	 otp_7422/1, zero_width/1, bad_append/1]).
 
 -include_lib("test_server/include/test_server.hrl").
 
@@ -38,7 +38,8 @@ all() ->
     [test1, test2, test3, test4, test5, testf, not_used,
      in_guard, mem_leak, coerce_to_float, bjorn,
      huge_float_field, huge_binary, system_limit, badarg,
-     copy_writable_binary, kostis, dynamic, bs_add, otp_7422, zero_width].
+     copy_writable_binary, kostis, dynamic, bs_add, otp_7422, zero_width,
+     bad_append].
 
 groups() -> 
     [].
@@ -460,7 +461,6 @@ mem_leak(0, _) -> ok;
 mem_leak(N, B) ->
     ?line big_bin(B, <<23>>),
     ?line {'EXIT',{badarg,_}} = (catch big_bin(B, bad)),
-    maybe_gc(),
     mem_leak(N-1, B).
 
 big_bin(B1, B2) ->
@@ -472,13 +472,6 @@ big_bin(B1, B2) ->
     
 make_bin(0, Acc) -> Acc;
 make_bin(N, Acc) -> make_bin(N-1, <<Acc/binary,Acc/binary>>).
-
-maybe_gc() ->
-    case erlang:system_info(heap_type) of
-	shared -> erlang:garbage_collect();
-	hybrid -> erlang:garbage_collect();
-	private -> ok
-    end.
 
 -define(COF(Int0),
 	?line (fun(Int) ->
@@ -554,11 +547,47 @@ huge_float_check({'EXIT',{badarg,_}}) -> ok.
 huge_binary(Config) when is_list(Config) ->
     ?line 16777216 = size(<<0:(id(1 bsl 26)),(-1):(id(1 bsl 26))>>),
     ?line garbage_collect(),
-    ?line id(<<0:((1 bsl 32)-1)>>),
+    {Shift,Return} = case free_mem() of
+			 undefined -> {32,ok};
+			 Mb when Mb > 600 -> {32,ok};
+			 Mb when Mb > 300 -> {31,"Limit huge binaries to 256 Mb"};
+			 _ -> {30,"Limit huge binary to 128 Mb"}
+		     end,
     ?line garbage_collect(),
-    ?line id(<<0:(id((1 bsl 32)-1))>>),
+    ?line id(<<0:((1 bsl Shift)-1)>>),
     ?line garbage_collect(),
-    ok.
+    ?line id(<<0:(id((1 bsl Shift)-1))>>),
+    ?line garbage_collect(),
+    case Return of
+	ok -> ok;	     
+	Comment -> {comment, Comment}
+    end.
+
+free_mem() ->
+    Cmd = "uname; free",
+    Output = string:tokens(os:cmd(Cmd), "\n"),
+    io:format("Output from command ~p\n~p\n",[Cmd,Output]),
+    case Output of
+	[OS, ColumnNames, Values | _] ->
+	    case string:str(OS,"Linux") of
+		0 -> 
+		    io:format("Unknown OS\n",[]),
+		    undefined;
+		_ ->
+		    case {string:tokens(ColumnNames, " \t"),
+			  string:tokens(Values, " \t")} of
+			{[_,_,"free"|_],["Mem:",_,_,FreeKb|_]} ->
+			    list_to_integer(FreeKb) div 1024;
+			_ ->
+			    io:format("Failed to parse output from 'free':\n",[]),
+			    undefined
+		    end
+	    end;
+	_ ->
+	    io:format("Too few lines in output\n",[]),
+	    undefined
+    end.
+    
 
 system_limit(Config) when is_list(Config) ->
     WordSize = erlang:system_info(wordsize),
@@ -835,5 +864,49 @@ zero_width(Config) when is_list(Config) ->
     ?line {'EXIT',{badarg,_}} = (catch <<(id(not_a_number)):0>>),
 
     ok.
+
+bad_append(_) ->
+    do_bad_append(<<127:1>>, fun append_unit_3/1),
+    do_bad_append(<<127:2>>, fun append_unit_3/1),
+    do_bad_append(<<127:17>>, fun append_unit_3/1),
+
+    do_bad_append(<<127:3>>, fun append_unit_4/1),
+    do_bad_append(<<127:5>>, fun append_unit_4/1),
+    do_bad_append(<<127:7>>, fun append_unit_4/1),
+    do_bad_append(<<127:199>>, fun append_unit_4/1),
+
+    do_bad_append(<<127:7>>, fun append_unit_8/1),
+    do_bad_append(<<127:9>>, fun append_unit_8/1),
+
+    do_bad_append(<<0:8>>, fun append_unit_16/1),
+    do_bad_append(<<0:15>>, fun append_unit_16/1),
+    do_bad_append(<<0:17>>, fun append_unit_16/1),
+    ok.
+
+do_bad_append(Bin0, Appender) ->
+    {'EXIT',{badarg,_}} = (catch Appender(Bin0)),
+
+    Bin1 = id(<<0:3,Bin0/bitstring>>),
+    <<_:3,Bin2/bitstring>> = Bin1,
+    {'EXIT',{badarg,_}} = (catch Appender(Bin2)),
+
+    %% Create a writable binary.
+    Empty = id(<<>>),
+    Bin3 = <<Empty/bitstring,Bin0/bitstring>>,
+    {'EXIT',{badarg,_}} = (catch Appender(Bin3)),
+    ok.
+
+append_unit_3(Bin) ->
+    <<Bin/binary-unit:3,0:1>>.
+
+append_unit_4(Bin) ->
+    <<Bin/binary-unit:4,0:1>>.
+
+append_unit_8(Bin) ->
+    <<Bin/binary,0:1>>.
+
+append_unit_16(Bin) ->
+    <<Bin/binary-unit:16,0:1>>.
+
     
 id(I) -> I.

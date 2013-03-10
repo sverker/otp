@@ -55,20 +55,49 @@ BS1024 ::= BIT STRING (SIZE (1024))
   OsExpCon ::= [60] EXPLICIT OCTET STRING
   OsExpPri ::= [PRIVATE 61] EXPLICIT  OCTET STRING
   OsExpApp ::= [APPLICATION 62] EXPLICIT OCTET STRING
+  OsFrag ::= OCTET STRING (SIZE (0..100000))
+  FixedOs65536 ::= OCTET STRING (SIZE (65536))
+  FixedOs65537 ::= OCTET STRING (SIZE (65537))
+
+  OsFixedStrings ::= SEQUENCE {
+    b1 BOOLEAN,  -- Unalign
+    s0 OCTET STRING (SIZE (0)),
+    s1 OCTET STRING (SIZE (1)),
+    s2 OCTET STRING (SIZE (2)),
+    s3 OCTET STRING (SIZE (3)),
+    b2 BOOLEAN,  -- Unalign
+    s255 OCTET STRING (SIZE (255)),
+    s256 OCTET STRING (SIZE (256)),
+    s257 OCTET STRING (SIZE (257)),
+    i INTEGER (0..1024)
+  }
+
+  OsAlignment ::= SEQUENCE {
+    b1 BOOLEAN,
+    s1 Os,
+    b2 BOOLEAN,
+    s2 OsFrag,
+    b3 BOOLEAN,
+    s3 FixedOs65536,
+    i INTEGER (0..63)
+  }
 
   Ns ::= NumericString
   NsCon ::= [70] NumericString
   NsExpCon ::= [71] EXPLICIT NumericString
 
   Ps ::= PrintableString
+  Ps11 ::= PrintableString (FROM ("0123456789*"))
 
   Ts ::= TeletexString
 
   Vxs ::= VideotexString
 
   Vis ::= VisibleString
+  Vis8 ::= VisibleString (FROM ("01234567"))
 
   IA5 ::= IA5String
+  IA5Visible ::= IA5String (FROM (" ".."~"))
 
   Grs ::= GraphicString
   

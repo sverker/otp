@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -23,17 +23,23 @@
 %% Module used to run suites from Makefile.
 %%
 
--export([run/1]).
+-export([run/1,
+         cover/0]).
 
-%% ct:run_test/1 is currently documented as returning a list of test
-%% results ... but no. Instead it returns 'ok' regardless of whether
-%% or not the suite in question has failed testcases.
+%% The makefile looks for signs of failure so ignore the ct:run_test/1
+%% return value.
 
-run([Suite]) ->
+run(Suites) ->
+    ct_run([{suite, Suites}]).
+
+cover() ->
+    ct_run([{spec, "./testspec"}]).
+
+ct_run(Opts) ->
     Start = info(),
-    ok = ct:run_test([{suite, Suite},
-                      {logdir, "./log"},
-                      {auto_compile, false}]),
+    ct:run_test([{logdir, "./log"},
+                 {auto_compile, false}
+                 | Opts]),
     info(Start , info()).
 
 info() ->

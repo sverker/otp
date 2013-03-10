@@ -1,7 +1,7 @@
 dnl
 dnl %CopyrightBegin%
 dnl
-dnl Copyright Ericsson AB 2005-2011. All Rights Reserved.
+dnl Copyright Ericsson AB 2005-2013. All Rights Reserved.
 dnl
 dnl The contents of this file are subject to the Erlang Public License,
 dnl Version 1.1, (the "License"); you may not use this file except in
@@ -211,5 +211,10 @@ AC_SUBST(ODBC_LIB)
 AC_SUBST(ODBC_INCLUDE)
 
 fi dnl "$with_odbc" != "no"
+
+if test "x$GCC" = xyes; then
+    # Treat certain GCC warnings as errors
+    LM_TRY_ENABLE_CFLAG([-Werror=return-type], [CFLAGS])
+fi
 
 AC_OUTPUT(c_src/$host/Makefile:c_src/Makefile.in)

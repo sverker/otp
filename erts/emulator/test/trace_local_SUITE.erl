@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2000-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -70,7 +70,8 @@ config(priv_dir,_) ->
 
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2, basic/1, bit_syntax/1,
-	 return/1, on_and_off/1, stack_grow/1,info/1, delete/1,
+	 return/1, on_and_off/1, systematic_on_off/1,
+	 stack_grow/1,info/1, delete/1,
 	 exception/1, exception_apply/1,
 	 exception_function/1, exception_apply_function/1,
 	 exception_nocatch/1, exception_nocatch_apply/1,
@@ -80,6 +81,7 @@ config(priv_dir,_) ->
 	 exception_meta_nocatch/1, exception_meta_nocatch_apply/1,
 	 exception_meta_nocatch_function/1,
 	 exception_meta_nocatch_apply_function/1,
+	 concurrency/1,
 	 init_per_testcase/2, end_per_testcase/2]).
 init_per_testcase(_Case, Config) ->
     ?line Dog=test_server:timetrap(test_server:minutes(2)),
@@ -89,14 +91,23 @@ end_per_testcase(_Case, Config) ->
     shutdown(),
     Dog=?config(watchdog, Config),
     test_server:timetrap_cancel(Dog),
-    ok.
+
+    %% Reloading the module will clear all trace patterns, and
+    %% in a debug-compiled emulator run assertions of the counters
+    %% for the number of functions with breakpoints.
+
+    c:l(?MODULE).
+
+
+
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     case test_server:is_native(trace_local_SUITE) of
 	true -> [not_run];
 	false ->
-	    [basic, bit_syntax, return, on_and_off, stack_grow,
+	    [basic, bit_syntax, return, on_and_off, systematic_on_off,
+	     stack_grow,
 	     info, delete, exception, exception_apply,
 	     exception_function, exception_apply_function,
 	     exception_nocatch, exception_nocatch_apply,
@@ -106,7 +117,8 @@ all() ->
 	     exception_meta_apply_function, exception_meta_nocatch,
 	     exception_meta_nocatch_apply,
 	     exception_meta_nocatch_function,
-	     exception_meta_nocatch_apply_function]
+	     exception_meta_nocatch_apply_function,
+	     concurrency]
     end.
 
 groups() -> 
@@ -350,7 +362,8 @@ same(A, B) ->
 
 basic_test() ->
     ?line setup([call]),
-    ?line erlang:trace_pattern({?MODULE,'_','_'},[],[local]),
+    NumMatches = erlang:trace_pattern({?MODULE,'_','_'},[],[local]),
+    NumMatches = erlang:trace_pattern({?MODULE,'_','_'},[],[local]),
     ?line erlang:trace_pattern({?MODULE,slave,'_'},false,[local]),
     ?line [1,1,1,1] = apply_slave(?MODULE,exported_wrap,[1]),
     ?line ?CT(?MODULE,exported_wrap,[1]),
@@ -572,7 +585,118 @@ on_and_off_test() ->
 	  end,
     ?line ?NM,
     ok.
-    
+
+systematic_on_off(Config) when is_list(Config) ->
+    setup([call]),
+    Local = combinations([local,meta,call_count,call_time]),
+    [systematic_on_off_1(Flags) || Flags <- Local],
+
+    %% Make sure that we don't get any trace messages when trace
+    %% is supposed to be off.
+    receive_no_next(500).
+
+systematic_on_off_1(Local) ->
+    io:format("~p\n", [Local]),
+
+    %% Global off.
+    verify_trace_info(false, []),
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, true, Local),
+    verify_trace_info(false, Local),
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, false, [global]),
+    verify_trace_info(false, Local),
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, false, Local),
+    verify_trace_info(false, []),
+
+    %% Global on.
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, true, [global]),
+    verify_trace_info(true, []),
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, false, Local),
+    verify_trace_info(true, []),
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, false, [global]),
+    verify_trace_info(false, []),
+
+    %% Implicitly turn off global call trace.
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, true, [global]),
+    verify_trace_info(true, []),
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, true, Local),
+    verify_trace_info(false, Local),
+
+    %% Implicitly turn off local call trace.
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, true, [global]),
+    verify_trace_info(true, []),
+
+    %% Turn off global call trace. Everything should be off now.
+    1 = erlang:trace_pattern({?MODULE,exported_wrap,1}, false, [global]),
+    verify_trace_info(false, []),
+
+    ok.
+
+verify_trace_info(Global, Local) ->
+    case erlang:trace_info({?MODULE,exported_wrap,1}, all) of
+	{all,false} ->
+	    false = Global,
+	    [] = Local;
+	{all,Ps} ->
+	    io:format("~p\n", [Ps]),
+	    [verify_trace_info(P, Global, Local) || P <- Ps]
+    end,
+    global_call(Global, Local),
+    local_call(Local),
+    ok.
+
+verify_trace_info({traced,global}, true, []) -> ok;
+verify_trace_info({traced,local}, false, _) -> ok;
+verify_trace_info({match_spec,[]}, _, _) -> ok;
+verify_trace_info({meta_match_spec,[]}, _, _) -> ok;
+verify_trace_info({LocalFlag,Bool}, _, Local) when is_boolean(Bool) ->
+    try
+	Bool = lists:member(LocalFlag, Local)
+    catch
+	error:_ ->
+	    io:format("Line ~p: {~p,~p}, false, ~p\n",
+		      [?LINE,LocalFlag,Bool,Local]),
+	    ?t:fail()
+    end;
+verify_trace_info({meta,Pid}, false, Local) when is_pid(Pid) ->
+    true = lists:member(meta, Local);
+verify_trace_info({call_time,_}, false, Local) ->
+    true = lists:member(call_time, Local);
+verify_trace_info({call_count,_}, false, Local) ->
+    true = lists:member(call_time, Local).
+
+global_call(Global, Local) ->
+    apply_slave(?MODULE, exported_wrap, [global_call]),
+    case Global of
+	false ->
+	    recv_local_call(Local, [global_call]);
+	true ->
+	    ?CT(?MODULE, exported_wrap, [global_call])
+    end.
+
+local_call(Local) ->
+    lambda_slave(fun() -> exported_wrap(local_call) end),
+    recv_local_call(Local, [local_call]).
+
+recv_local_call(Local, Args) ->
+    case lists:member(local, Local) of
+	false ->
+	    ok;
+	true ->
+	    ?CT(?MODULE, exported_wrap, Args)
+    end,
+    case lists:member(meta, Local) of
+	false ->
+	    ok;
+	true ->
+	    ?CTT(?MODULE, exported_wrap, Args)
+    end,
+    ok.
+
+combinations([_]=One) ->
+    [One];
+combinations([H|T]) ->
+    Cs = combinations(T),
+    [[H|C] || C <- Cs] ++ Cs.
     
 stack_grow_test() ->    
     ?line setup([call,return_to]),
@@ -703,16 +827,10 @@ exception_test(Opts) ->
     ?line ok.
 
 exceptions() ->
-    ?line Ref = make_ref(),
-    ?line N = case os:type() of
-		  vxworks ->
-		      ?line 2000; % Limited memory on themachines, not actually
-		                  % VxWorks' fault /PaN
-		  _ ->
-		      ?line 200000
-	      end,
-    ?line LiL = seq(1, N-1, N),	% Long Improper List
-    ?line LL = seq(1, N, []),  	% Long List
+    Ref = make_ref(),
+    N   = 200000,
+    LiL = seq(1, N-1, N),	% Long Improper List
+    LL  = seq(1, N, []),  	% Long List
     [{{erlang,exit},  [done]},
      {{erlang,error}, [1.0]},
      {{erlang,error}, [Ref,[]]},
@@ -812,6 +930,42 @@ clean_location({crash,{Reason,Stk0}}) ->
     Stk = [{M,F,A,[]} || {M,F,A,_} <- Stk0],
     {crash,{Reason,Stk}};
 clean_location(Term) -> Term.
+
+concurrency(_Config) ->
+    N = erlang:system_info(schedulers),
+
+    %% Spawn 2*N processes that spin in a tight infinite loop,
+    %% and one process that will turn on and off local call
+    %% trace on the infinite_loop/0 function. We expect the
+    %% emulator to crash if there is a memory barrier bug or
+    %% if an aligned word-sized write is not atomic.
+
+    Ps0 = [spawn_monitor(fun() -> infinite_loop() end) ||
+	      _ <- lists:seq(1, 2*N)],
+    OnAndOff = fun() -> concurrency_on_and_off() end,
+    Ps1 = [spawn_monitor(OnAndOff)|Ps0],
+    ?t:sleep(1000),
+
+    %% Now spawn off N more processes that turn on off and off
+    %% a local trace pattern.
+    Ps = [spawn_monitor(OnAndOff) || _ <- lists:seq(1, N)] ++ Ps1,
+    ?t:sleep(1000),
+
+    %% Clean up.
+    [exit(Pid, kill) || {Pid,_} <- Ps],
+    [receive
+	 {'DOWN',Ref,process,Pid,killed} -> ok
+     end || {Pid,Ref} <- Ps],
+    erlang:trace_pattern({?MODULE,infinite_loop,0}, false, [local]),
+    ok.
+
+concurrency_on_and_off() ->
+    1 = erlang:trace_pattern({?MODULE,infinite_loop,0}, true, [local]),
+    1 = erlang:trace_pattern({?MODULE,infinite_loop,0}, false, [local]),
+    concurrency_on_and_off().
+
+infinite_loop() ->
+    infinite_loop().
 
 %%% Tracee target functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%

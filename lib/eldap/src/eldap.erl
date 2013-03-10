@@ -42,7 +42,8 @@
 		log,                 % User provided log function
 		timeout = infinity,  % Request timeout
 		anon_auth = false,   % Allow anonymous authentication
-		use_tls = false      % LDAP/LDAPS
+		use_tls = false,      % LDAP/LDAPS
+		tls_opts = [] % ssl:ssloptsion()
 	       }).
 
 %%% For debug purposes
@@ -320,7 +321,7 @@ present(Attribute) when is_list(Attribute) ->
 %%% will match entries containing:  'sn: Tornkvist'
 %%%
 substrings(Type, SubStr) when is_list(Type), is_list(SubStr) ->
-    Ss = {'SubstringFilter_substrings',v_substr(SubStr)},
+    Ss = v_substr(SubStr),
     {substrings,#'SubstringFilter'{type = Type,
 				   substrings = Ss}}.
 
@@ -353,6 +354,10 @@ parse_args([{ssl, true}|T], Cpid, Data) ->
     parse_args(T, Cpid, Data#eldap{use_tls = true});
 parse_args([{ssl, _}|T], Cpid, Data) ->
     parse_args(T, Cpid, Data);
+parse_args([{sslopts, Opts}|T], Cpid, Data) when is_list(Opts) ->
+    parse_args(T, Cpid, Data#eldap{use_tls = true, tls_opts = Opts ++ Data#eldap.tls_opts});
+parse_args([{sslopts, _}|T], Cpid, Data) ->
+    parse_args(T, Cpid, Data);
 parse_args([{log, F}|T], Cpid, Data) when is_function(F) ->
     parse_args(T, Cpid, Data#eldap{log = F});
 parse_args([{log, _}|T], Cpid, Data) ->
@@ -384,8 +389,8 @@ try_connect([],_) ->
 do_connect(Host, Data, Opts) when Data#eldap.use_tls == false ->
     gen_tcp:connect(Host, Data#eldap.port, Opts, Data#eldap.timeout);
 do_connect(Host, Data, Opts) when Data#eldap.use_tls == true ->
-    ssl:connect(Host, Data#eldap.port, [{verify,0}|Opts]).
-
+    SslOpts = [{verify,0} | Opts ++ Data#eldap.tls_opts],
+    ssl:connect(Host, Data#eldap.port, SslOpts).
 
 loop(Cpid, Data) ->
     receive
@@ -694,26 +699,12 @@ do_recv(S, #eldap{use_tls=true, timeout=Timeout}, Len) ->
 recv_response(S, Data) ->
     case do_recv(S, Data, 0) of
 	{ok, Packet} ->
-	    check_tag(Packet),
 	    case asn1rt:decode('ELDAPv3', 'LDAPMessage', Packet) of
 		{ok,Resp} -> {ok,Resp};
 		Error     -> throw(Error)
 	    end;
 	{error,Reason} ->
-	    throw({gen_tcp_error, Reason});
-	Error ->
-	    throw(Error)
-    end.
-
-%%% Sanity check of received packet
-check_tag(Data) ->
-    case asn1rt_ber_bin:decode_tag(l2b(Data)) of
-	{_Tag, Data1, _Rb} ->
-	    case asn1rt_ber_bin:decode_length(l2b(Data1)) of
-		{{_Len, _Data2}, _Rb2} -> ok;
-		_ -> throw({error,decoded_tag_length})
-	    end;
-	_ -> throw({error,decoded_tag})
+	    throw({gen_tcp_error, Reason})
     end.
 
 %%% Check for expected kind of reply
@@ -1108,7 +1099,3 @@ get_head(Str,Tail) ->
 %%% Should always succeed !
 get_head([H|Tail],Tail,Rhead) -> lists:reverse([H|Rhead]);
 get_head([H|Rest],Tail,Rhead) -> get_head(Rest,Tail,[H|Rhead]).
-
-l2b(B) when is_binary(B) -> B;
-l2b(L) when is_list(L)   -> list_to_binary(L).
-

@@ -3,6 +3,7 @@
 -export([run/5]).
 
 -define(line, io:format("~s:~p\n", [?MODULE,?LINE]),).
+%-define(line,).    
 
 run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     %% Load version 1 of upgradee
@@ -322,5 +323,3 @@ check_tracing_loop(N) ->
 stop_tracing(Tracer) ->
     erlang:trace(self(), false, [call]),
     Tracer ! die_please.
-    
-    

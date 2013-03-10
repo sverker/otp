@@ -26,7 +26,7 @@ EBIN = ../ebin
 ifeq ($(NATIVE_LIBS_ENABLED),yes)
 ERL_COMPILE_FLAGS += +native
 endif
-ERL_COMPILE_FLAGS += +warn_unused_vars +nowarn_shadow_vars +warn_unused_import # +warn_missing_spec +warn_untyped_record
+ERL_COMPILE_FLAGS += +nowarn_shadow_vars +warn_unused_import -Werror # +warn_missing_spec +warn_untyped_record
 
 SOURCES=erl_syntax.erl erl_prettypr.erl erl_syntax_lib.erl	\
 	erl_comment_scan.erl erl_recomment.erl erl_tidy.erl	\
@@ -62,17 +62,17 @@ distclean: clean
 realclean: clean
 
 $(EBIN)/%.$(EMULATOR):%.erl
-	erlc -W $(ERL_COMPILE_FLAGS) -o$(EBIN) $<
+	$(erlc_verbose)erlc -W $(ERL_COMPILE_FLAGS) -o$(EBIN) $<
 
 # ----------------------------------------------------
 # Special Build Targets
 # ----------------------------------------------------
 
 $(APP_TARGET): $(APP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 # ----------------------------------------------------
 # Release Target
@@ -80,10 +80,10 @@ $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(OBJECTS) $(RELSYSDIR)/ebin
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(SOURCES) $(RELSYSDIR)/src
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(OBJECTS) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(SOURCES) "$(RELSYSDIR)/src"
 
 release_docs_spec:
 

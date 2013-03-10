@@ -225,7 +225,7 @@ handle_info({holder_updated, Count}, State0=#state{grid=Grid}) ->
     State = update_selection(State0),
 
     wxListCtrl:setItemCount(Grid, Count),
-    wxListCtrl:refreshItems(Grid, 0, Count-1),
+    Count > 0 andalso wxListCtrl:refreshItems(Grid, 0, Count-1),
 
     {noreply, State};
 
@@ -258,8 +258,7 @@ terminate(_Reason, #state{holder=Holder}) ->
     ok.
 
 code_change(_, _, State) ->
-    {stop, not_yet_implemented, State}.
-
+    {ok, State}.
 
 handle_call(Msg, _From, State) ->
     io:format("~p:~p: Unhandled call ~p~n",[?MODULE, ?LINE, Msg]),

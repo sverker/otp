@@ -1,7 +1,8 @@
+%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -257,7 +258,7 @@ chars(C, N, Tail) when N > 0 ->
 chars(C, 0, Tail) when is_integer(C) ->
     Tail.
 
-%% Torbjörn's bit.
+%% TorbjÃ¶rn's bit.
 
 %%% COPIES %%%
 
@@ -483,8 +484,8 @@ to_upper_char(C) ->
     C.
 
 -spec to_lower(String) -> Result when
-                  String :: string(),
-                  Result :: string()
+                  String :: io_lib:latin1_string(),
+                  Result :: io_lib:latin1_string()
 	    ; (Char) -> CharResult when
                   Char :: char(),
                   CharResult :: char().
@@ -495,8 +496,8 @@ to_lower(C) when is_integer(C) ->
     to_lower_char(C).
 
 -spec to_upper(String) -> Result when
-                  String :: string(),
-                  Result :: string()
+                  String :: io_lib:latin1_string(),
+                  Result :: io_lib:latin1_string()
 	    ; (Char) -> CharResult when
                   Char :: char(),
                   CharResult :: char().

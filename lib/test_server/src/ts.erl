@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -25,9 +25,9 @@
 -module(ts).
 
 -export([run/0, run/1, run/2, run/3, run/4,
-	 clean/0, clean/1,
 	 tests/0, tests/1,
-	 install/0, install/1, index/0,
+	 install/0, install/1,
+	 bench/0, bench/1, bench/2, benchmarks/0,
 	 estone/0, estone/1,
 	 cross_cover_analyse/1,
 	 compile_testcases/0, compile_testcases/1,
@@ -40,20 +40,14 @@
 %%% the modules:
 %%%
 %%%       +-- ts_install --+------  ts_autoconf_win32
-%%%       |                |
-%%%       |                +------  ts_autoconf_vxworks
 %%%       |
 %%% ts ---+                +------  ts_erl_config
 %%%       |                |				     ts_lib
-%%%       |                +------  ts_make
-%%%       |                |
-%%%       +-- ts_run  -----+
-%%%                        |	    			     ts_filelib
-%%%                        +------  ts_make_erl
-%%%                        |
-%%%                        +------  ts_reports (indirectly)
-%%%       
-%%%       
+%%%       +-- ts_run  -----+------  ts_make
+%%%       |                |	    			     ts_filelib
+%%%       |                +------  ts_make_erl
+%%%       |
+%%%       +-- ts_benchmark
 %%%
 %%% The modules ts_lib and ts_filelib contains utilities used by
 %%% the other modules.
@@ -63,8 +57,7 @@
 %%% ts			 Frontend to the test server framework.  Contains all
 %%%			 interface functions.
 %%% ts_install		 Installs the test suite.  On Unix, `autoconf' is
-%%%			 is used; on Windows, ts_autoconf_win32 is used,
-%%%                      on VxWorks, ts_autoconf_vxworks is used.
+%%%			 is used; on Windows, ts_autoconf_win32 is used.
 %%%			 The result is written to the file `variables'.
 %%% ts_run		 Supervises running of the tests.
 %%% ts_autconf_win32	 An `autoconf' for Windows.
@@ -77,10 +70,9 @@
 %%%			 and other platforms.
 %%% ts_make_erl		 A corrected version of the standar Erlang module
 %%%			 make (used for rebuilding test suites).
-%%% ts_reports		 Generates index pages in HTML, providing a summary
-%%%			 of the tests run.
 %%% ts_lib		 Miscellanous utility functions, each used by several
 %%%			 other modules.
+%%% ts_benchmark         Supervises otp benchmarks and collects results.
 %%%----------------------------------------------------------------------
 
 -include_lib("kernel/include/file.hrl").
@@ -128,7 +120,7 @@ help(installed) ->
 	 "  ts:run(Spec, Mod) - Run a single test suite.\n",
 	 "  ts:run(Spec, Mod, Case)\n",
 	 "                    - Run a single test case.\n",
-	 "  All above run functions can have the additional Options argument\n",
+	 "  All above run functions can have an additional Options argument\n",
 	 "  which is a list of options.\n",
 	 "\n",
 	 "Run options supported:\n",
@@ -158,27 +150,31 @@ help(installed) ->
 	 "  {ctp | ctpl, Mod, Func}\n",
 	 "  {ctp | ctpl, Mod, Func, Arity}\n",
 	 "\n",
-	 "Support functions\n",
+	 "Support functions:\n",
 	 "  ts:tests()        - Shows all available families of tests.\n",
 	 "  ts:tests(Spec)    - Shows all available test modules in Spec,\n",
 	 "                      i.e. ../Spec_test/*_SUITE.erl\n",
-	 "  ts:index()        - Updates local index page.\n",
-	 "  ts:clean()        - Cleans up all but the last tests run.\n",
-	 "  ts:clean(all)     - Cleans up all test runs found.\n",
 	 "  ts:estone()       - Run estone_SUITE in kernel application with\n"
 	 "                      no run options\n",
 	 "  ts:estone(Opts)   - Run estone_SUITE in kernel application with\n"
 	 "                      the given run options\n",
 	 "  ts:cross_cover_analyse(Level)\n"
 	 "                    - Used after ts:run with option cover or \n"
-	 "                      cover_details. Analyses modules specified in\n"
-	 "                      cross.cover.\n"
+	 "                      cover_details. Analyses modules specified with\n"
+	 "                      a 'cross' statement in the cover spec file.\n"
 	 "                      Level can be 'overview' or 'details'.\n",
 	 "  ts:compile_testcases()~n"
 	 "  ts:compile_testcases(Apps)~n"
 	 "                    - Compile all testcases for usage in a cross ~n"
 	 "                      compile environment."
 	 " \n"
+	 "Benchmark functions:\n"
+	 "  ts:benchmarks()   - Get all available families of benchmarks\n"
+	 "  ts:bench()        - Runs all benchmarks\n"
+	 "  ts:bench(Spec)    - Runs all benchmarks in the given spec file.\n"
+	 "                      The spec file is actually ../*_test/Spec_bench.spec\n\n"
+	 "                      ts:bench can take the same Options argument as ts:run.\n"
+	 "\n"
 	 "Installation (already done):\n"
 	],
     show_help([H,?install_help]).
@@ -192,33 +188,6 @@ install() ->
     ts_install:install(install_local,[]).
 install(Options) when is_list(Options) ->
     ts_install:install(install_local,Options).
-
-%% Updates the local index page.
-
-index() ->
-    check_and_run(fun(_Vars) -> ts_reports:make_index(), ok end).
-
-%%
-%% clean(all)
-%% Deletes all logfiles.
-%%
-clean(all) ->
-    delete_files(filelib:wildcard("*" ++ ?logdir_ext)).
-
-%% clean/0
-%%
-%% Cleans up run logfiles, all but the last run.
-clean() ->
-    clean1(filelib:wildcard("*" ++ ?logdir_ext)).
-
-clean1([Dir|Dirs]) ->
-    List0 = filelib:wildcard(filename:join(Dir, "run.*")),
-    case lists:reverse(lists:sort(List0)) of
-	[] -> ok;
-	[_Last|Rest] -> delete_files(Rest)
-    end,
-    clean1(Dirs);
-clean1([]) -> ok.
 
 %% run/0
 %%  Runs all specs found by ts:tests(), if any, or returns
@@ -290,14 +259,43 @@ run(List, Opts) when is_list(List), is_list(Opts) ->
 run(Testspec, Config) when is_atom(Testspec), is_list(Config) ->
     Options=check_test_get_opts(Testspec, Config),
     File=atom_to_list(Testspec),
-    Spec = case code:lib_dir(Testspec) of
-	       {error, bad_name} when Testspec /= emulator, 
-                                      Testspec /= system,
-                                      Testspec /= epmd ->
-		   create_skip_spec(Testspec, tests(Testspec));
-	       _ ->
-		   File++".spec"
-	       end,
+    WhatToDo =
+	case Testspec of
+	    %% Known to exist but fails generic tests below
+	    emulator -> test;
+	    system -> test;
+	    erl_interface -> test;
+	    epmd -> test;
+	    _ ->
+		case code:lib_dir(Testspec) of
+		    {error,bad_name} ->
+			%% Application does not exist
+			skip;
+		    Path ->
+			case file:read_file_info(filename:join(Path,"ebin")) of
+			    {ok,#file_info{type=directory}} ->
+				%% Erlang application is built
+				test;
+			    _ ->
+				case filelib:wildcard(
+				       filename:join([Path,"priv","*.jar"])) of
+				    [] ->
+					%% The application is not built
+					skip;
+				    [_|_] ->
+					%% Java application is built
+					test
+				end
+			end
+		end
+	end,
+    Spec =
+	case WhatToDo of
+	    skip ->
+		create_skip_spec(Testspec, tests(Testspec));
+	    test ->
+		File++".spec"
+	end,
     run_test(File, [{spec,[Spec]}], Options);
 %% Runs one module in a spec (interactive)
 run(Testspec, Mod) when is_atom(Testspec), is_atom(Mod) ->
@@ -491,6 +489,25 @@ tests(Spec) ->
     {ok, Cwd} = file:get_cwd(),
     ts_lib:suites(Cwd, atom_to_list(Spec)).
 
+%% Benchmark related functions
+
+bench() ->
+    bench([]).
+
+bench(Opts) when is_list(Opts) ->
+    bench(benchmarks(),Opts);
+bench(Spec) ->
+    bench([Spec],[]).
+
+bench(Spec, Opts) when is_atom(Spec) ->
+    bench([Spec],Opts);
+bench(Specs, Opts) ->
+    check_and_run(fun(Vars) -> ts_benchmark:run(Specs, Opts, Vars) end).
+
+benchmarks() ->
+    ts_benchmark:benchmarks().
+
+
 
 %% 
 %% estone/0, estone/1
@@ -510,8 +527,35 @@ estone(Opts) when is_list(Opts) -> run(emulator,estone_SUITE,Opts).
 cross_cover_analyse([Level]) ->
     cross_cover_analyse(Level);
 cross_cover_analyse(Level) ->
-    test_server_ctrl:cross_cover_analyse(Level).
+    Apps = get_last_app_tests(),
+    test_server_ctrl:cross_cover_analyse(Level,Apps).
 
+get_last_app_tests() ->
+    AllTests = filelib:wildcard(filename:join(["*","*_test.logs"])),
+    {ok,RE} = re:compile("^[^/]*/[^\.]*\.(.*)_test\.logs$"),
+    get_last_app_tests(AllTests,RE,[]).
+
+get_last_app_tests([Dir|Dirs],RE,Acc) ->
+    NewAcc =
+	case re:run(Dir,RE,[{capture,all,list}]) of
+	    {match,[Dir,AppStr]} ->
+		App = list_to_atom(AppStr),
+		case lists:keytake(App,1,Acc) of
+		    {value,{App,LastDir},Rest} ->
+			if Dir > LastDir ->
+				[{App,Dir}|Rest];
+			   true ->
+				Acc
+			end;
+		    false ->
+			[{App,Dir} | Acc]
+		end;
+	    _ ->
+		Acc
+	end,
+    get_last_app_tests(Dirs,RE,NewAcc);
+get_last_app_tests([],_,Acc) ->
+    Acc.
 
 %%% Implementation.
 
@@ -551,32 +595,6 @@ run_test(File, Args, Options) ->
 
 run_test(File, Args, Options, Vars) ->
     ts_run:run(File, Args, Options, Vars).
-
-
-delete_files([]) -> ok;
-delete_files([Item|Rest]) ->
-    case file:delete(Item) of
-	ok ->
-	    delete_files(Rest);
-	{error,eperm} ->
-	    file:change_mode(Item, 8#777),
-	    delete_files(filelib:wildcard(filename:join(Item, "*"))),
-	    file:del_dir(Item),
-	    ok;
-	{error,eacces} ->
-	    %% We'll see about that!
-	    file:change_mode(Item, 8#777),
-	    case file:delete(Item) of
-		ok -> ok;
-		{error,_} ->
-		    erlang:yield(),
-		    file:change_mode(Item, 8#777),
-		    file:delete(Item),
-		    ok
-	    end;
-	{error,_} -> ok
-    end,
-    delete_files(Rest).
 
 
 %% This module provides some convenient shortcuts to running

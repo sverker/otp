@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -37,7 +37,8 @@
          gethostnative_soft_restart/0, gethostnative_soft_restart/1,
 	 gethostnative_debug_level/0, gethostnative_debug_level/1,
 	 getif/1,
-	 getif_ifr_name_overflow/1,getservbyname_overflow/1, getifaddrs/1]).
+	 getif_ifr_name_overflow/1,getservbyname_overflow/1, getifaddrs/1,
+	 parse_strict_address/1]).
 
 -export([get_hosts/1, get_ipv6_hosts/1, parse_hosts/1, parse_address/1,
 	 kill_gethost/0, parallell_gethost/0]).
@@ -52,7 +53,7 @@ all() ->
      t_gethostnative, gethostnative_parallell, cname_loop,
      gethostnative_debug_level, gethostnative_soft_restart,
      getif, getif_ifr_name_overflow, getservbyname_overflow,
-     getifaddrs].
+     getifaddrs, parse_strict_address].
 
 groups() -> 
     [{parse, [], [parse_hosts, parse_address]}].
@@ -66,7 +67,7 @@ required(v6) ->
      {require, test_dummy_ipv6_host}];
 required(hosts) ->
     case os:type() of
-	{OS, _} when OS =:= win32; OS =:= vxworks ->
+	{OS, _} when OS =:= win32 ->
 	    [{require, hardcoded_hosts},
 	     {require, hardcoded_ipv6_hosts}];
 	_Else ->
@@ -582,16 +583,16 @@ parse_address(Config) when is_list(Config) ->
 	 "fe80::198.168.0.",
 	 "fec0::fFfF:127.0.0.1."],
     t_parse_address
-      (ipv6_address,
+      (parse_ipv6_address,
        V6Strict++V6Sloppy++V6Err++V4Err),
     t_parse_address
-      (ipv6strict_address,
+      (parse_ipv6strict_address,
        V6Strict++V6Err++V4Err++[S || {_,S} <- V6Sloppy]),
     t_parse_address
-      (ipv4_address,
+      (parse_ipv4_address,
        V4Strict++V4Sloppy++V4Err++V6Err++[S || {_,S} <- V6Strict]),
     t_parse_address
-      (ipv4strict_address,
+      (parse_ipv4strict_address,
        V4Strict++V4Err++V6Err++[S || {_,S} <- V4Sloppy++V6Strict]).
 
 t_parse_address(Func, []) ->
@@ -599,14 +600,16 @@ t_parse_address(Func, []) ->
     ok;
 t_parse_address(Func, [{Addr,String}|L]) ->
     io:format("~p = ~p.~n", [Addr,String]),
-    {ok,Addr} = inet_parse:Func(String),
+    {ok,Addr} = inet:Func(String),
     t_parse_address(Func, L);
 t_parse_address(Func, [String|L]) ->
     io:format("~p.~n", [String]),
-    {error,einval} = inet_parse:Func(String),
+    {error,einval} = inet:Func(String),
     t_parse_address(Func, L).
 
-
+parse_strict_address(Config) when is_list(Config) ->
+    {ok, Ipv4} = inet:parse_strict_address("127.0.0.1"),
+    {ok, Ipv6} = inet:parse_strict_address("c11:0c22:5c33:c440:55c0:c66c:77:0088").
 
 t_gethostnative(suite) ->[];
 t_gethostnative(doc) ->[];
@@ -614,17 +617,12 @@ t_gethostnative(Config) when is_list(Config) ->
 %% this will result in 26 bytes sent which causes problem in Windows
 %% if the port-program has not assured stdin to be read in BINARY mode
 %% OTP-2555
-    case os:type() of
-	vxworks ->
-	    {skipped, "VxWorks has no native gethostbyname()"};
-	_ ->
-	    ?line case inet_gethost_native:gethostbyname(
-			 "a23456789012345678901234") of
-		      {error,notfound} ->
-			  ?line ok;
-		      {error,no_data} ->
-			  ?line ok
-		  end
+    ?line case inet_gethost_native:gethostbyname(
+	    "a23456789012345678901234") of
+	{error,notfound} ->
+	    ?line ok;
+	{error,no_data} ->
+	    ?line ok
     end.
 
 gethostnative_parallell(suite) ->    

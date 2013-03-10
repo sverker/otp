@@ -7,7 +7,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -130,3 +130,26 @@ run3(Erule) ->
 	_ -> exit({expected,Val, got, Val2})
     end.
 
+run3() ->
+    SI = #'SystemInformationBlockType2'{
+            timeAlignmentTimerCommon = sf500,
+            lateNonCriticalExtension = asn1_NOVALUE,
+            'ssac-BarringForMMTEL-Voice-r9' = asn1_NOVALUE,
+            'ssac-BarringForMMTEL-Video-r9' = asn1_NOVALUE,
+	    'ac-BarringForCSFB-r10' = asn1_NOVALUE},
+    Barring = #'AC-BarringConfig'{
+                 'ac-BarringFactor' = p00,
+                 'ac-BarringTime' = s4,
+                 'ac-BarringForSpecialAC' = <<0:5>>},
+    roundtrip(SI),
+    roundtrip(SI#'SystemInformationBlockType2'{
+		'ssac-BarringForMMTEL-Voice-r9'=Barring}),
+    roundtrip(SI#'SystemInformationBlockType2'{
+		'ssac-BarringForMMTEL-Video-r9'=Barring}),
+    roundtrip(SI#'SystemInformationBlockType2'{
+		'ac-BarringForCSFB-r10'=Barring}).
+
+roundtrip(V) ->
+    Mod = 'Extension-Addition-Group',
+    {ok,E} = Mod:encode('SystemInformationBlockType2', V),
+    {ok,V} = Mod:decode('SystemInformationBlockType2', iolist_to_binary(E)).

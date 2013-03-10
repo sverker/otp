@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2004</year><year>2012</year>
+      <year>2004</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -30,6 +30,21 @@
   </header>
   <p>This document describes the changes made to the OTP_Mibs
     application.</p>
+
+<section><title>Otp_Mibs 1.0.8</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Misc build updates</p>
+          <p>
+	    Own Id: OTP-10784</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Otp_Mibs 1.0.7</title>
 

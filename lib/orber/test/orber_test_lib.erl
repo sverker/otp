@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -278,23 +278,13 @@ check_options(Options) ->
     end.
 
 starter(Host, Name, Args) ->
-    case os:type() of
-        vxworks ->
-            test_server:start_node(Name, slave, [{args,Args}]);
-        _ ->
-            slave:start_link(Host, Name, Args)
-    end.
+    io:format("slave:start_link(~p,~p,~p).~n",[Host,Name,Args]),
+    slave:start_link(Host, Name, Args).
 
 slave_sup() ->
     process_flag(trap_exit, true),
     receive
-        {'EXIT', _, _} ->
-            case os:type() of
-                vxworks ->
-                    erlang:halt();
-                _  ->
-                    ignore
-            end
+        {'EXIT', _, _} -> ignore
     end.
 
 start_ssl(true, Node) ->
@@ -403,8 +393,8 @@ create_paths() ->
         filename:join(Path, "idl_output") ++
 	" -pa " ++
         filename:join(Path, "all_SUITE_data") ++
-        " -pa " ++
-        filename:dirname(code:which(orber)).
+        " -pa \"" ++
+        filename:dirname(code:which(orber))++"\"".
 
 %%------------------------------------------------------------
 %% function : destroy_node
@@ -418,12 +408,7 @@ destroy_node(Node, Type) ->
     stopper(Node, Type).
 
 stopper(Node, _Type) ->
-    case os:type() of
-        vxworks ->
-            test_server:stop_node(Node);
-        _ ->
-            slave:stop(Node)
-    end.
+    slave:stop(Node).
 
 
 %%------------------------------------------------------------

@@ -166,34 +166,34 @@ EDOC_PATHS = \
 	-pa $(EDOC_APP)/ebin -pa $(XMERL_APP)/ebin -pa $(SYNTAX_TOOLS_APP)/ebin
 
 $(APP_TARGET): $(APP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 xmerl_xpath_parse.erl:	xmerl_xpath_parse.yrl
-	$(ERLC)  -o  $(ESRC) $<
+	$(yecc_verbose)$(ERLC)  -o  $(ESRC) $<
 
 xmerl_b64Bin.erl: xmerl_b64Bin.yrl
-	$(ERLC)  -o  $(ESRC) $<
+	$(yecc_verbose)$(ERLC)  -o  $(ESRC) $<
 
 xmerl_sax_parser_list.erl: xmerl_sax_parser_list.erlsrc xmerl_sax_parser_base.erlsrc
-	cat xmerl_sax_parser_list.erlsrc xmerl_sax_parser_base.erlsrc >$@
+	$(gen_verbose)cat xmerl_sax_parser_list.erlsrc xmerl_sax_parser_base.erlsrc >$@
 
 xmerl_sax_parser_latin1.erl: xmerl_sax_parser_latin1.erlsrc xmerl_sax_parser_base.erlsrc
-	cat xmerl_sax_parser_latin1.erlsrc xmerl_sax_parser_base.erlsrc >$@
+	$(gen_verbose)cat xmerl_sax_parser_latin1.erlsrc xmerl_sax_parser_base.erlsrc >$@
 
 xmerl_sax_parser_utf8.erl: xmerl_sax_parser_utf8.erlsrc xmerl_sax_parser_base.erlsrc
-	cat xmerl_sax_parser_utf8.erlsrc xmerl_sax_parser_base.erlsrc >$@
+	$(gen_verbose)cat xmerl_sax_parser_utf8.erlsrc xmerl_sax_parser_base.erlsrc >$@
 
 xmerl_sax_parser_utf16be.erl: xmerl_sax_parser_utf16be.erlsrc xmerl_sax_parser_base.erlsrc
-	cat xmerl_sax_parser_utf16be.erlsrc xmerl_sax_parser_base.erlsrc >$@
+	$(gen_verbose)cat xmerl_sax_parser_utf16be.erlsrc xmerl_sax_parser_base.erlsrc >$@
 
 xmerl_sax_parser_utf16le.erl: xmerl_sax_parser_utf16le.erlsrc xmerl_sax_parser_base.erlsrc
-	cat xmerl_sax_parser_utf16le.erlsrc xmerl_sax_parser_base.erlsrc >$@
+	$(gen_verbose)cat xmerl_sax_parser_utf16le.erlsrc xmerl_sax_parser_base.erlsrc >$@
 
 $(EBIN)/%.beam:	%.erl
-	$(ERLC)  $(ERL_COMPILE_FLAGS) -o $(EBIN) $<
+	$(V_ERLC)  $(ERL_COMPILE_FLAGS) -o $(EBIN) $<
 
 $(DOCDIR)/%.html:	%.erl
 	$(ERL) -noshell $(EDOC_PATHS) \
@@ -214,14 +214,14 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(TARGET_FILES) $(RELSYSDIR)/ebin
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(ERL_FILES) $(INTERNAL_HRL_FILES) $(APP_SRC) $(APPUP_SRC) $(RELSYSDIR)/src
-	$(INSTALL_DATA) xmerl_xpath_parse.yrl $(RELSYSDIR)/src
-	$(INSTALL_DATA) xmerl_b64Bin.yrl $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DATA) $(HRL_FILES) $(RELSYSDIR)/include
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(TARGET_FILES) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(ERL_FILES) $(INTERNAL_HRL_FILES) $(APP_SRC) $(APPUP_SRC) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) xmerl_xpath_parse.yrl "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) xmerl_b64Bin.yrl "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DATA) $(HRL_FILES) "$(RELSYSDIR)/include"
 
 release_docs_spec:
 

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -883,7 +883,7 @@ initial_ue_ies() ->
 
 
 cn_domain_indicator() ->
-    {'CN-DomainIndicator', 'ps-domain'}.
+    'ps-domain'.
     
 init_lai() ->
   #'ProtocolIE-Field'{
@@ -1279,11 +1279,11 @@ reset() ->
        protocolIEs = reset_ies()
       }.
 reset_ies() ->
-    {'Reset_protocolIEs', % this identifier is very unneccesary here 
-     [reset_cause(),
-      cn_domain_ind(),     % Se initial Ue
-      init_global_rnc_id() %  ---- " ----
-			     ]}.
+    [reset_cause(),
+     cn_domain_ind(),     % Se initial Ue
+     init_global_rnc_id() %  ---- " ----
+    ].
+
 init_global_rnc_id() ->
   #'ProtocolIE-Field'{
     id = 86,                              % 86 = id-GlobalRNC-ID 
@@ -1323,8 +1323,7 @@ reset_ack() ->
 	   protocolIEs = reset_ack_ies()
 	  }.
 reset_ack_ies() ->
-    {'ResetAcknowledge_protocolIEs', % very unneccesary 
-     [cn_domain_ind()]}.    % Se initial Ue
+    [cn_domain_ind()].    % Se initial Ue
 
 
 
@@ -1336,13 +1335,12 @@ reset_res(IuSCId) ->
 	  }.
 
 reset_res_ies(IuSCId) ->
-    {'ResetResource_protocolIEs', % very unneccesary
-     [
-      cn_domain_ind()       % Se initial Ue
-      ,reset_cause()        % Se reset
-      ,reset_res_list(IuSCId)
-      ,init_global_rnc_id_reset_res() %  ---- " ----
-     ]}.
+    [
+     cn_domain_ind()       % Se initial Ue
+     ,reset_cause()        % Se reset
+     ,reset_res_list(IuSCId)
+     ,init_global_rnc_id_reset_res() %  ---- " ----
+    ].
 
 init_global_rnc_id_reset_res() ->
   #'ProtocolIE-Field'{
@@ -1420,24 +1418,7 @@ wrapper_encode(Module,Type,Value) ->
 	    Error
     end.
 
-wrapper_decode(Module,Type,Bytes) ->
-    case Module:encoding_rule() of
-	ber ->
-	    asn1rt:decode(Module,Type,Bytes);
-	ber_bin when binary(Bytes) ->
-	    asn1rt:decode(Module,Type,Bytes);
-	ber_bin ->
-	    asn1rt:decode(Module,Type,list_to_binary(Bytes));
-	ber_bin_v2 when binary(Bytes) ->
-	    asn1rt:decode(Module,Type,Bytes);
-	ber_bin_v2 ->
-	    asn1rt:decode(Module,Type,list_to_binary(Bytes));
-	per ->
-	    asn1rt:decode(Module,Type,Bytes);
-	per_bin when binary(Bytes) ->
-	    asn1rt:decode(Module,Type,Bytes);
-	per_bin ->
-	    asn1rt:decode(Module,Type,list_to_binary(Bytes));
-	uper_bin ->
-	    asn1rt:decode(Module,Type,list_to_binary(Bytes))
-    end.
+wrapper_decode(Module, Type, Bytes) when is_binary(Bytes) ->
+    asn1rt:decode(Module, Type, Bytes);
+wrapper_decode(Module, Type, Bytes) when is_list(Bytes) ->
+    asn1rt:decode(Module, Type, list_to_binary(Bytes)).

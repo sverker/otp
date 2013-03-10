@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -40,8 +40,7 @@
 	 close/2, stop/1, send/5,
 	 send_eof/2]).
 
--export([open_channel/6, request/6, request/7, global_request/4, event/2,
-	 cast/2]).
+-export([open_channel/6, reply_request/3, request/6, request/7, global_request/4, event/2, event/3, cast/2]).
 
 %% Internal application API and spawn
 -export([send_msg/1, ssh_channel_info_handler/3]).
@@ -62,6 +61,7 @@
 	  latest_channel_id = 0, 
 	  opts,
 	  channel_args,
+	  idle_timer_ref, % timerref
 	  connected 
 	 }).
 
@@ -95,6 +95,9 @@ request(ConnectionManager, ChannelId, Type, true, Data, Timeout) ->
 request(ConnectionManager, ChannelId, Type, false, Data, _) ->
     cast(ConnectionManager, {request, ChannelId, Type, Data}).
 
+reply_request(ConnectionManager, Status, ChannelId) ->
+    cast(ConnectionManager, {reply_request, Status, ChannelId}).
+
 global_request(ConnectionManager, Type, true = Reply, Data) ->
     case call(ConnectionManager, 
 	      {global_request, self(), Type, Reply, Data}) of
@@ -106,10 +109,11 @@ global_request(ConnectionManager, Type, true = Reply, Data) ->
 
 global_request(ConnectionManager, Type, false = Reply, Data) ->
     cast(ConnectionManager, {global_request, self(), Type, Reply, Data}).
- 
+
+event(ConnectionManager, BinMsg, ErrorMsg) ->
+    call(ConnectionManager, {ssh_msg, self(), BinMsg, ErrorMsg}).
 event(ConnectionManager, BinMsg) -> 
     call(ConnectionManager, {ssh_msg, self(), BinMsg}).
-
 info(ConnectionManager) ->
     info(ConnectionManager, {info, all}).
 
@@ -121,7 +125,8 @@ info(ConnectionManager, ChannelProcess) ->
 %% or amount of data sent counter! 
 renegotiate(ConnectionManager) ->
     cast(ConnectionManager, renegotiate).
-
+renegotiate_data(ConnectionManager) ->
+    cast(ConnectionManager, renegotiate_data).
 connection_info(ConnectionManager, Options) ->
     call(ConnectionManager, {connection_info, Options}).
 
@@ -163,7 +168,7 @@ send(ConnectionManager, ChannelId, Type, Data, Timeout) ->
     call(ConnectionManager, {data, ChannelId, Type, Data}, Timeout).
 
 send_eof(ConnectionManager, ChannelId) ->
-    cast(ConnectionManager, {eof, ChannelId}).
+    call(ConnectionManager, {eof, ChannelId}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -200,6 +205,8 @@ init([client, Opts]) ->
     ChannelPid = proplists:get_value(channel_pid, Opts),
     self() ! 
 	{start_connection, client, [Parent, Address, Port, SocketOpts, Options]},
+    TimerRef = get_idle_time(Options),
+	
     {ok, #state{role = client, 
 		client = ChannelPid,
 		connection_state = #connection{channel_cache = Cache,
@@ -208,6 +215,7 @@ init([client, Opts]) ->
 					       connection_supervisor = Parent,
 					       requests = []},
 		opts = Opts,
+		idle_timer_ref = TimerRef,
 		connected = false}}.
 
 %%--------------------------------------------------------------------
@@ -227,6 +235,13 @@ handle_call({request, ChannelPid, ChannelId, Type, Data}, From, State0) ->
     %% channel is sent later when reply arrives from the connection
     %% handler. 
     lists:foreach(fun send_msg/1, Replies),
+    SshOpts = proplists:get_value(ssh_opts, State0#state.opts),
+    case proplists:get_value(idle_time, SshOpts) of
+	infinity ->
+	    ok;
+	_IdleTime ->
+	    erlang:send_after(5000, self(), {check_cache, [], []})
+    end,
     {noreply, State};
 
 handle_call({request, ChannelId, Type, Data}, From, State0) ->
@@ -247,8 +262,7 @@ handle_call({ssh_msg, Pid, Msg}, From,
     
     %% To avoid that not all data sent by the other side is processes before
     %% possible crash in ssh_connection_handler takes down the connection.
-    gen_server:reply(From, ok), 
-
+    gen_server:reply(From, ok),
     ConnectionMsg = decode_ssh_msg(Msg),
     try ssh_connection:handle_msg(ConnectionMsg, Connection0, Pid, Role) of
 	{{replies, Replies}, Connection} ->
@@ -279,7 +293,45 @@ handle_call({ssh_msg, Pid, Msg}, From,
 		disconnect_fun(Reason, SSHOpts),
 		{stop, {shutdown, Error}, State#state{connection_state = Connection}}
 	end;
+handle_call({ssh_msg, Pid, Msg, ErrorMsg}, From,
+	    #state{connection_state = Connection0,
+		   role = Role, opts = Opts, connected = IsConnected,
+		   client = ClientPid}
+	    = State) ->
 
+    %% To avoid that not all data sent by the other side is processes before
+    %% possible crash in ssh_connection_handler takes down the connection.
+    gen_server:reply(From, ok),
+    ConnectionMsg = decode_ssh_msg(Msg),
+    try ssh_connection:handle_msg(ConnectionMsg, Connection0, Pid, Role) of
+	{{replies, Replies}, Connection} ->
+	    lists:foreach(fun send_msg/1, Replies),
+	    {noreply, State#state{connection_state = Connection}};
+	{noreply, Connection} ->
+	    {noreply, State#state{connection_state = Connection}};
+	{disconnect, {_, Reason}, {{replies, Replies}, Connection}}
+	when Role == client andalso (not IsConnected) ->
+	    lists:foreach(fun send_msg/1, Replies),
+	    ClientPid ! {self(), not_connected, {Reason, ErrorMsg}},
+	    {stop, {shutdown, normal}, State#state{connection = Connection}};
+	{disconnect, Reason, {{replies, Replies}, Connection}} ->
+	    lists:foreach(fun send_msg/1, Replies),
+	    SSHOpts = proplists:get_value(ssh_opts, Opts),
+	    disconnect_fun(Reason, SSHOpts),
+	    {stop, {shutdown, normal}, State#state{connection_state = Connection}}
+	catch
+	    _:Error ->
+		{disconnect, Reason, {{replies, Replies}, Connection}} =
+		    ssh_connection:handle_msg(
+		      #ssh_msg_disconnect{code = ?SSH_DISCONNECT_BY_APPLICATION,
+					  description = "Internal error",
+					  language = "en"}, Connection0, undefined,
+		      Role),
+		lists:foreach(fun send_msg/1, Replies),
+		SSHOpts = proplists:get_value(ssh_opts, Opts),
+		disconnect_fun(Reason, SSHOpts),
+		{stop, {shutdown, Error}, State#state{connection_state = Connection}}
+	end;
 handle_call({global_request, Pid, _, _, _} = Request, From, 
 	    #state{connection_state = 
 		   #connection{channel_cache = Cache}} = State0) ->
@@ -294,6 +346,18 @@ handle_call({data, ChannelId, Type, Data}, From,
 		   connection = ConnectionPid} = State) ->
     channel_data(ChannelId, Type, Data, Connection0, ConnectionPid, From,
 		 State);
+
+handle_call({eof, ChannelId}, _From,
+			#state{connection = Pid, connection_state =
+					   #connection{channel_cache = Cache}} = State) ->
+	case ssh_channel:cache_lookup(Cache, ChannelId) of
+		#channel{remote_id = Id, sent_close = false} ->
+			send_msg({connection_reply, Pid,
+					  ssh_connection:channel_eof_msg(Id)}),
+			{reply, ok, State};
+		_ ->
+			{reply, {error,closed}, State}
+	end;
 
 handle_call({connection_info, Options}, From, 
 	    #state{connection = Connection} = State) ->
@@ -343,7 +407,7 @@ handle_call({open, ChannelPid, Type, InitialWindowSize, MaxPacketSize, Data},
 		       recv_packet_size = MaxPacketSize},
     ssh_channel:cache_update(Cache, Channel),
     State = add_request(true, ChannelId, From, State1),
-    {noreply, State};
+    {noreply, remove_timer_ref(State)};
 
 handle_call({send_window, ChannelId}, _From, 
 	    #state{connection_state = 
@@ -388,6 +452,13 @@ handle_call({close, ChannelId}, _,
 	    send_msg({connection_reply, Pid, 
 		      ssh_connection:channel_close_msg(Id)}),
 	    ssh_channel:cache_update(Cache, Channel#channel{sent_close = true}),
+	    SshOpts = proplists:get_value(ssh_opts, State#state.opts),
+	    case proplists:get_value(idle_time, SshOpts) of
+		infinity ->
+		    ok;
+		_IdleTime ->
+		    erlang:send_after(5000, self(), {check_cache, [], []})
+	    end,
 	    {reply, ok, State};
 	undefined -> 
 	    {reply, ok, State}
@@ -431,6 +502,16 @@ handle_cast({request, ChannelId, Type, Data}, State0) ->
     lists:foreach(fun send_msg/1, Replies),
     {noreply, State};
 
+handle_cast({reply_request, Status, ChannelId}, #state{connection_state =
+        #connection{channel_cache = Cache}} = State0) ->
+    State = case ssh_channel:cache_lookup(Cache, ChannelId) of
+        #channel{remote_id = RemoteId} ->
+            cm_message({Status, RemoteId}, State0);
+        undefined ->
+            State0
+    end,
+    {noreply, State};
+
 handle_cast({global_request, _, _, _, _} = Request, State0) ->
     State = handle_global_request(Request, State0),
     {noreply, State};
@@ -438,7 +519,9 @@ handle_cast({global_request, _, _, _, _} = Request, State0) ->
 handle_cast(renegotiate, #state{connection = Pid} = State) ->
     ssh_connection_handler:renegotiate(Pid),
     {noreply, State};
-
+handle_cast(renegotiate_data, #state{connection = Pid} = State) ->
+    ssh_connection_handler:renegotiate_data(Pid),
+    {noreply, State};
 handle_cast({adjust_window, ChannelId, Bytes}, 
 	    #state{connection = Pid, connection_state =
 		   #connection{channel_cache = Cache}} = State) ->
@@ -452,18 +535,6 @@ handle_cast({adjust_window, ChannelId, Bytes},
 	    ignore
     end,
     {noreply, State};
-
-handle_cast({eof, ChannelId}, 
-	    #state{connection = Pid, connection_state = 
-		   #connection{channel_cache = Cache}} = State) ->
-    case ssh_channel:cache_lookup(Cache, ChannelId) of			 
-	#channel{remote_id = Id} ->
-	    send_msg({connection_reply, Pid, 
-		      ssh_connection:channel_eof_msg(Id)}),
-	    {noreply, State};
-	undefined -> 
-	    {noreply, State}
-    end;
 
 handle_cast({success, ChannelId},  #state{connection = Pid} = State) ->
     Msg = ssh_connection:channel_success_msg(ChannelId),
@@ -489,6 +560,8 @@ handle_info({start_connection, server,
     Exec = proplists:get_value(exec, Options),
     CliSpec = proplists:get_value(ssh_cli, Options, {ssh_cli, [Shell]}),
     ssh_connection_handler:send_event(Connection, socket_control),
+    erlang:send_after(3600000, self(), rekey),
+    erlang:send_after(60000, self(), rekey_data),
     {noreply, State#state{connection = Connection,
 			  connection_state = 
 			  CState#connection{address = Address,
@@ -505,12 +578,17 @@ handle_info({start_connection, client,
     case (catch ssh_transport:connect(Parent, Address, 
 				      Port, SocketOpts, Options)) of
 	{ok, Connection} ->
+	    erlang:send_after(60000, self(), rekey_data),
+	    erlang:send_after(3600000, self(), rekey),
 	    {noreply, State#state{connection = Connection}};
 	Reason ->
 	    Pid ! {self(), not_connected, Reason},
 	    {stop, {shutdown, normal}, State}
     end;
-
+handle_info({check_cache, _ , _}, 
+	    #state{connection_state = 
+		       #connection{channel_cache = Cache}} = State) ->
+    {noreply, check_cache(State, Cache)};
 handle_info({ssh_cm, _Sender, Msg}, State0) ->
     %% Backwards compatibility!  
     State = cm_message(Msg, State0),
@@ -523,7 +601,7 @@ handle_info({same_user, _}, State) ->
 handle_info(ssh_connected, #state{role = client, client = Pid} 
 	    = State) ->
     Pid ! {self(), is_connected},
-    {noreply, State#state{connected = true}};
+    {noreply, State#state{connected = true, opts = handle_password(State#state.opts)}};
 
 handle_info(ssh_connected, #state{role = server} = State) ->
     {noreply, State#state{connected = true}};
@@ -534,8 +612,56 @@ handle_info({'DOWN', _Ref, process, ChannelPid, _Reason}, State) ->
 
 %%% So that terminate will be run when supervisor is shutdown
 handle_info({'EXIT', _Sup, Reason}, State) ->
-    {stop, Reason, State}.
-
+    {stop, Reason, State};
+handle_info(rekey, State) ->
+    renegotiate(self()),
+    erlang:send_after(3600000, self(), rekey),
+    {noreply, State};
+handle_info(rekey_data, State) ->
+    renegotiate_data(self()),
+    erlang:send_after(60000, self(), rekey_data),
+    {noreply, State}.
+handle_password(Opts) ->
+    handle_rsa_password(handle_dsa_password(handle_normal_password(Opts))).
+handle_normal_password(Opts) ->
+    case proplists:get_value(ssh_opts, Opts, false) of
+	false ->
+	    Opts;
+	SshOpts ->
+	    case proplists:get_value(password, SshOpts, false) of
+		false ->
+		    Opts;
+		_Password ->
+		    NewOpts = [{password, undefined}|lists:keydelete(password, 1, SshOpts)],
+		    [{ssh_opts, NewOpts}|lists:keydelete(ssh_opts, 1, Opts)]
+	    end
+    end.
+handle_dsa_password(Opts) ->
+    case proplists:get_value(ssh_opts, Opts, false) of
+	false ->
+	    Opts;
+	SshOpts ->
+	    case proplists:get_value(dsa_pass_phrase, SshOpts, false) of
+		false ->
+		    Opts;
+		_Password ->
+		    NewOpts = [{dsa_pass_phrase, undefined}|lists:keydelete(dsa_pass_phrase, 1, SshOpts)],
+		    [{ssh_opts, NewOpts}|lists:keydelete(ssh_opts, 1, Opts)]
+	    end
+    end.
+handle_rsa_password(Opts) ->
+    case proplists:get_value(ssh_opts, Opts, false) of
+	false ->
+	    Opts;
+	SshOpts ->
+	    case proplists:get_value(rsa_pass_phrase, SshOpts, false) of
+		false ->
+		    Opts;
+		_Password ->
+		    NewOpts = [{rsa_pass_phrase, undefined}|lists:keydelete(rsa_pass_phrase, 1, SshOpts)],
+		    [{ssh_opts, NewOpts}|lists:keydelete(ssh_opts, 1, Opts)]
+	    end
+    end.
 %%--------------------------------------------------------------------
 %% Function: terminate(Reason, State) -> void()
 %% Description: This function is called by a gen_server when it is about to
@@ -567,6 +693,45 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+get_idle_time(SshOptions) ->
+    case proplists:get_value(idle_time, SshOptions) of
+	infinity ->
+	    infinity;
+       _IdleTime -> %% We dont want to set the timeout on first connect
+	    undefined
+    end.
+check_cache(State, Cache) ->
+    %% Check the number of entries in Cache
+    case proplists:get_value(size, ets:info(Cache)) of
+	0 ->
+	    Opts = proplists:get_value(ssh_opts, State#state.opts),
+	    case proplists:get_value(idle_time, Opts) of
+		infinity ->
+		    State;
+		undefined ->
+		    State;
+		Time ->
+		    case State#state.idle_timer_ref of
+			undefined ->
+			    TimerRef = erlang:send_after(Time, self(), {'EXIT', [], "Timeout"}),
+			    State#state{idle_timer_ref=TimerRef};
+			_ ->
+			    State
+		    end
+	    end;
+	_ ->
+	    State
+    end.
+remove_timer_ref(State) ->
+    case State#state.idle_timer_ref of
+	infinity -> %% If the timer is not activated
+	    State;
+	undefined -> %% If we already has cancelled the timer
+	    State;
+	TimerRef -> %% Timer is active
+	    erlang:cancel_timer(TimerRef),
+	    State#state{idle_timer_ref = undefined}
+    end.
 channel_data(Id, Type, Data, Connection0, ConnectionPid, From, State) ->
     case ssh_connection:channel_data(Id, Type, Data, Connection0,
 				     ConnectionPid, From) of
@@ -586,7 +751,7 @@ call(Pid, Msg, Timeout) ->
     catch
 	exit:{timeout, _} ->
 	    {error, timeout};
-	exit:{normal} ->
+	exit:{normal, _} ->
 	    {error, channel_closed};
 	exit:{{shutdown, _}, _} ->
 	    {error, channel_closed};
@@ -614,6 +779,8 @@ do_send_msg({connection_reply, Pid, Data}) ->
     ssh_connection_handler:send(Pid, Msg);
 do_send_msg({flow_control, Cache, Channel, From, Msg}) ->
     ssh_channel:cache_update(Cache, Channel#channel{flow_control = undefined}),
+    gen_server:reply(From, Msg);
+do_send_msg({flow_control, From, Msg}) ->
     gen_server:reply(From, Msg).
 
 handle_request(ChannelPid, ChannelId, Type, Data, WantReply, From, 
@@ -662,7 +829,7 @@ handle_channel_down(ChannelPid, #state{connection_state =
 		  (_,Acc) ->
 		       Acc
 	       end, [], Cache),
-    {{replies, []}, State}.
+    {{replies, []}, check_cache(State, Cache)}.
 
 update_sys(Cache, Channel, Type, ChannelPid) ->
     ssh_channel:cache_update(Cache, 

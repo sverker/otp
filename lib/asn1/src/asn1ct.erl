@@ -2,7 +2,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -41,6 +41,7 @@
 	 maybe_rename_function/3,latest_sindex/0,current_sindex/0,
 	 set_current_sindex/1,next_sindex/0,maybe_saved_sindex/2,
 	 parse_and_save/2,verbose/3,warning/3,warning/4,error/3]).
+-export([get_bit_string_format/0]).
 
 -include("asn1_records.hrl").
 -include_lib("stdlib/include/erl_compile.hrl").
@@ -85,17 +86,15 @@
 compile(File) ->
     compile(File,[]).
 
-compile(File,Options) when is_list(Options) ->
-    case lists:member(driver, Options) of %% remove me in R16A!
-	true ->
-	    io:format("Warning: driver option is obsolete and will be removed in R16A, use nif instead!");
-	false ->
-	    ok
-    end,
-    Options1 = optimize_ber_bin(Options),
-    Options2 = includes(File,Options1),
-    Includes = strip_includes(Options2),
-    in_process(fun() -> compile_proc(File, Includes, Options2) end).
+compile(File, Options0) when is_list(Options0) ->
+    try translate_options(Options0) of
+	Options1 ->
+	    Options2 = includes(File,Options1),
+	    Includes = strip_includes(Options2),
+	    in_process(fun() -> compile_proc(File, Includes, Options2) end)
+    catch throw:Error ->
+	    Error
+    end.
 
 compile_proc(File, Includes, Options) ->
     case input_file_type(File, Includes) of
@@ -121,62 +120,17 @@ compile1(File,Options) when is_list(Options) ->
     DbFile = outfile(Base,"asn1db",Options),
     Includes = [I || {i,I} <- Options],
     EncodingRule = get_rule(Options),
-    asn1ct_table:new(asn1_functab),
     Continue1 = scan(File,Options),
     Continue2 = parse(Continue1,File,Options),
     Continue3 = check(Continue2,File,OutFile,Includes,EncodingRule,
 		      DbFile,Options,[]),
     Continue4 = generate(Continue3,OutFile,EncodingRule,Options),
-    asn1ct_table:delete(asn1_functab),
-    Ret = compile_erl(Continue4,OutFile,Options),
-    case inline(is_inline(Options),
-		inline_output(Options,filename:rootname(File)),
-		lists:concat([OutFile,".erl"]),Options) of
-	false ->
-	    Ret;
-	InlineRet ->
-	    InlineRet
-    end.
+    compile_erl(Continue4, OutFile, Options).
 
 			  
 %%****************************************************************************%%
 %% functions dealing with compiling of several input files to one output file %%
 %%****************************************************************************%%
-
-%%%
-%% inline/4
-%% merges the resulting erlang modules with
-%% the appropriate run-time modules so the resulting module contains all
-%% run-time asn1 functionality. Then compiles the resulting file to beam code.
-%% The merging is done by the igor module. If this function is used in older
-%% versions than R10B the igor module, part of user contribution syntax_tools,
-%% must be provided. It is possible to pass options for the ASN1 compiler
-%% Types:
-%%     Name -> atom()
-%%     Modules -> [filename()]
-%%     Options -> [term()]
-%%     filename() -> file:filename()
-inline(true,Name,Module,Options) ->
-    RTmodule = get_runtime_mod(Options),
-    IgorOptions = igorify_options(remove_asn_flags(Options)),
-    IgorName = list_to_atom(filename:rootname(filename:basename(Name))),
-%    io:format("*****~nName: ~p~nModules: ~p~nIgorOptions: ~p~n*****~n",
-%	      [IgorName,Modules++RTmodule,IgorOptions]),
-    verbose("Inlining modules: ~p in ~p~n",[[Module]++RTmodule,IgorName],Options),
-    case catch igor:merge(IgorName,[Module]++RTmodule,[{preprocess,true},{stubs,false},{backups,false}]++IgorOptions) of
-	{'EXIT',{undef,Reason}} -> %% module igor first in R10B
-	    error("Module igor in syntax_tools must be available:~n~p~n",
-		  [Reason],Options),
-	    {error,'no_compilation'};
-	{'EXIT',Reason} ->
-	    error("Merge by igor module failed due to ~p~n",[Reason],Options),
-	    {error,'no_compilation'};
-	_ ->
-%%	    io:format("compiling output module: ~p~n",[generated_file(Name,IgorOptions)]),
-	    erl_compile(generated_file(Name,IgorOptions),Options)
-    end;
-inline(_,_,_,_) ->
-    false.
 
 %% compile_set/3 merges and compiles a number of asn1 modules
 %% specified in a .set.asn file to one .erl file.
@@ -189,7 +143,6 @@ compile_set(SetBase,Files,Options)
     DbFile = outfile(SetBase,"asn1db",Options),
     Includes = [I || {i,I} <- Options],
     EncodingRule = get_rule(Options),
-    asn1ct_table:new(asn1_functab),
     ScanRes = scan_set(Files,Options),
     ParseRes = parse_set(ScanRes,Options),
     Result = 
@@ -214,7 +167,6 @@ compile_set(SetBase,Files,Options)
 		{error,{'unexpected error in scan/parse phase',
 			lists:map(fun(X)->element(3,X) end,Other)}}
 	end,
-    asn1ct_table:delete(asn1_functab),
     Result.
 
 check_set(ParseRes,SetBase,OutFile,Includes,EncRule,DbFile,
@@ -228,15 +180,7 @@ check_set(ParseRes,SetBase,OutFile,Includes,EncRule,DbFile,
 
     asn1ct_table:delete([renamed_defs, original_imports, automatic_tags]),
 
-    Ret = compile_erl(Continue2,OutFile,Options),
-    case inline(is_inline(Options),
-		inline_output(Options,filename:rootname(OutFile)),
-		lists:concat([OutFile,".erl"]),Options) of
-	false ->
-	    Ret;
-	InlineRet ->
-	    InlineRet
-    end.
+    compile_erl(Continue2, OutFile, Options).
 
 %% merge_modules/2 -> returns a module record where the typeorval lists are merged,
 %% the exports lists are merged, the imports lists are merged when the 
@@ -823,17 +767,14 @@ check({true,M},File,OutFile,Includes,EncodingRule,DbFile,Options,InputMods) ->
 check({false,M},_,_,_,_,_,_,_) ->
     {false,M}.
 
-generate({true,{M,_Module,GenTOrV}},OutFile,EncodingRule,Options) ->
+generate({true,{M,_Module,GenTOrV}}, OutFile, EncodingRule, Options) ->
     debug_on(Options),
-    case lists:member(compact_bit_string,Options) of
-	true -> put(compact_bit_string,true);
-	_ -> ok
-    end,
+    setup_bit_string_format(Options),
     put(encoding_options,Options),
     asn1ct_table:new(check_functions),
 
     %% create decoding function names and taglists for partial decode
-    case specialized_decode_prepare(EncodingRule,M,GenTOrV,Options) of
+    case (catch specialized_decode_prepare(EncodingRule,M,GenTOrV,Options)) of
         {error, Reason}  -> warning("Error in configuration file: ~n~p~n",
                                     [Reason], Options,
                                     "Error in configuration file");
@@ -850,10 +791,10 @@ generate({true,{M,_Module,GenTOrV}},OutFile,EncodingRule,Options) ->
 		ok
 	end,
     debug_off(Options),
-    put(compact_bit_string,false),
     erase(encoding_options),
-    erase(tlv_format), % used in ber_bin, optimize
-    erase(class_default_type),% used in ber_bin, optimize
+    cleanup_bit_string_format(),
+    erase(tlv_format), % used in ber
+    erase(class_default_type),% used in ber
     asn1ct_table:delete(check_functions),
     case Result of 
 	{error,_} ->
@@ -869,6 +810,26 @@ generate({true,{M,_Module,GenTOrV}},OutFile,EncodingRule,Options) ->
 generate({false,M},_,_,_) ->
     {false,M}.
 
+setup_bit_string_format(Opts) ->
+    Format = case {lists:member(compact_bit_string, Opts),
+		   lists:member(legacy_bit_string, Opts)} of
+		 {false,false} -> bitstring;
+		 {true,false} -> compact;
+		 {false,true} -> legacy;
+		 {true,true} ->
+		     Message = "Contradicting options given: "
+			 "compact_bit_string and legacy_bit_string",
+		     exit({error,{asn1,Message}})
+	     end,
+    put(bit_string_format, Format).
+
+cleanup_bit_string_format() ->
+    erase(bit_string_format).
+
+get_bit_string_format() ->
+    get(bit_string_format).
+
+
 %% parse_and_save parses an asn1 spec and saves the unchecked parse
 %% tree in a data base file.
 %% Does not support multifile compilation files
@@ -876,14 +837,13 @@ parse_and_save(Module,S) ->
     Options = S#state.options,
     SourceDir = S#state.sourcedir,
     Includes = [I || {i,I} <-Options],
-    Options1 = optimize_ber_bin(Options),
-    
+
     case get_input_file(Module,[SourceDir|Includes]) of 
 	%% search for asn1 source
 	{file,SuffixedASN1source} ->
-	    case dbfile_uptodate(SuffixedASN1source,Options1) of
+	    case dbfile_uptodate(SuffixedASN1source,Options) of
 		false ->
-		    parse_and_save1(S,SuffixedASN1source,Options1,Includes);
+		    parse_and_save1(S,SuffixedASN1source,Options,Includes);
 		_ -> ok
 	    end;
 	Err ->
@@ -1065,9 +1025,9 @@ get_file_list1(Stream,Dir,Includes,Acc) ->
     end.
 
 get_rule(Options) ->
-    case [Rule ||Rule <-[per,ber,ber_bin,ber_bin_v2,per_bin,uper_bin],
-		 Opt <- Options,
-		 Rule==Opt] of
+    case [Rule || Rule <- [ber,per,uper],
+		  Opt <- Options,
+		  Rule =:= Opt] of
 	[Rule] ->
 	    Rule;
 	[Rule|_] ->
@@ -1076,22 +1036,33 @@ get_rule(Options) ->
 	    ber
     end.
 
-get_runtime_mod(Options) ->
-    RtMod1=
-	case get_rule(Options) of
-	    per -> ["asn1rt_per_bin.erl"];
-	    ber -> ["asn1rt_ber_bin.erl"];
-	    per_bin ->
-		case lists:member(optimize,Options) of
-		    true -> ["asn1rt_per_bin_rt2ct.erl"];
-		    _ -> ["asn1rt_per_bin.erl"]
-		end;
-	    ber_bin -> ["asn1rt_ber_bin.erl"];
-	    ber_bin_v2 -> ["asn1rt_ber_bin_v2.erl"];
-	    uper_bin -> ["asn1rt_uper_bin.erl"]
-	end,
-    RtMod1++["asn1rt_check.erl","asn1rt.erl"].
-    
+%% translate_options(NewOptions) -> OldOptions
+%%  Translate the new option names to the old option name.
+
+translate_options([ber_bin|T]) ->
+    io:format("Warning: The option 'ber_bin' is now called 'ber'.\n"),
+    [ber|translate_options(T)];
+translate_options([per_bin|T]) ->
+    io:format("Warning: The option 'per_bin' is now called 'per'.\n"),
+    [per|translate_options(T)];
+translate_options([uper_bin|T]) ->
+    io:format("Warning: The option 'uper_bin' is now called 'uper'.\n"),
+    translate_options([uper|T]);
+translate_options([nif|T]) ->
+    io:format("Warning: The option 'nif' is no longer needed.\n"),
+    translate_options(T);
+translate_options([optimize|T]) ->
+    io:format("Warning: The option 'optimize' is no longer needed.\n"),
+    translate_options(T);
+translate_options([inline|T]) ->
+    io:format("Warning: The option 'inline' is no longer needed.\n"),
+    translate_options(T);
+translate_options([{inline,_}|_]) ->
+    io:format("ERROR: The option {inline,OutputFilename} is no longer supported.\n"),
+    throw({error,{unsupported_option,inline}});
+translate_options([H|T]) ->
+    [H|translate_options(T)];
+translate_options([]) -> [].
 
 erl_compile(OutFile,Options) ->
 %    io:format("Options:~n~p~n",[Options]),
@@ -1114,8 +1085,8 @@ remove_asn_flags(Options) ->
 	  X /= get_rule(Options),
 	  X /= optimize,
 	  X /= compact_bit_string,
+	  X /= legacy_bit_string,
 	  X /= debug,
-	  X /= keyed_list,
 	  X /= asn1config,
 	  X /= record_name_prefix].
 	  
@@ -1125,34 +1096,10 @@ debug_on(Options) ->
 	    put(asndebug,true);
 	_ ->
 	    true
-    end,
-    case lists:member(keyed_list,Options) of
-	true ->
-	    put(asn_keyed_list,true);
-	_ ->
-	    true
-    end.
-
-igorify_options(Options) ->
-    case lists:keysearch(outdir,1,Options) of
-	{value,{_,Dir}} ->
-	    Options1 = lists:keydelete(outdir,1,Options),
-	    [{dir,Dir}|Options1];
-	_ ->
-	    Options
-    end.
-
-generated_file(Name,Options) ->
-    case lists:keysearch(dir,1,Options) of
-	{value,{_,Dir}} ->
-	    filename:join([Dir,filename:basename(Name)]);
-	_ ->
-	    Name
     end.
 
 debug_off(_Options) ->
-    erase(asndebug),
-    erase(asn_keyed_list).
+    erase(asndebug).
 
 
 outfile(Base, Ext, Opts) ->
@@ -1166,13 +1113,6 @@ outfile(Base, Ext, Opts) ->
 	    Obase;
 	_ ->
 	    lists:concat([Obase,".",Ext])
-    end.
-
-optimize_ber_bin(Options) ->
-    case {lists:member(optimize,Options),lists:member(ber_bin,Options)} of
-	{true,true} -> 
-	    [ber_bin_v2|Options--[ber_bin]];
-	_ -> Options
     end.
 
 includes(File,Options) -> 
@@ -1198,21 +1138,6 @@ option_add(Option, Options, Fun) ->
 strip_includes(Includes) ->
     [I || {i, I} <- Includes].
 
-is_inline(Options) ->
-    case lists:member(inline,Options) of
-	true -> true;
-	_ ->
-	    lists:keymember(inline,1,Options)
-    end.
-
-inline_output(Options,Default) ->
-    case [X||{inline,X}<-Options] of
-	[OutputName] ->
-	    OutputName;
-	_ -> 
-	    Default
-    end.
-		    
 		    
 %% compile(AbsFileName, Options)
 %%   Compile entry point for erl_compile.
@@ -1284,12 +1209,7 @@ make_erl_options(Opts) ->
 	  Defines) ++
 	case OutputType of
 	    undefined -> [ber]; % temporary default (ber when it's ready)
-	    ber -> [ber];
-	    ber_bin -> [ber_bin];
-	    ber_bin_v2 -> [ber_bin_v2];
-	    per -> [per];
-	    per_bin -> [per_bin];
-	    uper_bin -> [uper_bin]
+	    _ -> [OutputType]	% pass through
 	end,
 
     Options++[errors, {cwd, Cwd}, {outdir, Outdir}|
@@ -1300,35 +1220,35 @@ pretty2(Module,AbsFile) ->
     {ok,F} = file:open(AbsFile,[write]),
     M = asn1_db:dbget(Module,'MODULE'),
     io:format(F,"%%%%%%%%%%%%%%%%%%%   ~p  %%%%%%%%%%%%%%%%%%%~n",[Module]),
-    io:format(F,"~s\n",[asn1ct_pretty_format:term(M#module.defid)]),
-    io:format(F,"~s\n",[asn1ct_pretty_format:term(M#module.tagdefault)]),
-    io:format(F,"~s\n",[asn1ct_pretty_format:term(M#module.exports)]),
-    io:format(F,"~s\n",[asn1ct_pretty_format:term(M#module.imports)]),
-    io:format(F,"~s\n\n",[asn1ct_pretty_format:term(M#module.extensiondefault)]),
+    io:format(F,"~s.\n",[asn1ct_pretty_format:term(M#module.defid)]),
+    io:format(F,"~s.\n",[asn1ct_pretty_format:term(M#module.tagdefault)]),
+    io:format(F,"~s.\n",[asn1ct_pretty_format:term(M#module.exports)]),
+    io:format(F,"~s.\n",[asn1ct_pretty_format:term(M#module.imports)]),
+    io:format(F,"~s.\n\n",[asn1ct_pretty_format:term(M#module.extensiondefault)]),
 
     {Types,Values,ParameterizedTypes,Classes,Objects,ObjectSets} = M#module.typeorval,
     io:format(F,"%%%%%%%%%%%%%%%%%%% TYPES in ~p  %%%%%%%%%%%%%%%%%%%~n",[Module]),
-    lists:foreach(fun(T)-> io:format(F,"~s\n",
+    lists:foreach(fun(T)-> io:format(F,"~s.\n",
 				     [asn1ct_pretty_format:term(asn1_db:dbget(Module,T))])
 		  end,Types),
     io:format(F,"%%%%%%%%%%%%%%%%%%% VALUES in ~p  %%%%%%%%%%%%%%%%%%%~n",[Module]),
-    lists:foreach(fun(T)-> io:format(F,"~s\n",
+    lists:foreach(fun(T)-> io:format(F,"~s.\n",
 				     [asn1ct_pretty_format:term(asn1_db:dbget(Module,T))])
 		  end,Values),
     io:format(F,"%%%%%%%%%%%%%%%%%%% Parameterized Types in ~p  %%%%%%%%%%%%%%%%%%%~n",[Module]),
-    lists:foreach(fun(T)-> io:format(F,"~s\n",
+    lists:foreach(fun(T)-> io:format(F,"~s.\n",
 				     [asn1ct_pretty_format:term(asn1_db:dbget(Module,T))])			   
 		  end,ParameterizedTypes),
     io:format(F,"%%%%%%%%%%%%%%%%%%% Classes in ~p  %%%%%%%%%%%%%%%%%%%~n",[Module]),
-    lists:foreach(fun(T)-> io:format(F,"~s\n",
+    lists:foreach(fun(T)-> io:format(F,"~s.\n",
 				     [asn1ct_pretty_format:term(asn1_db:dbget(Module,T))])			   
 		  end,Classes),
     io:format(F,"%%%%%%%%%%%%%%%%%%% Objects in ~p  %%%%%%%%%%%%%%%%%%%~n",[Module]),
-    lists:foreach(fun(T)-> io:format(F,"~s\n",
+    lists:foreach(fun(T)-> io:format(F,"~s.\n",
 				     [asn1ct_pretty_format:term(asn1_db:dbget(Module,T))])			   
 		  end,Objects),
     io:format(F,"%%%%%%%%%%%%%%%%%%% Object Sets in ~p  %%%%%%%%%%%%%%%%%%%~n",[Module]),
-    lists:foreach(fun(T)-> io:format(F,"~s\n",
+    lists:foreach(fun(T)-> io:format(F,"~s.\n",
 				     [asn1ct_pretty_format:term(asn1_db:dbget(Module,T))])			   
 		  end,ObjectSets).
 start() ->
@@ -1400,8 +1320,7 @@ test_value(Module, Type, Value) ->
     in_process(fun() ->
                    case catch encode(Module, Type, Value) of
                        {ok, Bytes} ->
-                           M = to_atom(Module),
-                           NewBytes = prepare_bytes(M:encoding_rule(), Bytes),
+                           NewBytes = prepare_bytes(Bytes),
                            case decode(Module, Type, NewBytes) of
                                {ok, Value} ->
                                    {ok, {Module, Type, Value}};
@@ -1452,18 +1371,8 @@ check(Module, Includes) ->
             end
     end.
 
-to_atom(Term) when is_list(Term) -> list_to_atom(Term);
-to_atom(Term) when is_atom(Term) -> Term.
-
-prepare_bytes(ber,          Bytes) -> lists:flatten(Bytes);
-prepare_bytes(ber_bin,      Bytes) when is_binary(Bytes) -> Bytes;
-prepare_bytes(ber_bin,      Bytes) -> list_to_binary(Bytes);
-prepare_bytes(ber_bin_v2,   Bytes) when is_binary(Bytes) -> Bytes;
-prepare_bytes(ber_bin_v2,   Bytes) -> list_to_binary(Bytes);
-prepare_bytes(per,          Bytes) -> lists:flatten(Bytes);
-prepare_bytes(per_bin,      Bytes) when is_binary(Bytes) -> Bytes;
-prepare_bytes(per_bin,      Bytes) -> list_to_binary(Bytes);
-prepare_bytes(uper_bin,     Bytes) -> Bytes.
+prepare_bytes(Bytes) when is_binary(Bytes) -> Bytes;
+prepare_bytes(Bytes) -> list_to_binary(Bytes).
 
 vsn() ->
     ?vsn.
@@ -1504,7 +1413,7 @@ specialized_decode_prepare(Erule,M,TsAndVs,Options) ->
     end.
 %% Reads the configuration file if it exists and stores information
 %% about partial decode and incomplete decode
-partial_decode_prepare(ber_bin_v2,M,TsAndVs,Options) when is_tuple(TsAndVs) ->
+partial_decode_prepare(ber,M,TsAndVs,Options) when is_tuple(TsAndVs) ->
     %% read configure file
 
     ModName =

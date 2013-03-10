@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -1492,7 +1492,7 @@ scan_next_allocated(Bin, From0, _To, <<From:32, To:32, L/binary>>, Ts, R) ->
 %% Read term from file at position Pos
 prterm(Head, Pos, ReadAhead) ->
     Res = dets_utils:pread(Head, Pos, ?OHDSZ, ReadAhead),
-    ?DEBUGF("file:pread(~p, ~p, ?) -> ~p~n", [Head#head.filename, Pos, Res]),
+    ?DEBUGF("file:pread(~tp, ~p, ?) -> ~p~n", [Head#head.filename, Pos, Res]),
     {ok, <<Next:32, Sz:32, _Status:32, Bin0/binary>>} = Res,
     ?DEBUGF("{Next, Sz} = ~p~n", [{Next, Sz}]),
     Bin = case byte_size(Bin0) of

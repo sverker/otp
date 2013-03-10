@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -30,11 +30,13 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     test_lib:recompile(?MODULE),
-    [pmatch, mixed, aliases, match_in_call, untuplify,
-     shortcut_boolean, letify_guard, selectify, underscore, coverage].
+    [{group,p}].
 
 groups() -> 
-    [].
+    [{p,test_lib:parallel(),
+      [pmatch,mixed,aliases,match_in_call,untuplify,
+       shortcut_boolean,letify_guard,selectify,underscore,coverage]}].
+
 
 init_per_suite(Config) ->
     Config.

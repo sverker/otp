@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -28,21 +28,18 @@
 %% Main entry point.
 -export([module/2]).
 
--import(ordsets, [from_list/1,add_element/2,union/2]).
+-import(ordsets, [from_list/1,union/2]).
 -import(lists,   [member/2,foldl/3,foldr/3]).
 
 -include("../include/erl_bits.hrl").
 
 -record(expand, {module=[],                     %Module name
-                 parameters=undefined,          %Module parameters
-                 package="",                    %Module package
                  exports=[],                    %Exports
                  imports=[],                    %Imports
-                 mod_imports,                   %Module Imports
                  compile=[],                    %Compile flags
                  attributes=[],                 %Attributes
                  callbacks=[],                  %Callbacks
-                 defined=[],                    %Defined functions
+                 defined,			%Defined functions (gb_set)
                  vcount=0,                      %Variable counter
                  func=[],                       %Current function
                  arity=[],                      %Arity for current function
@@ -67,12 +64,8 @@ module(Fs0, Opts0) ->
     %% Set pre-defined exported functions.
     PreExp = [{module_info,0},{module_info,1}],
 
-    %% Set pre-defined module imports.
-    PreModImp = [{erlang,erlang},{packages,packages}],
-
     %% Build initial expand record.
     St0 = #expand{exports=PreExp,
-                  mod_imports=dict:from_list(PreModImp),
                   compile=Opts,
                   defined=PreExp,
                   bitdefault = erl_bits:system_bitdefault(),
@@ -80,87 +73,20 @@ module(Fs0, Opts0) ->
                  },
     %% Expand the functions.
     {Tfs,St1} = forms(Fs, define_functions(Fs, St0)),
-    {Efs,St2} = expand_pmod(Tfs, St1),
     %% Get the correct list of exported functions.
-    Exports = case member(export_all, St2#expand.compile) of
-                  true -> St2#expand.defined;
-                  false -> St2#expand.exports
+    Exports = case member(export_all, St1#expand.compile) of
+                  true -> gb_sets:to_list(St1#expand.defined);
+                  false -> St1#expand.exports
               end,
     %% Generate all functions from stored info.
-    {Ats,St3} = module_attrs(St2#expand{exports = Exports}),
+    {Ats,St3} = module_attrs(St1#expand{exports = Exports}),
     {Mfs,St4} = module_predef_funcs(St3),
-    {St4#expand.module, St4#expand.exports, Ats ++ Efs ++ Mfs,
+    {St4#expand.module, St4#expand.exports, Ats ++ Tfs ++ Mfs,
      St4#expand.compile}.
 
 compiler_options(Forms) ->
     lists:flatten([C || {attribute,_,compile,C} <- Forms]).
     
-expand_pmod(Fs0, St0) ->
-    case St0#expand.parameters of
-        undefined ->
-            {Fs0,St0};
-        Ps0 ->
-	    Base = get_base(St0#expand.attributes),
-	    Ps = if is_atom(Base) ->
-			 ['BASE' | Ps0];
-		    true ->
-			 Ps0
-		 end,
-            {Fs1,Xs,Ds} = sys_expand_pmod:forms(Fs0, Ps,
-                                                St0#expand.exports,
-                                                St0#expand.defined),
-	    St1 = St0#expand{exports=Xs, defined=Ds},
-	    {Fs2,St2} = add_instance(Ps, Fs1, St1),
-	    {Fs3,St3} = ensure_new(Base, Ps0, Fs2, St2),
-            {Fs3,St3#expand{attributes = [{abstract, 0, [true]}
-					  | St3#expand.attributes]}}
-    end.
-
-get_base(As) ->
-    case lists:keyfind(extends, 1, As) of
-	{extends,[Base]} when is_atom(Base) ->
-	    Base;
-	_ ->
-	    []
-    end.
-
-ensure_new(Base, Ps, Fs, St) ->
-    case has_new(Fs) of
-	true ->
-	    {Fs, St};
-	false ->
-	    add_new(Base, Ps, Fs, St)
-    end.
-
-has_new([{function,_L,new,_A,_Cs} | _Fs]) ->
-    true;
-has_new([_ | Fs]) ->
-    has_new(Fs);
-has_new([]) ->
-    false.
-
-add_new(Base, Ps, Fs, St) ->
-    Vs = [{var,0,V} || V <- Ps],
-    As = if is_atom(Base) ->
-		 [{call,0,{remote,0,{atom,0,Base},{atom,0,new}},Vs} | Vs];
-	    true ->
-		 Vs
-	 end,
-    Body = [{call,0,{atom,0,instance},As}],
-    add_func(new, Vs, Body, Fs, St).
-
-add_instance(Ps, Fs, St) ->
-    Vs = [{var,0,V} || V <- Ps],
-    AbsMod = [{tuple,0,[{atom,0,St#expand.module}|Vs]}],
-    add_func(instance, Vs, AbsMod, Fs, St).
-
-add_func(Name, Args, Body, Fs, St) ->
-    A = length(Args), 
-    F = {function,0,Name,A,[{clause,0,Args,[],Body}]},
-    NA = {Name,A},
-    {[F|Fs],St#expand{exports=add_element(NA, St#expand.exports),
-		      defined=add_element(NA, St#expand.defined)}}.
-
 %% define_function(Form, State) -> State.
 %%  Add function to defined if form is a function.
 
@@ -168,7 +94,7 @@ define_functions(Forms, #expand{defined=Predef}=St) ->
     Fs = foldl(fun({function,_,N,A,_Cs}, Acc) -> [{N,A}|Acc];
                   (_, Acc) -> Acc
                end, Predef, Forms),
-    St#expand{defined=ordsets:from_list(Fs)}.
+    St#expand{defined=gb_sets:from_list(Fs)}.
 
 module_attrs(#expand{attributes=Attributes}=St) ->
     Attrs = [{attribute,Line,Name,Val} || {Name,Line,Val} <- Attributes],
@@ -187,7 +113,7 @@ module_predef_func_beh_info(#expand{callbacks=Callbacks,defined=Defined,
     PreDef=[{behaviour_info,1}],
     PreExp=PreDef,
     {[gen_beh_info(Callbacks)],
-     St#expand{defined=union(from_list(PreDef), Defined),
+     St#expand{defined=gb_sets:union(gb_sets:from_list(PreDef), Defined),
 	       exports=union(from_list(PreExp), Exports)}}.
 
 gen_beh_info(Callbacks) ->
@@ -215,7 +141,8 @@ module_predef_funcs_mod_info(St) ->
        [{clause,0,[{var,0,'X'}],[],
         [{call,0,{remote,0,{atom,0,erlang},{atom,0,get_module_info}},
           [{atom,0,St#expand.module},{var,0,'X'}]}]}]}],
-     St#expand{defined=union(from_list(PreDef), St#expand.defined),
+     St#expand{defined=gb_sets:union(gb_sets:from_list(PreDef),
+				     St#expand.defined),
                exports=union(from_list(PreExp), St#expand.exports)}}.
 
 %% forms(Forms, State) ->
@@ -239,15 +166,9 @@ forms([], St) -> {[],St}.
 %% attribute(Attribute, Value, Line, State) -> State'.
 %%  Process an attribute, this just affects the state.
 
-attribute(module, {Module, As}, _L, St) ->
-    M = package_to_string(Module),
-    St#expand{module=list_to_atom(M),
-              package=packages:strip_last(M),
-              parameters=As};
 attribute(module, Module, _L, St) ->
-    M = package_to_string(Module),
-    St#expand{module=list_to_atom(M),
-              package=packages:strip_last(M)};
+    true = is_atom(Module),
+    St#expand{module=Module};
 attribute(export, Es, _L, St) ->
     St#expand{exports=union(from_list(Es), St#expand.exports)};
 attribute(import, Is, _L, St) ->
@@ -310,8 +231,6 @@ pattern({tuple,Line,Ps}, St0) ->
 %%pattern({struct,Line,Tag,Ps}, St0) ->
 %%    {TPs,TPsvs,St1} = pattern_list(Ps, St0),
 %%    {{tuple,Line,[{atom,Line,Tag}|TPs]},TPsvs,St1};
-pattern({record_field,_,_,_}=M, St) ->
-    {expand_package(M, St),St};  % must be a package name
 pattern({bin,Line,Es0}, St0) ->
     {Es1,St1} = pattern_bin(Es0, St0),
     {{bin,Line,Es1},St1};
@@ -402,8 +321,6 @@ expr({tuple,Line,Es0}, St0) ->
 %%expr({struct,Line,Tag,Es0}, Vs, St0) ->
 %%    {Es1,Esvs,Esus,St1} = expr_list(Es0, Vs, St0),
 %%    {{tuple,Line,[{atom,Line,Tag}|Es1]},Esvs,Esus,St1};
-expr({record_field,_,_,_}=M, St) ->
-    {expand_package(M, St),St};  % must be a package name
 expr({bin,Line,Es0}, St0) ->
     {Es1,St1} = expr_bin(Es0, St0),
     {{bin,Line,Es1},St1};
@@ -446,15 +363,9 @@ expr({call,Line,{atom,La,N}=Atom,As0}, St0) ->
 		    end
 	    end
     end;
-expr({call,Line,{record_field,_,_,_}=M,As0}, St0) ->
-    expr({call,Line,expand_package(M, St0),As0}, St0);
-expr({call,Line,{remote,Lr,M,F},As0}, St0) ->
-    M1 = expand_package(M, St0),
-    {[M2,F1|As1],St1} = expr_list([M1,F|As0], St0),
-    {{call,Line,{remote,Lr,M2,F1},As1},St1};
-expr({call,Line,{tuple,_,[{atom,_,_}=M,{atom,_,_}=F]},As}, St) ->
-    %% Rewrite {Mod,Function}(Args...) to Mod:Function(Args...).
-    expr({call,Line,{remote,Line,M,F},As}, St);
+expr({call,Line,{remote,Lr,M0,F},As0}, St0) ->
+    {[M1,F1|As1],St1} = expr_list([M0,F|As0], St0),
+    {{call,Line,{remote,Lr,M1,F1},As1},St1};
 expr({call,Line,F,As0}, St0) ->
     {[Fun1|As1],St1} = expr_list([F|As0], St0),
     {{call,Line,Fun1,As1},St1};
@@ -667,32 +578,6 @@ string_to_conses(Line, Cs, Tail) ->
     foldr(fun (C, T) -> {cons,Line,{char,Line,C},T} end, Tail, Cs).
 
 
-%% In syntax trees, module/package names are atoms or lists of atoms.
-
-package_to_string(A) when is_atom(A) -> atom_to_list(A);
-package_to_string(L) when is_list(L) -> packages:concat(L).
-
-expand_package({atom,L,A} = M, St) ->
-    case dict:find(A, St#expand.mod_imports) of
-        {ok, A1} ->
-            {atom,L,A1};
-        error ->
-            case packages:is_segmented(A) of
-                true ->
-                    M;
-                false -> 
-                    M1 = packages:concat(St#expand.package, A),
-                    {atom,L,list_to_atom(M1)}
-            end
-    end;
-expand_package(M, _St) ->
-    case erl_parse:package_segments(M) of
-        error ->
-            M;
-        M1 ->
-            {atom,element(2,M),list_to_atom(package_to_string(M1))}
-    end.
-
 %% import(Line, Imports, State) ->
 %%      State'
 %% imported(Name, Arity, State) ->
@@ -700,15 +585,10 @@ expand_package(M, _St) ->
 %%  Handle import declarations and test for imported functions. No need to
 %%  check when building imports as code is correct.
 
-import({Mod0,Fs}, St) ->
-    Mod = list_to_atom(package_to_string(Mod0)),
+import({Mod,Fs}, St) ->
+    true = is_atom(Mod),
     Mfs = from_list(Fs),
-    St#expand{imports=add_imports(Mod, Mfs, St#expand.imports)};
-import(Mod0, St) ->
-    Mod = package_to_string(Mod0),
-    Key = list_to_atom(packages:last(Mod)),
-    St#expand{mod_imports=dict:store(Key, list_to_atom(Mod),
-                                     St#expand.mod_imports)}.
+    St#expand{imports=add_imports(Mod, Mfs, St#expand.imports)}.
 
 add_imports(Mod, [F|Fs], Is) ->
     add_imports(Mod, Fs, orddict:store(F, Mod, Is));
@@ -721,4 +601,4 @@ imported(F, A, St) ->
     end.
 
 defined(F, A, St) ->
-    ordsets:is_element({F,A}, St#expand.defined).
+    gb_sets:is_element({F,A}, St#expand.defined).

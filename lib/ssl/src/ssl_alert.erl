@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -36,8 +36,7 @@
 %% Internal application API
 %%====================================================================
 %%--------------------------------------------------------------------
--spec reason_code(#alert{}, client | server) -> closed | esslconnect |
-						esslaccept | string().
+-spec reason_code(#alert{}, client | server) -> closed | {essl, string()}.
 %%
 %% Description: Returns the error reason that will be returned to the
 %% user.
@@ -45,12 +44,8 @@
 
 reason_code(#alert{description = ?CLOSE_NOTIFY}, _) ->
     closed;
-reason_code(#alert{description = ?HANDSHAKE_FAILURE}, client) ->
-    esslconnect;
-reason_code(#alert{description = ?HANDSHAKE_FAILURE}, server) ->
-    esslaccept;
 reason_code(#alert{description = Description}, _) ->
-    description_txt(Description).
+    {tls_alert, description_txt(Description)}.
 
 %%--------------------------------------------------------------------
 -spec alert_txt(#alert{}) -> string().
@@ -84,6 +79,8 @@ description_txt(?DECOMPRESSION_FAILURE) ->
     "decompression failure";
 description_txt(?HANDSHAKE_FAILURE) ->
     "handshake failure";
+description_txt(?NO_CERTIFICATE_RESERVED) ->
+    "No certificate reserved";
 description_txt(?BAD_CERTIFICATE) ->
     "bad certificate";
 description_txt(?UNSUPPORTED_CERTIFICATE) ->

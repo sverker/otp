@@ -1,3 +1,4 @@
+%% -*- coding: utf-8 -*-
 %% This library is free software; you can redistribute it and/or modify
 %% it under the terms of the GNU Lesser General Public License as
 %% published by the Free Software Foundation; either version 2 of the
@@ -13,7 +14,7 @@
 %% Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %% USA
 %%
-%% Copyright (C) 2004-2006 Mickaël Rémond, Richard Carlsson
+%% Copyright (C) 2004-2006 MickaÃ«l RÃ©mond, Richard Carlsson
 
 %% Including this file turns on testing and defines TEST, unless NOTEST
 %% is defined before the file is included. If both NOTEST and TEST are
@@ -25,11 +26,12 @@
 %% will become undefined. NODEBUG also implies NOASSERT, unless testing
 %% is enabled.
 %%
-%% If including this file causes TEST to be defined, then NOASSERT will
-%% be undefined, even if it was previously defined and even if NODEBUG
-%% is defined. If both ASSERT and NOASSERT are defined before the file
-%% is included, then ASSERT takes precedence, and NOASSERT will become
-%% undefined regardless of TEST.
+%% Defining NOASSERT disables asserts. NODEBUG implies NOASSERT unless
+%% testing is enabled. If including this file causes TEST to be defined,
+%% then NOASSERT will be undefined, even if it was previously defined and
+%% even if NODEBUG is defined. If both ASSERT and NOASSERT are defined
+%% before the file is included, then ASSERT takes precedence, and NOASSERT
+%% will become undefined regardless of TEST.
 %% 
 %% After including this file, EUNIT will be defined if and only if TEST
 %% is defined.
@@ -123,13 +125,13 @@
 -ifndef(UNDER_EUNIT).
 -define(UNDER_EUNIT,
 	(?MATCHES({current_function,{eunit_proc,_,_}},
-		  .erlang:process_info(.erlang:group_leader(),
-				       current_function)))).
+		  erlang:process_info(erlang:group_leader(),
+				      current_function)))).
 -endif.
 
--ifdef(NOASSERT).
 %% The plain assert macro should be defined to do nothing if this file
 %% is included when debugging/testing is turned off.
+-ifdef(NOASSERT).
 -ifndef(assert).
 -define(assert(BoolExpr),ok).
 -endif.
@@ -141,14 +143,14 @@
 	((fun () ->
 	    case (BoolExpr) of
 		true -> ok;
-		__V -> .erlang:error({assertion_failed,
-				      [{module, ?MODULE},
-				       {line, ?LINE},
-				       {expression, (??BoolExpr)},
-				       {expected, true},
-				       {value, case __V of false -> __V;
-						   _ -> {not_a_boolean,__V}
-					       end}]})
+		__V -> erlang:error({assertion_failed,
+				     [{module, ?MODULE},
+				      {line, ?LINE},
+				      {expression, (??BoolExpr)},
+				      {expected, true},
+				      {value, case __V of false -> __V;
+						  _ -> {not_a_boolean,__V}
+					      end}]})
 	    end
 	  end)())).
 -endif.
@@ -169,12 +171,12 @@
 	((fun () ->
 	    case (Expr) of
 		Guard -> ok;
-		__V -> .erlang:error({assertMatch_failed,
-				      [{module, ?MODULE},
-				       {line, ?LINE},
-				       {expression, (??Expr)},
-				       {pattern, (??Guard)},
-				       {value, __V}]})
+		__V -> erlang:error({assertMatch_failed,
+				     [{module, ?MODULE},
+				      {line, ?LINE},
+				      {expression, (??Expr)},
+				      {pattern, (??Guard)},
+				      {value, __V}]})
 	    end
 	  end)())).
 -endif.
@@ -188,12 +190,12 @@
 	((fun () ->
 	    __V = (Expr),
 	    case __V of
-		Guard -> .erlang:error({assertNotMatch_failed,
-					[{module, ?MODULE},
-					 {line, ?LINE},
-					 {expression, (??Expr)},
-					 {pattern, (??Guard)},
-					 {value, __V}]});
+		Guard -> erlang:error({assertNotMatch_failed,
+				       [{module, ?MODULE},
+					{line, ?LINE},
+					{expression, (??Expr)},
+					{pattern, (??Guard)},
+					{value, __V}]});
 		_ -> ok
 	    end
 	  end)())).
@@ -209,12 +211,12 @@
 	((fun (__X) ->
 	    case (Expr) of
 		__X -> ok;
-		__V -> .erlang:error({assertEqual_failed,
-				      [{module, ?MODULE},
-				       {line, ?LINE},
-				       {expression, (??Expr)},
-				       {expected, __X},
-				       {value, __V}]})
+		__V -> erlang:error({assertEqual_failed,
+				     [{module, ?MODULE},
+				      {line, ?LINE},
+				      {expression, (??Expr)},
+				      {expected, __X},
+				      {value, __V}]})
 	    end
 	  end)(Expect))).
 -endif.
@@ -227,11 +229,11 @@
 -define(assertNotEqual(Unexpected, Expr),
 	((fun (__X) ->
 	    case (Expr) of
-		__X -> .erlang:error({assertNotEqual_failed,
-				      [{module, ?MODULE},
-				       {line, ?LINE},
-				       {expression, (??Expr)},
-				       {value, __X}]});
+		__X -> erlang:error({assertNotEqual_failed,
+				     [{module, ?MODULE},
+				      {line, ?LINE},
+				      {expression, (??Expr)},
+				      {value, __X}]});
 		_ -> ok
 	    end
 	  end)(Unexpected))).
@@ -247,7 +249,7 @@
 -define(assertException(Class, Term, Expr),
 	((fun () ->
 	    try (Expr) of
-	        __V -> .erlang:error({assertException_failed,
+	        __V -> erlang:error({assertException_failed,
 				      [{module, ?MODULE},
 				       {line, ?LINE},
 				       {expression, (??Expr)},
@@ -258,16 +260,16 @@
 	    catch
 		Class:Term -> ok;
 	        __C:__T ->
-		    .erlang:error({assertException_failed,
-				   [{module, ?MODULE},
-				    {line, ?LINE},
-				    {expression, (??Expr)},
-				    {pattern,
-				     "{ "++(??Class)++" , "++(??Term)
-				     ++" , [...] }"},
-				    {unexpected_exception,
-				     {__C, __T,
-				      .erlang:get_stacktrace()}}]})
+		    erlang:error({assertException_failed,
+				  [{module, ?MODULE},
+				   {line, ?LINE},
+				   {expression, (??Expr)},
+				   {pattern,
+				    "{ "++(??Class)++" , "++(??Term)
+				    ++" , [...] }"},
+				   {unexpected_exception,
+				    {__C, __T,
+				     erlang:get_stacktrace()}}]})
 	    end
 	  end)())).
 -endif.
@@ -298,17 +300,17 @@
 			Class ->
 			    case __T of
 				Term ->
-				    .erlang:error({assertNotException_failed,
-						   [{module, ?MODULE},
-						    {line, ?LINE},
-						    {expression, (??Expr)},
-						    {pattern,
-						     "{ "++(??Class)++" , "
-						     ++(??Term)++" , [...] }"},
-						    {unexpected_exception,
-						     {__C, __T,
-						      .erlang:get_stacktrace()
-						     }}]});
+				    erlang:error({assertNotException_failed,
+						  [{module, ?MODULE},
+						   {line, ?LINE},
+						   {expression, (??Expr)},
+						   {pattern,
+						    "{ "++(??Class)++" , "
+						    ++(??Term)++" , [...] }"},
+						   {unexpected_exception,
+						    {__C, __T,
+						     erlang:get_stacktrace()
+						    }}]});
 				_ -> ok
 			    end;
 			_ -> ok
@@ -323,17 +325,17 @@
 %% require EUnit to be present at runtime, or at least eunit_lib.)
 
 %% these can be used for simply running commands in a controlled way
--define(_cmd_(Cmd), (.eunit_lib:command(Cmd))).
+-define(_cmd_(Cmd), (eunit_lib:command(Cmd))).
 -define(cmdStatus(N, Cmd),
 	((fun () ->
 	    case ?_cmd_(Cmd) of
 		{(N), __Out} -> __Out;
-		{__N, _} -> .erlang:error({command_failed,
-					   [{module, ?MODULE},
-					    {line, ?LINE},
-					    {command, (Cmd)},
-					    {expected_status,(N)},
-					    {status,__N}]})
+		{__N, _} -> erlang:error({command_failed,
+					  [{module, ?MODULE},
+					   {line, ?LINE},
+					   {command, (Cmd)},
+					   {expected_status,(N)},
+					   {status,__N}]})
 	    end
 	  end)())).
 -define(_cmdStatus(N, Cmd), ?_test(?cmdStatus(N, Cmd))).
@@ -349,12 +351,12 @@
  	((fun () ->
 	    case ?_cmd_(Cmd) of
 		{(N), _} -> ok;
-		{__N, _} -> .erlang:error({assertCmd_failed,
-					   [{module, ?MODULE},
-					    {line, ?LINE},
-					    {command, (Cmd)},
-					    {expected_status,(N)},
-					    {status,__N}]})
+		{__N, _} -> erlang:error({assertCmd_failed,
+					  [{module, ?MODULE},
+					   {line, ?LINE},
+					   {command, (Cmd)},
+					   {expected_status,(N)},
+					   {status,__N}]})
 	    end
 	  end)())).
 -endif.
@@ -367,12 +369,12 @@
  	((fun () ->
 	    case ?_cmd_(Cmd) of
 		{_, (T)} -> ok;
-		{_, __T} -> .erlang:error({assertCmdOutput_failed,
-					   [{module, ?MODULE},
-					    {line, ?LINE},
-					    {command,(Cmd)},
-					    {expected_output,(T)},
-					    {output,__T}]})
+		{_, __T} -> erlang:error({assertCmdOutput_failed,
+					  [{module, ?MODULE},
+					   {line, ?LINE},
+					   {command,(Cmd)},
+					   {expected_output,(T)},
+					   {output,__T}]})
 	    end
 	  end)())).
 -endif.
@@ -393,12 +395,12 @@
 -else.
 -define(debugMsg(S),
 	(begin
-	     .io:fwrite(user, <<"~s:~w:~w: ~s\n">>,
-                        [?FILE, ?LINE, self(), S]),
+	     io:fwrite(user, <<"~s:~w:~w: ~s\n">>,
+		       [?FILE, ?LINE, self(), S]),
 	     ok
 	 end)).
 -define(debugHere, (?debugMsg("<-"))).
--define(debugFmt(S, As), (?debugMsg(.io_lib:format((S), (As))))).
+-define(debugFmt(S, As), (?debugMsg(io_lib:format((S), (As))))).
 -define(debugVal(E),
 	((fun (__V) ->
 		  ?debugFmt(<<"~s = ~P">>, [(??E), __V, 15]),

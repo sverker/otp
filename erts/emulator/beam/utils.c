@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2012. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -46,6 +46,7 @@
 #include "erl_thr_queue.h"
 #include "erl_sched_spec_pre_alloc.h"
 #include "beam_bp.h"
+#include "erl_ptab.h"
 
 #undef M_TRIM_THRESHOLD
 #undef M_TOP_PAD
@@ -370,7 +371,7 @@ Eterm
 erts_bld_atom(Uint **hpp, Uint *szp, char *str)
 {
     if (hpp)
-	return am_atom_put(str, sys_strlen(str));
+	return erts_atom_put((byte *) str, sys_strlen(str), ERTS_ATOM_ENC_LATIN1, 1);
     else
 	return THE_NON_VALUE;
 }
@@ -3016,12 +3017,13 @@ buf_to_intlist(Eterm** hpp, char *buf, size_t len, Eterm tail)
 **        ;
 ** 
 ** Return remaining bytes in buffer on success
-**        -1 on overflow
-**        -2 on type error (including that result would not be a whole number of bytes)
+**        ERTS_IOLIST_TO_BUF_OVERFLOW on overflow
+**        ERTS_IOLIST_TO_BUF_TYPE_ERROR on type error (including that result would not be a whole number of bytes)
 */
 
-int io_list_to_buf(Eterm obj, char* buf, int len)
+ErlDrvSizeT erts_iolist_to_buf(Eterm obj, char* buf, ErlDrvSizeT alloced_len)
 {
+    ErlDrvSizeT len = (ErlDrvSizeT) alloced_len;
     Eterm* objp;
     DECLARE_ESTACK(s);
     goto L_again;
@@ -3114,20 +3116,20 @@ int io_list_to_buf(Eterm obj, char* buf, int len)
 
  L_type_error:
     DESTROY_ESTACK(s);
-    return -2;
+    return ERTS_IOLIST_TO_BUF_TYPE_ERROR;
 
  L_overflow:
     DESTROY_ESTACK(s);
-    return -1;
+    return ERTS_IOLIST_TO_BUF_OVERFLOW;
 }
 
 /*
  * Return 0 if successful, and non-zero if unsuccessful.
  */
-int erts_iolist_size(Eterm obj, Uint* sizep)
+int erts_iolist_size(Eterm obj, ErlDrvSizeT* sizep)
 {
     Eterm* objp;
-    Uint size = 0;
+    Uint size = 0; /* Intentionally Uint due to halfword heap */
     DECLARE_ESTACK(s);
     goto L_again;
 
@@ -3179,7 +3181,7 @@ int erts_iolist_size(Eterm obj, Uint* sizep)
 #undef SAFE_ADD
 
     DESTROY_ESTACK(s);
-    *sizep = size;
+    *sizep = (ErlDrvSizeT) size;
     return ERTS_IOLIST_OK;
 
  L_overflow_error:
@@ -3443,7 +3445,7 @@ erts_read_env(char *key)
     char *value = erts_alloc(ERTS_ALC_T_TMP, value_len);
     int res;
     while (1) {
-	res = erts_sys_getenv(key, value, &value_len);
+	res = erts_sys_getenv_raw(key, value, &value_len);
 	if (res <= 0)
 	    break;
 	value = erts_realloc(ERTS_ALC_T_TMP, value, value_len);
@@ -3460,28 +3462,6 @@ erts_free_read_env(void *value)
 {
     if (value)
 	erts_free(ERTS_ALC_T_TMP, value);
-}
-
-int
-erts_write_env(char *key, char *value)
-{
-    int ix, res;
-    size_t key_len = sys_strlen(key), value_len = sys_strlen(value);
-    char *key_value = erts_alloc_fnf(ERTS_ALC_T_TMP,
-				     key_len + 1 + value_len + 1);
-    if (!key_value) {
-	errno = ENOMEM;
-	return -1;
-    }
-    sys_memcpy((void *) key_value, (void *) key, key_len);
-    ix = key_len;
-    key_value[ix++] = '=';
-    sys_memcpy((void *) key_value, (void *) value, value_len);
-    ix += value_len;
-    key_value[ix] = '\0';
-    res = erts_sys_putenv(key_value, key_len);
-    erts_free(ERTS_ALC_T_TMP, key_value);
-    return res;
 }
 
 /*

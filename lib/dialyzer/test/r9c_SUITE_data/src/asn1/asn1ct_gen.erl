@@ -148,7 +148,7 @@ pgen_partial_inc_dec(Erules,Module) ->
 %    io:format("Start partial incomplete decode gen?~n"),
     case asn1ct:get_gen_state_field(inc_type_pattern) of
 	undefined ->
-%	    io:format("Partial incomplete decode gen not started: ~w~n",[asn1ct:get_gen_state_field(active)]),
+%	    io:format("Partial incomplete decode gen not started: ~w~n",[asn1ct:get_gen_state_field(active)]),
 	    ok;
 %	[] ->
 %	    ok;
@@ -295,7 +295,7 @@ gen_part_decode_funcs([_H|T],N) ->
 gen_part_decode_funcs([],N) ->
     if
 	N > 0 ->
-	    .emit([".",nl]);
+	    emit([".",nl]);
 	true ->
 	    ok
     end.

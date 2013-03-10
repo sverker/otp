@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -50,14 +50,16 @@
 	  unsafe_vars_try/1,
 	  guard/1, otp_4886/1, otp_4988/1, otp_5091/1, otp_5276/1, otp_5338/1,
 	  otp_5362/1, otp_5371/1, otp_7227/1, otp_5494/1, otp_5644/1, otp_5878/1,
-	  otp_5917/1, otp_6585/1, otp_6885/1, export_all/1,
+	  otp_5917/1, otp_6585/1, otp_6885/1, otp_10436/1,
+          export_all/1,
 	  bif_clash/1,
 	  behaviour_basic/1, behaviour_multiple/1,
 	  otp_7550/1,
 	  otp_8051/1,
 	  format_warn/1,
 	  on_load_successful/1, on_load_failing/1, 
-	  too_many_arguments/1
+	  too_many_arguments/1,
+	  basic_errors/1,bin_syntax_errors/1
         ]).
 
 % Default timetrap timeout (set in init_per_testcase).
@@ -80,10 +82,10 @@ all() ->
      unsafe_vars, unsafe_vars2, unsafe_vars_try, guard,
      otp_4886, otp_4988, otp_5091, otp_5276, otp_5338,
      otp_5362, otp_5371, otp_7227, otp_5494, otp_5644,
-     otp_5878, otp_5917, otp_6585, otp_6885, export_all,
+     otp_5878, otp_5917, otp_6585, otp_6885, otp_10436, export_all,
      bif_clash, behaviour_basic, behaviour_multiple,
      otp_7550, otp_8051, format_warn, {group, on_load},
-     too_many_arguments].
+     too_many_arguments, basic_errors, bin_syntax_errors].
 
 groups() -> 
     [{unused_vars_warn, [],
@@ -1307,41 +1309,30 @@ guard(Config) when is_list(Config) ->
                    foo;
                t3(A) when erlang:is_record(A, {apa}) ->
                    foo;
-               t3(A) when {erlang,is_record}(A, {apa}) ->
-                   foo;
                t3(A) when is_record(A, {apa}, 1) ->
                    foo;
                t3(A) when erlang:is_record(A, {apa}, 1) ->
                    foo;
-               t3(A) when {erlang,is_record}(A, {apa}, 1) ->
-                   foo;
                t3(A) when is_record(A, apa, []) ->
                    foo;
                t3(A) when erlang:is_record(A, apa, []) ->
-                   foo;
-               t3(A) when {erlang,is_record}(A, apa, []) ->
                    foo;
                t3(A) when record(A, apa) ->
                    foo;
                t3(A) when is_record(A, apa) ->
                    foo;
                t3(A) when erlang:is_record(A, apa) ->
-                   foo;
-               t3(A) when {erlang,is_record}(A, apa) ->
                    foo.
             ">>,
             [warn_unused_vars, nowarn_obsolete_guard],
             {errors,[{2,erl_lint,illegal_guard_expr},
-                     {4,erl_lint,illegal_guard_expr},
-                     {6,erl_lint,illegal_guard_expr},
-                     {8,erl_lint,illegal_guard_expr},
+		     {4,erl_lint,illegal_guard_expr},
+		     {6,erl_lint,illegal_guard_expr},
+		     {8,erl_lint,illegal_guard_expr},
 		     {10,erl_lint,illegal_guard_expr},
 		     {12,erl_lint,illegal_guard_expr},
-		     {14,erl_lint,illegal_guard_expr},
-		     {16,erl_lint,illegal_guard_expr},
-		     {18,erl_lint,illegal_guard_expr},
-		     {20,erl_lint,illegal_guard_expr}],
-             []}},
+		     {14,erl_lint,illegal_guard_expr}],
+	     []}},
            {guard6,
             <<"-record(apa,{a=a,b=foo:bar()}).
               apa() ->
@@ -1361,7 +1352,17 @@ guard(Config) when is_list(Config) ->
                                         (is_record(X, apa)*2)].
             ">>,
             [],
-            []}],
+            []},
+	   {guard8,
+	    <<"t(A) when erlang:is_foobar(A) -> ok;
+	      t(A) when A ! ok -> ok;
+	      t(A) when A ++ [x] -> ok."
+	    >>,
+	    [],
+	    {errors,[{1,erl_lint,illegal_guard_expr},
+		     {2,erl_lint,illegal_guard_expr},
+		     {3,erl_lint,illegal_guard_expr}],[]}}
+	  ],
     ?line [] = run(Config, Ts1),
     ok.
 
@@ -1649,6 +1650,7 @@ otp_5276(Config) when is_list(Config) ->
              -deprecated([{'_','_',never}]).
              -deprecated([{{badly,formed},1}]).
              -deprecated([{'_','_',next_major_release}]).
+             -deprecated([{atom_to_list,1}]).
              -export([t/0]).
              frutt() -> ok.
              t() -> ok.
@@ -1659,8 +1661,9 @@ otp_5276(Config) when is_list(Config) ->
                    {3,erl_lint,{invalid_deprecated,'foo bar'}},
                    {5,erl_lint,{bad_deprecated,{f,'_'}}},
                    {8,erl_lint,{invalid_deprecated,{'_','_',never}}},
-                   {9,erl_lint,{invalid_deprecated,{{badly,formed},1}}}],
-            [{12,erl_lint,{unused_function,{frutt,0}}}]}}],
+                   {9,erl_lint,{invalid_deprecated,{{badly,formed},1}}},
+		   {11,erl_lint,{bad_deprecated,{atom_to_list,1}}}],
+            [{13,erl_lint,{unused_function,{frutt,0}}}]}}],
     ?line [] = run(Config, Ts),
     ok.
 
@@ -1742,7 +1745,7 @@ otp_5362(Config) when is_list(Config) ->
           {otp_5362_2,
           <<"-export([inline/0]).
 
-             -import(lists.foo, [a/1,b/1]). % b/1 is not used
+             -import(lists, [a/1,b/1]). % b/1 is not used
 
              -compile([{inline,{inl,7}}]).    % undefined
              -compile([{inline,[{inl,17}]}]). % undefined
@@ -1774,7 +1777,7 @@ otp_5362(Config) when is_list(Config) ->
                    {6,erl_lint,{bad_inline,{inl,17}}},
                    {11,erl_lint,{undefined_function,{fipp,0}}},
                    {22,erl_lint,{bad_nowarn_unused_function,{and_not_used,2}}}],
-            [{3,erl_lint,{unused_import,{{b,1},'lists.foo'}}},
+            [{3,erl_lint,{unused_import,{{b,1},lists}}},
              {9,erl_lint,{unused_function,{foop,0}}},
              {19,erl_lint,{unused_function,{not_used,0}}},
              {23,erl_lint,{unused_function,{and_not_used,1}}}]}},
@@ -1906,9 +1909,23 @@ otp_5362(Config) when is_list(Config) ->
              warn_deprecated_function,
              warn_bif_clash]},
            {errors,
-            [{2,erl_lint,disallowed_nowarn_bif_clash}],[]}}
+            [{2,erl_lint,disallowed_nowarn_bif_clash}],[]}},
 
-          ],
+	  {call_deprecated_function,
+	   <<"t(X) -> erlang:hash(X, 2000).">>,
+	   [],
+	   {warnings,
+            [{1,erl_lint,{deprecated,{erlang,hash,2},
+			  {erlang,phash2,2},"in a future release"}}]}},
+
+	  {call_removed_function,
+	   <<"t(X) -> regexp:match(X).">>,
+	   [],
+	   {warnings,
+            [{1,erl_lint,{removed,{regexp,match,1},
+			  "removed in R15; use the re module instead"}}]}}
+
+	 ],
 
     ?line [] = run(Config, Ts),
     ok.
@@ -2197,27 +2214,9 @@ otp_5878(Config) when is_list(Config) ->
     ?line [] = run(Config, Ts),
 
     Abstr = <<"-module(lint_test, [A, B]).
-
-               -export([args/1]).
-
-               -record(r, {a = A, b = THIS}). % A and THIS are unbound
-
-               %% param:args(compile,param:new(1,2)).
-
-               args(C) ->
-                   X = local(C),
-                   Z = new(A, B),
-                   F = fun(THIS) -> {x, A} end, % THIS unused and shadowed
-                   {X, Z, THIS, F, #r{}}.
-
-               local(C) ->
-                   module_info(C).
             ">>,
-    ?line {error,[{5,erl_lint,{unbound_var,'A'}},
-                  {5,erl_lint,{unbound_var,'THIS'}}],
-           [{12,erl_lint,{unused_var,'THIS'}},
-            {12,erl_lint,{shadowed_var,'THIS','fun'}}]}
-        = run_test2(Config, Abstr, [warn_unused_record]),
+    {errors,[{1,erl_lint,pmod_unsupported}],[]} =
+        run_test2(Config, Abstr, [warn_unused_record]),
 
     QLC1 = <<"-module(lint_test).
               -include_lib(\"stdlib/include/qlc.hrl\").
@@ -2395,6 +2394,28 @@ otp_6885(Config) when is_list(Config) ->
 		   {14,erl_lint,typed_literal_string},
 		   {16,erl_lint,typed_literal_string}],
 	   []} = run_test2(Config, Ts, []),
+    ok.
+
+otp_10436(doc) ->
+    "OTP-6885. Warnings for opaque types.";
+otp_10436(suite) -> [];
+otp_10436(Config) when is_list(Config) ->
+    Ts = <<"-module(otp_10436).
+            -export_type([t1/0]).
+            -opaque t1() :: {i, integer()}.
+            -opaque t2() :: {a, atom()}.
+         ">>,
+    {warnings,[{4,erl_lint,{not_exported_opaque,{t2,0}}},
+               {4,erl_lint,{unused_type,{t2,0}}}]} =
+        run_test2(Config, Ts, []),
+    Ts2 = <<"-module(otp_10436_2).
+             -export_type([t1/0, t2/0]).
+             -opaque t1() :: term().
+             -opaque t2() :: any().
+         ">>,
+    {warnings,[{3,erl_lint,{underspecified_opaque,{t1,0}}},
+               {4,erl_lint,{underspecified_opaque,{t2,0}}}]} =
+        run_test2(Config, Ts2, []),
     ok.
 
 export_all(doc) ->
@@ -2845,10 +2866,10 @@ otp_8051(doc) ->
 otp_8051(Config) when is_list(Config) ->
     Ts = [{otp_8051,
            <<"-opaque foo() :: bar().
+              -export_type([foo/0]).
              ">>,
            [],
-           {error,[{1,erl_lint,{undefined_type,{bar,0}}}],
-            [{1,erl_lint,{unused_type,{foo,0}}}]}}],
+           {errors,[{1,erl_lint,{undefined_type,{bar,0}}}],[]}}],
     ?line [] = run(Config, Ts),
     ok.
 
@@ -2976,6 +2997,77 @@ too_many_arguments(Config) when is_list(Config) ->
     ?line [] = run(Config, Ts),
     ok.
 
+
+%% Test some basic errors to improve coverage.
+basic_errors(Config) ->
+    Ts = [{redefine_module,
+	   <<"-module(redefine_module).">>,
+	   [],
+	   {errors,[{1,erl_lint,redefine_module}],[]}},
+
+	  {attr_after_function,
+	   <<"f() -> ok.
+               -attr(x).">>,
+	   [],
+	   {errors,[{2,erl_lint,{attribute,attr}}],[]}},
+
+	  {redefine_function,
+	   <<"f() -> ok.
+              f() -> ok.">>,
+	   [],
+	   {errors,[{2,erl_lint,{redefine_function,{f,0}}}],[]}},
+
+	  {redefine_record,
+	   <<"-record(r, {a}).
+              -record(r, {a}).
+	      f(#r{}) -> ok.">>,
+	   [],
+	   {errors,[{2,erl_lint,{redefine_record,r}}],[]}},
+
+	  {illegal_record_info,
+	   <<"f1() -> record_info(42, record).
+	      f2() -> record_info(shoe_size, record).">>,
+	   [],
+	   {errors,[{1,erl_lint,illegal_record_info},
+		    {2,erl_lint,illegal_record_info}],[]}},
+
+	  {illegal_expr,
+	   <<"f() -> a:b.">>,
+	   [],
+	   {errors,[{1,erl_lint,illegal_expr}],[]}},
+
+	  {illegal_pattern,
+	   <<"f(A+B) -> ok.">>,
+	   [],
+	   {errors,[{1,erl_lint,illegal_pattern}],[]}}
+	 ],
+    [] = run(Config, Ts),
+    ok.
+
+%% Test binary syntax errors
+bin_syntax_errors(Config) ->
+    Ts = [{bin_syntax_errors,
+	   <<"t(<<X:bad_size>>) -> X;
+	      t(<<_:(x ! y)/integer>>) -> ok;
+              t(<<X:all/integer>>) -> X;
+              t(<<X/bad_type>>) -> X;
+	      t(<<X/unit:8>>) -> X;
+	      t(<<X:7/float>>) -> X;
+	      t(<< <<_:8>> >>) -> ok;
+	      t(<<(x ! y):8/integer>>) -> ok.
+	    ">>,
+	   [],
+	   {error,[{1,erl_lint,illegal_bitsize},
+		   {2,erl_lint,illegal_bitsize},
+		   {3,erl_lint,illegal_bitsize},
+		   {4,erl_lint,{undefined_bittype,bad_type}},
+		   {5,erl_lint,bittype_unit},
+		   {7,erl_lint,illegal_pattern},
+		   {8,erl_lint,illegal_pattern}],
+	    [{6,erl_lint,{bad_bitsize,"float"}}]}}
+	 ],
+    [] = run(Config, Ts),
+    ok.
 
 run(Config, Tests) ->
     F = fun({N,P,Ws,E}, BadL) ->

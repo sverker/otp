@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -26,7 +26,7 @@
          decode_header/1,
          sequence_numbers/1,
          hop_by_hop_id/2,
-         msg_name/1,
+         msg_name/2,
          msg_id/1]).
 
 %% Towards generated encoders (from diameter_gen.hrl).
@@ -63,9 +63,9 @@ encode(Mod, #diameter_packet{} = Pkt) ->
         e(Mod, Pkt)
     catch
         error: Reason ->
-            %% Be verbose rather than letting the emulator truncate the
-            %% error report.
-            X = {Reason, ?STACK},
+            %% Be verbose since a crash report may be truncated and
+            %% encode errors are self-inflicted.
+            X = {?MODULE, encode, {Reason, ?STACK}},
             diameter_lib:error_report(X, {?MODULE, encode, [Mod, Pkt]}),
             exit(X)
     end;
@@ -91,20 +91,21 @@ e(_, #diameter_packet{msg = [#diameter_header{} = Hdr | As]} = Pkt) ->
 
     Flags = make_flags(0, Hdr),
 
-    Pkt#diameter_packet{bin = <<Vsn:8, Length:24,
+    Pkt#diameter_packet{header = Hdr,
+                        bin = <<Vsn:8, Length:24,
                                 Flags:8, Code:24,
                                 Aid:32,
                                 Hid:32,
                                 Eid:32,
                                 Avps/binary>>};
 
-e(Mod0, #diameter_packet{header = Hdr, msg = Msg} = Pkt) ->
+e(Mod, #diameter_packet{header = Hdr, msg = Msg} = Pkt) ->
     #diameter_header{version = Vsn,
                      hop_by_hop_id = Hid,
                      end_to_end_id = Eid}
         = Hdr,
 
-    {Mod, MsgName} = rec2msg(Mod0, Msg),
+    MsgName = rec2msg(Mod, Msg),
     {Code, Flags0, Aid} = msg_header(Mod, MsgName, Hdr),
     Flags = make_flags(Flags0, Hdr),
 
@@ -191,32 +192,24 @@ encode_avps(Avps) ->
 %% msg_header/3
 
 msg_header(Mod, 'answer-message' = MsgName, Header) ->
-    ?BASE = Mod,
-    #diameter_header{cmd_code = Code} = Header,
-    {_, Flags, ApplId} = ?BASE:msg_header(MsgName),
-    {Code, Flags, ApplId};
+    0 = Mod:id(),  %% assert
+    #diameter_header{application_id = Aid,
+                     cmd_code = Code}
+        = Header,
+    {-1, Flags, ?DIAMETER_APP_ID_COMMON} = Mod:msg_header(MsgName),
+    {Code, Flags, Aid};
 
 msg_header(Mod, MsgName, _) ->
     Mod:msg_header(MsgName).
 
 %% rec2msg/2
 
-rec2msg(_, ['answer-message' = M | _]) ->
-    {?BASE, M};
-
-rec2msg(Mod, [MsgName|_])
-  when is_atom(MsgName) ->
-    {Mod, MsgName};
+rec2msg(_, [Name|_])
+  when is_atom(Name) ->
+    Name;
 
 rec2msg(Mod, Rec) ->
-    R = element(1, Rec),
-    A = 'answer-message',
-    case ?BASE:msg2rec(A) of
-        R ->
-            {?BASE, A};
-        _ ->
-            {Mod, Mod:rec2msg(R)}
-    end.
+    Mod:rec2msg(element(1, Rec)).
 
 %%% ---------------------------------------------------------------------------
 %%% # decode/2
@@ -240,20 +233,19 @@ decode(?APP_ID_RELAY, _, #diameter_packet{} = Pkt) ->
     end;
 
 %% Otherwise decode using the dictionary.
-decode(_, Mod, #diameter_packet{header = Hdr} = Pkt)
-  when is_atom(Mod) ->
+decode(_, Mod, #diameter_packet{header = Hdr} = Pkt) ->
     #diameter_header{cmd_code = CmdCode,
                      is_request = IsRequest,
                      is_error = IsError}
         = Hdr,
 
-    {M, MsgName} = if IsError andalso not IsRequest ->
-                           {?BASE, 'answer-message'};
-                      true ->
-                           {Mod, Mod:msg_name(CmdCode, IsRequest)}
-                   end,
+    MsgName = if IsError andalso not IsRequest ->
+                      'answer-message';
+                 true ->
+                      Mod:msg_name(CmdCode, IsRequest)
+              end,
 
-    decode_avps(MsgName, M, Pkt, collect_avps(Pkt));
+    decode_avps(MsgName, Mod, Pkt, collect_avps(Pkt));
 
 decode(Id, Mod, Bin)
   when is_bitstring(Bin) ->
@@ -332,6 +324,9 @@ decode_header(_) ->
 %% wraparound counter. The 8-bit counter is incremented each time the
 %% system is restarted.
 
+sequence_numbers({_,_} = T) ->
+    T;
+
 sequence_numbers(#diameter_packet{bin = Bin})
   when is_binary(Bin) ->
     sequence_numbers(Bin);
@@ -354,15 +349,15 @@ hop_by_hop_id(Id, <<H:12/binary, _:32, T/binary>>) ->
     <<H/binary, Id:32, T/binary>>.
 
 %%% ---------------------------------------------------------------------------
-%%% # msg_name/1
+%%% # msg_name/2
 %%% ---------------------------------------------------------------------------
 
-msg_name(#diameter_header{application_id = ?APP_ID_COMMON,
-                          cmd_code = C,
-                          is_request = R}) ->
-    ?BASE:msg_name(C,R);
+msg_name(Dict0, #diameter_header{application_id = ?APP_ID_COMMON,
+                                 cmd_code = C,
+                                 is_request = R}) ->
+    Dict0:msg_name(C,R);
 
-msg_name(Hdr) ->
+msg_name(_, Hdr) ->
     msg_id(Hdr).
 
 %% Note that messages in different applications could have the same

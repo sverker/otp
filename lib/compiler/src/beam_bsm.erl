@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -204,16 +204,6 @@ btb_reaches_match_1(Is, Regs, D) ->
 btb_reaches_match_2([{block,Bl}|Is], Regs0, D) ->
     Regs = btb_reaches_match_block(Bl, Regs0),
     btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{call_only,Arity,{f,Lbl}}|_], Regs0, D) ->
-    Regs = btb_kill_not_live(Arity, Regs0),
-    btb_tail_call(Lbl, Regs, D);
-btb_reaches_match_2([{call_ext_only,Arity,Func}|_], Regs0, D) ->
-    Regs = btb_kill_not_live(Arity, Regs0),
-    btb_tail_call(Func, Regs, D);
-btb_reaches_match_2([{call_last,Arity,{f,Lbl},_}|_], Regs0, D) ->
-    Regs1 = btb_kill_not_live(Arity, Regs0),
-    Regs = btb_kill_yregs(Regs1),
-    btb_tail_call(Lbl, Regs, D);
 btb_reaches_match_2([{call,Arity,{f,Lbl}}|Is], Regs, D) ->
     btb_call(Arity, Lbl, Regs, Is, D);
 btb_reaches_match_2([{apply,Arity}|Is], Regs, D) ->
@@ -222,19 +212,16 @@ btb_reaches_match_2([{call_fun,Live}=I|Is], Regs, D) ->
     btb_call(Live, I, Regs, Is, D);
 btb_reaches_match_2([{make_fun2,_,_,_,Live}|Is], Regs, D) ->
     btb_call(Live, make_fun2, Regs, Is, D);
-btb_reaches_match_2([{call_ext,Arity,{extfunc,Mod,Name,Arity}=Func}|Is], Regs0, D) ->
+btb_reaches_match_2([{call_ext,Arity,Func}=I|Is], Regs0, D) ->
     %% Allow us scanning beyond the call in case the match
     %% context is saved on the stack.
-    case erl_bifs:is_exit_bif(Mod, Name, Arity) of
+    case beam_jump:is_exit_instruction(I) of
 	false ->
 	    btb_call(Arity, Func, Regs0, Is, D);
 	true ->
 	    Regs = btb_kill_not_live(Arity, Regs0),
 	    btb_tail_call(Func, Regs, D)
     end;
-btb_reaches_match_2([{call_ext_last,Arity,_,_}=I|_], Regs, D) ->
-    btb_ensure_not_used(btb_regs_from_arity(Arity), I, Regs),
-    D;
 btb_reaches_match_2([{kill,Y}|Is], Regs, D) ->
     btb_reaches_match_1(Is, btb_kill([Y], Regs), D);
 btb_reaches_match_2([{deallocate,_}|Is], Regs0, D) ->
@@ -254,21 +241,45 @@ btb_reaches_match_2([{bif,_,{f,F},Ss,Dst}=I|Is], Regs0, D0) ->
     Regs = btb_kill([Dst], Regs0),
     D = btb_follow_branch(F, Regs, D0),
     btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{test,bs_start_match2,_,_,[Ctx,_],Ctx}|Is], Regs, D) ->
-    case btb_context_regs(Regs) of
-	[Ctx] ->
-	    D;
-	CtxRegs ->
-	    case member(Ctx, CtxRegs) of
-		false -> btb_reaches_match_2(Is, Regs, D);
-		true -> btb_error(unsuitable_bs_start_match)
+btb_reaches_match_2([{test,bs_start_match2,{f,F},Live,[Ctx,_],Ctx}=I|Is],
+		    Regs0, D0) ->
+    CtxRegs = btb_context_regs(Regs0),
+    case member(Ctx, CtxRegs) of
+	false ->
+	    %% This bs_start_match2 instruction does not use "our"
+	    %% match state. Therefore we can continue the search
+	    %% for another bs_start_match2 instruction.
+	    D = btb_follow_branch(F, Regs0, D0),
+	    Regs = btb_kill_not_live(Live, Regs0),
+	    btb_reaches_match_2(Is, Regs, D);
+	true ->
+	    %% OK. This instruction will use "our" match state,
+	    %% but we must make sure that all other copies of the
+	    %% match state are killed in the code that follows
+	    %% the instruction. (We know that the fail branch cannot
+	    %% be taken in this case.)
+	    OtherCtxRegs = CtxRegs -- [Ctx],
+	    case btb_are_all_unused(OtherCtxRegs, Is, D0) of
+		false -> btb_error({OtherCtxRegs,not_all_unused_after,I});
+		true -> D0
 	    end
     end;
-btb_reaches_match_2([{test,bs_start_match2,_,_,[Bin,_],Ctx}|Is], Regs, D) ->
-    CtxRegs = btb_context_regs(Regs),
+btb_reaches_match_2([{test,bs_start_match2,{f,F},Live,[Bin,_],Ctx}|Is],
+		    Regs0, D0) ->
+    CtxRegs = btb_context_regs(Regs0),
     case member(Bin, CtxRegs) orelse member(Ctx, CtxRegs) of
-	false -> btb_reaches_match_2(Is, Regs, D);
-	true -> btb_error(unsuitable_bs_start_match)
+	false ->
+	    %% This bs_start_match2 does not reference any copy of the
+	    %% match state. Therefore it can safely be passed on the
+	    %% way to another (perhaps more suitable) bs_start_match2
+	    %% instruction.
+	    D = btb_follow_branch(F, Regs0, D0),
+	    Regs = btb_kill_not_live(Live, Regs0),
+	    btb_reaches_match_2(Is, Regs, D);
+	true ->
+	    %% This variant of the bs_start_match2 instruction does
+	    %% not accept a match state as source.
+	    btb_error(unsuitable_bs_start_match)
     end;
 btb_reaches_match_2([{test,_,{f,F},Ss}=I|Is], Regs, D0) ->
     btb_ensure_not_used(Ss, I, Regs),
@@ -278,12 +289,7 @@ btb_reaches_match_2([{test,_,{f,F},_,Ss,_}=I|Is], Regs, D0) ->
     btb_ensure_not_used(Ss, I, Regs),
     D = btb_follow_branch(F, Regs, D0),
     btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{select_val,Src,{f,F},{list,Conds}}=I|Is], Regs, D0) ->
-    btb_ensure_not_used([Src], I, Regs),
-    D1 = btb_follow_branch(F, Regs, D0),
-    D = btb_follow_branches(Conds, Regs, D1),
-    btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{select_tuple_arity,Src,{f,F},{list,Conds}}=I|Is], Regs, D0) ->
+btb_reaches_match_2([{select,_,Src,{f,F},Conds}=I|Is], Regs, D0) ->
     btb_ensure_not_used([Src], I, Regs),
     D1 = btb_follow_branch(F, Regs, D0),
     D = btb_follow_branches(Conds, Regs, D1),
@@ -293,46 +299,11 @@ btb_reaches_match_2([{jump,{f,Lbl}}|_], Regs, #btb{index=Li}=D) ->
     btb_reaches_match_2(Is, Regs, D);
 btb_reaches_match_2([{label,_}|Is], Regs, D) ->
     btb_reaches_match_2(Is, Regs, D);
-btb_reaches_match_2([{bs_add,{f,0},_,Dst}|Is], Regs, D) ->
+btb_reaches_match_2([{bs_init,{f,0},_,_,Ss,Dst}=I|Is], Regs, D) ->
+    btb_ensure_not_used(Ss, I, Regs),
     btb_reaches_match_1(Is, btb_kill([Dst], Regs), D);
-btb_reaches_match_2([bs_init_writable|Is], Regs0, D) ->
-    Regs = btb_kill_not_live(0, Regs0),
-    btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{bs_init2,{f,0},_,_,_,_,Dst}|Is], Regs, D) ->
-    btb_reaches_match_1(Is, btb_kill([Dst], Regs), D);
-btb_reaches_match_2([{bs_init_bits,{f,0},_,_,_,_,Dst}|Is], Regs, D) ->
-    btb_reaches_match_1(Is, btb_kill([Dst], Regs), D);
-btb_reaches_match_2([{bs_append,{f,0},_,_,_,_,Src,_,Dst}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, btb_kill([Dst], Regs), D);
-btb_reaches_match_2([{bs_private_append,{f,0},_,_,Src,_,Dst}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, btb_kill([Dst], Regs), D);
-btb_reaches_match_2([{bs_put_integer,{f,0},_,_,_,Src}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{bs_put_float,{f,0},_,_,_,Src}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{bs_put_binary,{f,0},_,_,_,Src}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{bs_put_string,_,_}|Is], Regs, D) ->
-    btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{bs_utf8_size,_,Src,Dst}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, btb_kill([Dst], Regs), D);
-btb_reaches_match_2([{bs_utf16_size,_,Src,Dst}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, btb_kill([Dst], Regs), D);
-btb_reaches_match_2([{bs_put_utf8,_,_,Src}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{bs_put_utf16,_,_,Src}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
-    btb_reaches_match_1(Is, Regs, D);
-btb_reaches_match_2([{bs_put_utf32,_,_,Src}=I|Is], Regs, D) ->
-    btb_ensure_not_used([Src], I, Regs),
+btb_reaches_match_2([{bs_put,{f,0},_,Ss}=I|Is], Regs, D) ->
+    btb_ensure_not_used(Ss, I, Regs),
     btb_reaches_match_1(Is, Regs, D);
 btb_reaches_match_2([{bs_restore2,Src,_}=I|Is], Regs0, D) ->
     case btb_contains_context(Src, Regs0) of
@@ -340,11 +311,11 @@ btb_reaches_match_2([{bs_restore2,Src,_}=I|Is], Regs0, D) ->
 	    btb_reaches_match_1(Is, Regs0, D);
 	true ->
 	    %% Check that all other copies of the context registers
-	    %% are killed by the following instructions.
+	    %% are unused by the following instructions.
 	    Regs = btb_kill([Src], Regs0),
 	    CtxRegs = btb_context_regs(Regs),
-	    case btb_are_all_killed(CtxRegs, Is, D) of
-		false -> btb_error({CtxRegs,not_all_killed_after,I});
+	    case btb_are_all_unused(CtxRegs, Is, D) of
+		false -> btb_error({CtxRegs,not_all_unused_after,I});
 		true -> D#btb{must_not_save=true}
 	    end
     end;
@@ -354,11 +325,11 @@ btb_reaches_match_2([{bs_context_to_binary,Src}=I|Is], Regs0, D) ->
 	    btb_reaches_match_1(Is, Regs0, D);
 	true ->
 	    %% Check that all other copies of the context registers
-	    %% are killed by the following instructions.
+	    %% are unused by the following instructions.
 	    Regs = btb_kill([Src], Regs0),
 	    CtxRegs = btb_context_regs(Regs),
-	    case btb_are_all_killed(CtxRegs, Is, D) of
-		false -> btb_error({CtxRegs,not_all_killed_after,I});
+	    case btb_are_all_unused(CtxRegs, Is, D) of
+		false -> btb_error({CtxRegs,not_all_unused_after,I});
 		true -> D#btb{must_not_save=true}
 	    end
     end;
@@ -389,13 +360,16 @@ btb_call(Arity, Lbl, Regs0, Is, D0) ->
 	    %% First handle the call as if it were a tail call.
 	    D = btb_tail_call(Lbl, Regs, D0),
 
-	    %% No problem so far, but now we must make sure that
-	    %% we don't have any copies of the match context
-	    %% tucked away in an y register.
+	    %% No problem so far (the called function can handle a
+	    %% match context). Now we must make sure that the rest
+	    %% of this function following the call does not attempt
+	    %% to use the match context in case there is a copy
+	    %% tucked away in a y register.
 	    RegList = btb_context_regs(Regs),
-	    case [R || {y,_}=R <- RegList] of
-		[] -> D;
-		[_|_] -> btb_error({multiple_uses,RegList})
+	    YRegs = [R || {y,_}=R <- RegList],
+	    case btb_are_all_unused(YRegs, Is, D) of
+		true -> D;
+		false -> btb_error({multiple_uses,RegList})
 	    end;
 	true ->
 	    %% No match context in any x register. It could have been
@@ -475,21 +449,12 @@ btb_reaches_match_block([{set,Ds,Ss,_}=I|Is], Regs0) ->
 btb_reaches_match_block([], Regs) ->
     Regs.
 
-%% btb_regs_from_arity(Arity) -> [Register])
-%%  Create a list of x registers from a function arity.
-
-btb_regs_from_arity(Arity) ->
-    btb_regs_from_arity_1(Arity, []).
-
-btb_regs_from_arity_1(0, Acc) -> Acc;
-btb_regs_from_arity_1(N, Acc) -> btb_regs_from_arity_1(N-1, [{x,N-1}|Acc]).
-
 %% btb_are_all_killed([Register], [Instruction], D) -> true|false
-%%  Test whether all of the register are killed in the instruction stream.
+%%  Test whether all of the register are unused in the instruction stream.
 
-btb_are_all_killed(RegList, Is, #btb{index=Li}) ->
+btb_are_all_unused(RegList, Is, #btb{index=Li}) ->
     all(fun(R) ->
-		beam_utils:is_killed(R, Is, Li)
+		beam_utils:is_not_used(R, Is, Li)
 	end, RegList).
 
 %% btp_regs_from_list([Register]) -> RegisterSet.

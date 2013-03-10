@@ -4,7 +4,7 @@
 <comref>
   <header>
     <copyright>
-      <year>2007</year><year>2012</year>
+      <year>2007</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -36,6 +36,8 @@
     OS command line.
   </comsummary>
 
+  <marker id="top"></marker>
+
   <description>
   <p>The <c>ct_run</c> program is automatically installed with Erlang/OTP
     and Common Test (please see the Installation chapter in the Common
@@ -46,7 +48,7 @@
     particular mode.</p>
 
   <p>There is an interface function that corresponds to this program,
-    called <c>ct:run_test/1</c>, for starting Common Test from the Erlang
+    called <c><seealso marker="ct#run_test-1">ct:run_test/1</seealso></c>, for starting Common Test from the Erlang
     shell (or an Erlang program). Please see the <c>ct</c> man page for
     details.</p>
 
@@ -72,6 +74,10 @@
     following <c>-erl_args</c> on the command line. These directories are added
     to the code path normally (i.e. on specified form)</p>
 
+  <p>Exit status is set before the program ends. Value <c>0</c> indicates a successful
+    test result, <c>1</c> indicates one or more failed or auto-skipped test cases, and
+    <c>2</c> indicates test execution failure.</p>
+
   <p>If <c>ct_run</c> is called with option:</p>
     <pre>-help</pre>
     <p>it prints all valid start flags to stdout.</p>
@@ -84,18 +90,21 @@
     <pre>
 	ct_run [-dir TestDir1 TestDir2 .. TestDirN] |
 	[[-dir TestDir] -suite Suite1 Suite2 .. SuiteN
-	 [[-group Group1 Group2 .. GroupN] [-case Case1 Case2 .. CaseN]]]
+	 [[-group Groups1 Groups2 .. GroupsN] [-case Case1 Case2 .. CaseN]]]
 	[-step [config | keep_inactive]]
 	[-config ConfigFile1 ConfigFile2 .. ConfigFileN]
 	[-userconfig CallbackModule1 ConfigString1 and CallbackModule2
-	 ConfigString2 and .. and CallbackModuleN ConfigStringN]
+	 ConfigString2 and .. CallbackModuleN ConfigStringN]
 	[-decrypt_key Key] | [-decrypt_file KeyFile]
 	[-label Label]
 	[-logdir LogDir]
 	[-logopts LogOpts]
+	[-verbosity GenVLevel | [Category1 VLevel1 and
+	 Category2 VLevel2 and .. CategoryN VLevelN]]
 	[-silent_connections [ConnType1 ConnType2 .. ConnTypeN]]
 	[-stylesheet CSSFile]
 	[-cover CoverCfgFile]
+	[-cover_stop Bool]
 	[-event_handler EvHandler1 EvHandler2 .. EvHandlerN] |
         [-event_handler_init EvHandler1 InitArg1 and
 	 EvHandler2 InitArg2 and .. EvHandlerN InitArgN]
@@ -107,12 +116,17 @@
         [-repeat N [-force_stop]] |
         [-duration HHMMSS [-force_stop]] |
         [-until [YYMoMoDD]HHMMSS [-force_stop]]
-	[-basic_html]</pre>
+	[-basic_html]
+    	[-ct_hooks CTHModule1 CTHOpts1 and CTHModule2 CTHOpts2 and ..
+	 CTHModuleN CTHOptsN]
+	[-exit_status ignore_config]
+    </pre>
   </section>
   <section>
     <title>Run tests using test specification</title>
     <pre>
 	ct_run -spec TestSpec1 TestSpec2 .. TestSpecN
+	[-join_specs]
 	[-config ConfigFile1 ConfigFile2 .. ConfigFileN]
 	[-userconfig CallbackModule1 ConfigString1 and CallbackModule2
          ConfigString2 and .. and CallbackModuleN ConfigStringN]
@@ -120,10 +134,13 @@
 	[-label Label]
 	[-logdir LogDir]
 	[-logopts LogOpts]
+	[-verbosity GenVLevel | [Category1 VLevel1 and
+	 Category2 VLevel2 and .. CategoryN VLevelN]]
 	[-allow_user_terms]
 	[-silent_connections [ConnType1 ConnType2 .. ConnTypeN]]
 	[-stylesheet CSSFile]
 	[-cover CoverCfgFile]
+	[-cover_stop Bool]
 	[-event_handler EvHandler1 EvHandler2 .. EvHandlerN] |
         [-event_handler_init EvHandler1 InitArg1 and
 	 EvHandler2 InitArg2 and .. EvHandlerN InitArgN]
@@ -135,7 +152,11 @@
         [-repeat N [-force_stop]] |
         [-duration HHMMSS [-force_stop]] |
         [-until [YYMoMoDD]HHMMSS [-force_stop]]
-	[-basic_html]</pre>
+	[-basic_html]
+    	[-ct_hooks CTHModule1 CTHOpts1 and CTHModule2 CTHOpts2 and ..
+	 CTHModuleN CTHOptsN]
+	[-exit_status ignore_config]
+    </pre>
   </section>
   <section>
     <title>Run tests in web based GUI</title>
@@ -147,6 +168,8 @@
 	[-userconfig CallbackModule1 ConfigString1 and CallbackModule2
          ConfigString2 and .. and CallbackModuleN ConfigStringN]
 	[-logopts LogOpts]
+	[-verbosity GenVLevel | [Category1 VLevel1 and
+	 Category2 VLevel2 and .. CategoryN VLevelN]]
 	[-decrypt_key Key] | [-decrypt_file KeyFile]
 	[-include InclDir1 InclDir2 .. InclDirN]
 	[-no_auto_compile]

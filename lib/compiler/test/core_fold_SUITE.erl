@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -21,7 +21,8 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2,
 	 t_element/1,setelement/1,t_length/1,append/1,t_apply/1,bifs/1,
-	 eq/1,nested_call_in_case/1,guard_try_catch/1,coverage/1]).
+	 eq/1,nested_call_in_case/1,guard_try_catch/1,coverage/1,
+	 unused_multiple_values_error/1,unused_multiple_values/1]).
 
 -export([foo/0,foo/1,foo/2,foo/3]).
 
@@ -31,11 +32,14 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     test_lib:recompile(?MODULE),
-    [t_element, setelement, t_length, append, t_apply, bifs,
-     eq, nested_call_in_case, guard_try_catch, coverage].
+    [{group,p}].
 
 groups() -> 
-    [].
+    [{p,test_lib:parallel(),
+      [t_element,setelement,t_length,append,t_apply,bifs,
+       eq,nested_call_in_case,guard_try_catch,coverage,
+       unused_multiple_values_error,unused_multiple_values]}].
+
 
 init_per_suite(Config) ->
     Config.
@@ -67,6 +71,9 @@ t_element(Config) when is_list(Config) ->
     ?line {'EXIT',{badarg,_}} = (catch element(5, {a,b,c,d})),
     ?line {'EXIT',{badarg,_}} = (catch element(5, {a,b,X,d})),
     ?line {'EXIT',{badarg,_}} = (catch element(5.0, {a,b,X,d})),
+    {'EXIT',{badarg,_}} = (catch element(2, not_a_tuple)),
+    {'EXIT',{badarg,_}} = (catch element(2, [])),
+    {'EXIT',{badarg,_}} = (catch element(2, Tuple == 3)),
     case id({a,b,c}) of
 	{_,_,_}=Tup ->
 	    ?line {'EXIT',{badarg,_}} = (catch element(4, Tup))
@@ -87,6 +94,9 @@ setelement(Config) when is_list(Config) ->
 
     ?line {'EXIT',{badarg,_}} = (catch setelement_crash({a,b,c,d,e,f})),
     ?line error = setelement_crash_2({a,b,c,d,e,f}, <<42>>),
+
+    {'EXIT',{badarg,_}} = (catch setelement(1, not_a_tuple, New)),
+
     ok.
 
 setelement_crash(Tuple) ->
@@ -281,3 +291,41 @@ cover_is_safe_bool_expr(X) ->
     end.
 
 id(I) -> I.
+
+unused_multiple_values_error(Config) when is_list(Config) ->
+    PrivDir = ?config(priv_dir, Config),
+    Dir = filename:dirname(code:which(?MODULE)),
+    Core = filename:join(Dir, "unused_multiple_values_error"),
+    Opts = [no_copt,clint,return,from_core,{outdir,PrivDir}
+	   |test_lib:opt_opts(?MODULE)],
+    {error,[{unused_multiple_values_error,
+        [{core_lint,{return_mismatch,{hello,1}}}]}],
+     []} = c:c(Core, Opts),
+    ok.
+
+unused_multiple_values(Config) when is_list(Config) ->
+    put(unused_multiple_values, []),
+    [false] = test_unused_multiple_values(false),
+    [b,a,{a,b},false] = test_unused_multiple_values({a,b}),
+    ok.
+
+test_unused_multiple_values(X) ->
+    ok = do_unused_multiple_values(X),
+    get(unused_multiple_values).
+
+do_unused_multiple_values(X) ->
+    case do_something(X) of
+        false ->
+            A = false;
+        Res ->
+            {A,B} = Res,
+            do_something(A),
+            do_something(B)
+    end,
+    _ThisShouldNotFail = A,
+    ok.
+
+do_something(I) ->
+    put(unused_multiple_values,
+	[I|get(unused_multiple_values)]),
+    I.

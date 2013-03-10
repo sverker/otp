@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2005-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2005-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -131,11 +131,16 @@ report_receiver(warning_msg, _) -> kernel;
 report_receiver(warning_report, _) -> kernel;
 report_receiver(info, _) -> kernel;
 report_receiver(info_msg, _) -> kernel;
+report_receiver(info_report,Tuple)
+  when is_tuple(Tuple) andalso
+       (element(1,Tuple)==ct_connection orelse
+	element(1,Tuple)==conn_log) ->
+    none;
 report_receiver(info_report, _) -> kernel;
 report_receiver(_, _) -> none.
 
 tag({M,F,A}) when is_atom(M), is_atom(F), is_integer(A) ->
-    io:format(user, "~n=TESTCASE: ~p:~p/~p", [M,F,A]);
+    io:format(user, "~n=TESTCASE: ~w:~w/~w", [M,F,A]);
 tag(Testcase) ->
     io:format(user, "~n=TESTCASE: ~p", [Testcase]).
 

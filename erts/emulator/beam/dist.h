@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -38,7 +38,8 @@
 #define DFLAG_UNICODE_IO          0x1000
 #define DFLAG_DIST_HDR_ATOM_CACHE 0x2000
 #define DFLAG_SMALL_ATOM_TAGS     0x4000
-#define DFLAGS_INTERNAL_TAGS      0x8000
+#define DFLAG_INTERNAL_TAGS       0x8000
+#define DFLAG_UTF8_ATOMS          0x10000
 
 /* All flags that should be enabled when term_to_binary/1 is used. */
 #define TERM_TO_BINARY_DFLAGS (DFLAG_EXTENDED_REFERENCES	\
@@ -187,11 +188,12 @@ void erts_schedule_dist_command(Port *prt, DistEntry *dist_entry)
 
     if (prt) {
 	ERTS_SMP_LC_ASSERT(erts_lc_is_port_locked(prt));
-	ASSERT((erts_port_status_get(prt) & ERTS_PORT_SFLGS_DEAD) == 0);
+	ASSERT((erts_atomic32_read_nob(&prt->state)
+		& ERTS_PORT_SFLGS_DEAD) == 0);
 	ASSERT(prt->dist_entry);
 
 	dep = prt->dist_entry;
-	id = prt->id;
+	id = prt->common.id;
     }
     else {
 	ASSERT(dist_entry);
@@ -203,13 +205,8 @@ void erts_schedule_dist_command(Port *prt, DistEntry *dist_entry)
 	id = dep->cid;
     }
 
-    if (!erts_smp_atomic_xchg_mb(&dep->dist_cmd_scheduled, 1)) {
-	(void) erts_port_task_schedule(id,
-				       &dep->dist_cmd,
-				       ERTS_PORT_TASK_DIST_CMD,
-				       (ErlDrvEvent) -1,
-				       NULL);
-    }
+    if (!erts_smp_atomic_xchg_mb(&dep->dist_cmd_scheduled, 1))
+	erts_port_task_schedule(id, &dep->dist_cmd, ERTS_PORT_TASK_DIST_CMD);
 }
 
 #endif

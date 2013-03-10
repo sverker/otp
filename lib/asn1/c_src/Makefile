@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2002-2011. All Rights Reserved.
+# Copyright Ericsson AB 2002-2012. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -66,13 +66,8 @@ NIF_SHARED_OBJ_FILE = $(LIBDIR)/asn1_erl_nif.dll
 CLIB_FLAGS =
 LN=cp
 else
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-NIF_SHARED_OBJ_FILE = $(LIBDIR)/asn1_erl_nif.eld
-CLIB_FLAGS =
-else
 NIF_SHARED_OBJ_FILE = $(LIBDIR)/asn1_erl_nif.so
 CLIB_FLAGS = -lc
-endif
 LN= ln -s
 endif
 
@@ -99,10 +94,10 @@ docs:
 
 
 $(OBJDIR)/%.o: %.c
-	$(CC) -c $(CFLAGS) -O3 -o $@ $<
+	$(V_CC) -c $(CFLAGS) -O3 -o $@ $<
 
 $(NIF_SHARED_OBJ_FILE): $(NIF_OBJ_FILES)
-	$(LD) $(LDFLAGS) -o $(NIF_SHARED_OBJ_FILE) $(NIF_OBJ_FILES) $(CLIB_FLAGS) $(LIBS)
+	$(V_LD) $(LDFLAGS) -o $(NIF_SHARED_OBJ_FILE) $(NIF_OBJ_FILES) $(CLIB_FLAGS) $(LIBS)
 
 # ----------------------------------------------------
 # Release Target
@@ -110,10 +105,10 @@ $(NIF_SHARED_OBJ_FILE): $(NIF_OBJ_FILES)
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/priv/lib
-	$(INSTALL_PROGRAM) $(NIF_SHARED_OBJ_FILE) $(RELSYSDIR)/priv/lib
-	$(INSTALL_DIR) $(RELSYSDIR)/c_src
-	$(INSTALL_DATA) *.c $(RELSYSDIR)/c_src
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv/lib"
+	$(INSTALL_PROGRAM) $(NIF_SHARED_OBJ_FILE) "$(RELSYSDIR)/priv/lib"
+	$(INSTALL_DIR) "$(RELSYSDIR)/c_src"
+	$(INSTALL_DATA) *.c "$(RELSYSDIR)/c_src"
 
 release_docs_spec:
 

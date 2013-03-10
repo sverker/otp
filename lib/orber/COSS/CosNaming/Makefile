@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 1997-2011. All Rights Reserved.
+# Copyright Ericsson AB 1997-2012. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -117,7 +117,7 @@ clean:
 	rm -f errs core *~
 
 $(APP_TARGET): $(APP_SRC)
-	sed -e 's;%VSN%;$(VSN);' $(APP_SRC) > $(APP_TARGET)
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $(APP_SRC) > $(APP_TARGET)
 
 docs:
 
@@ -125,10 +125,10 @@ docs:
 # Special Build Targets
 # ----------------------------------------------------
 IDL-GENERATED: cos_naming_ext.idl cos_naming.idl
-	erlc $(ERL_IDL_FLAGS) +'{this,"CosNaming::NamingContext"}' \
+	$(gen_verbose)erlc $(ERL_IDL_FLAGS) +'{this,"CosNaming::NamingContext"}' \
 	+'{this,"CosNaming::NamingContextExt"}' cos_naming_ext.idl
-	erlc $(ERL_IDL_FLAGS) +'{this,"CosNaming::NamingContext"}' cos_naming.idl
-	>IDL-GENERATED
+	$(V_at)erlc $(ERL_IDL_FLAGS) +'{this,"CosNaming::NamingContext"}' cos_naming.idl
+	$(V_at)>IDL-GENERATED
 
 $(GEN_FILES): IDL-GENERATED
 
@@ -141,11 +141,11 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(TARGET_FILES) $(APP_TARGET) $(RELSYSDIR)/ebin
-	$(INSTALL_DIR) $(RELSYSDIR)/COSS/CosNaming
-	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(IDL_FILE) $(RELSYSDIR)/COSS/CosNaming
-	$(INSTALL_DATA) $(GEN_FILES) $(RELSYSDIR)/COSS/CosNaming
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(TARGET_FILES) $(APP_TARGET) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DIR) "$(RELSYSDIR)/COSS/CosNaming"
+	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(IDL_FILE) "$(RELSYSDIR)/COSS/CosNaming"
+	$(INSTALL_DATA) $(GEN_FILES) "$(RELSYSDIR)/COSS/CosNaming"
 
 
 release_docs_spec:

@@ -2,7 +2,7 @@
 %%-------------------------------------------------------------------
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2006-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2006-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -398,7 +398,8 @@ do_analysis(Files, Options, Plt, PltInfo) ->
 			   timing = Options#options.timing,
 			   plt = Plt,
 			   use_contracts = Options#options.use_contracts,
-			   callgraph_file = Options#options.callgraph_file},
+			   callgraph_file = Options#options.callgraph_file,
+                           solvers = Options#options.solvers},
   State3 = start_analysis(State2, InitAnalysis),
   {T1, _} = statistics(wall_clock),
   Return = cl_loop(State3),
@@ -487,6 +488,7 @@ expand_dependent_modules_1([Mod|Mods], Included, ModDeps) ->
 expand_dependent_modules_1([], Included, _ModDeps) ->
   Included.
 
+-define(MIN_PARALLELISM, 7).
 -define(MIN_FILES_FOR_NATIVE_COMPILE, 20).
 
 -spec hipe_compile([file:filename()], #options{}) -> 'ok'.
@@ -500,11 +502,14 @@ hipe_compile(Files, #options{erlang_mode = ErlangMode} = Options) ->
       case erlang:system_info(hipe_architecture) of
 	undefined -> ok;
 	_ ->
-	  Mods = [lists, dict, gb_sets, gb_trees, ordsets, sets,
+	  Mods = [lists, dict, digraph, digraph_utils, ets,
+		  gb_sets, gb_trees, ordsets, sets, sofs,
 		  cerl, cerl_trees, erl_types, erl_bif_types,
-		  dialyzer_analysis_callgraph, dialyzer_codeserver,
-		  dialyzer_dataflow, dialyzer_dep, dialyzer_plt,
-		  dialyzer_succ_typings, dialyzer_typesig],
+		  dialyzer_analysis_callgraph, dialyzer, dialyzer_behaviours,
+		  dialyzer_codeserver, dialyzer_contracts,
+		  dialyzer_coordinator, dialyzer_dataflow, dialyzer_dep,
+		  dialyzer_plt, dialyzer_succ_typings, dialyzer_typesig,
+		  dialyzer_typesig, dialyzer_worker],
 	  report_native_comp(Options),
 	  {T1, _} = statistics(wall_clock),
 	  native_compile(Mods),
@@ -514,12 +519,12 @@ hipe_compile(Files, #options{erlang_mode = ErlangMode} = Options) ->
   end.
 
 native_compile(Mods) ->
-  case erlang:system_info(schedulers) of
-    %% N when N > 1 ->
-    %%   Parent = self(),
-    %%   Pids = [spawn(fun () -> Parent ! {self(), hc(M)} end) || M <- Mods],
-    %%   lists:foreach(fun (Pid) -> receive {Pid, Res} -> Res end end, Pids);
-    _ -> % 1 ->
+  case dialyzer_utils:parallelism() > ?MIN_PARALLELISM of
+    true ->
+      Parent = self(),
+      Pids = [spawn(fun () -> Parent ! {self(), hc(M)} end) || M <- Mods],
+      lists:foreach(fun (Pid) -> receive {Pid, Res} -> Res end end, Pids);
+    false ->
       lists:foreach(fun (Mod) -> hc(Mod) end, Mods)
   end.
 
@@ -528,6 +533,7 @@ hc(Mod) ->
   case code:is_module_native(Mod) of
     true -> ok;
     false ->
+      %% io:format(" ~s", [Mod]),
       {ok, Mod} = hipe:c(Mod),
       ok
   end.

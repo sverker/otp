@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2004-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2004-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -971,7 +971,7 @@ Eterm erts_debug_dump_monitors_1(BIF_ALIST_1)
 	}
     } else {
 	erts_printf("Dumping pid monitors--------------------\n");
-	erts_dump_monitors(rp->monitors,0);
+	erts_dump_monitors(ERTS_P_MONITORS(rp),0);
 	erts_printf("Monitors dumped-------------------------\n");
 	erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
 	BIF_RET(am_true);
@@ -985,12 +985,15 @@ Eterm erts_debug_dump_links_1(BIF_ALIST_1)
     Process *rp;
     DistEntry *dep;
     if (is_internal_port(pid)) {
-	Port *rport = erts_id2port(pid, p, ERTS_PROC_LOCK_MAIN);
+	Port *rport = erts_id2port_sflgs(pid,
+					 p,
+					 ERTS_PROC_LOCK_MAIN,
+					 ERTS_PORT_SFLGS_INVALID_LOOKUP);
 	if (rport) {
 	    erts_printf("Dumping port links----------------------\n");
-	    erts_dump_links(rport->nlinks,0);
+	    erts_dump_links(ERTS_P_LINKS(rport), 0);
 	    erts_printf("Links dumped----------------------------\n");
-	    erts_smp_port_unlock(rport);
+	    erts_port_release(rport);
 	    BIF_RET(am_true);
 	} else {
 	    BIF_ERROR(p,BADARG);
@@ -1014,7 +1017,7 @@ Eterm erts_debug_dump_links_1(BIF_ALIST_1)
 
 	} else {
 	    erts_printf("Dumping pid links-----------------------\n");
-	    erts_dump_links(rp->nlinks,0);
+	    erts_dump_links(ERTS_P_LINKS(rp), 0);
 	    erts_printf("Links dumped----------------------------\n");
 	    erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
 	    BIF_RET(am_true);

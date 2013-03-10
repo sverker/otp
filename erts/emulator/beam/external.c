@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2012. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -142,6 +142,7 @@ erts_init_atom_cache_map(ErtsAtomCacheMap *acmp)
 {
     if (acmp) {
 	int ix;
+	acmp->long_atoms = 0;
 	for (ix = 0; ix < ERTS_ATOM_CACHE_SIZE; ix++)
 	    acmp->cache[ix].iix = -1;
 	acmp->sz = 0;
@@ -154,6 +155,7 @@ erts_reset_atom_cache_map(ErtsAtomCacheMap *acmp)
 {
     if (acmp) {
 	int i;
+	acmp->long_atoms = 0;
 	for (i = 0; i < acmp->sz; i++) {
 	    ASSERT(0 <= acmp->cix[i] && acmp->cix[i] < ERTS_ATOM_CACHE_SIZE);
 	    acmp->cache[acmp->cix[i]].iix = -1;
@@ -175,9 +177,23 @@ erts_destroy_atom_cache_map(ErtsAtomCacheMap *acmp)
 }
 
 static ERTS_INLINE void
-insert_acache_map(ErtsAtomCacheMap *acmp, Eterm atom)
+insert_acache_map(ErtsAtomCacheMap *acmp, Eterm atom, Uint32 dflags)
 {
-    if (acmp && acmp->sz < ERTS_MAX_INTERNAL_ATOM_CACHE_ENTRIES) {
+    /*
+     * If the receiver do not understand utf8 atoms
+     * and this atom cannot be represented in latin1,
+     * we are not allowed to cache it.
+     *
+     * In this case all atoms are assumed to have
+     * latin1 encoding in the cache. By refusing it
+     * in the cache we will instead encode it using
+     * ATOM_UTF8_EXT/SMALL_ATOM_UTF8_EXT which the
+     * receiver do not recognize and tear down the
+     * connection.
+     */
+    if (acmp && acmp->sz < ERTS_MAX_INTERNAL_ATOM_CACHE_ENTRIES
+	&& ((dflags & DFLAG_UTF8_ATOMS)
+	    || atom_tab(atom_val(atom))->latin1_chars >= 0)) {
 	int ix;
 	ASSERT(acmp->hdr_sz < 0);
 	ix = atom2cix(atom);
@@ -190,7 +206,7 @@ insert_acache_map(ErtsAtomCacheMap *acmp, Eterm atom)
 }
 
 static ERTS_INLINE int
-get_iix_acache_map(ErtsAtomCacheMap *acmp, Eterm atom)
+get_iix_acache_map(ErtsAtomCacheMap *acmp, Eterm atom, Uint32 dflags)
 {
     if (!acmp)
 	return -1;
@@ -199,7 +215,9 @@ get_iix_acache_map(ErtsAtomCacheMap *acmp, Eterm atom)
 	ASSERT(is_atom(atom));
 	ix = atom2cix(atom);
 	if (acmp->cache[ix].iix < 0) {
-	    ASSERT(acmp->sz == ERTS_MAX_INTERNAL_ATOM_CACHE_ENTRIES);
+	    ASSERT(acmp->sz == ERTS_MAX_INTERNAL_ATOM_CACHE_ENTRIES
+		   || (!(dflags & DFLAG_UTF8_ATOMS)
+		       && atom_tab(atom_val(atom))->latin1_chars < 0));
 	    return -1;
 	}
 	else {
@@ -210,18 +228,17 @@ get_iix_acache_map(ErtsAtomCacheMap *acmp, Eterm atom)
 }
 
 void
-erts_finalize_atom_cache_map(ErtsAtomCacheMap *acmp)
+erts_finalize_atom_cache_map(ErtsAtomCacheMap *acmp, Uint32 dflags)
 {
     if (acmp) {
-#if MAX_ATOM_LENGTH > 255
-#error "This code is not complete; long_atoms info need to be passed to the following stages."
-	int long_atoms = 0; /* !0 if one or more atoms are long than 255. */
-#endif
+	int utf8_atoms = (int) (dflags & DFLAG_UTF8_ATOMS);
+	int long_atoms = 0; /* !0 if one or more atoms are longer than 255. */
 	int i;
 	int sz;
 	int fix_sz
 	    = 1 /* VERSION_MAGIC */
 	    + 1 /* DIST_HEADER */
+	    + 1 /* dist header flags */
 	    + 1 /* number of internal cache entries */
 	    ;
 	int min_sz;
@@ -230,22 +247,23 @@ erts_finalize_atom_cache_map(ErtsAtomCacheMap *acmp)
 	min_sz = fix_sz+(2+4)*acmp->sz;
 	sz = fix_sz;
 	for (i = 0; i < acmp->sz; i++) {
+	    Atom *a;
 	    Eterm atom;
 	    int len;
 	    atom = acmp->cache[acmp->cix[i]].atom;
 	    ASSERT(is_atom(atom));
-	    len = atom_tab(atom_val(atom))->len;
-#if MAX_ATOM_LENGTH > 255
+	    a = atom_tab(atom_val(atom));
+	    len = (int) (utf8_atoms ? a->len : a->latin1_chars);
+	    ASSERT(len >= 0);
 	    if (!long_atoms && len > 255)
 		long_atoms = 1;
-#endif
 	    /* Enough for a new atom cache value */
 	    sz += 1 /* cix */ + 1 /* length */ + len /* text */;
 	}
-#if MAX_ATOM_LENGTH > 255
-	if (long_atoms)
+	if (long_atoms) {
+	    acmp->long_atoms = 1;
 	    sz += acmp->sz; /* we need 2 bytes per atom for length */
-#endif
+	}
 	/* Dynamically sized flag field */
 	sz += ERTS_DIST_HDR_ATOM_CACHE_FLAG_BYTES(acmp->sz);
 	if (sz < min_sz)
@@ -274,6 +292,7 @@ byte *erts_encode_ext_dist_header_setup(byte *ctl_ext, ErtsAtomCacheMap *acmp)
     else {
 	int i;
 	byte *ep = ctl_ext;
+	byte dist_hdr_flags = acmp->long_atoms ? ERTS_DIST_HDR_LONG_ATOMS_FLG : 0;
 	ASSERT(acmp->hdr_sz >= 0);
 	/*
 	 * Write cache update instructions. Note that this is a purely
@@ -296,28 +315,36 @@ byte *erts_encode_ext_dist_header_setup(byte *ctl_ext, ErtsAtomCacheMap *acmp)
 	}
 	--ep;
 	put_int8(acmp->sz, ep);
+	--ep;
+	put_int8(dist_hdr_flags, ep);
 	*--ep = DIST_HEADER;
 	*--ep = VERSION_MAGIC;
 	return ep;
     }
 }
 
-byte *erts_encode_ext_dist_header_finalize(byte *ext, ErtsAtomCache *cache)
+byte *erts_encode_ext_dist_header_finalize(byte *ext, ErtsAtomCache *cache, Uint32 dflags)
 {
     byte *ip;
     byte instr_buf[(2+4)*ERTS_ATOM_CACHE_SIZE];
     int ci, sz;
+    byte dist_hdr_flags;
+    int long_atoms;
+    int utf8_atoms = (int) (dflags & DFLAG_UTF8_ATOMS);
     register byte *ep = ext;
     ASSERT(ep[0] == VERSION_MAGIC);
     if (ep[1] != DIST_HEADER)
 	return ext;
+
+    dist_hdr_flags = ep[2];
+    long_atoms = ERTS_DIST_HDR_LONG_ATOMS_FLG & ((int) dist_hdr_flags);
 
     /*
      * Update output atom cache and write the external version of
      * the dist header. We write the header backwards just
      * before the actual term(s).
      */
-    ep += 2;
+    ep += 3;
     ci = (int) get_int8(ep);
     ASSERT(0 <= ci && ci < ERTS_ATOM_CACHE_SIZE);
     ep += 1;
@@ -342,12 +369,7 @@ byte *erts_encode_ext_dist_header_finalize(byte *ext, ErtsAtomCache *cache)
 	flgs_bytes = ERTS_DIST_HDR_ATOM_CACHE_FLAG_BYTES(ci);
 
 	ASSERT(flgs_bytes <= sizeof(flgs_buf));
-#if MAX_ATOM_LENGTH > 255
-	/* long_atoms info needs to be passed from previous stages */
-	if (long_atoms)
-	    flgs |= ERTS_DIST_HDR_LONG_ATOMS_FLG;
-#endif
-	flgs = 0;
+	flgs = (Uint32) dist_hdr_flags;
 	flgs_buf_ix = 0;
 	if ((ci & 1) == 0)
 	    used_half_bytes = 2;
@@ -382,17 +404,22 @@ byte *erts_encode_ext_dist_header_finalize(byte *ext, ErtsAtomCache *cache)
 		Atom *a;
 		cache->out_arr[cix] = atom;
 		a = atom_tab(atom_val(atom));
-		sz = a->len;
-		ep -= sz;
-		sys_memcpy((void *) ep, (void *) a->name, sz);
-#if MAX_ATOM_LENGTH > 255
+		if (utf8_atoms) {
+		    sz = a->len;
+		    ep -= sz;
+		    sys_memcpy((void *) ep, (void *) a->name, sz);
+		}
+		else {
+		    ASSERT(0 <= a->latin1_chars && a->latin1_chars <= MAX_ATOM_CHARACTERS);
+		    ep -= a->latin1_chars;
+		    sz = erts_utf8_to_latin1(ep, a->name, a->len);
+		    ASSERT(a->latin1_chars == sz);
+		}
 		if (long_atoms) {
 		    ep -= 2;
 		    put_int16(sz, ep);
 		}
-		else
-#endif
-		{
+		else {
 		    ASSERT(0 <= sz && sz <= 255);
 		    --ep;
 		    put_int8(sz, ep);
@@ -467,7 +494,7 @@ Uint erts_encode_ext_size_2(Eterm term, unsigned dflags)
 
 Uint erts_encode_ext_size_ets(Eterm term)
 {
-    return encode_size_struct2(NULL, term, TERM_TO_BINARY_DFLAGS|DFLAGS_INTERNAL_TAGS);
+    return encode_size_struct2(NULL, term, TERM_TO_BINARY_DFLAGS|DFLAG_INTERNAL_TAGS);
 }
 
 
@@ -500,7 +527,7 @@ void erts_encode_ext(Eterm term, byte **ext)
 
 byte* erts_encode_ext_ets(Eterm term, byte *ep, struct erl_off_heap_header** off_heap)
 {
-    return enc_term(NULL, term, ep, TERM_TO_BINARY_DFLAGS|DFLAGS_INTERNAL_TAGS,
+    return enc_term(NULL, term, ep, TERM_TO_BINARY_DFLAGS|DFLAG_INTERNAL_TAGS,
 		    off_heap);
 }
 
@@ -553,6 +580,7 @@ erts_prepare_dist_ext(ErtsDistExternal *edep,
 #endif
 
     register byte *ep = ext;
+    int utf8_atoms = (int) (dep->flags & DFLAG_UTF8_ATOMS);
 
     edep->heap_size = -1;
     edep->ext_endp = ext+size;
@@ -611,9 +639,7 @@ erts_prepare_dist_ext(ErtsDistExternal *edep,
 	    ERTS_EXT_HDR_FAIL;
 	ep++;
 	if (no_atoms) {
-#if MAX_ATOM_LENGTH > 255
 	    int long_atoms = 0;
-#endif
 #ifdef DEBUG
 	    byte *flgs_buf = ep;
 #endif
@@ -632,14 +658,8 @@ erts_prepare_dist_ext(ErtsDistExternal *edep,
 	     */
 	    byte_ix = ERTS_DIST_HDR_ATOM_CACHE_FLAG_BYTE_IX(no_atoms);
 	    bit_ix = ERTS_DIST_HDR_ATOM_CACHE_FLAG_BIT_IX(no_atoms);
-	    if (flgsp[byte_ix] & (((byte) ERTS_DIST_HDR_LONG_ATOMS_FLG)
-				  << bit_ix)) {
-#if MAX_ATOM_LENGTH > 255
+	    if (flgsp[byte_ix] & (((byte) ERTS_DIST_HDR_LONG_ATOMS_FLG) << bit_ix))
 		long_atoms = 1;
-#else
-		ERTS_EXT_HDR_FAIL; /* Long atoms not supported yet */
-#endif
-	    }
 
 #ifdef DEBUG
 	    byte_ix = 0;
@@ -707,23 +727,25 @@ erts_prepare_dist_ext(ErtsDistExternal *edep,
 		    if (cix >= ERTS_ATOM_CACHE_SIZE)
 			ERTS_EXT_HDR_FAIL;
 		    ep++;
-#if MAX_ATOM_LENGTH > 255
 		    if (long_atoms) {
 			CHKSIZE(2);
 			len = get_int16(ep);
 			ep += 2;
 		    }
-		    else
-#endif
-		    {
+		    else {
 			CHKSIZE(1);
 			len = get_int8(ep);
 			ep++;
 		    }
-		    if (len > MAX_ATOM_LENGTH)
-			ERTS_EXT_HDR_FAIL; /* Too long atom */
 		    CHKSIZE(len);
-		    atom = am_atom_put((char *) ep, len);
+		    atom = erts_atom_put((byte *) ep,
+					 len,
+					 (utf8_atoms
+					  ? ERTS_ATOM_ENC_UTF8
+					  : ERTS_ATOM_ENC_LATIN1),
+					 0);
+		    if (is_non_value(atom))
+			ERTS_EXT_HDR_FAIL;
 		    ep += len;
 		    cache->in_arr[cix] = atom;
 		    edep->attab.atom[tix] = atom;
@@ -926,7 +948,7 @@ BIF_RETTYPE erts_debug_dist_ext_to_term_2(BIF_ALIST_2)
     Eterm res;
     Eterm *hp;
     Eterm *hendp;
-    Uint hsz;
+    Sint hsz;
     ErtsDistExternal ede;
     Eterm *tp;
     Eterm real_bin;
@@ -972,7 +994,7 @@ BIF_RETTYPE erts_debug_dist_ext_to_term_2(BIF_ALIST_2)
     if (hsz < 0)
 	goto badarg;
 
-    hp = HAlloc(BIF_P, hsz);
+    hp = HAlloc(BIF_P, (Uint) hsz);
     hendp = hp + hsz;
 
     res = erts_decode_dist_ext(&hp, &MSO(BIF_P), &ede);
@@ -1404,11 +1426,12 @@ static byte*
 enc_atom(ErtsAtomCacheMap *acmp, Eterm atom, byte *ep, Uint32 dflags)
 {
     int iix;
-    int i, j;
+    int len;
+    int utf8_atoms = (int) (dflags & DFLAG_UTF8_ATOMS);
 
     ASSERT(is_atom(atom));
 
-    if (dflags & DFLAGS_INTERNAL_TAGS) {
+    if (dflags & DFLAG_INTERNAL_TAGS) {
 	Uint aval = atom_val(atom);
 	ASSERT(aval < (1<<24));
 	if (aval >= (1 << 16)) {
@@ -1423,27 +1446,56 @@ enc_atom(ErtsAtomCacheMap *acmp, Eterm atom, byte *ep, Uint32 dflags)
 	}
 	return ep;
     }
+
     /*
      * term_to_binary/1,2 and the initial distribution message
      * don't use the cache.
      */
-    iix = get_iix_acache_map(acmp, atom);
-    if (iix < 0) { 
-	i = atom_val(atom);
-	j = atom_tab(i)->len;
-	if ((MAX_ATOM_LENGTH <= 255 || j <= 255)
-	    && (dflags & DFLAG_SMALL_ATOM_TAGS)) {
-	    *ep++ = SMALL_ATOM_EXT;
-	    put_int8(j, ep);
-	    ep++;
+
+    iix = get_iix_acache_map(acmp, atom, dflags);
+    if (iix < 0) {
+	Atom *a = atom_tab(atom_val(atom));
+	len = a->len;
+	if (utf8_atoms || a->latin1_chars < 0) {
+	    if (len > 255) {
+		*ep++ = ATOM_UTF8_EXT;
+		put_int16(len, ep);
+		ep += 2;
+	    }
+	    else {
+		*ep++ = SMALL_ATOM_UTF8_EXT;
+		put_int8(len, ep);
+		ep += 1;
+	    }
+	    sys_memcpy((char *) ep, (char *) a->name, len);
 	}
 	else {
-	    *ep++ = ATOM_EXT;
-	    put_int16(j, ep);
-	    ep += 2;
+	    if (a->latin1_chars <= 255 && (dflags & DFLAG_SMALL_ATOM_TAGS)) {
+		*ep++ = SMALL_ATOM_EXT;
+		if (len == a->latin1_chars) {
+		    sys_memcpy(ep+1, a->name, len);
+		}
+		else {
+		    len = erts_utf8_to_latin1(ep+1, a->name, len);
+		    ASSERT(len == a->latin1_chars);
+		}
+		put_int8(len, ep);
+		ep++;
+	    }
+	    else {
+		*ep++ = ATOM_EXT;
+		if (len == a->latin1_chars) {
+		    sys_memcpy(ep+2, a->name, len);
+		}
+		else {
+		    len = erts_utf8_to_latin1(ep+2, a->name, len);
+		    ASSERT(len == a->latin1_chars);
+		}
+		put_int16(len, ep);
+		ep += 2;
+	    }	    
 	}
-	sys_memcpy((char *) ep, (char*)atom_tab(i)->name, (int) j);
-	ep += j;
+	ep += len;
 	return ep;
     }
 
@@ -1472,7 +1524,7 @@ enc_pid(ErtsAtomCacheMap *acmp, Eterm pid, byte* ep, Uint32 dflags)
     ep += 4;
     put_int32(os, ep);
     ep += 4;
-    *ep++ = (is_internal_pid(pid) && (dflags & DFLAGS_INTERNAL_TAGS)) ?
+    *ep++ = (is_internal_pid(pid) && (dflags & DFLAG_INTERNAL_TAGS)) ?
 	INTERNAL_CREATION : pid_creation(pid);
     return ep;
 }
@@ -1483,6 +1535,7 @@ dec_atom(ErtsDistExternal *edep, byte* ep, Eterm* objp)
 {
     Uint len;
     int n;
+    ErtsAtomEncoding char_enc;
 
     switch (*ep++) {
     case ATOM_CACHE_REF:
@@ -1498,17 +1551,32 @@ dec_atom(ErtsDistExternal *edep, byte* ep, Eterm* objp)
     case ATOM_EXT:
 	len = get_int16(ep),
 	ep += 2;
+	char_enc = ERTS_ATOM_ENC_LATIN1;
         goto dec_atom_common;
     case SMALL_ATOM_EXT:
 	len = get_int8(ep);
 	ep++;
+	char_enc = ERTS_ATOM_ENC_LATIN1;
+	goto dec_atom_common;
+    case ATOM_UTF8_EXT:
+	len = get_int16(ep),
+	ep += 2;
+	char_enc = ERTS_ATOM_ENC_UTF8;
+	goto dec_atom_common;
+    case SMALL_ATOM_UTF8_EXT:
+	len = get_int8(ep),
+	ep++;
+	char_enc = ERTS_ATOM_ENC_UTF8;
     dec_atom_common:
         if (edep && (edep->flags & ERTS_DIST_EXT_BTT_SAFE)) {
-	    if (!erts_atom_get((char*)ep, len, objp)) {
+	    if (!erts_atom_get((char*)ep, len, objp, char_enc)) {
                 goto error;
 	    }
         } else {
-            *objp = am_atom_put((char*)ep, len);
+	    Eterm atom = erts_atom_put(ep, len, char_enc, 0);
+	    if (is_non_value(atom))
+		goto error;
+            *objp = atom;
         }
 	ep += len;
 	break;
@@ -1770,7 +1838,7 @@ enc_term(ErtsAtomCacheMap *acmp, Eterm obj, byte* ep, Uint32 dflags,
 	    put_int16(i, ep);
 	    ep += 2;
 	    ep = enc_atom(acmp,ref_node_name(obj),ep,dflags);
-	    *ep++ = ((dflags & DFLAGS_INTERNAL_TAGS) && is_internal_ref(obj)) ?
+	    *ep++ = ((dflags & DFLAG_INTERNAL_TAGS) && is_internal_ref(obj)) ?
 		INTERNAL_CREATION : ref_creation(obj);
 	    ref_num = ref_numbers(obj);
 	    for (j = 0; j < i; j++) {
@@ -1787,7 +1855,7 @@ enc_term(ErtsAtomCacheMap *acmp, Eterm obj, byte* ep, Uint32 dflags,
 	    j = port_number(obj);
 	    put_int32(j, ep);
 	    ep += 4;
-	    *ep++ = ((dflags & DFLAGS_INTERNAL_TAGS) && is_internal_port(obj)) ?
+	    *ep++ = ((dflags & DFLAG_INTERNAL_TAGS) && is_internal_port(obj)) ?
 		INTERNAL_CREATION : port_creation(obj);
 	    break;
 
@@ -1850,8 +1918,8 @@ enc_term(ErtsAtomCacheMap *acmp, Eterm obj, byte* ep, Uint32 dflags,
 	    } else {
 		*ep++ = FLOAT_EXT;
 
-		/* now the sprintf which does the work */
-		i = sys_double_to_chars(f.fd, (char*) ep);
+		/* now the erts_snprintf which does the work */
+		i = sys_double_to_chars(f.fd, (char*) ep, (size_t)31);
 
 		/* Don't leave garbage after the float!  (Bad practice in general,
 		 * and Purify complains.)
@@ -1868,7 +1936,7 @@ enc_term(ErtsAtomCacheMap *acmp, Eterm obj, byte* ep, Uint32 dflags,
 		byte* bytes;
 
 		ERTS_GET_BINARY_BYTES(obj, bytes, bitoffs, bitsize);
-		if (dflags & DFLAGS_INTERNAL_TAGS) {
+		if (dflags & DFLAG_INTERNAL_TAGS) {
 		    ProcBin* pb = (ProcBin*) binary_val(obj);
 		    Uint bytesize = pb->size;
 		    if (pb->thing_word == HEADER_SUB_BIN) {
@@ -1889,7 +1957,9 @@ enc_term(ErtsAtomCacheMap *acmp, Eterm obj, byte* ep, Uint32 dflags,
 			    *ep++ = BINARY_INTERNAL_REF;
 			}
 			if (pb->flags) {
+			    char* before_realloc = pb->val->orig_bytes; 
 			    erts_emasculate_writable_binary(pb);
+			    bytes += (pb->val->orig_bytes - before_realloc);
 			}
 			erts_refc_inc(&pb->val->refc, 2);
 
@@ -2112,6 +2182,7 @@ dec_term(ErtsDistExternal *edep, Eterm** hpp, byte* ep, ErlOffHeap* off_heap, Et
 {
     Eterm* hp_saved = *hpp;
     int n;
+    ErtsAtomEncoding char_enc;
     register Eterm* hp = *hpp;	/* Please don't take the address of hp */
     Eterm* next = objp;
 
@@ -2197,17 +2268,32 @@ dec_term(ErtsDistExternal *edep, Eterm** hpp, byte* ep, ErlOffHeap* off_heap, Et
 	case ATOM_EXT:
 	    n = get_int16(ep);
 	    ep += 2;
-            goto dec_term_atom_common;
+	    char_enc = ERTS_ATOM_ENC_LATIN1;
+	    goto dec_term_atom_common;
 	case SMALL_ATOM_EXT:
 	    n = get_int8(ep);
 	    ep++;
+	    char_enc = ERTS_ATOM_ENC_LATIN1;
+	    goto dec_term_atom_common;
+	case ATOM_UTF8_EXT:
+	    n = get_int16(ep);
+	    ep += 2;
+	    char_enc = ERTS_ATOM_ENC_UTF8;
+	    goto dec_term_atom_common;
+	case SMALL_ATOM_UTF8_EXT:
+	    n = get_int8(ep);
+	    ep++;
+	    char_enc = ERTS_ATOM_ENC_UTF8;
 dec_term_atom_common:
 	    if (edep && (edep->flags & ERTS_DIST_EXT_BTT_SAFE)) {
-		if (!erts_atom_get((char*)ep, n, objp)) {
+		if (!erts_atom_get((char*)ep, n, objp, char_enc)) {
 		    goto error;
 		}
 	    } else {
-	        *objp = am_atom_put((char*)ep, n);
+		Eterm atom = erts_atom_put(ep, n, char_enc, 0);
+		if (is_non_value(atom))
+		    goto error;
+	        *objp = atom;
 	    }
 	    ep += n;
 	    break;
@@ -2626,14 +2712,12 @@ dec_term_atom_common:
 		}
 		old_uniq = unsigned_val(temp);
 
-#ifndef HYBRID /* FIND ME! */
 		/*
 		 * It is safe to link the fun into the fun list only when
 		 * no more validity tests can fail.
 		 */
 		funp->next = off_heap->first;
 		off_heap->first = (struct erl_off_heap_header*)funp;
-#endif
 
 		funp->fe = erts_put_fun_entry2(module, old_uniq, old_index,
 					       uniq, index, arity);
@@ -2704,14 +2788,12 @@ dec_term_atom_common:
 		    goto error;
 		}
 		
-#ifndef HYBRID /* FIND ME! */
 		/*
 		 * It is safe to link the fun into the fun list only when
 		 * no more validity tests can fail.
 		 */
 		funp->next = off_heap->first;
 		off_heap->first = (struct erl_off_heap_header*)funp;
-#endif
 		old_uniq = unsigned_val(temp);
 
 		funp->fe = erts_put_fun_entry(module, old_uniq, old_index);
@@ -2871,7 +2953,7 @@ encode_size_struct2(ErtsAtomCacheMap *acmp, Eterm obj, unsigned dflags)
 	    result++;
 	    break;
 	case ATOM_DEF:
-	    if (dflags & DFLAGS_INTERNAL_TAGS) {
+	    if (dflags & DFLAG_INTERNAL_TAGS) {
 		if (atom_val(obj) >= (1<<16)) {
 		    result += 1 + 3;
 		}
@@ -2880,17 +2962,22 @@ encode_size_struct2(ErtsAtomCacheMap *acmp, Eterm obj, unsigned dflags)
 		}
 	    }
 	    else {
-		int alen = atom_tab(atom_val(obj))->len;
-		if ((MAX_ATOM_LENGTH <= 255 || alen <= 255)
-		    && (dflags & DFLAG_SMALL_ATOM_TAGS)) {
-		    /* Make sure a SMALL_ATOM_EXT fits: SMALL_ATOM_EXT l t1 t2... */
-			result += 1 + 1 + alen;
+		Atom *a = atom_tab(atom_val(obj));
+		int alen;
+		if ((dflags & DFLAG_UTF8_ATOMS) || a->latin1_chars < 0) {
+		    alen = a->len;
+		    result += 1 + 1 + alen;
+		    if (alen > 255) {
+			result++; /* ATOM_UTF8_EXT (not small) */
+		    }
 		}
 		else {
-		    /* Make sure an ATOM_EXT fits: ATOM_EXT l1 l0 t1 t2... */
-			result += 1 + 2 + alen;
+		    alen = a->latin1_chars;
+		    result += 1 + 1 + alen;
+		    if (alen > 255 || !(dflags & DFLAG_SMALL_ATOM_TAGS))
+			result++; /* ATOM_EXT (not small) */
 		}
-		insert_acache_map(acmp, obj);
+		insert_acache_map(acmp, obj, dflags);
 	    }
 	    break;
 	case SMALL_DEF:
@@ -2971,7 +3058,7 @@ encode_size_struct2(ErtsAtomCacheMap *acmp, Eterm obj, unsigned dflags)
 	    }
 	    break;
 	case BINARY_DEF:
-	    if (dflags & DFLAGS_INTERNAL_TAGS) {
+	    if (dflags & DFLAG_INTERNAL_TAGS) {
 		ProcBin* pb = (ProcBin*) binary_val(obj);
 		Uint sub_extra = 0;
 		Uint tot_bytes = pb->size;
@@ -3060,6 +3147,17 @@ encode_size_struct2(ErtsAtomCacheMap *acmp, Eterm obj, unsigned dflags)
     return result;
 }
 
+static int is_valid_utf8_atom(byte* bytes, Uint nbytes)
+{
+    byte* err_pos;
+    Uint num_chars;
+
+    /*SVERK Do we really need to validate correct utf8? */
+    return nbytes <= MAX_ATOM_SZ_LIMIT
+	&& erts_analyze_utf8(bytes, nbytes, &err_pos, &num_chars, NULL) == ERTS_UTF8_OK
+	&& num_chars <= MAX_ATOM_CHARACTERS; 
+}
+
 static Sint
 decoded_size(byte *ep, byte* endp, int internal_tags)
 {
@@ -3127,19 +3225,39 @@ decoded_size(byte *ep, byte* endp, int internal_tags)
 	case ATOM_EXT:
 	    CHKSIZE(2);
 	    n = get_int16(ep);
-	    if (n > MAX_ATOM_LENGTH) {
+	    if (n > MAX_ATOM_CHARACTERS) {
 		return -1;
 	    }
 	    SKIP(n+2+atom_extra_skip);
 	    atom_extra_skip = 0;
 	    break;
+	case ATOM_UTF8_EXT:
+	    CHKSIZE(2);
+	    n = get_int16(ep);
+	    ep += 2;
+	    if (!is_valid_utf8_atom(ep, n)) {
+		return -1;
+	    }
+	    SKIP(n+atom_extra_skip);
+	    atom_extra_skip = 0;
+	    break;
 	case SMALL_ATOM_EXT:
 	    CHKSIZE(1);
 	    n = get_int8(ep);
-	    if (n > MAX_ATOM_LENGTH) {
+	    if (n > MAX_ATOM_CHARACTERS) {
 		return -1;
 	    }
 	    SKIP(n+1+atom_extra_skip);
+	    atom_extra_skip = 0;
+	    break;
+	case SMALL_ATOM_UTF8_EXT:
+	    CHKSIZE(1);
+	    n = get_int8(ep);
+	    ep++;
+	    if (!is_valid_utf8_atom(ep, n)) {
+		return -1;
+	    }
+	    SKIP(n+atom_extra_skip);
 	    atom_extra_skip = 0;
 	    break;
 	case ATOM_CACHE_REF:

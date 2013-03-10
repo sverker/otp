@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2000-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -84,13 +84,14 @@ undefined_functions(Config) when is_list(Config) ->
 		      "ExcludedFrom = ~p:_/_,"
 		      "Undef - Undef | ExcludedFrom", 
 		      [UndefS,ExcludeFrom]),
-    ?line {ok,Undef0} = xref:q(Server, lists:flatten(Q)),
-    ?line Undef1 = hipe_filter(Undef0),
-    ?line Undef2 = ssl_crypto_filter(Undef1),
-    ?line Undef3 = edoc_filter(Undef2),
+    {ok,Undef0} = xref:q(Server, lists:flatten(Q)),
+    Undef1 = hipe_filter(Undef0),
+    Undef2 = ssl_crypto_filter(Undef1),
+    Undef3 = edoc_filter(Undef2),
     Undef4 = eunit_filter(Undef3),
     Undef5 = dialyzer_filter(Undef4),
-    Undef = wx_filter(Undef5),
+    Undef6 = wx_filter(Undef5),
+    Undef  = gs_filter(Undef6),
 
     case Undef of
 	[] -> ok;
@@ -150,8 +151,8 @@ is_hipe_module(Mod) ->
     end.
 
 ssl_crypto_filter(Undef) ->
-    case {code:lib_dir(crypto),code:lib_dir(ssl)} of
-	{{error,bad_name},{error,bad_name}} ->
+    case {app_exists(crypto),app_exists(ssl)} of
+	{false,false} ->
 	    filter(fun({_,{ssl,_,_}}) -> false;
 		      ({_,{crypto,_,_}}) -> false;
 		      ({_,{ssh,_,_}}) -> false;
@@ -175,12 +176,13 @@ eunit_filter(Undef) ->
 	   end, Undef).
 
 dialyzer_filter(Undef) ->
-    case code:lib_dir(dialyzer) of
-	{error,bad_name} ->
+    case app_exists(dialyzer) of
+	false ->
 	    filter(fun({_,{dialyzer_callgraph,_,_}}) -> false;
 		      ({_,{dialyzer_codeserver,_,_}}) -> false;
 		      ({_,{dialyzer_contracts,_,_}}) -> false;
 		      ({_,{dialyzer_cl_parse,_,_}}) -> false;
+		      ({_,{dialyzer_timing,_,_}}) -> false;
 		      ({_,{dialyzer_plt,_,_}}) -> false;
 		      ({_,{dialyzer_succ_typings,_,_}}) -> false;
 		      ({_,{dialyzer_utils,_,_}}) -> false;
@@ -190,8 +192,8 @@ dialyzer_filter(Undef) ->
     end.
 
 wx_filter(Undef) ->
-    case code:lib_dir(wx) of
-	{error,bad_name} ->
+    case app_exists(wx) of
+	false ->
 	    filter(fun({_,{MaybeWxModule,_,_}}) ->
 			   case atom_to_list(MaybeWxModule) of
 			       "wx"++_ -> false;
@@ -201,6 +203,16 @@ wx_filter(Undef) ->
 	_ -> Undef
     end.
 				   
+gs_filter(Undef) ->
+    case code:lib_dir(gs) of
+	{error,bad_name} ->
+	    filter(fun({_,{gs,_,_}}) -> false;
+		      ({_,{gse,_,_}}) -> false;
+                      ({_,{tool_utils,_,_}}) -> false;
+		      (_) -> true
+		   end, Undef);
+	_ -> Undef
+    end.
 
 deprecated_not_in_obsolete(Config) when is_list(Config) ->
     ?line Server = ?config(xref_server, Config),
@@ -261,7 +273,7 @@ call_to_size_1(Config) when is_list(Config) ->
     Server = ?config(xref_server, Config),
 
     %% Applications that do not call erlang:size/1:
-    Apps = [compiler,debugger,kernel,observer,parsetools,
+    Apps = [asn1,compiler,debugger,kernel,observer,parsetools,
 	    runtime_tools,stdlib,tools,webtool],
 
     Fs = [{erlang,size,1}],
@@ -337,3 +349,16 @@ open_log(Config, Name) ->
 
 close_log(Fd) ->
     ok = file:close(Fd).
+
+app_exists(AppAtom) ->
+    case code:lib_dir(AppAtom) of
+	{error,bad_name} ->
+	    false;
+	Path ->
+	    case file:read_file_info(filename:join(Path,"ebin")) of
+		{ok,_} ->
+		    true;
+		_ ->
+		    false
+	    end
+    end.

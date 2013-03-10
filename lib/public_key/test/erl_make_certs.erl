@@ -137,10 +137,10 @@ decode_key(PemBin, Pw) ->
 
 encode_key(Key = #'RSAPrivateKey'{}) ->
     {ok, Der} = 'OTP-PUB-KEY':encode('RSAPrivateKey', Key),
-    {'RSAPrivateKey', list_to_binary(Der), not_encrypted};   
+    {'RSAPrivateKey', Der, not_encrypted};
 encode_key(Key = #'DSAPrivateKey'{}) ->
     {ok, Der} = 'OTP-PUB-KEY':encode('DSAPrivateKey', Key),
-    {'DSAPrivateKey', list_to_binary(Der), not_encrypted}.
+    {'DSAPrivateKey', Der, not_encrypted}.
 
 make_tbs(SubjectKey, Opts) ->    
     Version = list_to_atom("v"++integer_to_list(proplists:get_value(version, Opts, 3))),
@@ -234,7 +234,7 @@ extensions(Opts) ->
     end.
 
 default_extensions(Exts) ->
-    Def = [{key_usage,undefined}, 
+    Def = [{key_usage, default},
 	   {subject_altname, undefined},
 	   {issuer_altname, undefined},
 	   {basic_constraints, default},
@@ -265,6 +265,11 @@ extension({basic_constraints, Data}) ->
 	    #'Extension'{extnID = ?'id-ce-basicConstraints',
 			 extnValue = Data}
     end;
+
+extension({key_usage, default}) ->
+    #'Extension'{extnID = ?'id-ce-keyUsage',
+		 extnValue = [keyCertSign], critical = true};
+
 extension({Id, Data, Critical}) ->
     #'Extension'{extnID = Id, extnValue = Data, critical = Critical}.
 

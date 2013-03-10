@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -93,7 +93,7 @@ code_change(_OldVsn, State, _Extra) ->
 sync_nodes() ->
     case catch get_sync_data() of
 	{error, Reason} = Error ->
-	    error_logger:format("~p", [Reason]),
+	    error_logger:format("~tp", [Reason]),
 	    Error;
 	{infinity, MandatoryNodes, OptionalNodes} ->
 	    case wait_nodes(MandatoryNodes, OptionalNodes) of

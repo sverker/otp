@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2003-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2003-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -62,9 +62,14 @@ init_per_suite(Config) when is_list(Config) ->
     case case code:priv_dir(jinterface) of
 	     {error,bad_name} -> 
 		 false;
-	     P -> 
-		 filelib:is_dir(P) 
-	 end 
+	     P ->
+		 case filelib:wildcard(filename:join(P, "*.jar")) of
+		     [_|_] ->
+			 true;
+		     [] ->
+			 false
+		 end
+	 end
 	of
 	true -> 
 	    case find_executable(["java"]) of
@@ -249,7 +254,7 @@ marshal_any_2(Config) when is_list(Config) ->
 
 
 java(Java, Dir, ClassAndArgs) ->
-    cmd(Java++" -classpath "++classpath(Dir)++" "++ClassAndArgs).
+    cmd(Java++" -classpath \""++classpath(Dir)++"\" "++ClassAndArgs).
 
 java(Java, Dir, Class, Args) ->
     java(Java, Dir, Class++" "++to_string(Args)).

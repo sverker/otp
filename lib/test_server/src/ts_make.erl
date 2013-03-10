@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2009. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -85,7 +85,7 @@ run_make_script({win32, _}, Make, Dir, Makefile) ->
     {"run_make.bat",
      ".\\run_make",
      ["@echo off\r\n",
-      "cd ", filename:nativename(Dir), "\r\n",
+      "cd \"", filename:nativename(Dir), "\"\r\n",
       Make, " -f ", Makefile, " \r\n",
       "if errorlevel 1 echo *error*\r\n",
       "if not errorlevel 1 echo *ok*\r\n"]};
@@ -93,7 +93,7 @@ run_make_script({unix, _}, Make, Dir, Makefile) ->
     {"run_make", 
      "/bin/sh ./run_make",
      ["#!/bin/sh\n",
-      "cd ", Dir, "\n",
+      "cd \"", Dir, "\"\n",
       Make, " -f ", Makefile, " 2>&1\n",
       "case $? in\n",
       "  0) echo '*ok*';;\n",

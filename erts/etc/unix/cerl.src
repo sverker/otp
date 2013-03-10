@@ -2,7 +2,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2003-2011. All Rights Reserved.
+# Copyright Ericsson AB 2003-2012. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -227,7 +227,7 @@ done
 PATH=$BINDIR:$ROOTDIR/bin:$PATH
 EXEC=$BINDIR/erlexec
 
-PROGNAME="$PROGNAME $cargs"
+PROGNAME="$PROGNAME$cargs"
 EMU="$EMU$TYPE"
 EMU_NAME=`$EXEC -emu_name_exit $eeargs`
 
@@ -267,11 +267,16 @@ if [ "x$GDB" = "x" ]; then
 	    valgrind_misc_flags="$VALGRIND_MISC_FLAGS"
 	fi
 	beam_args=`$EXEC -emu_args_exit ${1+"$@"}`
-	# Ahhhh... Need to quote $PROGNAME...
-	early_beam_args=`echo $beam_args | sed "s|^\(.*-progname\).*$|\1|g"`
-	late_beam_args=`echo $beam_args | sed "s|^$pre_beam_args.*\(-- -home.*\)$|\1|g"`
-	
-	exec valgrind $valgrind_xml $valgrind_log $valgrind_misc_flags $BINDIR/$EMU_NAME $emu_xargs $early_beam_args "$PROGNAME" $late_beam_args -pz $PRELOADED
+
+	# Time for some argument passing voodoo:
+	# $beam_args is a list of command line arguments separated by newlines.
+	# Make "$@" represent those arguments verbatim (including spaces and quotes).
+	SAVE_IFS="$IFS"
+	IFS='
+'
+	set -- $beam_args
+	IFS="$SAVE_IFS"
+	exec valgrind $valgrind_xml $valgrind_log $valgrind_misc_flags $BINDIR/$EMU_NAME $emu_xargs "$@" -pz $PRELOADED
     else
 	exec $EXEC $eeargs $xargs ${1+"$@"}
     fi
@@ -299,10 +304,17 @@ else
 	    ;;
     esac
 
-    # Set annotation level for gdb in emacs 22 and higher.
-    emacs_major=`$EMACS --version | head -1 | sed 's,^[^0-9]*\([0-9]*\).*,\1,g'`
-    if [ '!' -z "$emacs_major" -a $emacs_major -gt 21 ]; then
-	GDBARGS="--annotate=3 "
+    if [ "$EMACS_ANNOTATE_LEVEL" != "" ]; then
+	GDBARGS="--annotate=$EMACS_ANNOTATE_LEVEL"
+    else
+        # Set annotation level for gdb in emacs 22 and higher. Seems to
+        # be working with level 1 for emacs 22 and level 3 for emacs 23...
+	emacs_major=`$EMACS --version | head -1 | sed 's,^[^0-9]*\([0-9]*\).*,\1,g'`
+	if [ '!' -z "$emacs_major" -a $emacs_major -gt 22 ]; then
+	    GDBARGS="--annotate=3 "
+	elif [ '!' -z "$emacs_major" -a $emacs_major -gt 21 ]; then
+	    GDBARGS="--annotate=1 "
+	fi
     fi
     gdbcmd="$gdbcmd $GDBBP \
             (insert-string \"source $ROOTDIR/erts/etc/unix/etp-commands\") \

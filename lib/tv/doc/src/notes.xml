@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2004</year><year>2011</year>
+      <year>2004</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -29,6 +29,21 @@
     <file>notes.xml</file>
   </header>
   <p>This document describes the changes made to the TV application.</p>
+
+<section><title>TV 2.1.4.10</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Misc build updates</p>
+          <p>
+	    Own Id: OTP-10784</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>TV 2.1.4.9</title>
 

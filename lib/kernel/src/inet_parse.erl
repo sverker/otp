@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -23,7 +23,6 @@
 %% Avoid warning for local function error/2 clashing with autoimported BIF.
 -compile({no_auto_import,[error/2]}).
 -export([hosts/1, hosts/2]).
--export([hosts_vxworks/1]).
 -export([protocols/1, protocols/2]).
 -export([netmasks/1, netmasks/2]).
 -export([networks/1, networks/2]).
@@ -37,7 +36,7 @@
 
 -export([ipv4_address/1, ipv6_address/1]).
 -export([ipv4strict_address/1, ipv6strict_address/1]).
--export([address/1]).
+-export([address/1, strict_address/1]).
 -export([visible_string/1, domain/1]).
 -export([ntoa/1, dots/1]).
 -export([split_line/1]).
@@ -105,18 +104,6 @@ hosts(Fname,File) ->
 		 end
 	 end,
     parse_file(Fname, File, Fn).
-
-%% --------------------------------------------------------------------------
-%% Parse hostShow vxworks style
-%% Syntax:
-%%      Name          IP                [Aliases]  \n 
-%% --------------------------------------------------------------------------
-hosts_vxworks(Hosts) ->
-    Fn = fun([Name, Address | Aliases]) ->
-		 {ok,IP} = address(Address),
-		 {IP, Name, Aliases}
-	 end,
-    parse_file(Hosts, Fn).
 
 %% --------------------------------------------------------------------------
 %% Parse resolv file unix style
@@ -290,9 +277,6 @@ networks(Fname, File) ->
 %% Simple Line by Line parser
 %%
 %% --------------------------------------------------------------------------
-
-parse_file(File, Fn) ->
-    parse_file(noname, File, Fn).
 
 parse_file(Fname, {fd,Fd}, Fn) ->
     parse_fd(Fname,Fd, 1, Fn, []);
@@ -470,6 +454,17 @@ address(Cs) when is_list(Cs) ->
 	    ipv6strict_address(Cs)
     end;
 address(_) -> 
+    {error, einval}.
+
+%%Parse ipv4 strict address or ipv6 strict address
+strict_address(Cs) when is_list(Cs) ->
+    case ipv4strict_address(Cs) of
+	{ok,IP} ->
+	    {ok,IP};
+	_ ->
+	    ipv6strict_address(Cs)
+    end;
+strict_address(_) ->
     {error, einval}.
 
 %%

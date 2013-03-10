@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -387,7 +387,7 @@ encode_arg({list, List}, Dict0) ->
     {L, Dict} = encode_list(List, Dict0, []),
     {[encode(?tag_z, 1), encode(?tag_u, length(List))|L], Dict};
 encode_arg({float, Float}, Dict) when is_float(Float) ->
-    {[encode(?tag_z, 0),<<Float:64/float>>], Dict};
+    encode_arg({literal,Float}, Dict);
 encode_arg({fr,Fr}, Dict) ->
     {[encode(?tag_z, 2),encode(?tag_u, Fr)], Dict};
 encode_arg({field_flags,Flags0}, Dict) ->

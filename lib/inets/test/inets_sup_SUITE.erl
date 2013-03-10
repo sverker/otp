@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -226,8 +226,6 @@ ftpc_worker(doc) ->
 ftpc_worker(suite) ->
     [];
 ftpc_worker(Config) when is_list(Config) ->
-    inets:disable_trace(),
-    inets:enable_trace(max, io, ftpc), 
     [] = supervisor:which_children(ftp_sup),
     try
 	begin
@@ -239,20 +237,16 @@ ftpc_worker(Config) when is_list(Config) ->
 			    inets:stop(ftpc, Pid), 
 			    test_server:sleep(5000),
 			    [] = supervisor:which_children(ftp_sup),
-			    inets:disable_trace(),
 			    ok;
 			Children ->
-			    inets:disable_trace(),
 			    exit({unexpected_children, Children})
 		    end;
 		_ ->
-		    inets:disable_trace(),
 		    {skip, "Unable to reach test FTP server"}
 	    end
 	end
     catch
 	throw:{error, not_found} ->
-	    inets:disable_trace(),
 	    {skip, "No available FTP servers"}
     end.
 

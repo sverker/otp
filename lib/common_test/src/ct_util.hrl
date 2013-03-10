@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2003-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2003-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -21,6 +21,7 @@
 -define(conn_table,ct_connections).
 -define(board_table,ct_boards).
 -define(suite_table,ct_suite_data).
+-define(verbosity_table,ct_verbosity_table).
 
 -record(conn, {handle,
 	       targetref,
@@ -34,13 +35,20 @@
 		   profile=[],
 		   logdir=["."],
 		   logopts=[],
+		   basic_html=[],
+		   verbosity=[],
+		   silent_connections=[],
 		   cover=[],
+		   cover_stop=[],
 		   config=[],
 		   userconfig=[],
 		   event_handler=[],
 		   ct_hooks=[],
 		   enable_builtin_hooks=true,
+		   release_shell=false,
 		   include=[],
+		   auto_compile=[],
+		   stylesheet=[],
 		   multiply_timetraps=[],
 		   scale_timetraps=[],
 		   create_priv_dir=[],
@@ -64,3 +72,11 @@
 -define(ct_config_txt, ct_config_plain).
 
 -define(ct_profile_file, ".common_test").
+
+-define(css_default, "ct_default.css").
+-define(sortable_table_name, "SortableTable").
+-define(jquery_script, "jquery-latest.js").
+-define(tablesorter_script, "jquery.tablesorter.min.js").
+
+%% Logging information for error handler
+-record(conn_log, {client, name, address, action, module}).

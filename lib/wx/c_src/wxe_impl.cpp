@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2008-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2008-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -30,6 +30,11 @@
 // Ok ugly but needed for wxBufferedDC crash workaround
 #define private public
 #include <wx/dcbuffer.h>
+
+#if defined(__WXMSW__)
+    #include <wx/msw/private.h> // for wxSetInstance
+#endif
+
 #undef private
 
 #include "wxe_impl.h"
@@ -112,7 +117,7 @@ int start_native_gui(wxe_data *sd)
 
   wxe_batch_locker_m = erl_drv_mutex_create((char *)"wxe_batch_locker_m");
   wxe_batch_locker_c = erl_drv_cond_create((char *)"wxe_batch_locker_c");
-  init_caller = driver_connected(sd->port);
+  init_caller = driver_connected(sd->port_handle);
 
 #ifdef __DARWIN__
   res = erl_drv_steal_main_thread((char *)"wxwidgets",
@@ -164,7 +169,7 @@ void unload_native_gui()
 
 void push_command(int op,char * buf,int len, wxe_data *sd)
 {
-  // fprintf(stderr, "Op %d %d\r\n", op, (int) driver_caller(sd->port)),fflush(stderr);
+  // fprintf(stderr, "Op %d %d\r\n", op, (int) driver_caller(sd->port_handle)),fflush(stderr);
   wxeCommand *Cmd = new wxeCommand(op, buf, len, sd);
   erl_drv_mutex_lock(wxe_batch_locker_m);
   wxe_batch->Append(Cmd);
@@ -222,6 +227,11 @@ void *wxe_main_loop(void *vpdl)
   // This should be done in emulator but it's not in yet.
 #ifndef _WIN32
   erts_thread_disable_fpe();
+#else 
+  // Setup that wxWidgets should look for cursors and icons in 
+  // this dll and not in werl.exe (which is the default)
+  HMODULE WXEHandle = GetModuleHandle(_T("wxe_driver"));
+  wxSetInstance((HINSTANCE) WXEHandle);
 #endif
 
   result = wxEntry(argc, argv);
@@ -248,19 +258,29 @@ wxFrame * dummy_window;
 
 void create_dummy_window() {
   dummy_window = new wxFrame(NULL,-1, wxT("wx driver"),
-			     wxDefaultPosition, wxSize(5,5),
+			     wxPoint(0,0), wxSize(5,5),
 			     wxFRAME_NO_TASKBAR);
+
+  wxMenuBar * menubar = new wxMenuBar();
+  dummy_window->SetMenuBar(menubar);
+  // wx-2.9 Don't delete the app menubar correctly
   dummy_window->Connect(wxID_ANY, wxEVT_CLOSE_WINDOW,
 			(wxObjectEventFunction) (wxEventFunction) &WxeApp::dummy_close);
+  dummy_window->Connect(wxID_ANY, wxEVT_COMMAND_MENU_SELECTED,
+			(wxObjectEventFunction) (wxEventFunction) &WxeApp::dummy_close);
+  dummy_window->Show(true);
+  // dummy_window->Show(false);
 }
 
 // wxMac really wants a top level window which command-q quits if there are no
 // windows open, and this will kill the thread, so restart the dummy_window each
 // time a we receive a close.
 void WxeApp::dummy_close(wxEvent& Ev) {
-  // fprintf(stderr, "Tried to close dummy window\r\n"); fflush(stderr);
-  create_dummy_window();
+  if(Ev.GetEventType() == wxEVT_CLOSE_WINDOW) {
+    create_dummy_window();
+  }
 }
+
 
 // Init wx-widgets thread
 bool WxeApp::OnInit()
@@ -272,7 +292,7 @@ bool WxeApp::OnInit()
   wxe_batch_cb_saved = new wxList;
   cb_buff = NULL;
 
-  wxIdleEvent::SetMode(wxIDLE_PROCESS_SPECIFIED);
+  // wxIdleEvent::SetMode(wxIDLE_PROCESS_SPECIFIED); Hmm printpreview doesn't work in 2.9 with this
 
   this->Connect(wxID_ANY, wxEVT_IDLE,
 		(wxObjectEventFunction) (wxEventFunction) &WxeApp::idle);
@@ -290,7 +310,11 @@ bool WxeApp::OnInit()
 
   /* Create a dummy window so wxWidgets don't automagicly quits the main loop
      after the last window */
+#ifdef __DARWIN__
   create_dummy_window();
+#else
+  SetExitOnFrameDelete(false);
+#endif
 
   init_nonconsts(global_me, init_caller);
   erl_drv_mutex_lock(wxe_status_m);
@@ -301,7 +325,9 @@ bool WxeApp::OnInit()
 }
 
 void WxeApp::shutdown(wxeMetaCommand& Ecmd) {
+#ifdef __DARWIN__
   delete dummy_window;
+#endif
   ExitMainLoop();
 }
 
@@ -510,18 +536,18 @@ void WxeApp::newMemEnv(wxeMetaCommand& Ecmd) {
     memenv->ref2ptr[i] = global_me->ref2ptr[i];
   }
   memenv->next = global_me->next;
-  refmap[(ErlDrvTermData) Ecmd.port] = memenv;
+  refmap[Ecmd.port] = memenv;
   memenv->owner = Ecmd.caller;
 
   ErlDrvTermData rt[] = {ERL_DRV_ATOM, driver_mk_atom((char *)"wx_port_initiated")};
-  driver_send_term(WXE_DRV_PORT,Ecmd.caller,rt,2);
+  erl_drv_send_term(WXE_DRV_PORT,Ecmd.caller,rt,2);
 }
 
 void WxeApp::destroyMemEnv(wxeMetaCommand& Ecmd) {
   // Clear incoming cmd queue first
   // dispatch_cmds();
   wxWindow *parent = NULL;
-  wxeMemEnv * memenv = refmap[(ErlDrvTermData) Ecmd.port];
+  wxeMemEnv * memenv = refmap[Ecmd.port];
 
   if(wxe_debug) {
     wxString msg;
@@ -630,8 +656,8 @@ void WxeApp::destroyMemEnv(wxeMetaCommand& Ecmd) {
   refmap.erase((ErlDrvTermData) Ecmd.port);
 }
 
-wxeMemEnv * WxeApp::getMemEnv(ErlDrvPort port) {
-  return refmap[(ErlDrvTermData) port];
+wxeMemEnv * WxeApp::getMemEnv(ErlDrvTermData port) {
+  return refmap[port];
 }
 
 int WxeApp::newPtr(void * ptr, int type, wxeMemEnv *memenv) {
@@ -811,7 +837,7 @@ wxeCommand::wxeCommand(int fc,char * cbuf,int buflen, wxe_data *sd)
 {
   WXEBinRef *temp, *start, *prev;
   int n = 0;
-  caller = driver_caller(sd->port);
+  caller = driver_caller(sd->port_handle);
   port   = sd->port;
   op = fc;
   len = buflen;
@@ -914,7 +940,7 @@ int wxCALLBACK wxEListCtrlCompare(long item1, long item2, long callbackInfoPtr)
   rt.addAtom("_wx_invoke_cb_");
   rt.addTupleCount(3);
   rt.send();
-  handle_event_callback(cb->port, memenv->owner);
+  handle_event_callback(WXE_DRV_PORT_HANDLE, memenv->owner);
 
   if(((WxeApp *) wxTheApp)->cb_buff) {
     int res = * (int*) ((WxeApp *) wxTheApp)->cb_buff;

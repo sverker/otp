@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -23,12 +23,6 @@
 -else.
 -define(dbg(Fmt, Args), no_debug).
 -endif.
-
--define('RT_BER_BIN',"asn1rt_ber_bin").
--define('RT_PER_BIN',"asn1rt_per_bin").
-
-%% Some encoding are common for BER and PER. Shared code are in RT_COMMON
--define('RT_COMMON',asn1rt_ber_bin).
 
 -define('COMPLETE_ENCODE',1).
 -define('TLV_DECODE',2).

@@ -5,7 +5,7 @@
   <header>
     <copyright>
       <year>2007</year>
-      <year>2011</year>
+      <year>2012</year>
       <holder>Ericsson AB, All Rights Reserved</holder>
     </copyright>
     <legalnotice>
@@ -85,8 +85,7 @@
     <p><c>ts:install/1</c> or <c>ts:install/2</c> is used if the
         target platform is different from the controller host, i.e. if
         you run on "remote target" or if special options are required
-        for your system. VxWorks is currently supported
-        as remote target platform.
+        for your system.
         </p>
       <p>See the reference manual for detailed information about
         <c>ts:install/0/1/2</c>.
@@ -249,9 +248,8 @@
         <p>Installs and configures the Test Server Framework for
           running test suites. If a remote host is to be used, the
           <c>TargetSystem</c> argument must be given so that "cross
-          installation" can be done. This should be used for testing on
-          VxWorks. Installation is required for any of the
-          functions in <c>ts</c> to work.
+		  installation" can be done. Installation is required for
+		  any of the functions in <c>ts</c> to work.
           </p>
         <p>Opts may be one or more of
           </p>
@@ -452,7 +450,7 @@ This option is mandatory for remote targets
       <desc>
         <p>Analyse cover data collected from all tests.
           </p>
-        <p>See test_server_ctrl:cross_cover_analyse/1
+        <p>See test_server_ctrl:cross_cover_analyse/2
           </p>
       </desc>
     </func>
@@ -497,29 +495,6 @@ This option is mandatory for remote targets
           </p>
         <p>For information about the <c>cover</c> and
           <c>cover_details</c> options, see <c>test_server_ctrl:cover/2/3</c>.</p>
-      </desc>
-    </func>
-    <func>
-      <name>index() -> ok | {error, Reason}</name>
-      <fsummary>Updates local index page</fsummary>
-      <type>
-        <v>Reason = term()</v>
-      </type>
-      <desc>
-        <p>This function updates the local index page. This can be
-          useful if a previous test run was not completed and the index
-          is incomplete.</p>
-      </desc>
-    </func>
-    <func>
-      <name>clean() -> ok</name>
-      <name>clean(all) -> ok</name>
-      <fsummary>Cleans up the log directories created when running tests. </fsummary>
-      <desc>
-        <p>This function cleans up log directories created when
-          running test cases. <c>clean/0</c> cleans up all but the last
-          run of each application.  <c>clean/1</c> cleans up all test
-          runs found.</p>
       </desc>
     </func>
     <func>

@@ -2,7 +2,7 @@ dnl Process this file with autoconf to produce a configure script. -*-m4-*-
 
 dnl %CopyrightBegin%
 dnl
-dnl Copyright Ericsson AB 1997-2012. All Rights Reserved.
+dnl Copyright Ericsson AB 1997-2013. All Rights Reserved.
 dnl
 dnl The contents of this file are subject to the Erlang Public License,
 dnl Version 1.1, (the "License"); you may not use this file except in
@@ -156,14 +156,6 @@ AS_HELP_STRING([--without-termcap],
                [do not use any termcap libraries (ncurses,curses,termcap,termlib)]),
 [],
 [with_termcap=yes])
-
-
-AC_ARG_ENABLE(hybrid-heap,
-AS_HELP_STRING([--enable-hybrid-heap], [enable hybrid heap]),
-[ case "$enableval" in
-    no) enable_hybrid_heap=no ;;
-    *)  enable_hybrid_heap=yes ;;
-  esac ], enable_hybrid_heap=unknown)
 
 AC_ARG_ENABLE(lock-checking,
 AS_HELP_STRING([--enable-lock-checking], [enable lock checking]),
@@ -545,6 +537,9 @@ else
 fi
 
 if test "x$GCC" = xyes; then
+  # Treat certain GCC warnings as errors
+  LM_TRY_ENABLE_CFLAG([-Werror=return-type], [WERRORFLAGS])
+
   # until the emulator can handle this, I suggest we turn it off!
   #WFLAGS="-Wall -Wshadow -Wcast-qual -Wmissing-declarations"
   WFLAGS="-Wall -Wstrict-prototypes"
@@ -567,11 +562,13 @@ if test "x$GCC" = xyes; then
   CFLAGS=$saved_CFLAGS
 else
   WFLAGS=""
+  WERRORFLAGS=""
 fi
 dnl DEBUG_FLAGS is obsolete (I hope)
 AC_SUBST(DEBUG_FLAGS)
 AC_SUBST(DEBUG_CFLAGS)
 AC_SUBST(WFLAGS)
+AC_SUBST(WERRORFLAGS)
 AC_SUBST(CFLAG_RUNTIME_LIBRARY_PATH)
 
 AC_CHECK_SIZEOF(void *) # Needed for ARCH and smp checks below
@@ -626,6 +623,8 @@ case $chk_arch_ in
     armv5b)	ARCH=arm;;
     armv5teb)	ARCH=arm;;
     armv5tel)	ARCH=arm;;
+    armv5tejl)	ARCH=arm;;
+    armv7l)	ARCH=arm;;
     tile)	ARCH=tile;;
     *)	 	ARCH=noarch;;
 esac
@@ -741,12 +740,8 @@ esac
 
 AC_MSG_CHECKING(if VM has to be linked with Carbon framework)
 case $ARCH-$OPSYS in
-	amd64-darwin*)
-		LIBCARBON=
-		AC_MSG_RESULT([no])
-		;;
 	*-darwin*)
-		LIBCARBON="-framework Carbon "
+  		LIBCARBON="-framework Carbon -framework Cocoa"
 		AC_MSG_RESULT([yes])
 		;;
 	*)
@@ -830,6 +825,12 @@ if test -z "$FOP"; then
   FOP="$ERL_TOP/make/fakefop"
   echo "fop" >> doc/CONF_INFO
   AC_MSG_WARN([No 'fop' command found: going to generate placeholder PDF files])
+fi
+
+AC_CHECK_PROGS(XMLLINT, xmllint)
+if test -z "$XMLLINT"; then
+  echo "xmllint" >> doc/CONF_INFO
+  AC_MSG_WARN([No 'xmllint' command found: can't run the xmllint target for the documentation])
 fi
 
 dnl
@@ -1081,8 +1082,45 @@ fi
 
 AC_SUBST(ERTS_BUILD_SMP_EMU)
 
-AC_CHECK_FUNCS([posix_fadvise])
+AC_CHECK_FUNCS([posix_fadvise, fallocate])
+AC_CHECK_HEADERS([linux/falloc.h])
 
+dnl * Old glibcs have broken posix_fallocate(). Make sure not to use it.
+dnl * It may also be broken in AIX.
+AC_CACHE_CHECK([whether posix_fallocate() works],i_cv_posix_fallocate_works,[
+    AC_TRY_RUN([
+        #if !defined(__sun) && !defined(__sun__)
+        #define _XOPEN_SOURCE 600
+        #endif
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <fcntl.h>
+        #include <unistd.h>
+        #if defined(__GLIBC__) && (__GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 7))
+            possibly broken posix_fallocate
+        #endif
+        int main() {
+            int fd = creat("conftest.temp", 0600);
+            int ret;
+            if (-1 == fd) {
+               perror("creat()");
+               return 2;
+            }
+            ret = posix_fallocate(fd, 1024, 1024) < 0 ? 1 : 0;
+            unlink("conftest.temp");
+            return ret;
+        }
+    ], [
+        i_cv_posix_fallocate_works=yes
+    ], [
+        i_cv_posix_fallocate_works=no
+    ], [
+        i_cv_posix_fallocate_works=no
+    ])
+])
+if test $i_cv_posix_fallocate_works = yes; then
+   AC_DEFINE(HAVE_POSIX_FALLOCATE,, Define if you have a working posix_fallocate())
+fi
 
 #
 # Figure out if the emulator should use threads. The default is set above
@@ -1736,6 +1774,7 @@ case X$erl_xcomp_bigendian in
 esac
 
 AC_C_BIGENDIAN
+AC_C_DOUBLE_MIDDLE_ENDIAN
 
 dnl fdatasync syscall (Unix only)
 AC_CHECK_FUNCS([fdatasync])
@@ -1884,12 +1923,22 @@ fi
 AC_CHECK_FUNCS([getipnodebyname getipnodebyaddr gethostbyname2])
 
 AC_CHECK_FUNCS([ieee_handler fpsetmask finite isnan isinf res_gethostbyname dlopen \
-		pread pwrite writev memmove strerror strerror_r strncasecmp \
+		pread pwrite memmove strerror strerror_r strncasecmp \
 		gethrtime localtime_r gmtime_r inet_pton mmap mremap memcpy mallopt \
 		sbrk _sbrk __sbrk brk _brk __brk \
-		flockfile fstat strlcpy strlcat setsid posix2time setlocale nl_langinfo poll])
+		flockfile fstat strlcpy strlcat setsid posix2time time2posix \
+		setlocale nl_langinfo poll])
 
-AC_CHECK_DECLS([posix2time],,,[#include <time.h>])
+dnl writev on OS X snow leopard is broken for files > 4GB
+case $host_os in
+        darwin10.8.0)
+	    AC_MSG_CHECKING([for writev])
+	    AC_MSG_RESULT(no, not stable on OS X Snow Leopard) ;;
+        *)
+	    AC_CHECK_FUNCS([writev]) ;;
+esac
+
+AC_CHECK_DECLS([posix2time, time2posix],,,[#include <time.h>])
 
 disable_vfork=false
 if test "x$EMU_THR_LIB_NAME" != "x"; then
@@ -1948,6 +1997,68 @@ AC_CHECK_FUNCS([openpty])
 
 AC_CHECK_HEADERS(net/if_dl.h ifaddrs.h netpacket/packet.h)
 AC_CHECK_FUNCS([getifaddrs])
+
+dnl Checks for variables in6addr_any and in6addr_loopback,
+dnl
+dnl They normally declared by netinet/in.h, according to POSIX,
+dnl but not on Windows 7 (Windows SDK 7.1).  I would have liked
+dnl to just write AC_CHECK_DECL([in6addr_any], ...) but if doing so,
+dnl the configure check fails erroneously on Linux with the error
+dnl "cannot convert to a pointer type", on a line looking like
+dnl "char *p = (char *) in6addr_any;", so work around that
+dnl with some more code. 
+AC_CACHE_CHECK(
+    [whether in6addr_any is declared],
+    [erts_cv_have_in6addr_any],
+    [AC_LINK_IFELSE(
+	[AC_LANG_PROGRAM(
+	    [[
+		#include <sys/types.h>
+		#include <sys/socket.h>
+		#include <netinet/in.h>
+	    ]],
+	    [[printf("%d", in6addr_any.s6_addr[16]);]]
+	)],
+	[erts_cv_have_in6addr_any=yes],
+	[erts_cv_have_in6addr_any=no]
+    )]
+)
+
+case "$erts_cv_have_in6addr_any" in
+ yes)
+   AC_DEFINE([HAVE_IN6ADDR_ANY], [1],
+             [Define to 1 if you have the variable in6addr_any declared.])
+esac
+
+AC_CACHE_CHECK(
+    [whether in6addr_loopback is declared],
+    [erts_cv_have_in6addr_loopback],
+    [AC_LINK_IFELSE(
+	[AC_LANG_PROGRAM(
+	    [[
+		#include <sys/types.h>
+		#include <sys/socket.h>
+		#include <netinet/in.h>
+	    ]],
+	    [[printf("%d", in6addr_loopback.s6_addr[16]);]]
+	)],
+	[erts_cv_have_in6addr_loopback=yes],
+	[erts_cv_have_in6addr_loopback=no]
+    )]
+)
+
+case "$erts_cv_have_in6addr_loopback" in
+ yes)
+   AC_DEFINE([HAVE_IN6ADDR_LOOPBACK], [1],
+             [Define to 1 if you have the variable in6addr_loopback declared.])
+esac
+
+AC_CHECK_DECLS([IN6ADDR_ANY_INIT, IN6ADDR_LOOPBACK_INIT, IPV6_V6ONLY], [], [],
+	       [
+		#include <sys/types.h>
+		#include <sys/socket.h>
+		#include <netinet/in.h>
+	       ])
 
 dnl ----------------------------------------------------------------------
 dnl Checks for features/quirks in the system that affects Erlang.
@@ -3134,33 +3245,6 @@ fi
 AC_SUBST(TSP_APP)
 
 #
-# Check if we should build hybrid emulator
-#
-
-AC_MSG_CHECKING([whether a hybrid heap emulator should be built])
-case $enable_hybrid_heap-$host_os in
-    yes-*)
-	AC_MSG_RESULT([yes; enabled by user])
-	ERTS_BUILD_HYBRID_EMU=yes;;
-    no-*)
-	AC_MSG_RESULT([no; disabled by user])
-	ERTS_BUILD_HYBRID_EMU=no;;
-    *-win32|*-vxworks) # vxworks have their own "configure scripts"...
-	AC_MSG_RESULT([no; default on this platform])
-	ERTS_BUILD_HYBRID_EMU=no;;
-    *)
-	AC_MSG_RESULT([yes; default on this platform])
-	ERTS_BUILD_HYBRID_EMU=yes;;
-esac
-
-
-if test $ERTS_BUILD_HYBRID_EMU = yes; then
-    AC_DEFINE(ERTS_HAVE_HYBRID_EMU, 1, [Define if the hybrid emulator is built])
-fi
-
-AC_SUBST(ERTS_BUILD_HYBRID_EMU)
-
-#
 # Check if we should enable HiPE.
 #
 
@@ -3548,6 +3632,11 @@ case $host_os in
 			DED_LDFLAGS="-m32 $DED_LDFLAGS"
 		fi
 	;;	
+	openbsd*)
+		DED_LD="$CC"
+		DED_LD_FLAG_RUNTIME_LIBRARY_PATH="$CFLAG_RUNTIME_LIBRARY_PATH"
+		DED_LDFLAGS="-shared"
+	;;
 	osf*)
 		# NOTE! Whitespace after -rpath is important.
 		DED_LD_FLAG_RUNTIME_LIBRARY_PATH="-rpath "
@@ -4425,7 +4514,7 @@ dnl needs to be rebuilt.
 dnl
 
 AC_DEFINE_UNQUOTED(ERTS_EMU_CMDLINE_FLAGS,
-"$STATIC_CFLAGS $CFLAGS $DEBUG_CFLAGS $EMU_THR_DEFS $DEFS $WFLAGS",
+"$STATIC_CFLAGS $CFLAGS $DEBUG_CFLAGS $EMU_THR_DEFS $DEFS $WERRORFLAGS $WFLAGS",
 [The only reason ERTS_EMU_CMDLINE_FLAGS exists is to force modification of config.h when the emulator command line flags are modified by configure])
 
 dnl ----------------------------------------------------------------------
@@ -4487,6 +4576,10 @@ AH_BOTTOM([
 #define ERTS_ENABLE_LOCK_CHECK 1
 #endif
 ])
+
+if test "x$GCC" = xyes; then
+  CFLAGS="$WERRORFLAGS $CFLAGS"
+fi
 
 dnl ----------------------------------------------------------------------
 dnl Output the result.

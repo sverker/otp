@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1997-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1997-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -114,22 +114,23 @@ sys_chars_to_double(char *buf, double *fp)
 
 /* 
 ** Convert a double to ascii format 0.dddde[+|-]ddd
-** return number of characters converted
+** return number of characters converted or -1 if error.
 */
 
 int
-sys_double_to_chars(double fp, char *buf)
+sys_double_to_chars_ext(double fp, char *buffer, size_t buffer_size, size_t decimals)
 {
-    char *s = buf;
-    
-    (void) sprintf(buf, "%.20e", fp);
+    char *s = buffer;
+
+    if (erts_snprintf(buffer, buffer_size, "%.*e", decimals, fp) >= buffer_size)
+        return -1;
     /* Search upto decimal point */
     if (*s == '+' || *s == '-') s++;
     while (isdigit(*s)) s++;
     if (*s == ',') *s++ = '.'; /* Replace ',' with '.' */
     /* Scan to end of string */
     while (*s) s++;
-    return s-buf; /* i.e strlen(buf) */
+    return s-buffer; /* i.e strlen(buffer) */
 }
 
 int

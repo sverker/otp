@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -136,8 +136,8 @@ delayed_unload_with_ports(Config) when is_list(Config) ->
     ?line {ok,pending_driver,Ref} = erl_ddll:try_unload(echo_drv,[{monitor, pending_driver}]),
     ?line ok = receive _ -> false after 0 -> ok end,
     ?line Port ! {self(), close},
-    ?line 1 = erl_ddll:info(echo_drv, port_count),
     ?line ok = receive {Port,closed} -> ok after 1000 -> false end,
+    ?line 1 = erl_ddll:info(echo_drv, port_count),
     ?line Port2 ! {self(), close},
     ?line ok = receive {Port2,closed} -> ok after 1000 -> false end,
     ?line ok = receive {'DOWN', Ref, driver, echo_drv, unloaded} -> ok after 1000 -> false end,

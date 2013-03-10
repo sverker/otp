@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 1999-2011. All Rights Reserved.
+# Copyright Ericsson AB 1999-2012. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -332,10 +332,10 @@ clean:
 	rm -f errs core *~
 
 $(APP_TARGET): $(APP_SRC)
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 docs:
 
@@ -344,16 +344,16 @@ docs:
 # ----------------------------------------------------
 IDL-GENERATED: CosNotification.idl CosNotifyChannelAdmin.idl \
   CosNotifyFilter.idl cosNotificationAppComm.idl CosNotifyComm.idl
-	erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosNotification.cfg"}' CosNotification.idl
-	mv $(GEN_NOTIFICATION_HRL_FILES) $(EXTERNAL_INC_PATH)
-	erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosNotifyChannelAdmin.cfg"}' CosNotifyChannelAdmin.idl
-	mv $(GEN_CHANNELADMIN_HRL_FILES) $(EXTERNAL_INC_PATH)
-	erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosNotifyFilter.cfg"}' CosNotifyFilter.idl
-	mv $(GEN_NOTIFYFILTER_HRL_FILES) $(EXTERNAL_INC_PATH)
-	erlc $(ERL_IDL_FLAGS) +'{cfgfile,"cosNotificationComm.cfg"}' cosNotificationAppComm.idl
-	erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosNotifyComm.cfg"}' CosNotifyComm.idl
-	mv $(GEN_NOTIFYCOMM_HRL_FILES) $(EXTERNAL_INC_PATH)
-	>IDL-GENERATED
+	$(gen_verbose)erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosNotification.cfg"}' CosNotification.idl
+	$(V_at)mv $(GEN_NOTIFICATION_HRL_FILES) $(EXTERNAL_INC_PATH)
+	$(V_at)erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosNotifyChannelAdmin.cfg"}' CosNotifyChannelAdmin.idl
+	$(V_at)mv $(GEN_CHANNELADMIN_HRL_FILES) $(EXTERNAL_INC_PATH)
+	$(V_at)erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosNotifyFilter.cfg"}' CosNotifyFilter.idl
+	$(V_at)mv $(GEN_NOTIFYFILTER_HRL_FILES) $(EXTERNAL_INC_PATH)
+	$(V_at)erlc $(ERL_IDL_FLAGS) +'{cfgfile,"cosNotificationComm.cfg"}' cosNotificationAppComm.idl
+	$(V_at)erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosNotifyComm.cfg"}' CosNotifyComm.idl
+	$(V_at)mv $(GEN_NOTIFYCOMM_HRL_FILES) $(EXTERNAL_INC_PATH)
+	$(V_at)>IDL-GENERATED
 
 $(IDL_GEN_ERL_FILES) $(IDL_GEN_HRL_FILES): IDL-GENERATED
 
@@ -367,12 +367,12 @@ $(GEN_YECC_ERL_FILES) $(GEN_YECC_HRL_FILES): cosNotification_Grammar.yrl
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(TARGET_FILES) $(APP_TARGET) $(APPUP_TARGET) $(RELSYSDIR)/ebin
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(GEN_FILES) $(IDL_FILES) $(YECC_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(IDL_FILES) $(YECC_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DATA) $(GEN_HRL_FILES) $(RELSYSDIR)/include
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(TARGET_FILES) $(APP_TARGET) $(APPUP_TARGET) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(GEN_FILES) $(IDL_FILES) $(YECC_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(IDL_FILES) $(YECC_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DATA) $(GEN_HRL_FILES) "$(RELSYSDIR)/include"
 
 release_docs_spec:

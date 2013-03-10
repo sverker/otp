@@ -1,7 +1,8 @@
+%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2001-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -165,7 +166,7 @@
 -export([new/0, is_element/2, add_element/2, del_element/2,
 	 subtract/2]).
 
-%% GB-trees adapted from Sven-Olof Nyström's implementation for
+%% GB-trees adapted from Sven-Olof NystrÃ¶m's implementation for
 %% representation of sets.
 %%
 %% Data structures:
@@ -195,6 +196,8 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Some types.
+
+-export_type([iter/0]).
 
 -type gb_set_node() :: 'nil' | {term(), _, _}.
 -opaque iter() :: [gb_set_node()].

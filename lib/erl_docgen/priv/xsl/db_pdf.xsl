@@ -3,7 +3,7 @@
      #
      # %CopyrightBegin%
      #
-     # Copyright Ericsson AB 2009-2011. All Rights Reserved.
+     # Copyright Ericsson AB 2009-2013. All Rights Reserved.
      #
      # The contents of this file are subject to the Erlang Public License,
      # Version 1.1, (the "License"); you may not use this file except in
@@ -650,7 +650,7 @@
 
       <fo:flow flow-name="xsl-region-body">
         <fo:block xsl:use-attribute-sets="cover.logo">
-          <fo:external-graphic src="{$docgen}/priv/images/erlang-logo.gif"/>
+          <fo:external-graphic src="{$logo}"/>
         </fo:block>
         <fo:block xsl:use-attribute-sets="cover.title" id="cover-page">
           <xsl:apply-templates/>
@@ -1102,11 +1102,13 @@
 
   <xsl:template match="taglist/item">
     <xsl:param name="partnum"/>
-    <fo:block xsl:use-attribute-sets="tagitem">
-      <xsl:apply-templates>
-        <xsl:with-param name="partnum" select="$partnum"/>
-      </xsl:apply-templates>
-    </fo:block>
+    <fo:block-container>
+      <fo:block xsl:use-attribute-sets="tagitem">
+	<xsl:apply-templates>
+	  <xsl:with-param name="partnum" select="$partnum"/>
+	</xsl:apply-templates>
+      </fo:block>
+    </fo:block-container>
   </xsl:template>
 
 
@@ -1424,7 +1426,13 @@
     <xsl:param name="partnum"/>
     <xsl:choose>
       <xsl:when test="ancestor::cref">
-        <fo:block id="{generate-id(nametext)}"><xsl:value-of select="ret"/><xsl:text></xsl:text><xsl:value-of select="nametext"/></fo:block>
+        <fo:block id="{generate-id(nametext)}">
+          <xsl:value-of select="ret"/>
+          <xsl:call-template name="maybe-space-after-ret">
+            <xsl:with-param name="s" select="ret"/>
+          </xsl:call-template>
+          <xsl:value-of select="nametext"/>
+        </fo:block>
       </xsl:when>
       <xsl:otherwise>
         <fo:block id="{generate-id(.)}"><xsl:value-of select="."/></fo:block>
@@ -1432,6 +1440,16 @@
     </xsl:choose>
   </xsl:template>
 
+  <xsl:template name="maybe-space-after-ret">
+    <xsl:param name="s"/>
+    <xsl:variable name="last_char"
+	          select="substring($s, string-length($s), 1)"/>
+    <xsl:choose>
+      <xsl:when test="$last_char != '*'">
+        <xsl:text> </xsl:text>
+      </xsl:when>
+    </xsl:choose>
+  </xsl:template>
 
   <!-- Type -->
   <xsl:template match="type">

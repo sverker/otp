@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2004</year><year>2011</year>
+      <year>2004</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -31,6 +31,669 @@
     <rev>A</rev>
     <file>notes.xml</file>
     </header>
+
+<section><title>Common_Test 1.7.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    If an event handler installed in the CT Master event
+	    manager took too long to respond during the termination
+	    phase, CT Master crashed because of a timeout after 5
+	    secs. This would leave the system in a bad state. The
+	    problem has been solved by means of a 30 min timeout
+	    value and if CT Master gets a timeout after that time, it
+	    now kills the event manager and shuts down properly.</p>
+          <p>
+	    Own Id: OTP-10634 Aux Id: kunagi-347 [258] </p>
+        </item>
+        <item>
+          <p>
+	    Printing with any of the ct printout functions from an
+	    event handler installed by Common Test, would cause a
+	    deadlock. This problem has been solved.</p>
+          <p>
+	    Own Id: OTP-10826 Aux Id: seq12250 </p>
+        </item>
+        <item>
+          <p>
+	    Using the force_stop flag/option to interrupt a test run
+	    caused a crash in Common Test. This problem has been
+	    solved.</p>
+          <p>
+	    Own Id: OTP-10832</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Removed depricated run_test program, use ct_run instead.</p>
+          <p>
+	    *** POTENTIAL INCOMPATIBILITY ***</p>
+          <p>
+	    Own Id: OTP-9052</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Known Bugs and Problems</title>
+      <list>
+        <item>
+          <p>
+	    Test case execution time increases with size of test run.</p>
+          <p>
+	    Own Id: OTP-10855</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Common_Test 1.7</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Severe errors detected by <c>test_server</c> (e.g. if log
+	    files directories cannot be created) will now be reported
+	    to <c>common_test</c> and noted in the <c>common_test</c>
+	    logs.</p>
+          <p>
+	    Own Id: OTP-9769 Aux Id: kunagi-202 [113] </p>
+        </item>
+        <item>
+          <p>
+	    The earlier undocumented cross cover feature for
+	    accumulating cover data over multiple tests has now been
+	    fixed and documented.</p>
+          <p>
+	    Own Id: OTP-9870 Aux Id: kunagi-206 [117] </p>
+        </item>
+        <item>
+          <p>
+	    If a busy test case generated lots of error messages,
+	    cth_log_redirect:post_end_per_testcase would crash with a
+	    timeout while waiting for the error logger to finish
+	    handling all error reports. The default timer was 5
+	    seconds. This has now been extended to 5 minutes.</p>
+          <p>
+	    Own Id: OTP-10040 Aux Id: kunagi-173 [84] </p>
+        </item>
+        <item>
+	    <p>When a test case failed because of a timetrap time
+	    out, the <c>Config</c> data for the case was lost in the
+	    following call to <c>end_per_testcase/2</c>, and also in
+	    calls to the CT Hook function
+	    <c>post_end_per_testcase/4</c>. This problem has been
+	    solved and the <c>Config</c> data is now correctly passed
+	    to the above functions after a timetrap timeout
+	    failure.</p>
+          <p>
+	    Own Id: OTP-10070 Aux Id: kunagi-175 [86] </p>
+        </item>
+        <item>
+          <p>
+	    Some calls to deprecated and removed functions in snmp
+	    are removed from ct_snmp.</p>
+          <p>
+	    Own Id: OTP-10088 Aux Id: kunagi-176 [87] </p>
+        </item>
+        <item>
+	    <p>In test_server, the same process would supervise the
+	    currently running test case and be group leader (and IO
+	    server) for the test case. Furthermore, when running
+	    parallel test cases, new temporary supervisor/group
+	    leader processes were spawned and the process that was
+	    group leader for sequential test cases would not be
+	    active. That would lead to several problems:</p>
+	    <p>* Processes started by init_per_suite will inherit the
+	    group leader of the init_per_suite process (and that
+	    group leader would not process IO requests when parallel
+	    test cases was running). If later a parallel test case
+	    caused such a processto print using (for example)
+	    io:format/2, the calling would hang.</p>
+	    <p>* Similarly, if a process was spawned from a parallel
+	    test case, it would inherit the temporary group leader
+	    for that parallel test case. If that spawned process
+	    later - when the group of parallel tests have finished -
+	    attempted to print something, its group leader would be
+	    dead and there would be <c>badarg</c> exception.</p>
+	    <p>Those problems have been solved by having group
+	    leaders separate from the processes that supervises the
+	    test cases, and keeping temporary group leader process
+	    for parallel test cases alive until no more process in
+	    the system use them as group leaders.</p>
+	    <p>Also, a new <c>unexpected_io.log</c> log file
+	    (reachable from the summary page of each test suite) has
+	    been introduced. All unexpected IO will be printed into
+	    it(for example, IO to a group leader for a parallel test
+	    case that has finished).</p>
+          <p>
+	    Own Id: OTP-10101 Aux Id: OTP-10125 </p>
+        </item>
+        <item>
+          <p>
+	    Some bugfixes in <c>ct_snmp:</c></p>
+          <p>
+	    <list> <item> ct_snmp will now use the value of the
+	    'agent_vsns' config variable when setting the 'variables'
+	    parameter to snmp application agent configuration.
+	    Earlier this had to be done separately - i.e. the
+	    supported versions had to be specified twice. </item>
+	    <item> Snmp application failed to write notify.conf since
+	    ct_snmp gave the notify type as a string instead of an
+	    atom. This has been corrected. </item> </list></p>
+          <p>
+	    Own Id: OTP-10432</p>
+        </item>
+        <item>
+          <p>
+	    Some bugfixes in <c>ct_snmp</c>:</p>
+          <p>
+	    <list> <item> Functions <c>register_users/2</c>,
+	    <c>register_agents/2</c> and <c>register_usm_users/2</c>,
+	    and the corresponding <c>unregister_*/1</c> functions
+	    were not executable. These are corrected/rewritten.
+	    </item> <item> Function <c>update_usm_users/2</c> is
+	    removed, and an unregister function is added instead.
+	    Update can now be done with unregister_usm_users and then
+	    register_usm_users. </item> <item> Functions
+	    <c>unregister_*/2</c> are added, so specific
+	    users/agents/usm users can be unregistered. </item>
+	    <item> Function <c>unload_mibs/1</c> is added for
+	    completeness. </item> <item> Overriding configuration
+	    files did not work, since the files were written in
+	    priv_dir instead of in the configuration dir
+	    (priv_dir/conf). This has been corrected. </item> <item>
+	    Arguments to <c>register_usm_users/2</c> were faulty
+	    documented. This has been corrected. </item> </list></p>
+          <p>
+	    Own Id: OTP-10434 Aux Id: kunagi-264 [175] </p>
+        </item>
+        <item>
+          <p>
+	    Faulty exported specs in common test has been corrected
+	    to <c>ct_netconfc:hook_options/0</c> and
+	    <c>inet:hostname/0</c></p>
+          <p>
+	    Own Id: OTP-10601</p>
+        </item>
+        <item>
+          <p>
+	    The netconf client in common_test did not adjust the
+	    window after receiving data. Due to this, the client
+	    stopped receiving data after a while. This has been
+	    corrected.</p>
+          <p>
+	    Own Id: OTP-10646</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+	    <p>It is now possible to let a test specification include
+	    other test specifications. Included specs can either be
+	    joined with the source spec (and all other joined specs),
+	    resulting in one single test run, or they can be executed
+	    in separate test runs. Also, a start flag/option,
+	    <c>join_specs</c>, has been introduced, to be used in
+	    combination with the <c>spec</c> option. With
+	    <c>join_specs</c>, Common Test can be told to either join
+	    multiple test specifications, or run them separately.
+	    Without <c>join_specs</c>, the latter behaviour is
+	    default. Note that this is a change compared to earlier
+	    versions of Common Test, where specifications could only
+	    be joined. More information can be found in the Running
+	    Tests chapter in the User's Guide (see the Test
+	    Specifications section).</p>
+          <p>
+	    *** POTENTIAL INCOMPATIBILITY ***</p>
+          <p>
+	    Own Id: OTP-9881 Aux Id: kunagi-350 [261] </p>
+        </item>
+        <item>
+          <p>
+	    The <c>ct_slave:start/3</c> function now supports an
+	    <c>{env,[{Var,Value}]}</c> option to extend environment
+	    for the slave node.</p>
+          <p>
+	    Own Id: OTP-10469 Aux Id: kunagi-317 [228] </p>
+        </item>
+        <item>
+	    <p> Some examples overflowing the width of PDF pages have
+	    been corrected. </p>
+          <p>
+	    Own Id: OTP-10665</p>
+        </item>
+        <item>
+          <p>
+	    Update common test modules to handle unicode <list>
+	    <item> Use UTF-8 encoding for all HTML files, except the
+	    HTML version of the test suite generated with
+	    erl2html2:convert, which will have the same encoding as
+	    the original test suite (.erl) file. </item> <item>
+	    Encode link targets in HTML files with
+	    test_server_ctrl:uri_encode/1. </item> <item> Use unicode
+	    modifier 't' with ~s when appropriate. </item> <item> Use
+	    unicode:characters_to_list and
+	    unicode:characters_to_binary for conversion between
+	    binaries and strings instead of binary_to_list and
+	    list_to_binary. </item> </list></p>
+          <p>
+	    Own Id: OTP-10783</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Known Bugs and Problems</title>
+      <list>
+        <item>
+          <p>
+	    CT drops error reason when groups/0 crashes.</p>
+          <p>
+	    Own Id: OTP-10631 Aux Id: kunagi-345 [256] </p>
+        </item>
+        <item>
+          <p>
+	    Event handler on a ct_master node causes hanging.</p>
+          <p>
+	    Own Id: OTP-10634 Aux Id: kunagi-347 [258] </p>
+        </item>
+        <item>
+          <p>
+	    CT fails to open telnet conn after a timetrap timeout.</p>
+          <p>
+	    Own Id: OTP-10648 Aux Id: seq12212 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Common_Test 1.6.3.1</title>
+
+    <section><title>Known Bugs and Problems</title>
+      <list>
+        <item>
+          <p>
+	    The following corrections/changes are done in the
+	    cth_surefire hook:</p>
+          <p>
+	    <list> <item> Earlier there would always be a
+	    'properties' element under the 'testsuites' element. This
+	    would exist even if there were no 'property' element
+	    inside it. This has been changed so if there are no
+	    'property' elements to display, then there will not be a
+	    'properties' element either. </item> <item> The XML file
+	    will now (unless other is specified) be stored in the top
+	    log directory. Earlier, the default directory would be
+	    the current working directory for the erlang node, which
+	    would mostly, but not always, be the top log directory.
+	    </item> <item> The 'hostname' attribute in the
+	    'testsuite' element would earlier never have the correct
+	    value. This has been corrected. </item> <item> The
+	    'errors' attribute in the 'testsuite' element would
+	    earlier display the number of failed testcases. This has
+	    been changed and will now always have the value 0, while
+	    the 'failures' attribute will show the number of failed
+	    testcases. </item> <item> A new attribute 'skipped' is
+	    added to the 'testsuite' element. This will display the
+	    number of skipped testcases. These would earlier be
+	    included in the number of failed test cases. </item>
+	    <item> The total number of tests displayed by the 'tests'
+	    attribute in the 'testsuite' element would earlier
+	    include init/end_per_suite and init/end_per_group. This
+	    is no longer the case. The 'tests' attribute will now
+	    only count "real" test cases. </item> <item> Earlier,
+	    auto skipped test cases would have no value in the 'log'
+	    attribute. This is now corrected. </item> <item> A new
+	    attributes 'log' is added to the 'testsuite' element.
+	    </item> <item> A new option named 'url_base' is added for
+	    this hook. If this option is used, a new attribute named
+	    'url' will be added to the 'testcase' and 'testsuite'
+	    elements. </item> </list></p>
+          <p>
+	    Own Id: OTP-10589</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Common_Test 1.6.3</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The ct:run_test/1 option 'config' only worked with a
+	    single config file, not a list of files. This has been
+	    fixed.</p>
+          <p>
+	    Own Id: OTP-10495</p>
+        </item>
+        <item>
+          <p>
+	    ct_netconfc:close_session sometimes returned
+	    {error,closed} because the ssh connection was closed
+	    (from the server side) before the rpc-reply was received
+	    by the client. This is normal and can not be helped. It
+	    has been corrected so the return will be 'ok' in this
+	    case. Other error situations will still give
+	    {error,Reason}.</p>
+          <p>
+	    Own Id: OTP-10510 Aux Id: kunagi-320 [231] </p>
+        </item>
+        <item>
+          <p>
+	    ct_netconfc:close_session sometimes returned
+	    {error,closed} or (if the connection was named)
+	    {error,{process_down,Pid,normal}} because the ssh
+	    connection was closed (from the server side) before the
+	    rpc-reply was received by the client. This is normal and
+	    can not be helped. It has been corrected so the return
+	    will be 'ok' in this situation.</p>
+          <p>
+	    Own Id: OTP-10570</p>
+        </item>
+        <item>
+          <p>
+	    Fix bug where ct:require of same name with same config
+	    would return name_in_use.</p>
+          <p>
+	    Own Id: OTP-10572</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    A new test case group search functionality has been
+	    implemented that makes Common Test search automatically
+	    through the group definitions tree (the return value of
+	    groups/0) and create tests for all paths of nested groups
+	    that match the specification. It also allows for
+	    specifying unique paths to sub groups in order to avoid
+	    execution of unwanted tests. This new feature can be used
+	    whenever starting a test run by means of the ct_run
+	    program, the ct:run_test/1 API function, or a Test
+	    Specification. Details can be found in the Test Case
+	    Group Execution section in the Running Tests chapter.</p>
+          <p>
+	    Own Id: OTP-10466 Aux Id: kunagi-276 [187] </p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Known Bugs and Problems</title>
+      <list>
+        <item>
+          <p>
+	    Restore Config data if lost when test case fails.</p>
+          <p>
+	    Own Id: OTP-10070 Aux Id: kunagi-175 [86] </p>
+        </item>
+        <item>
+          <p>
+	    IO server error in test_server.</p>
+          <p>
+	    Own Id: OTP-10125 Aux Id: OTP-10101, kunagi-177 [88] </p>
+        </item>
+        <item>
+          <p>
+	    Faulty connection handling in common_test.</p>
+          <p>
+	    Own Id: OTP-10126 Aux Id: kunagi-178 [89] </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Common_Test 1.6.2.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The interactive mode (ct_run -shell) would not start
+	    properly. This error has been fixed.</p>
+          <p>
+	    Own Id: OTP-10414</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Common_Test 1.6.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    If a CT hook function caused a crash, this could in some
+	    situations cause Common Test to terminate due to an
+	    illegal IO operation. This error has been corrected.</p>
+          <p>
+	    Own Id: OTP-10050 Aux Id: seq12039 </p>
+        </item>
+        <item>
+          <p>
+	    The Common Test documentation states that timetraps are
+	    never active during execution of CT hook functions. This
+	    was only true for post hook functions, not for pre hook
+	    functions. The code for CT hooks has been modified to
+	    behave according to the documentation.</p>
+          <p>
+	    Own Id: OTP-10069</p>
+        </item>
+        <item>
+          <p>
+	    If a CT hook function would call the exit/1 or throw/1
+	    BIF (possibly indirectly, e.g. as a result of a timeout
+	    in gen_server:call/3), Common Test would hang. This
+	    problem has been fixed.</p>
+          <p>
+	    Own Id: OTP-10072 Aux Id: seq12053 </p>
+        </item>
+        <item>
+          <p>
+	    The documentation has been updated with information about
+	    how to deal with chaining of hooks which return
+	    fail/skip.</p>
+          <p>
+	    Own Id: OTP-10077 Aux Id: seq12048 </p>
+        </item>
+        <item>
+          <p>
+	    When ct_hooks called the id/1 functions of multiple
+	    hooks, it would reverse the order of the hooks and call
+	    the proceeding init/2 calls in the wrong order. This has
+	    been fixed.</p>
+          <p>
+	    Own Id: OTP-10135</p>
+        </item>
+        <item>
+          <p>
+	    The surefire hook now correctly handles autoskipped
+	    initialization and test functions.</p>
+          <p>
+	    Own Id: OTP-10158</p>
+        </item>
+        <item>
+          <p>
+	    The ct:get_status/0 function failed to report status if a
+	    parallel test case group was running at the time of the
+	    call. This has been fixed and the return value for the
+	    function has been updated. Please see the ct reference
+	    manual for details.</p>
+          <p>
+	    Own Id: OTP-10172</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    The support for "silent connections" has been updated to
+	    include ssh. Also, a silent_connections term has been
+	    added to the set of test specification terms.</p>
+          <p>
+	    Own Id: OTP-9625 Aux Id: seq11918 </p>
+        </item>
+        <item>
+          <p>
+	    It is now possible to specify an arbitrarily large tuple
+	    as the requires config data when using require and
+	    ct:get_config. See the ct:get_config and ct:require
+	    reference manual pages for details about which keys are
+	    allowed.</p>
+          <p>
+	    This change introduces a backwards incompatability in the
+	    <c>ct:require/2</c> interface. Previously when doing
+	    <c>ct:require(a_name,{key,subkey})</c>, a_name would be
+	    associated with key. This has been changed to that
+	    <c>a_name</c> is associated with <c>subkey</c>. This
+	    change also effects using <c>require</c> in an
+	    suite/group/testcase info function.</p>
+          <p>
+	    *** POTENTIAL INCOMPATIBILITY ***</p>
+          <p>
+	    Own Id: OTP-9626 Aux Id: seq11920 </p>
+        </item>
+        <item>
+          <p>
+	    The ct_run program now sets the OS process exit status
+	    before it ends. Value 0 indicates a successful test
+	    result, 1 indicates one or more failed or auto-skipped
+	    test cases, and 2 indicates test execution failure.</p>
+          <p>
+	    Own Id: OTP-9865 Aux Id: OTP-10087 </p>
+        </item>
+        <item>
+          <p>
+	    It is now possible to sort the HTML tables by clicking on
+	    the header elements. In order to reset a sorted table,
+	    the browser window should simply be refreshed. This
+	    feature requires that the browser supports javascript,
+	    and has javascript execution enabled. If the 'ct_run
+	    -basic_html' flag is used, no javascript code is included
+	    in the generated HTML code.</p>
+          <p>
+	    Own Id: OTP-9896 Aux Id: seq12034, OTP-9835 </p>
+        </item>
+        <item>
+          <p>
+	    A netconf client, ct_netconfc, is added to common_test.
+	    It supports basic netconf functionality over SSH. In
+	    order to allow testing of both success and failure cases,
+	    it is intentionally written to allow non-standard
+	    behavior.</p>
+          <p>
+	    Own Id: OTP-10025</p>
+        </item>
+        <item>
+          <p>
+	    The test specification term {define,Constant,Value} has
+	    been introduced, which makes it possible to replace
+	    constant names (atom()) with values (term()) in arbitrary
+	    test specification terms. The 'define' makes the (now
+	    deprecated) 'alias' term obsolete. More details,
+	    including examples, can be found in the Test
+	    Specifications chapter in the Common Test User's Guide.</p>
+          <p>
+	    Own Id: OTP-10049</p>
+        </item>
+        <item>
+          <p>
+	    Verbosity levels for log printouts has been added. This
+	    makes it possible to specify preferred verbosity for
+	    different categories of log printouts, as well as general
+	    printouts (such as standard IO), to allow control over
+	    which strings get printed and which get ignored. New
+	    versions of the Common Test logging functions, ct:log,
+	    ct:pal and ct:print, have been introduced, with a new
+	    Importance argument added. The Importance value is
+	    compared to the verbosity level at runtime. More
+	    information can be found in the chapter about Logging in
+	    the Common Test User's Guide.</p>
+          <p>
+	    Own Id: OTP-10067 Aux Id: seq12050 </p>
+        </item>
+        <item>
+          <p>
+	    The return values of ct:run_test/1 and ct:run_testspec/1
+	    have been changed from an uninformative 'ok' (independent
+	    of the test outcome) to a value,
+	    {Ok,Failed,{UserSkipped,AutoSkipped}} (all integers),
+	    that presents the final test case result, or a value,
+	    {error,Reason}, that informs about fatal test execution
+	    failure. See details in the reference manual for ct.</p>
+          <p>
+	    Own Id: OTP-10087 Aux Id: OTP-9865 </p>
+        </item>
+        <item>
+          <p>
+	    The test specification syntax has been updated with new
+	    and missing terms, such as 'define', 'verbosity',
+	    'auto_compile', 'stylesheet', 'silent_connections',
+	    'basic_html' and 'release_shell'. See the Test
+	    Specification chapter in the Common Test User's Guide for
+	    details.</p>
+          <p>
+	    Own Id: OTP-10089 Aux Id: OTP-10049 </p>
+        </item>
+        <item>
+          <p>
+	    It is now possible to pause execution of a test case, by
+	    calling the ct:break/1/2 function. Execution is resumed
+	    with a call to ct:continue/0/1. Break/continue also works
+	    for test cases executing in parallel. See the ct
+	    reference manual for details.</p>
+          <p>
+	    Own Id: OTP-10127</p>
+        </item>
+        <item>
+          <p>
+	    It is now possible to send user defined events from a
+	    testcase which will be picked up by the installed event
+	    handler.</p>
+          <p>
+	    Own Id: OTP-10157</p>
+        </item>
+        <item>
+          <p>
+	    A new start option, release_shell, for ct:run_test/1, has
+	    been added, which makes Common Test release the shell
+	    process after the test suite compilation phase is
+	    finished. For details, see the Running Tests chapter in
+	    the User's Guide.</p>
+          <p>
+	    Own Id: OTP-10248 Aux Id: OTP-10127 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Common_Test 1.6.1</title>
 

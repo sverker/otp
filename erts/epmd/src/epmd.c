@@ -2,7 +2,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1998-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1998-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -64,7 +64,7 @@ int epmd_dbg(int level,int port) /* Utility to debug epmd... */
   if(port)
     {
       argv[argc++] = "-port";
-      sprintf(ibuff,"%d",port);
+      erts_snprintf(ibuff, sizeof(ibuff), "%d",port);
       argv[argc++] = ibuff;
     }
   argv[argc] = NULL;

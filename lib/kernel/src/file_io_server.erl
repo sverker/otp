@@ -40,6 +40,8 @@ format_error({_Line, ?MODULE, Reason}) ->
     io_lib:format("~w", [Reason]);
 format_error({_Line, Mod, Reason}) ->
     Mod:format_error(Reason);
+format_error(invalid_unicode) ->
+    io_lib:format("cannot translate from UTF-8", []);
 format_error(ErrorId) ->
     erl_posix_msg:message(ErrorId).
 
@@ -209,6 +211,10 @@ file_request({advise,Offset,Length,Advise},
     Reply ->
         {reply,Reply,State}
     end;
+file_request({allocate, Offset, Length},
+         #state{handle = Handle} = State) ->
+    Reply = ?PRIM_FILE:allocate(Handle, Offset, Length),
+    {reply, Reply, State};
 file_request({pread,At,Sz}, 
 	     #state{handle=Handle,buf=Buf,read_mode=ReadMode}=State) ->
     case position(Handle, At, Buf) of
@@ -549,7 +555,7 @@ get_chars_notempty(Mod, Func, XtraArg, S, OutEnc,
 		<<>> ->
 		    get_chars_apply(Mod, Func, XtraArg, S, OutEnc, State, eof);
 		_ ->
-		    {stop,invalid_unicode,{error,invalid_unicode},State}
+                    {stop,invalid_unicode,invalid_unicode_error(Mod, Func, XtraArg, S),State}
 	    end;
 	{error,Reason}=Error ->
 	    {stop,Reason,Error,State}
@@ -616,12 +622,22 @@ get_chars_apply(Mod, Func, XtraArg, S0, OutEnc,
 	end
     catch
 	exit:ExReason ->
-	   {stop,ExReason,{error,err_func(Mod, Func, XtraArg)},State};
+            {stop,ExReason,invalid_unicode_error(Mod, Func, XtraArg, S0),State};
 	error:ErrReason ->
 	   {stop,ErrReason,{error,err_func(Mod, Func, XtraArg)},State}
     end.
 	    
-
+%% A hack that tries to inform the caller about the position where the
+%% error occured.
+invalid_unicode_error(Mod, Func, XtraArg, S) ->
+    try
+        {erl_scan,tokens,_Args} = XtraArg,
+        Location = erl_scan:continuation_location(S),
+        {error,{Location, ?MODULE, invalid_unicode},Location}
+    catch
+        _:_ ->
+            {error,err_func(Mod, Func, XtraArg)}
+    end.
 
 %% Convert error code to make it look as before
 err_func(io_lib, get_until, {_,F,_}) ->

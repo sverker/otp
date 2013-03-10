@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1998-2009. All Rights Reserved.
+ * Copyright Ericsson AB 1998-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -24,28 +24,23 @@
 int ei_encode_port(char *buf, int *index, const erlang_port *p)
 {
   char *s = buf + *index;
-  char *s0 = s;
-  int len = strlen(p->node);
-  
-  if (!buf) s += 9 + len;
-  else {
+
+  ++(*index); /* skip ERL_PORT_EXT */
+  if (ei_encode_atom_len_as(buf, index, p->node, strlen(p->node), ERLANG_UTF8,
+			    ERLANG_LATIN1|ERLANG_UTF8) < 0) {
+      return -1;
+  }
+  if (buf) {
     put8(s,ERL_PORT_EXT);
 
-    /* first the nodename */
-    put8(s,ERL_ATOM_EXT);
-
-    put16be(s,len);
-  
-    memmove(s, p->node, len);
-    s += len;
+    s = buf + *index;
 
     /* now the integers */
     put32be(s,p->id & 0x0fffffff /* 28 bits */);
     put8(s,(p->creation & 0x03));
   }
   
-  *index += s-s0;
-  
+  *index += 4 + 1;
   return 0;
 }
 

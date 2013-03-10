@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1997-2012. All Rights Reserved.
+# Copyright Ericsson AB 1997-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -83,6 +83,7 @@ MODULES= \
 	testInfObj \
 	testParameterizedInfObj \
 	testMergeCompile \
+	testMultipleLevels \
 	testDeepTConstr \
 	testTimer \
 	testMegaco \
@@ -101,7 +102,6 @@ MODULES= \
 	test_driver_load \
 	testSelectionTypes \
 	test_undecoded_rest \
-	test_inline \
 	testTcapsystem \
 	testNBAPsystem \
 	test_compile_options \
@@ -109,6 +109,7 @@ MODULES= \
 	test_modified_x420 \
 	testX420 \
 	test_x691 \
+	testWSParamClass \
 	asn1_test_lib \
 	asn1_app_test \
 	asn1_appup_test \
@@ -156,13 +157,13 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 release_spec: opt
 
 release_tests_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)
-	$(INSTALL_DIR) $(RELSYSDIR)/asn1_SUITE_data
-	$(INSTALL_DATA)  $(ERL_FILES) $(HRL_FILES) $(RELSYSDIR)
-	$(INSTALL_DATA) asn1.spec asn1.cover $(INSTALL_PROGS) $(RELSYSDIR)
-	chmod -R u+w $(RELSYSDIR)
-	cd asn1_SUITE_data; tar cfh $(RELSYSDIR)/asn1_SUITE_data.tar *
-	cd $(RELSYSDIR)/asn1_SUITE_data; tar xf $(RELSYSDIR)/asn1_SUITE_data.tar
-	rm $(RELSYSDIR)/asn1_SUITE_data.tar
+	$(INSTALL_DIR) "$(RELSYSDIR)"
+	$(INSTALL_DIR) "$(RELSYSDIR)/asn1_SUITE_data"
+	$(INSTALL_DATA)  $(ERL_FILES) $(HRL_FILES) "$(RELSYSDIR)"
+	$(INSTALL_DATA) asn1.spec asn1.cover $(INSTALL_PROGS) "$(RELSYSDIR)"
+	chmod -R u+w "$(RELSYSDIR)"
+	cd asn1_SUITE_data; tar cfh "$(RELSYSDIR)/asn1_SUITE_data.tar" *
+	cd "$(RELSYSDIR)/asn1_SUITE_data"; tar xf "$(RELSYSDIR)/asn1_SUITE_data.tar"
+	rm "$(RELSYSDIR)/asn1_SUITE_data.tar"
 
 release_docs_spec:

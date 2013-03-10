@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1998-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -25,7 +25,7 @@
 	 variable_1/1, otp_4870/1, otp_4871/1, otp_5362/1,
          pmod/1, not_circular/1, skip_header/1, otp_6277/1, otp_7702/1,
          otp_8130/1, overload_mac/1, otp_8388/1, otp_8470/1, otp_8503/1,
-         otp_8562/1, otp_8665/1, otp_8911/1]).
+         otp_8562/1, otp_8665/1, otp_8911/1, otp_10302/1, otp_10820/1]).
 
 -export([epp_parse_erl_form/2]).
 
@@ -67,7 +67,7 @@ all() ->
      {group, variable}, otp_4870, otp_4871, otp_5362, pmod,
      not_circular, skip_header, otp_6277, otp_7702, otp_8130,
      overload_mac, otp_8388, otp_8470, otp_8503, otp_8562,
-     otp_8665, otp_8911].
+     otp_8665, otp_8911, otp_10302, otp_10820].
 
 groups() -> 
     [{upcase_mac, [], [upcase_mac_1, upcase_mac_2]},
@@ -582,12 +582,13 @@ otp_8130(suite) ->
 otp_8130(Config) when is_list(Config) ->
     true = os:putenv("epp_inc1", "stdlib"),
     Ts = [{otp_8130_1,
-           %% The scanner handles UNICODE in a special way. Hopefully
-           %% temporarily.
            <<"-define(M(A), ??A). "
              "t() ->  "
-             "   \"{ 34 , [ $1 , 2730 ] , \\\"34\\\" , X . a , 2730 }\" = "
-             "        ?M({34,\"1\\x{aaa}\",\"34\",X.a,$\\x{aaa}}), ok. ">>,
+             "   L = \"{ 34 , \\\"1\\\\x{AAA}\\\" , \\\"34\\\" , X . a , $\\\\x{AAA} }\", "
+             "   R = ?M({34,\"1\\x{aaa}\",\"34\",X.a,$\\x{aaa}}),"
+             "   Lt = erl_scan:string(L, 1, [unicode]),"
+             "   Rt = erl_scan:string(R, 1, [unicode]),"
+             "   Lt = Rt, ok. ">>,
           ok},
 
           {otp_8130_2,
@@ -1236,6 +1237,13 @@ otp_8911(doc) ->
 otp_8911(suite) ->
     [];
 otp_8911(Config) when is_list(Config) ->
+    case test_server:is_cover() of
+	true ->
+	    {skip, "Testing cover, so can not run when cover is already running"};
+	false ->
+	    do_otp_8911(Config)
+    end.
+do_otp_8911(Config) ->
     ?line {ok, CWD} = file:get_cwd(),
     ?line ok = file:set_cwd(?config(priv_dir, Config)),
 
@@ -1275,6 +1283,104 @@ otp_8665(Config) when is_list(Config) ->
            {errors,[{{1,54},epp,premature_end}],[]}}
          ],
     ?line [] = compile(Config, Cs),
+    ok.
+
+otp_10302(doc) ->
+    "OTP-10302. Unicode characters scanner/parser.";
+otp_10302(suite) ->
+    [];
+otp_10302(Config) when is_list(Config) ->
+    %% Two messages (one too many). Keeps otp_4871 happy.
+    Cs = [{otp_8562,
+           <<"%% coding: utf-8\n \n \x{E4}">>,
+           {errors,[{3,epp,cannot_parse},
+                    {3,file_io_server,invalid_unicode}],[]}}
+         ],
+    [] = compile(Config, Cs),
+    Dir = ?config(priv_dir, Config),
+    File = filename:join(Dir, "otp_10302.erl"),
+    utf8 = encoding("coding: utf-8", File),
+    utf8 = encoding("coding: UTF-8", File),
+    latin1 = encoding("coding: Latin-1", File),
+    latin1 = encoding("coding: latin-1", File),
+    none = encoding_com("coding: utf-8", File),
+    none = encoding_com("\n\n%% coding: utf-8", File),
+    none = encoding_nocom("\n\n coding: utf-8", File),
+    utf8 = encoding_com("\n%% coding: utf-8", File),
+    utf8 = encoding_nocom("\n coding: utf-8", File),
+    none = encoding("coding: \nutf-8", File),
+    latin1 = encoding("Encoding :  latin-1", File),
+    utf8 = encoding("ccoding: UTF-8", File),
+    utf8 = encoding("coding= utf-8", File),
+    utf8 = encoding_com(" %% coding= utf-8", File),
+    utf8 = encoding("coding  =  utf-8", File),
+    none = encoding("coding: utf-16 coding: utf-8", File), %first is bad
+    none = encoding("Coding: utf-8", File),    %capital c
+    utf8 = encoding("-*- coding: utf-8 -*-", File),
+    utf8 = encoding("-*-coding= utf-8-*-", File),
+    utf8 = encoding("codingcoding= utf-8", File),
+    ok = prefix("coding: utf-8", File, utf8),
+
+    "coding: latin-1" = epp:encoding_to_string(latin1),
+    "coding: utf-8" = epp:encoding_to_string(utf8),
+    true = lists:member(epp:default_encoding(), [latin1, utf8]),
+
+    ok.
+
+prefix(S, File, Enc) ->
+    prefix(0, S, File, Enc).
+
+prefix(100, _S, _File, _) ->
+    ok;
+prefix(N, S, File, Enc) ->
+    Enc = encoding(lists:duplicate(N, $\s) ++ S, File),
+    prefix(N+1, S, File, Enc).
+
+encoding(Enc, File) ->
+    E = encoding_com("%% " ++ Enc, File),
+    none = encoding_com(Enc, File),
+    E = encoding_nocom(Enc, File).
+
+encoding_com(Enc, File) ->
+    B = list_to_binary(Enc),
+    E = epp:read_encoding_from_binary(B),
+    ok = file:write_file(File, Enc),
+    {ok, Fd} = file:open(File, [read]),
+    E = epp:set_encoding(Fd),
+    ok = file:close(Fd),
+    E = epp:read_encoding(File).
+
+encoding_nocom(Enc, File) ->
+    Options = [{in_comment_only, false}],
+    B = list_to_binary(Enc),
+    E = epp:read_encoding_from_binary(B, Options),
+    ok = file:write_file(File, Enc),
+    {ok, Fd} = file:open(File, [read]),
+    ok = file:close(Fd),
+    E = epp:read_encoding(File, Options).
+
+otp_10820(doc) ->
+    "OTP-10820. Unicode filenames.";
+otp_10820(suite) ->
+    [];
+otp_10820(Config) when is_list(Config) ->
+    L = [915,953,959,973,957,953,954,959,957,964],
+    Dir = ?config(priv_dir, Config),
+    File = filename:join(Dir, L++".erl"),
+    C1 = <<"%% coding: utf-8\n -module(any).">>,
+    ok = do_otp_10820(File, C1, "+pc latin1"),
+    ok = do_otp_10820(File, C1, "+pc unicode"),
+    C2 = <<"\n-module(any).">>,
+    ok = do_otp_10820(File, C2, "+pc latin1"),
+    ok = do_otp_10820(File, C2, "+pc unicode").
+
+do_otp_10820(File, C, PC) ->
+    {ok,Node} = start_node(erl_pp_helper, "+fnu " ++ PC),
+    ok = rpc:call(Node, file, write_file, [File, C]),
+    {ok,[{attribute,1,file,{File,1}},
+         {attribute,2,module,any},
+         {eof,2}]} = rpc:call(Node, epp, parse_file, [File, [],[]]),
+    true = test_server:stop_node(Node),
     ok.
 
 check(Config, Tests) ->
@@ -1393,3 +1499,8 @@ ln2({error,M}) ->
     {error,ln2(M)};
 ln2(M) ->
     M.
+
+%% +fnu means a peer node has to be started; slave will not do
+start_node(Name, Xargs) ->
+    ?line PA = filename:dirname(code:which(?MODULE)),
+    test_server:start_node(Name, peer, [{args, "-pa " ++ PA ++ " " ++ Xargs}]).

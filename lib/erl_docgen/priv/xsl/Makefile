@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 2009. All Rights Reserved.
+# Copyright Ericsson AB 2009-2012. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -42,7 +42,8 @@ XSL_FILES = \
 	db_pdf_params.xsl \
 	db_html.xsl \
 	db_html_params.xsl \
-	db_man.xsl
+	db_man.xsl \
+	db_eix.xsl
 
 
 # ----------------------------------------------------
@@ -68,8 +69,8 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/priv/xsl
-	$(INSTALL_DATA) $(XSL_FILES) $(RELSYSDIR)/priv/xsl
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv/xsl"
+	$(INSTALL_DATA) $(XSL_FILES) "$(RELSYSDIR)/priv/xsl"
 
 
 release_docs_spec:

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2006-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2006-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -610,9 +610,9 @@ get_zip_opt([Unknown | _Rest], _Opts) ->
 %% feedback funs
 silent(_) -> ok.
 
-verbose_unzip(FN) -> io:format("extracting: ~p\n", [FN]).
+verbose_unzip(FN) -> io:format("extracting: ~tp\n", [FN]).
 
-verbose_zip(FN) -> io:format("adding: ~p\n", [FN]).
+verbose_zip(FN) -> io:format("adding: ~tp\n", [FN]).
 
 %% file filter funs
 all(_) -> true.
@@ -943,7 +943,7 @@ raw_short_print_info_etc(EOCD, X, Comment, Y, Acc) when is_record(EOCD, eocd) ->
     raw_long_print_info_etc(EOCD, X, Comment, Y, Acc).
 
 print_file_name(FileName) ->
-    io:format("~s\n", [FileName]).
+    io:format("~ts\n", [FileName]).
 
 
 %% for printing directory (tt/1)
@@ -960,14 +960,14 @@ raw_long_print_info_etc(EOCD, _, Comment, _, Acc) when is_record(EOCD, eocd) ->
     Acc.
 
 print_header(CompSize, MTime, UncompSize, FileName, FileComment) ->
-    io:format("~8w ~s ~8w ~2w% ~s ~s\n",
+    io:format("~8w ~s ~8w ~2w% ~ts ~ts\n",
 	      [CompSize, time_to_string(MTime), UncompSize,
 	       get_percent(CompSize, UncompSize), FileName, FileComment]).
 
 print_comment("") ->
     ok;
 print_comment(Comment) ->
-    io:format("Archive comment: ~s\n", [Comment]).
+    io:format("Archive comment: ~ts\n", [Comment]).
 
 get_percent(_, 0) -> 100;
 get_percent(CompSize, Size) -> round(CompSize * 100 / Size).
@@ -1017,7 +1017,7 @@ cd_file_header_from_lh_and_pos(LH, Pos) ->
 		    file_name_length = FileNameLength,
 		    extra_field_length = ExtraFieldLength,
 		    file_comment_length = 0, % FileCommentLength,
-		    disk_num_start = 1, % DiskNumStart,
+		    disk_num_start = 0, % DiskNumStart,
 		    internal_attr = 0, % InternalAttr,
 		    external_attr = 0, % ExternalAttr,
 		    local_header_offset = Pos}.

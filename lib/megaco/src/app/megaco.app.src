@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1999-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -23,19 +23,6 @@
   {modules,
    [	
 	megaco,
-	megaco_ber_bin_encoder,
-	megaco_ber_bin_drv_media_gateway_control_v1,
-	megaco_ber_bin_drv_media_gateway_control_v2,
-	megaco_ber_bin_drv_media_gateway_control_prev3a,
-	megaco_ber_bin_drv_media_gateway_control_prev3b,
-	megaco_ber_bin_drv_media_gateway_control_prev3c,
-	megaco_ber_bin_drv_media_gateway_control_v3,
-	megaco_ber_bin_media_gateway_control_v1,
-	megaco_ber_bin_media_gateway_control_v2,
-	megaco_ber_bin_media_gateway_control_prev3a,
-	megaco_ber_bin_media_gateway_control_prev3b,
-	megaco_ber_bin_media_gateway_control_prev3c,
-	megaco_ber_bin_media_gateway_control_v3,
 	megaco_ber_encoder,
 	megaco_ber_media_gateway_control_v1,
 	megaco_ber_media_gateway_control_v2,
@@ -87,19 +74,6 @@
 	megaco_per_media_gateway_control_prev3b,
 	megaco_per_media_gateway_control_prev3c,
 	megaco_per_media_gateway_control_v3,
-	megaco_per_bin_encoder,
-	megaco_per_bin_drv_media_gateway_control_v1,
-	megaco_per_bin_drv_media_gateway_control_v2,
-	megaco_per_bin_drv_media_gateway_control_prev3a,
-	megaco_per_bin_drv_media_gateway_control_prev3b,
-	megaco_per_bin_drv_media_gateway_control_prev3c,
-	megaco_per_bin_drv_media_gateway_control_v3,
-	megaco_per_bin_media_gateway_control_v1,
-	megaco_per_bin_media_gateway_control_v2,
-	megaco_per_bin_media_gateway_control_prev3a,
-	megaco_per_bin_media_gateway_control_prev3b,
-	megaco_per_bin_media_gateway_control_prev3c,
-	megaco_per_bin_media_gateway_control_v3,
 	megaco_pretty_text_encoder,
 	megaco_pretty_text_encoder_v1,
 	megaco_pretty_text_encoder_v2,

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -156,10 +156,10 @@ return(ok,Warnings,Flags) ->
 	_ ->
 	    case member(warnings_as_errors,Flags) of
 		true ->
-		    io:format("~s",[format_warning(Warnings, true)]),
+		    io:format("~ts",[format_warning(Warnings, true)]),
 		    error;
 		false ->
-		    io:format("~s",[format_warning(Warnings)]),
+		    io:format("~ts",[format_warning(Warnings)]),
 		    ok
 	    end
     end;
@@ -168,7 +168,7 @@ return({error,Mod,Error},_,Flags) ->
 	true ->
 	    {error,Mod,Error};
 	_ ->
-	    io:format("~s",[Mod:format_error(Error)]),
+	    io:format("~ts",[Mod:format_error(Error)]),
 	    error
     end.
 
@@ -673,7 +673,7 @@ check_item({_,{registered,Regs}},I) ->
 	_ -> throw({bad_param, I})
     end;
 check_item({_,{modules,Mods}},I) ->
-    case mod_list_p(Mods) of
+    case a_list_p(Mods) of
 	true -> Mods;
 	_ -> throw({bad_param, I})
     end;
@@ -900,11 +900,10 @@ find_pos(N, Name, [_OtherAppl|OrderedAppls]) ->
 
 check_modules(Appls, Path, TestP, Machine) ->
     %% first check that all the module names are unique
-    %% Make a list M1 = [{Mod,Vsn,App,AppVsn,Dir}]
-    %%   where Vsn = '$$ignore$$' | Specified
-    M1 = [{Mod,Vsn,App,Appv,A#application.dir} ||
-	     {{App,Appv},A} <- Appls,
-	     {Mod,Vsn} <- get_mod_vsn(A#application.modules)],
+    %% Make a list M1 = [{Mod,App,Dir}]
+    M1 = [{Mod,App,A#application.dir} ||
+	     {{App,_Appv},A} <- Appls,
+	     Mod <- A#application.modules],
     case duplicates(M1) of
 	[] ->
 	    case check_mods(M1, Appls, Path, TestP, Machine) of
@@ -918,16 +917,8 @@ check_modules(Appls, Path, TestP, Machine) ->
 	    throw({error, {duplicate_modules, Dups}})
     end.
 
-get_mod_vsn([{Mod,Vsn}|Mods]) ->
-    [{Mod,Vsn}|get_mod_vsn(Mods)];
-get_mod_vsn([Mod|Mods]) ->
-    [{Mod,'$$ignore$$'}|get_mod_vsn(Mods)];
-get_mod_vsn([]) ->
-    [].
-
 %%______________________________________________________________________
-%% Check that all modules exists and that the specified version
-%% corresponds to the version in the module's source code.
+%% Check that all modules exists.
 %% Use the module extension of the running machine as extension for
 %% the checked modules.
 
@@ -952,7 +943,7 @@ check_src(Modules, Appls, Path, true, Machine) ->
     Ext = objfile_extension(Machine),
     IncPath = create_include_path(Appls, Path),
     append(map(fun(ModT) ->
-		       {Mod,_Vsn,App,_,Dir} = ModT,
+		       {Mod,App,Dir} = ModT,
 		       case check_mod(Mod,App,Dir,Ext,IncPath) of
 			   ok ->
 			       [];
@@ -1076,11 +1067,10 @@ check_mod(Mod,App,Dir,Ext,IncPath) ->
     end.
 
 mod_to_filename(Dir, Mod, Ext) ->
-    Parts = packages:split(Mod),
-    filename:join([Dir | Parts]) ++ Ext.
+    filename:join(Dir, atom_to_list(Mod) ++ Ext).
 
 check_module(Mod, Dir, ObjModTime, IncPath) ->
-    {SrcDirs,_IncDirs}= smart_guess(Mod, Dir,IncPath),
+    {SrcDirs,_IncDirs}= smart_guess(Dir,IncPath),
     case locate_src(Mod,SrcDirs) of
 	{ok,_FDir,_File,LastModTime} ->
 	    if
@@ -1094,7 +1084,7 @@ check_module(Mod, Dir, ObjModTime, IncPath) ->
     end.
 
 locate_src(Mod,[Dir|Dirs]) ->
-    File = filename:join(Dir, mod_to_fname(Mod) ++ ".erl"),
+    File = mod_to_filename(Dir, Mod, ".erl"),
     case file:read_file_info(File) of
 	{ok,FileInfo} ->
 	    LastModTime = FileInfo#file_info.mtime,
@@ -1105,9 +1095,6 @@ locate_src(Mod,[Dir|Dirs]) ->
 locate_src(_,[]) ->
     false.
 
-mod_to_fname(Mod) ->
-    hd(lists:reverse(packages:split(Mod))).
-
 
 %%______________________________________________________________________
 %% smart_guess(Mod, Dir,IncludePath) -> {[Dirs],[IncDirs]}
@@ -1115,17 +1102,12 @@ mod_to_fname(Mod) ->
 %% src-dir should be one of .../src or .../src/e_src
 %% If dir does not contain .../ebin set dir to the same directory.
 
-smart_guess(Mod, Dir,IncPath) ->
+smart_guess(Dir,IncPath) ->
     case reverse(filename:split(Dir)) of
 	["ebin"|D] ->
-	    Subdirs = case packages:split(Mod) of
-			  [_] -> [];
-			  [_|_] = Parts ->
-			      lists:reverse(tl(lists:reverse(Parts)))
-		      end,
 	    D1 = reverse(D),
-	    Dirs = [filename:join(D1 ++ ["src" | Subdirs]),
-		    filename:join(D1 ++ ["src", "e_src" | Subdirs])],
+	    Dirs = [filename:join(D1 ++ ["src"]),
+		    filename:join(D1 ++ ["src", "e_src"])],
 	    {Dirs,Dirs ++ IncPath};
 	_ ->
 	    {[Dir],[Dir] ++ IncPath}
@@ -1421,10 +1403,7 @@ create_mandatory_path(Appls, PathFlag, Variables) ->
 %% Load all modules, except those in Mandatory_modules.
 
 load_appl_mods([{{Name,Vsn},A}|Appls], Mand, PathFlag, Variables) ->
-    Mods = map(fun({Mod,_}) -> Mod;
-		  (Mod)     -> Mod
-	       end,
-	       A#application.modules),
+    Mods = A#application.modules,
     load_commands(filter(fun(Mod) -> not member(Mod, Mand) end, Mods),
 		  cr_path(Name, Vsn, A, PathFlag, Variables)) ++
 	load_appl_mods(Appls, Mand, PathFlag, Variables);
@@ -1435,23 +1414,8 @@ load_appl_mods([], _, _, _) ->
     [{progress, modules_loaded}].
 
 load_commands(Mods, Path) ->
-    SplitMods = lists:foldl(
-		  fun({Parts,M}, [{Last, Acc}|Rest]) ->
-			  [_|Tail] = lists:reverse(Parts),
-			  case lists:reverse(Tail) of
-			      Subs when Subs == Last ->
-				  [{Last,[M|Acc]}|Rest];
-			      Subs ->
-				  [{Subs, [M]}|[{Last,Acc}|Rest]]
-			  end
-		  end, [{[],[]}],
-		  lists:sort([{packages:split(M),M} || M <- Mods])),
-    lists:foldl(
-      fun({Subs,Ms}, Cmds) ->
-	      [{path, [filename:join([Path | Subs])]},
-	       {primLoad,lists:sort(Ms)} | Cmds]
-      end, [], SplitMods).
-
+    [{path, [filename:join([Path])]},
+     {primLoad,lists:sort(Mods)}].
 
 %%______________________________________________________________________
 %% Pack an application to an application term.
@@ -1497,7 +1461,8 @@ mandatory_modules() ->
 
 preloaded() ->
     %% Sorted
-    [erl_prim_loader,erlang,init,otp_ring0,prim_file,prim_inet, prim_zip,zlib]. 
+    [erl_prim_loader,erlang,erts_internal,init,otp_ring0,prim_file,prim_inet,
+     prim_zip,zlib]. 
 
 %%______________________________________________________________________
 %% Kernel processes; processes that are specially treated by the init
@@ -1784,9 +1749,7 @@ add_appl(Name, Vsn, App, Tar, Variables, Flags, Var) ->
 	    add_to_tar(Tar,
 		       filename:join(AppDir, Name ++ ".app"),
 		       filename:join(BinDir, Name ++ ".app")),
-	    add_modules(map(fun({Mod,_}) -> to_list(Mod);
-			       (Mod)     -> to_list(Mod)
-			    end,
+	    add_modules(map(fun(Mod) -> to_list(Mod) end,
 			    App#application.modules),
 			Tar,
 			AppDir,
@@ -2007,17 +1970,11 @@ is_app_type(_) -> false.
 
 % check if a term is a string.
 
-string_p([H|T]) when is_integer(H), H >= $ , H < 255 ->
-    string_p(T);
-string_p([$\n|T]) -> string_p(T);
-string_p([$\r|T]) -> string_p(T);
-string_p([$\t|T]) -> string_p(T);
-string_p([$\v|T]) -> string_p(T);
-string_p([$\b|T]) -> string_p(T);
-string_p([$\f|T]) -> string_p(T);
-string_p([$\e|T]) -> string_p(T);
-string_p([]) -> true;
-string_p(_) ->  false.
+string_p(S) ->
+    case unicode:characters_to_list(S) of
+	S -> true;
+	_ -> false
+    end.
 
 % check if a term is a list of two tuples with the first
 % element as an atom.
@@ -2025,14 +1982,6 @@ string_p(_) ->  false.
 t_list_p([{A,_}|T]) when is_atom(A) -> t_list_p(T);
 t_list_p([])                        -> true;
 t_list_p(_)                         -> false.
-
-% check if a term is a list of atoms or two-tuples with the first
-% element as an atom.
-
-mod_list_p([{A,_}|T]) when is_atom(A) -> mod_list_p(T);
-mod_list_p([A|T]) when is_atom(A)     -> mod_list_p(T);
-mod_list_p([])                        -> true;
-mod_list_p(_)                         -> false.
 
 % check if a term is a list of atoms.
 
@@ -2248,31 +2197,31 @@ format_error({illegal_applications,Names}) ->
     io_lib:format("Illegal applications in the release file: ~p~n",
 		  [Names]);
 format_error({missing_mandatory_app,Name}) ->
-    io_lib:format("Mandatory application ~p must be specified in the release file~n",
+    io_lib:format("Mandatory application ~w must be specified in the release file~n",
 		  [Name]);
 format_error({mandatory_app,Name,Type}) ->
-    io_lib:format("Mandatory application ~p must be of type 'permanent' in the release file. Is '~p'.~n",
+    io_lib:format("Mandatory application ~w must be of type 'permanent' in the release file. Is '~p'.~n",
 		  [Name,Type]);
 format_error({duplicate_register,Dups}) ->
-    io_lib:format("Duplicated register names: ~n~s",
+    io_lib:format("Duplicated register names: ~n~ts",
 		  [map(fun({{Reg,App1,_,_},{Reg,App2,_,_}}) ->
-			       io_lib:format("\t~p registered in ~p and ~p~n",
+			       io_lib:format("\t~w registered in ~w and ~w~n",
 					     [Reg,App1,App2])
 		       end, Dups)]);
 format_error({undefined_applications,Apps}) ->
     io_lib:format("Undefined applications: ~p~n",[Apps]);
 format_error({duplicate_modules,Dups}) ->
-    io_lib:format("Duplicated modules: ~n~s",
+    io_lib:format("Duplicated modules: ~n~ts",
 		  [map(fun({{Mod,_,App1,_,_},{Mod,_,App2,_,_}}) ->
-			       io_lib:format("\t~p specified in ~p and ~p~n",
+			       io_lib:format("\t~w specified in ~w and ~w~n",
 					     [Mod,App1,App2])
 		       end, Dups)]);
 format_error({included_and_used, Dups}) ->
     io_lib:format("Applications both used and included: ~p~n",[Dups]);
 format_error({duplicate_include, Dups}) ->
-    io_lib:format("Duplicated application included: ~n~s",
+    io_lib:format("Duplicated application included: ~n~ts",
 		  [map(fun({{Name,App1,_,_},{Name,App2,_,_}}) ->
-			       io_lib:format("\t~p included in ~p and ~p~n",
+			       io_lib:format("\t~w included in ~w and ~w~n",
 					     [Name,App1,App2])
 		       end, Dups)]);
 format_error({modules,ModErrs}) ->
@@ -2283,11 +2232,11 @@ format_error({not_found,File}) ->
     io_lib:format("File not found: ~p~n",[File]);
 format_error({parse,File,{Line,Mod,What}}) ->
     Str = Mod:format_error(What),
-    io_lib:format("~s:~p: ~s\n",[File, Line, Str]);
+    io_lib:format("~ts:~w: ~ts\n",[File, Line, Str]);
 format_error({read,File}) ->
     io_lib:format("Cannot read ~p~n",[File]);
 format_error({open,File,Error}) ->
-    io_lib:format("Cannot open ~p - ~s~n",
+    io_lib:format("Cannot open ~p - ~ts~n",
 		  [File,file:format_error(Error)]);
 format_error({tar_error,What}) ->
     form_tar_err(What);
@@ -2303,24 +2252,21 @@ format_errors(ListOfErrors) ->
 form_err({bad_application_name,{Name,Found}}) ->
     io_lib:format("~p: Mismatched application id: ~p~n",[Name,Found]);
 form_err({error_reading, {Name, What}}) ->
-    io_lib:format("~p: ~s~n",[Name,form_reading(What)]);
+    io_lib:format("~p: ~ts~n",[Name,form_reading(What)]);
 form_err({module_not_found,App,Mod}) ->
-    io_lib:format("~p: Module (~p) not found~n",[App,Mod]);
-form_err({{vsn_diff,File},{Mod,Vsn,App,_,_}}) ->
-    io_lib:format("~p: Module (~p) version (~p) differs in file ~p~n",
-		  [App,Mod,Vsn,File]);
+    io_lib:format("~w: Module (~w) not found~n",[App,Mod]);
 form_err({error_add_appl, {Name, {tar_error, What}}}) ->
-    io_lib:format("~p: ~s~n",[Name,form_tar_err(What)]);
+    io_lib:format("~p: ~ts~n",[Name,form_tar_err(What)]);
 form_err(E) ->
     io_lib:format("~p~n",[E]).
 
 form_reading({not_found,File}) ->
     io_lib:format("File not found: ~p~n",[File]);
 form_reading({application_vsn, {Name,Vsn}}) ->
-    io_lib:format("Application ~s with version ~p not found~n",[Name, Vsn]);
+    io_lib:format("Application ~ts with version ~p not found~n",[Name, Vsn]);
 form_reading({parse,File,{Line,Mod,What}}) ->
     Str = Mod:format_error(What),
-    io_lib:format("~s:~p: ~s\n",[File, Line, Str]);
+    io_lib:format("~ts:~w: ~ts\n",[File, Line, Str]);
 form_reading({read,File}) ->
     io_lib:format("Cannot read ~p~n",[File]);
 form_reading({{bad_param, P},_}) ->
@@ -2336,15 +2282,15 @@ form_reading({no_valid_version, {{_, SVsn}, {_, File, FVsn}}}) ->
     io_lib:format("No valid version (~p) of .app file found. Found file ~p with version ~p~n", 
 		  [SVsn, File, FVsn]);
 form_reading({parse_error, {File, Line, Error}}) ->
-    io_lib:format("Parse error in file: ~p.  Line: ~p  Error: ~p; ~n", [File, Line, Error]);
+    io_lib:format("Parse error in file: ~p.  Line: ~w  Error: ~p; ~n", [File, Line, Error]);
 form_reading(W) ->
     io_lib:format("~p~n",[W]).
 
 form_tar_err({open, File, Error}) ->
-    io_lib:format("Cannot open tar file ~s - ~p~n",
+    io_lib:format("Cannot open tar file ~ts - ~ts~n",
 		  [File, erl_tar:format_error(Error)]);
 form_tar_err({add, File, Error}) ->
-    io_lib:format("Cannot add file ~s to tar file - ~s~n",
+    io_lib:format("Cannot add file ~ts to tar file - ~ts~n",
 		  [File, erl_tar:format_error(Error)]).
 
 %% Format warning
@@ -2362,23 +2308,23 @@ format_warning(Warnings, Werror) ->
     map(fun({warning,W}) -> form_warn(Prefix, W) end, Warnings).
 
 form_warn(Prefix, {source_not_found,{Mod,_,App,_,_}}) ->
-    io_lib:format("~s~p: Source code not found: ~p.erl~n",
+    io_lib:format("~ts~w: Source code not found: ~w.erl~n",
 		  [Prefix,App,Mod]);
 form_warn(Prefix, {{parse_error, File},{_,_,App,_,_}}) ->
-    io_lib:format("~s~p: Parse error: ~p~n",
+    io_lib:format("~ts~w: Parse error: ~p~n",
 		  [Prefix,App,File]);
 form_warn(Prefix, {obj_out_of_date,{Mod,_,App,_,_}}) ->
-    io_lib:format("~s~p: Object code (~p) out of date~n",
+    io_lib:format("~ts~w: Object code (~w) out of date~n",
 		  [Prefix,App,Mod]);
 form_warn(Prefix, {exref_undef, Undef}) ->
     F = fun({M,F,A}) ->
-		io_lib:format("~sUndefined function ~p:~p/~p~n",
+		io_lib:format("~tsUndefined function ~w:~w/~w~n",
 			      [Prefix,M,F,A])
 	end,
     map(F, Undef);
 form_warn(Prefix, missing_sasl) ->
-    io_lib:format("~s: Missing application sasl. "
+    io_lib:format("~ts: Missing application sasl. "
 		  "Can not upgrade with this release~n",
 		  [Prefix]);
 form_warn(Prefix, What) ->
-    io_lib:format("~s ~p~n", [Prefix,What]).
+    io_lib:format("~ts ~p~n", [Prefix,What]).

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -37,9 +37,11 @@
         {dontroute,       boolean()} |
         {exit_on_close,   boolean()} |
         {header,          non_neg_integer()} |
+        {high_msgq_watermark, pos_integer()} |
         {high_watermark,  non_neg_integer()} |
         {keepalive,       boolean()} |
         {linger,          {boolean(), non_neg_integer()}} |
+        {low_msgq_watermark, pos_integer()} |
         {low_watermark,   non_neg_integer()} |
         {mode,            list | binary} | list | binary |
         {nodelay,         boolean()} |
@@ -57,7 +59,8 @@
         {send_timeout,    non_neg_integer() | infinity} |
         {send_timeout_close, boolean()} |
         {sndbuf,          non_neg_integer()} |
-        {tos,             non_neg_integer()}.
+        {tos,             non_neg_integer()} |
+	{ipv6_v6only,     boolean()}.
 -type option_name() ::
         active |
         buffer |
@@ -66,9 +69,11 @@
         dontroute |
         exit_on_close |
         header |
+        high_msgq_watermark |
         high_watermark |
         keepalive |
         linger |
+        low_msgq_watermark |
         low_watermark |
         mode |
         nodelay |
@@ -85,7 +90,8 @@
         send_timeout |
         send_timeout_close |
         sndbuf |
-        tos.
+        tos |
+	ipv6_v6only.
 -type connect_option() ::
         {ip, inet:ip_address()} |
         {fd, Fd :: non_neg_integer()} |
@@ -250,7 +256,7 @@ close(S) ->
 -spec send(Socket, Packet) -> ok | {error, Reason} when
       Socket :: socket(),
       Packet :: iodata(),
-      Reason :: inet:posix().
+      Reason :: closed | inet:posix().
 
 send(S, Packet) when is_port(S) ->
     case inet_db:lookup_socket(S) of

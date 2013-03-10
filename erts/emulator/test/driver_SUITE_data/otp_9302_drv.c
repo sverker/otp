@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2011. All Rights Reserved.
+ * Copyright Ericsson AB 2011-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -134,8 +134,8 @@ static void send_reply(Otp9302AsyncData *adata)
 	ERL_DRV_ATOM, adata->term_data.msg,
 	ERL_DRV_TUPLE, 2
     };
-    driver_send_term(adata->port, adata->term_data.receiver,
-		     spec, sizeof(spec)/sizeof(spec[0]));
+    erl_drv_send_term(adata->term_data.port, adata->term_data.receiver,
+		      spec, sizeof(spec)/sizeof(spec[0]));
 }
 
 static void enqueue_reply(Otp9302AsyncData *adata)

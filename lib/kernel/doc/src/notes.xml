@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2004</year><year>2011</year>
+      <year>2004</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -29,6 +29,364 @@
     <file>notes.xml</file>
   </header>
   <p>This document describes the changes made to the Kernel application.</p>
+
+<section><title>Kernel 2.16.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p> A bug that could cause a crash with wrong reason has
+	    been corrected in the <c>application_controller</c>
+	    module. </p>
+          <p>
+	    Own Id: OTP-10754</p>
+        </item>
+        <item>
+          <p>
+	    Fix <c>code:is_module_native/1</c> that sometimes in R16A
+	    returned false for hipe compiled modules containing BIFs
+	    such as <c>lists</c>.</p>
+          <p>
+	    Own Id: OTP-10870</p>
+        </item>
+        <item>
+          <p>
+	    Respect <c>{exit_on_close,false}</c> option on tcp socket
+	    in non-passive mode when receiving fails (due to an
+	    ill-formed packet for example) by only doing a half close
+	    and still allow sending on the socket. (Thanks to Anthony
+	    Molinaro and Steve Vinoski for reporting the problem)</p>
+          <p>
+	    Own Id: OTP-10879</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Slightly nicer error message when node start fails due to
+	    duplicate name. Thanks to Magnus Henoch.</p>
+          <p>
+	    Own Id: OTP-10797</p>
+        </item>
+        <item>
+	    <p> Miscellaneous updates due to Unicode support. </p>
+          <p>
+	    Own Id: OTP-10820</p>
+        </item>
+        <item>
+          <p>
+	    Add a new function code:get_mode() can be used to detect
+	    how the code servers behaves. Thanks to Vlad Dumitrescu</p>
+          <p>
+	    Own Id: OTP-10823</p>
+        </item>
+        <item>
+          <p>
+	    Fix type of error Reason on gen_tcp:send/2. Thanks to
+	    Sean Cribbs.</p>
+          <p>
+	    Own Id: OTP-10839</p>
+        </item>
+        <item>
+	    <p><c>file:list_dir_all/1</c> and
+	    <c>file:read_link_all/1</c> that can handle raw file
+	    names have been added. See the User Guide for STDLIB for
+	    information about raw file names.</p>
+          <p>
+	    Own Id: OTP-10852</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Kernel 2.16</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    It is no longer possible to have <c>{Mod,Vsn}</c> in the
+	    'modules' list in a .app file.</p>
+          <p>
+	    This was earlier possible, although never documented in
+	    the .app file reference manual. It was however visible in
+	    the documentation of <c>application:load/[1,2]</c>, where
+	    the same term as in a .app file can be used as the first
+	    argument.</p>
+          <p>
+	    The possibility has been removed since the <c>Vsn</c>
+	    part was never used.</p>
+          <p>
+	    *** POTENTIAL INCOMPATIBILITY ***</p>
+          <p>
+	    Own Id: OTP-10417</p>
+        </item>
+        <item>
+	    <p> The contract of <c>erl_ddll:format_error/1</c> has
+	    been corrected. (Thanks to Joseph Wayne Norton.) </p>
+          <p>
+	    Own Id: OTP-10473</p>
+        </item>
+        <item>
+          <p>
+	    Change printout of application crash message on startup
+	    to formated strings (Thanks to Serge Aleynikov)</p>
+          <p>
+	    Own Id: OTP-10620</p>
+        </item>
+        <item>
+	    <p> The type <c>ascii_string()</c> in the <c>base64</c>
+	    module has been corrected. The type
+	    <c>file:file_info()</c> has been cleaned up. The type
+	    <c>file:fd()</c> has been made opaque in the
+	    documentation. </p>
+          <p>
+	    Own Id: OTP-10624 Aux Id: kunagi-352 [263] </p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Inet exported functionality</p>
+          <p>
+	    inet:parse_ipv4_address/1,
+	    inet:parse_ipv4strict_address/1,
+	    inet:parse_ipv6_address/1,
+	    inet:parse_ipv6strict_address/1, inet:parse_address/1 and
+	    inet:parse_strict_address is now exported from the inet
+	    module.</p>
+          <p>
+	    Own Id: OTP-8067 Aux Id: kunagi-274 [185] </p>
+        </item>
+        <item>
+          <p>
+	    A boolean socket option 'ipv6_v6only' for IPv6 sockets
+	    has been added. The default value of the option is OS
+	    dependent, so applications aiming to be portable should
+	    consider using <c>{ipv6_v6only,true}</c> when creating an
+	    <c>inet6</c> listening/destination socket, and if
+	    neccesary also create an <c>inet</c> socket on the same
+	    port for IPv4 traffic. See the documentation.</p>
+          <p>
+	    Own Id: OTP-8928 Aux Id: kunagi-193 [104] </p>
+        </item>
+        <item>
+	    <p> Support for Unicode has been implemented. </p>
+          <p>
+	    Own Id: OTP-10302</p>
+        </item>
+        <item>
+          <p>
+	    The documentation for <c>global:register_name/3</c> has
+	    been updated to mention that the use of
+	    <c>{Module,Function}</c> as the method argument (resolve
+	    function) is deprecated.</p>
+          <p>
+	    Own Id: OTP-10419</p>
+        </item>
+        <item>
+          <p>
+	    Fixed bug where sendfile on oracle solaris would return
+	    an error when a partial send was done.</p>
+          <p>
+	    Own Id: OTP-10549</p>
+        </item>
+        <item>
+          <p>
+	    The <c>error_handler</c> module will now call
+	    <c>'$handle_undefined_function'/2</c> if an attempt is
+	    made to call a non-existing function in a module that
+	    exists. See the documentation for <c>error_handler</c>
+	    module for details.</p>
+          <p>
+	    Own Id: OTP-10617 Aux Id: kunagi-340 [251] </p>
+        </item>
+        <item>
+	    <p>Where necessary a comment stating encoding has been
+	    added to Erlang files. The comment is meant to be removed
+	    in Erlang/OTP R17B when UTF-8 becomes the default
+	    encoding. </p>
+          <p>
+	    Own Id: OTP-10630</p>
+        </item>
+        <item>
+          <p>
+	    Do not return wrong terms unnecessarily. (Thanks to
+	    Kostis Sagonas.)</p>
+          <p>
+	    Own Id: OTP-10662</p>
+        </item>
+        <item>
+	    <p> Some examples overflowing the width of PDF pages have
+	    been corrected. </p>
+          <p>
+	    Own Id: OTP-10665</p>
+        </item>
+        <item>
+	    <p>Add file:allocate/3 operation</p>
+	    <p>This operation allows pre-allocation of space for
+	    files. It succeeds only on systems that support such
+	    operation. (Thanks to Filipe David Manana)</p>
+          <p>
+	    Own Id: OTP-10680</p>
+        </item>
+        <item>
+          <p>
+	    Add application:get_key/3. The new function provides a
+	    default value for a configuration parameter. Thanks to
+	    Serge Aleynikov.</p>
+          <p>
+	    Own Id: OTP-10694</p>
+        </item>
+        <item>
+          <p>
+	    Add search to Erlang shell's history. Thanks to Fred
+	    Herbert.</p>
+          <p>
+	    Own Id: OTP-10739</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Kernel 2.15.3</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Ensure 'erl_crash.dump' when asked for it. This will
+	    change erl_crash.dump behaviour.</p>
+          <p>
+	    * Not setting ERL_CRASH_DUMP_SECONDS will now terminate
+	    beam immediately on a crash without writing a crash dump
+	    file.</p>
+          <p>
+	    * Setting ERL_CRASH_DUMP_SECONDS to 0 will also terminate
+	    beam immediately on a crash without writing a crash dump
+	    file, i.e. same as not setting ERL_CRASH_DUMP_SECONDS
+	    environment variable.</p>
+          <p>
+	    * Setting ERL_CRASH_DUMP_SECONDS to a negative value will
+	    let the beam wait indefinitely on the crash dump file
+	    being written.</p>
+          <p>
+	    * Setting ERL_CRASH_DUMP_SECONDS to a positive value will
+	    let the beam wait that many seconds on the crash dump
+	    file being written.</p>
+          <p>
+	    A positive value will set an alarm/timeout for restart
+	    both in beam and in heart if heart is running.</p>
+          <p>
+	    *** POTENTIAL INCOMPATIBILITY ***</p>
+          <p>
+	    Own Id: OTP-10422 Aux Id: kunagi-250 [161] </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Kernel 2.15.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Fixed issue where using controlling_process/2 with self()
+	    as the second argument caused the port to leak if self()
+	    crashes. (Thanks to Ricardo Catalinas Jiménez)</p>
+          <p>
+	    Own Id: OTP-10094</p>
+        </item>
+        <item>
+          <p>
+	    When sending large files using the file:sendfile fallback
+	    file:sendfile would crash. This is now fixed.</p>
+          <p>
+	    Own Id: OTP-10098</p>
+        </item>
+        <item>
+          <p>
+	    Fix rpc:call/5 for local calls with a finite Timeout
+	    (Thanks to Tomer Chachamu)</p>
+          <p>
+	    Own Id: OTP-10149</p>
+        </item>
+        <item>
+          <p>
+	    fix escript/primary archive reloading</p>
+          <p>
+	    If the mtime of an escript/primary archive file changes
+	    after being added to the code path, correctly reload the
+	    archive and update the cache. (Thanks to Tuncer Ayaz)</p>
+          <p>
+	    Own Id: OTP-10151</p>
+        </item>
+        <item>
+          <p>
+	    Support added for home directories named with non-ASCII
+	    characters (codepoints above 127) on a system running in
+	    Unicode file mode (e.g. on MacOSX or Linux with startup
+	    arguments +fnu or +fna with the right LOCALE). Also
+	    environment variables with Unicode content are supported
+	    in applicable environments.</p>
+          <p>
+	    Own Id: OTP-10160</p>
+        </item>
+        <item>
+          <p>
+	    Allow mixed IPv4 and IPv6 addresses to sctp_bindx</p>
+          <p>
+	    Also allow mixed address families to bind, since the
+	    first address on a multihomed sctp socket must be bound
+	    with bind, while the rest are to be bound using
+	    sctp_bindx. At least Linux supports adding address of
+	    mixing families. Make inet_set_faddress function
+	    available also when HAVE_SCTP is not defined, since we
+	    use it to find an address for bind to be able to mix ipv4
+	    and ipv6 addresses. Thanks to Tomas Abrahamsson</p>
+          <p>
+	    Own Id: OTP-10217</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+	    <p>Document inet options: high_watermark, priority,
+	    linger and a some other options that previously was
+	    undocumented.</p>
+          <p>
+	    Own Id: OTP-10053</p>
+        </item>
+        <item>
+	    <p>Remove bit8 option support from inet</p>
+          <p>
+	    Own Id: OTP-10056</p>
+        </item>
+        <item>
+	    <p> The type of the disk log header has been corrected.
+	    (Thanks to Niclas Eklund.) </p>
+          <p>
+	    Own Id: OTP-10131</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Kernel 2.15.1</title>
 

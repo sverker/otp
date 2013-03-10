@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2006-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2006-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -58,7 +58,7 @@ void erl_sys_ddll_init(void) {
 /* 
  * Open a shared object
  */
-int erts_sys_ddll_open2(char *full_name, void **handle, ErtsSysDdllError* err)
+int erts_sys_ddll_open2(const char *full_name, void **handle, ErtsSysDdllError* err)
 {
     int len;
     char dlname[MAXPATHLEN + 1];
@@ -92,7 +92,7 @@ int erts_sys_ddll_open_noext(char *dlname, void **handle, ErtsSysDdllError* err)
 /* 
  * Find a symbol in the shared object
  */
-int erts_sys_ddll_sym2(void *handle, char *func_name, void **function,
+int erts_sys_ddll_sym2(void *handle, const char *func_name, void **function,
 		       ErtsSysDdllError* err)
 {
     FARPROC proc;

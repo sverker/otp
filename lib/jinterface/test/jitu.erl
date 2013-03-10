@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -89,13 +89,19 @@ classpath(Dir) ->
 	    {win32, _} -> ";";
 	    _          -> ":"
 	end,
-    Dir++PS++
+    es(Dir++PS++
 	filename:join([code:lib_dir(jinterface),"priv","OtpErlang.jar"])++PS++
 	case os:getenv("CLASSPATH") of
 	    false -> "";
 	    Classpath -> Classpath
-	end.
+	end).
 
+es(L) ->
+    lists:flatmap(fun($ ) ->
+			  "\\ ";
+		     (C) ->
+			  [C]
+		  end,lists:flatten(L)).
 
 cmd(Cmd) ->
     PortOpts = [{line,80},eof,exit_status,stderr_to_stdout],

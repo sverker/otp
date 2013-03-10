@@ -2,7 +2,7 @@ changecom(`/*', `*/')dnl
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2004-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2004-2012. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -30,12 +30,12 @@ include(`hipe/hipe_amd64_asm.m4')
 #define TEST_GOT_EXN	cmpq	$THE_NON_VALUE, %rax
 #endif'
 
-define(TEST_GOT_MBUF,`movq P_MBUF(P), %rdx	# `TEST_GOT_MBUF'
+define(TEST_GOT_MBUF,`movq P_MBUF(P), %rdx	/* `TEST_GOT_MBUF' */
 	testq %rdx, %rdx
 	jnz 3f	
 2:')
 define(HANDLE_GOT_MBUF,`
-3:	call nbif_$1_gc_after_bif	# `HANDLE_GOT_MBUF'
+3:	call nbif_$1_gc_after_bif	/* `HANDLE_GOT_MBUF' */
 	jmp 2b')
 
 `#if defined(ERTS_ENABLE_LOCK_CHECK) && defined(ERTS_SMP)

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -35,7 +35,8 @@
 
 -export([start_link/4, send/2, renegotiate/1, send_event/2,
 	 connection_info/3,
-	 peer_address/1]).
+	 peer_address/1,
+	 renegotiate_data/1]).
 
 %% gen_fsm callbacks
 -export([hello/2, kexinit/2, key_exchange/2, new_keys/2,
@@ -85,6 +86,8 @@ send(ConnectionHandler, Data) ->
 renegotiate(ConnectionHandler) ->
     send_all_state_event(ConnectionHandler, renegotiate).
  
+renegotiate_data(ConnectionHandler) ->
+    send_all_state_event(ConnectionHandler, data_size).
 connection_info(ConnectionHandler, From, Options) ->
      send_all_state_event(ConnectionHandler, {info, From, Options}).
 
@@ -220,11 +223,13 @@ key_exchange(#ssh_msg_kexdh_reply{} = Msg,
     catch
 	#ssh_msg_disconnect{} = DisconnectMsg ->
 	    handle_disconnect(DisconnectMsg, State);
+	{ErrorToDisplay, #ssh_msg_disconnect{} = DisconnectMsg} ->
+	    handle_disconnect(DisconnectMsg, State, ErrorToDisplay);
 	_:Error ->
 	    Desc = log_error(Error),
 	    handle_disconnect(#ssh_msg_disconnect{code = ?SSH_DISCONNECT_KEY_EXCHANGE_FAILED,
-						  description = Desc,
-						  language = "en"}, State)
+							  description = Desc,
+							  language = "en"}, State)
     end;
 
 key_exchange(#ssh_msg_kex_dh_gex_group{} = Msg, 
@@ -419,11 +424,15 @@ userauth(#ssh_msg_userauth_failure{authentications = Methodes},
 	 #state{ssh_params = #ssh{role = client,
 				  userauth_methods = none} = Ssh0} = State) ->
     AuthMethods = string:tokens(Methodes, ","),
-    {Msg, Ssh} = ssh_auth:userauth_request_msg(
-	 	   Ssh0#ssh{userauth_methods = AuthMethods}),
-    send_msg(Msg, State),
-    {next_state, userauth, next_packet(State#state{ssh_params = Ssh})};
-
+    Ssh1 = Ssh0#ssh{userauth_methods = AuthMethods},
+    case ssh_auth:userauth_request_msg(Ssh1) of
+	{disconnect, DisconnectMsg, {Msg, Ssh}} ->
+	    send_msg(Msg, State),
+	    handle_disconnect(DisconnectMsg, State#state{ssh_params = Ssh}); 
+	{Msg, Ssh} ->
+	    send_msg(Msg, State),
+	    {next_state, userauth, next_packet(State#state{ssh_params = Ssh})}
+    end;
 %% The prefered authentication method failed try next method 
 userauth(#ssh_msg_userauth_failure{},  
 	 #state{ssh_params = #ssh{role = client} = Ssh0} = State) ->
@@ -500,7 +509,22 @@ handle_event(renegotiate, StateName, State) ->
 handle_event({info, From, Options}, StateName,  #state{ssh_params = Ssh} = State) ->
     spawn(?MODULE, ssh_info_handler, [Options, Ssh, From]), 
     {next_state, StateName, State};
-
+handle_event(data_size, connected, #state{ssh_params = Ssh0} = State) ->
+    Sent = inet:getstat(State#state.socket, [send_oct]),
+    MaxSent = proplists:get_value(rekey_limit, State#state.opts, 1024000000),
+    case Sent >= MaxSent of
+	true ->
+	    {KeyInitMsg, SshPacket, Ssh} = ssh_transport:key_exchange_init_msg(Ssh0),
+	    send_msg(SshPacket, State),
+	    {next_state, connected, 
+	     next_packet(State#state{ssh_params = Ssh,
+			     key_exchange_init_msg = KeyInitMsg,
+				     renegotiate = true})};
+	_ ->
+	    {next_state, connected, next_packet(State)}
+    end;
+handle_event(data_size, StateName, State) ->
+    {next_state, StateName, State};
 handle_event({unknown, Data}, StateName, State) ->
     Msg = #ssh_msg_unimplemented{sequence = Data},
     send_msg(Msg, State),
@@ -651,6 +675,11 @@ terminate({shutdown, #ssh_msg_disconnect{} = Msg}, StateName, #state{ssh_params 
     send_msg(SshPacket, State),
     ssh_connection_manager:event(Pid, Msg),
     terminate(normal, StateName, State#state{ssh_params = Ssh});
+terminate({shutdown, {#ssh_msg_disconnect{} = Msg, ErrorMsg}}, StateName, #state{ssh_params = Ssh0, manager = Pid} = State) ->
+    {SshPacket, Ssh} = ssh_transport:ssh_packet(Msg, Ssh0),
+    send_msg(SshPacket, State),
+    ssh_connection_manager:event(Pid, Msg, ErrorMsg),
+    terminate(normal, StateName, State#state{ssh_params = Ssh});
 terminate(Reason, StateName, #state{ssh_params = Ssh0, manager = Pid} = State) ->
     log_error(Reason),
     DisconnectMsg = 
@@ -718,8 +747,18 @@ init_ssh(server = Role, Vsn, Version, Options, Socket) ->
 	 available_host_keys = supported_host_keys(Role, KeyCb, Options)
 	 }.
 
-supported_host_keys(client, _, _) ->
-    ["ssh-rsa", "ssh-dss"];
+supported_host_keys(client, _, Options) ->
+    try
+	case extract_algs(proplists:get_value(pref_public_key_algs, Options, false), []) of
+	    false ->
+		["ssh-rsa", "ssh-dss"];
+	    Algs ->
+		Algs
+	end
+    catch
+	exit:Reason ->
+	    {stop, {shutdown, Reason}}
+    end;
 supported_host_keys(server, KeyCb, Options) ->
     lists:foldl(fun(Type, Acc) ->
 			case available_host_key(KeyCb, Type, Options) of
@@ -731,7 +770,19 @@ supported_host_keys(server, KeyCb, Options) ->
 		end, [],
 		%% Prefered alg last so no need to reverse
 		["ssh-dss", "ssh-rsa"]).
-
+extract_algs(false, _) ->
+    false;
+extract_algs([],[]) ->
+    false;
+extract_algs([], NewList) ->
+    lists:reverse(NewList);
+extract_algs([H|T], NewList) ->
+    case H of
+	'ssh-dss' ->
+	    extract_algs(T, ["ssh-dss"|NewList]);
+	'ssh-rsa' ->
+	    extract_algs(T, ["ssh-rsa"|NewList])
+    end.
 available_host_key(KeyCb, "ssh-dss"= Alg, Opts) ->
     case KeyCb:host_key('ssh-dss', Opts) of
 	{ok, _} ->
@@ -906,6 +957,8 @@ handle_ssh_packet(Length, StateName, #state{decoded_data_buffer = DecData0,
 
 handle_disconnect(#ssh_msg_disconnect{} = Msg, State) ->
     {stop, {shutdown, Msg}, State}.
+handle_disconnect(#ssh_msg_disconnect{} = Msg, State, ErrorMsg) ->
+    {stop, {shutdown, {Msg, ErrorMsg}}, State}.
 
 counterpart_versions(NumVsn, StrVsn, #ssh{role = server} = Ssh) ->
     Ssh#ssh{c_vsn = NumVsn , c_version = StrVsn};

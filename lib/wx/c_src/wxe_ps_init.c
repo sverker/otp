@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2008-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2008-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -25,12 +25,17 @@
 #include <Cocoa/Cocoa.h>
 #include <objc/objc-runtime.h>
 
+extern OSErr  CPSSetProcessName (ProcessSerialNumber *psn, char *processname);
+
 void * wxe_ps_init() 
 {
    ProcessSerialNumber psn;
    NSAutoreleasePool *pool;
    // Enable GUI 
    GetCurrentProcess(&psn);
+   char *app_title = getenv("WX_APP_TITLE");
+   // Undocumented function (but no documented way of doing this exists)
+   CPSSetProcessName(&psn, app_title?app_title:"Erlang");
    TransformProcessType(&psn, kProcessTransformToForegroundApplication);
    SetFrontProcess(&psn);
    // Enable Cocoa calls from Carbon app

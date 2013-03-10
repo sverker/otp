@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2012. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -56,7 +56,8 @@
 #define FILE_FDATASYNC          30
 #define FILE_FADVISE            31
 #define FILE_SENDFILE           32
-
+#define FILE_FALLOCATE          33
+#define FILE_CLOSE_ON_PORT_EXIT 34
 /* Return codes */
 
 #define FILE_RESP_OK         0
@@ -177,6 +178,7 @@ dt_private *get_dt_private(int);
 #define MUTEX_LOCK(m)    do { IF_THRDS { TRACE_DRIVER; driver_pdl_lock(m);   } } while (0)
 #define MUTEX_UNLOCK(m)  do { IF_THRDS { TRACE_DRIVER; driver_pdl_unlock(m); } } while (0)
 #else
+#define IF_THRDS if (0)
 #define MUTEX_INIT(m, p)
 #define MUTEX_LOCK(m)
 #define MUTEX_UNLOCK(m)
@@ -206,6 +208,9 @@ dt_private *get_dt_private(int);
 #  define KEY(desc) (&(desc)->key)
 #endif
 
+#ifndef MAX
+#  define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#endif
 
 #ifdef FILENAMES_16BIT
 #ifdef USE_VM_PROBES
@@ -425,6 +430,7 @@ struct t_data
     int            level;
     void         (*invoke)(void *);
     void         (*free)(void *);
+    void           *data_to_free; /* used by FILE_CLOSE_ON_PORT_EXIT only */
     int            again;
     int            reply;
 #ifdef  USE_VM_PROBES
@@ -436,6 +442,7 @@ struct t_data
     Efile_error    errInfo;
     int            flags;
     SWord          fd;
+    int            is_fd_unused;
     /**/
     Efile_info        info;
     EFILE_DIR_HANDLE  dir_handle; /* Handle to open directory. */
@@ -500,6 +507,10 @@ struct t_data
 	    Uint64 written;
 	} sendfile;
 #endif /* HAVE_SENDFILE */
+	struct {
+	    Sint64 offset;
+	    Sint64 length;
+	} fallocate;
     } c;
     char b[1];
 };
@@ -522,7 +533,7 @@ static void *ef_safe_alloc(Uint s)
 static void *ef_safe_realloc(void *op, Uint s)
 {
     void *p = EF_REALLOC(op, s);
-    if (!p) erl_exit(1, "efile drv: Can't reallocate %d bytes of memory\n", s);
+    if (!p) erl_exit(1, "efile drv: Can't reallocate %lu bytes of memory\n", (unsigned long)s);
     return p;
 }
 
@@ -778,11 +789,6 @@ file_start(ErlDrvPort port, char* command)
     return (ErlDrvData) desc;
 }
 
-static void free_data(void *data)
-{
-    EF_FREE(data);
-}
-
 static void do_close(int flags, SWord fd) {
     if (flags & EFILE_COMPRESSED) {
 	erts_gzclose((gzFile)(fd));
@@ -800,25 +806,27 @@ static void invoke_close(void *data)
     DTRACE_INVOKE_RETURN(FILE_CLOSE);
 }
 
-/*********************************************************************
- * Driver entry point -> stop
- */
-static void 
-file_stop(ErlDrvData e)
+static void free_data(void *data)
 {
-    file_descriptor* desc = (file_descriptor*)e;
+    struct t_data *d = (struct t_data *) data;
 
-    TRACE_C('p');
+    switch (d->command) {
+    case FILE_OPEN:
+        if (d->is_fd_unused && d->fd != FILE_FD_INVALID) {
+            /* This is OK to do in scheduler thread because there can be no async op
+               ongoing for this fd here, as we exited during async open.
+               Ideally, this close should happen in an async thread too, but that would
+               require a substantial rewrite, as we are here because of a dead port and
+               cannot schedule async jobs for that port any more... */
+            do_close(d->flags, d->fd);
+        }
+        break;
+    case FILE_CLOSE_ON_PORT_EXIT:
+        EF_FREE(d->data_to_free);
+        break;
+    }
 
-    if (desc->fd != FILE_FD_INVALID) {
-	do_close(desc->flags, desc->fd);
-	desc->fd = FILE_FD_INVALID;
-	desc->flags = 0;
-    }
-    if (desc->read_binp) {
-	driver_free_binary(desc->read_binp);
-    }
-    EF_FREE(desc);
+    EF_FREE(data);
 }
 
 
@@ -1141,7 +1149,7 @@ static void invoke_read_line(void *data)
 {
     struct t_data *d = (struct t_data *) data;
     int status;
-    size_t read_size;
+    size_t read_size = 0;
     int local_loop = (d->again == 0);
     DTRACE_INVOKE_SETUP(FILE_READ_LINE);
 
@@ -1152,7 +1160,14 @@ static void invoke_read_line(void *data)
 	    /* Need more place */
 	    ErlDrvSizeT need = (d->c.read_line.read_size >= DEFAULT_LINEBUF_SIZE) ?
 		d->c.read_line.read_size + DEFAULT_LINEBUF_SIZE : DEFAULT_LINEBUF_SIZE;
-	    ErlDrvBinary   *newbin = driver_alloc_binary(need);
+	    ErlDrvBinary   *newbin;
+#if !ALWAYS_READ_LINE_AHEAD
+	    /* Use read_ahead size if need does not exceed it */
+	    if (need < (d->c.read_line.binp)->orig_size && 
+		d->c.read_line.read_ahead)
+	      need = (d->c.read_line.binp)->orig_size;
+#endif
+	    newbin = driver_alloc_binary(need);
 	    if (newbin == NULL) {
 		d->result_ok = 0;
 		d->errInfo.posix_errno = ENOMEM;
@@ -1859,6 +1874,9 @@ static void invoke_open(void *data)
     }
 
     d->result_ok = status;
+    if (!status) {
+        d->fd = FILE_FD_INVALID;
+    }
     DTRACE_INVOKE_RETURN(FILE_OPEN);
 }
 
@@ -1949,6 +1967,17 @@ static int flush_sendfile(file_descriptor *desc,void *_) {
 }
 #endif /* HAVE_SENDFILE */
 
+
+static void invoke_fallocate(void *data)
+{
+    struct t_data *d = (struct t_data *) data;
+    int fd = (int) d->fd;
+    Sint64 offset = d->c.fallocate.offset;
+    Sint64 length = d->c.fallocate.length;
+
+    d->again = 0;
+    d->result_ok = efile_fallocate(&d->errInfo, fd, offset, length);
+}
 
 static void free_readdir(void *data)
 {
@@ -2213,6 +2242,49 @@ static int lseek_flush_read(file_descriptor *desc, int *errp
 }
 
 
+/*********************************************************************
+ * Driver entry point -> stop
+ * The close has to be scheduled on async thread, so that currently active
+ * async operation does not suddenly have the ground disappearing under their feet...
+ */
+static void 
+file_stop(ErlDrvData e)
+{
+    file_descriptor* desc = (file_descriptor*)e;
+
+    TRACE_C('p');
+
+    IF_THRDS {
+	flush_read(desc);
+	if (desc->fd != FILE_FD_INVALID) {
+	    struct t_data *d = EF_SAFE_ALLOC(sizeof(struct t_data));
+	    d->command = FILE_CLOSE_ON_PORT_EXIT;
+	    d->reply = !0;
+	    d->fd = desc->fd;
+	    d->flags = desc->flags;
+	    d->invoke = invoke_close;
+	    d->free = free_data;
+	    d->level = 2;
+	    d->data_to_free = (void *) desc;
+	    cq_enq(desc, d);
+	    desc->fd = FILE_FD_INVALID;
+	    desc->flags = 0;
+	    cq_execute(desc);
+	} else {
+	    EF_FREE(desc);
+	}
+    } else {
+	if (desc->fd != FILE_FD_INVALID) {
+	    do_close(desc->flags, desc->fd);
+	    desc->fd = FILE_FD_INVALID;
+	    desc->flags = 0;
+	}
+	if (desc->read_binp) {
+	    driver_free_binary(desc->read_binp);
+	}
+	EF_FREE(desc);
+    }
+}
 
 /*********************************************************************
  * Driver entry point -> ready_async
@@ -2345,6 +2417,7 @@ file_async_ready(ErlDrvData e, ErlDrvThreadData data)
       case FILE_RENAME:
       case FILE_WRITE_INFO:
       case FILE_FADVISE:
+      case FILE_FALLOCATE:
 	reply(desc, d->result_ok, &d->errInfo);
 	free_data(data);
 	break;
@@ -2370,8 +2443,10 @@ file_async_ready(ErlDrvData e, ErlDrvThreadData data)
 	if (!d->result_ok) {
 	    reply_error(desc, &d->errInfo);
 	} else {
+	    ASSERT(d->is_fd_unused);
 	    desc->fd = d->fd;
 	    desc->flags = d->flags;
+	    d->is_fd_unused = 0;
 	    reply_Uint(desc, d->fd);
 	}
 	free_data(data);
@@ -2433,7 +2508,6 @@ file_async_ready(ErlDrvData e, ErlDrvThreadData data)
 	}
 	free_readdir(data);
 	break;
-	/* See file_stop */
       case FILE_CLOSE:
 	  if (d->reply) {
 	      TRACE_C('K');
@@ -2493,6 +2567,15 @@ file_async_ready(ErlDrvData e, ErlDrvThreadData data)
 	  }
 	  break;
 #endif
+      case FILE_CLOSE_ON_PORT_EXIT:
+	  /* See file_stop. However this is never invoked after the port is killed. */
+	  free_data(data);
+	  EF_FREE(desc);
+	  desc = NULL;
+	  /* This is it for this port, so just send dtrace and return, avoid doing anything to the freed data */
+	  DTRACE6(efile_drv_return, sched_i1, sched_i2, sched_utag,
+		  command, result_ok, posix_errno);
+	  return;
       default:
 	abort();
     }
@@ -2503,6 +2586,7 @@ file_async_ready(ErlDrvData e, ErlDrvThreadData data)
 	driver_set_timer(desc->port, desc->write_delay);
     }
     cq_execute(desc);
+
 }
 
 
@@ -2597,7 +2681,7 @@ file_output(ErlDrvData e, char* buf, ErlDrvSizeT count)
 #ifdef USE_VM_PROBES
 	    dt_s1 = d->b;
 	    dt_s2 = d->b + namelen;
-	    dt_utag = buf + namelen + FILENAME_BYTELEN(name) + FILENAME_CHARSIZE;
+	    dt_utag = buf + namelen + FILENAME_BYTELEN(new_name) + FILENAME_CHARSIZE;
 #endif
 	    d->flags = desc->flags;
 	    d->fd = fd;
@@ -2742,6 +2826,7 @@ file_output(ErlDrvData e, char* buf, ErlDrvSizeT count)
 	    d->invoke = invoke_open;
 	    d->free = free_data;
 	    d->level = 2;
+	    d->is_fd_unused = 1;
 	    goto done;
 	}
 
@@ -2848,8 +2933,9 @@ file_output(ErlDrvData e, char* buf, ErlDrvSizeT count)
 
     case FILE_READLINK:
 	{
-	    d = EF_SAFE_ALLOC(sizeof(struct t_data) - 1 + RESBUFSIZE + 1);
-	
+	    d = EF_SAFE_ALLOC(sizeof(struct t_data) - 1 + 
+			      MAX(RESBUFSIZE, (FILENAME_BYTELEN(name) +  
+					       FILENAME_CHARSIZE))  + 1);
 	    FILENAME_COPY(d->b, name);
 #ifdef USE_VM_PROBES
 	    dt_s1 = d->b;
@@ -2864,7 +2950,9 @@ file_output(ErlDrvData e, char* buf, ErlDrvSizeT count)
 
     case FILE_ALTNAME:
 	{
-	    d = EF_SAFE_ALLOC(sizeof(struct t_data) - 1 + RESBUFSIZE + 1);
+	     d = EF_SAFE_ALLOC(sizeof(struct t_data) - 1 + 
+			       MAX(RESBUFSIZE, (FILENAME_BYTELEN(name) +  
+						FILENAME_CHARSIZE))  + 1);
 	    FILENAME_COPY(d->b, name);
 #ifdef USE_VM_PROBES
 	    dt_s1 = d->b;
@@ -2949,6 +3037,20 @@ file_output(ErlDrvData e, char* buf, ErlDrvSizeT count)
         dt_i4 = d->c.fadvise.advise;
         dt_utag = buf + 3 * sizeof(Sint64);
 #endif
+        goto done;
+    }
+
+    case FILE_FALLOCATE:
+    {
+        d = EF_SAFE_ALLOC(sizeof(struct t_data));
+
+        d->fd = fd;
+        d->command = command;
+        d->invoke = invoke_fallocate;
+        d->free = free_data;
+        d->level = 2;
+        d->c.fallocate.offset = get_int64((uchar*) buf);
+        d->c.fallocate.length = get_int64(((uchar*) buf) + sizeof(Sint64));
         goto done;
     }
 

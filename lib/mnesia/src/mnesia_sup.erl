@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2009. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -60,9 +60,8 @@ init() ->
 
     Event = event_procs(),
     Kernel = kernel_procs(),
-    Mnemosyne = mnemosyne_procs(),
 
-    {ok, {Flags, Event ++ Kernel ++ Mnemosyne}}.
+    {ok, {Flags, Event ++ Kernel}}.
 
 event_procs() ->
     KillAfter = timer:seconds(30),
@@ -75,16 +74,6 @@ kernel_procs() ->
     KA = infinity,
     [{K, {K, start, []}, permanent, KA, supervisor, [K, supervisor]}].
 
-mnemosyne_procs() ->
-    case mnesia_monitor:get_env(embedded_mnemosyne) of
-	true ->
-	    Q = mnemosyne_sup,
-	    KA = infinity,
-	    [{Q, {Q, start, []}, permanent, KA, supervisor, [Q, supervisor]}];
-	false ->
-	    []
-    end.
-    
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% event handler
 

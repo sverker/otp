@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -61,6 +61,8 @@
 
 %% Internals
 -export([proxy_user_flush/0]).
+
+-export_type([key/0]).
 
 %%------------------------------------------------------------------------
 
@@ -286,7 +288,7 @@ call(N,M,F,A) ->
       Reason :: term(),
       Timeout :: timeout().
 
-call(N,M,F,A,_Timeout) when node() =:= N ->  %% Optimize local call
+call(N,M,F,A,infinity) when node() =:= N ->  %% Optimize local call
     local_call(M,F,A);
 call(N,M,F,A,infinity) ->
     do_call(N, {call,M,F,A,group_leader()}, infinity);

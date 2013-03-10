@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2008-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2008-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -1154,15 +1154,24 @@ BIF_RETTYPE unicode_characters_to_list_2(BIF_ALIST_2)
  * When input to characters_to_list is a plain binary and the format is 'unicode', we do
  * a faster analyze and size count with this function.
  */
-int erts_analyze_utf8(byte *source, Uint size, 
-			byte **err_pos, Uint *num_chars, int *left)
+static ERTS_INLINE int
+analyze_utf8(byte *source, Uint size, byte **err_pos, Uint *num_chars, int *left,
+	     Sint *num_latin1_chars, Uint max_chars)
 {
+    Uint latin1_count;
+    int is_latin1;
     *err_pos = source;
+    if (num_latin1_chars) {
+	is_latin1 = 1;
+	latin1_count = 0;
+    }
     *num_chars = 0;
     while (size) {
 	if (((*source) & ((byte) 0x80)) == 0) {
 	    source++;
-	    --size; 
+	    --size;
+	    if (num_latin1_chars)
+		latin1_count++;
 	} else if (((*source) & ((byte) 0xE0)) == 0xC0) {
 	    if (size < 2) {
 		return ERTS_UTF8_INCOMPLETE;
@@ -1170,6 +1179,11 @@ int erts_analyze_utf8(byte *source, Uint size,
 	    if (((source[1] & ((byte) 0xC0)) != 0x80) ||
 		((*source) < 0xC2) /* overlong */) {
 		return ERTS_UTF8_ERROR;
+	    }
+	    if (num_latin1_chars) {
+		latin1_count++;
+		if ((source[0] & ((byte) 0xFC)) != ((byte) 0xC0))
+		    is_latin1 = 0;
 	    }
 	    source += 2;
 	    size -= 2;
@@ -1188,6 +1202,8 @@ int erts_analyze_utf8(byte *source, Uint size,
 	    }
 	    source += 3;
 	    size -= 3;
+	    if (num_latin1_chars)
+		is_latin1 = 0;
 	} else if (((*source) & ((byte) 0xF8)) == 0xF0) {
 	    if (size < 4) {
 		return ERTS_UTF8_INCOMPLETE;
@@ -1205,21 +1221,40 @@ int erts_analyze_utf8(byte *source, Uint size,
 	    }
 	    source += 4;
 	    size -= 4; 
+	    if (num_latin1_chars)
+		is_latin1 = 0;
 	} else {
 	    return ERTS_UTF8_ERROR;
 	}
 	++(*num_chars);
 	*err_pos = source;
-	if (left && --(*left) <= 0) {
+	if (max_chars && size > 0 && *num_chars == max_chars)
+	    return ERTS_UTF8_OK_MAX_CHARS;
+	if (left && --(*left) <= 0 && size) {
 	    return ERTS_UTF8_ANALYZE_MORE;
 	}
     }
+    if (num_latin1_chars)
+	*num_latin1_chars = is_latin1 ? latin1_count : -1;
     return ERTS_UTF8_OK;
+}
+
+int erts_analyze_utf8(byte *source, Uint size, 
+		      byte **err_pos, Uint *num_chars, int *left)
+{
+    return analyze_utf8(source, size, err_pos, num_chars, left, NULL, 0);
+}
+
+int erts_analyze_utf8_x(byte *source, Uint size, 
+			byte **err_pos, Uint *num_chars, int *left,
+			Sint *num_latin1_chars, Uint max_chars)
+{
+    return analyze_utf8(source, size, err_pos, num_chars, left, num_latin1_chars, max_chars);
 }
 
 /*
  * No errors should be able to occur - no overlongs, no malformed, no nothing
- */    
+ */
 static Eterm do_utf8_to_list(Process *p, Uint num, byte *bytes, Uint sz, 
 			     Uint left,
 			     Uint *num_built, Uint *num_eaten, Eterm tail)
@@ -1273,6 +1308,12 @@ static Eterm do_utf8_to_list(Process *p, Uint num, byte *bytes, Uint sz,
     }
     *num_eaten = (ssource - source);
     return ret;
+}
+
+Eterm erts_utf8_to_list(Process *p, Uint num, byte *bytes, Uint sz, Uint left,
+			Uint *num_built, Uint *num_eaten, Eterm tail)
+{
+    return do_utf8_to_list(p, num, bytes, sz, left, num_built, num_eaten, tail);
 }
 
 static int is_candidate(Uint cp)
@@ -1812,31 +1853,25 @@ BIF_RETTYPE atom_to_binary_2(BIF_ALIST_2)
     ap = atom_tab(atom_val(BIF_ARG_1));
 
     if (BIF_ARG_2 == am_latin1) {
-	BIF_RET(new_binary(BIF_P, ap->name, ap->len));
-    } else if (BIF_ARG_2 == am_utf8 || BIF_ARG_2 == am_unicode) {
-	int bin_size = 0;
-	int i;
 	Eterm bin_term;
-	byte* bin_p;
 
-	for (i = 0; i < ap->len; i++) {
-	    bin_size += (ap->name[i] >= 0x80) ? 2 : 1;
+	if (ap->latin1_chars < 0) {
+	    goto error;
 	}
-	if (bin_size == ap->len) {
-	    BIF_RET(new_binary(BIF_P, ap->name, ap->len));
+	if (ap->latin1_chars == ap->len) {
+	    bin_term = new_binary(BIF_P, ap->name, ap->len);
 	}
-	bin_term = new_binary(BIF_P, 0, bin_size);
-	bin_p = binary_bytes(bin_term);
-	for (i = 0; i < ap->len; i++) {
-	    byte b = ap->name[i];
-	    if (b < 0x80) {
-		*bin_p++ = b;
-	    } else {
-		*bin_p++ = 0xC0 | (b >> 6);
-		*bin_p++ = 0x80 | (b & 0x3F);
-	    }
+	else {
+	    byte* bin_p;
+	    int dbg_sz;
+	    bin_term = new_binary(BIF_P, 0, ap->latin1_chars);
+	    bin_p = binary_bytes(bin_term);
+	    dbg_sz = erts_utf8_to_latin1(bin_p, ap->name, ap->len);
+	    ASSERT(dbg_sz == ap->latin1_chars); (void)dbg_sz; 
 	}
 	BIF_RET(bin_term);
+    } else if (BIF_ARG_2 == am_utf8 || BIF_ARG_2 == am_unicode) {
+	BIF_RET(new_binary(BIF_P, ap->name, ap->len));
     } else {
     error:
 	BIF_ERROR(BIF_P, BADARG);
@@ -1844,118 +1879,78 @@ BIF_RETTYPE atom_to_binary_2(BIF_ALIST_2)
 }
 
 static BIF_RETTYPE
-binary_to_atom(Process* p, Eterm bin, Eterm enc, int must_exist)
+binary_to_atom(Process* proc, Eterm bin, Eterm enc, int must_exist)
 {
     byte* bytes;
     byte *temp_alloc = NULL;
     Uint bin_size;
 
     if ((bytes = erts_get_aligned_binary_bytes(bin, &temp_alloc)) == 0) {
-	BIF_ERROR(p, BADARG);
+	BIF_ERROR(proc, BADARG);
     }
     bin_size = binary_size(bin);
     if (enc == am_latin1) {
 	Eterm a;
-	if (bin_size > MAX_ATOM_LENGTH) {
+	if (bin_size > MAX_ATOM_CHARACTERS) {
 	system_limit:
 	    erts_free_aligned_binary_bytes(temp_alloc);
-	    BIF_ERROR(p, SYSTEM_LIMIT);
+	    BIF_ERROR(proc, SYSTEM_LIMIT);
 	}
 	if (!must_exist) {
-	    a = am_atom_put((char *)bytes, bin_size);
-	    erts_free_aligned_binary_bytes(temp_alloc);
+	    a = erts_atom_put((byte *) bytes,
+			      bin_size,
+			      ERTS_ATOM_ENC_LATIN1,
+			      0);
+    	    erts_free_aligned_binary_bytes(temp_alloc);
+	    if (is_non_value(a))
+		goto badarg;
 	    BIF_RET(a);
-	} else if (erts_atom_get((char *)bytes, bin_size, &a)) {
+	} else if (erts_atom_get((char *)bytes, bin_size, &a, ERTS_ATOM_ENC_LATIN1)) {
 	    erts_free_aligned_binary_bytes(temp_alloc);
 	    BIF_RET(a);
 	} else {
 	    goto badarg;
 	}
     } else if (enc == am_utf8 || enc == am_unicode) {
-	char *buf;
-	char *dst;
-	int i;
-	int num_chars;
 	Eterm res;
+	Uint num_chars = 0;
+	const byte* p = bytes;
+	Uint left = bin_size;
 
-	if (bin_size > 2*MAX_ATOM_LENGTH) {
-	    byte* err_pos;
-	    Uint n;
-	    int reds_left = bin_size+1; /* Number of reductions left. */
-
-	    if (erts_analyze_utf8(bytes, bin_size, &err_pos,
-			     &n, &reds_left) == ERTS_UTF8_OK) {
-		/* 
-		 * Correct UTF-8 encoding, but too many characters to
-		 * fit in an atom.
-		 */
+	while (left) {
+	    if (++num_chars > MAX_ATOM_CHARACTERS) {
 		goto system_limit;
-	    } else {
-		/*
-		 * Something wrong in the UTF-8 encoding or Unicode code
-		 * points > 255.
-		 */
-		goto badarg;
 	    }
+	    if ((p[0] & 0x80) == 0) {
+		++p;
+		--left;
+	    }
+	    else if (left >= 2
+		     && (p[0] & 0xFE) == 0xC2 /* only allow latin1 subset */
+		     && (p[1] & 0xC0) == 0x80) {
+		p += 2;
+		left -= 2;
+	    }
+	    else goto badarg;
 	}
 
-	/*
-	 * Allocate a temporary buffer the same size as the binary,
-	 * so that we don't need an extra overflow test.
-	 */
-	buf = (char *) erts_alloc(ERTS_ALC_T_TMP, bin_size);
-	dst = buf;
-	for (i = 0; i < bin_size; i++) {
-	    int c = bytes[i];
-	    if (c < 0x80) {
-		*dst++ = c;
-	    } else if (i < bin_size-1) {
-		int c2;
-		if ((c & 0xE0) != 0xC0) {
-		    goto free_badarg;
-		}
-		i++;
-		c = (c & 0x3F) << 6;
-		c2 = bytes[i];
-		if ((c2 & 0xC0) != 0x80) {
-		    goto free_badarg;
-		}
-		c = c | (c2 & 0x3F);
-		if (0x80 <= c && c < 256) {
-		    *dst++ = c;
-		} else {
-		    goto free_badarg;
-		}
-	    } else {
-	    free_badarg:
-		erts_free(ERTS_ALC_T_TMP, (void *) buf);
-		goto badarg;
-	    }
-	}
-	num_chars = dst - buf;
-	if (num_chars > MAX_ATOM_LENGTH) {
-	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
-	    goto system_limit;
-	}
 	if (!must_exist) {
-	    res = am_atom_put(buf, num_chars);
-	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
-	    erts_free_aligned_binary_bytes(temp_alloc);
-	    BIF_RET(res);
-	} else {
-	    int exists = erts_atom_get(buf, num_chars, &res);
-	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
-	    if (exists) {
-		erts_free_aligned_binary_bytes(temp_alloc);
-		BIF_RET(res);
-	    } else {
-		goto badarg;
-	    }
+	    res = erts_atom_put((byte *) bytes,
+				bin_size,
+				ERTS_ATOM_ENC_UTF8,
+				0);
 	}
+	else if (!erts_atom_get((char*)bytes, bin_size, &res, ERTS_ATOM_ENC_UTF8)) {
+	    goto badarg;
+	}
+	erts_free_aligned_binary_bytes(temp_alloc);
+	if (is_non_value(res))
+	    goto badarg;
+	BIF_RET(res);
     } else {
     badarg:
 	erts_free_aligned_binary_bytes(temp_alloc);
-	BIF_ERROR(p, BADARG);
+	BIF_ERROR(proc, BADARG);
     }
 }
 
@@ -1986,12 +1981,14 @@ BIF_RETTYPE binary_to_existing_atom_2(BIF_ALIST_2)
  * string routines, that will certainly fail on some OS.
  */
 
-char *erts_convert_filename_to_native(Eterm name, ErtsAlcType_t alloc_type, int allow_empty)
+char *erts_convert_filename_to_native(Eterm name, char *statbuf, size_t statbuf_size, ErtsAlcType_t alloc_type, int allow_empty, int allow_atom, Sint *used)
 {
     int encoding = erts_get_native_filename_encoding();
     char* name_buf = NULL;
 
-    if (is_atom(name) || is_list(name) || (allow_empty && is_nil(name))) {
+    if ((allow_atom && is_atom(name)) || 
+	is_list(name) || 
+	(allow_empty && is_nil(name))) {
 	Sint need;
 	if ((need = erts_native_filename_need(name,encoding)) < 0) {
 	    return NULL;
@@ -2001,7 +1998,13 @@ char *erts_convert_filename_to_native(Eterm name, ErtsAlcType_t alloc_type, int 
 	} else {
 	    ++need;
 	}
-	name_buf = (char *) erts_alloc(alloc_type, need);
+	if (used) 
+	    *used = (Sint) need;
+	if (need > statbuf_size) {
+	    name_buf = (char *) erts_alloc(alloc_type, need);
+	} else {
+	    name_buf = statbuf;
+	}
 	erts_native_filename_put(name,encoding,(byte *)name_buf); 
 	name_buf[need-1] = 0;
 	if (encoding == ERL_FILENAME_WIN_WCHAR) {
@@ -2017,14 +2020,26 @@ char *erts_convert_filename_to_native(Eterm name, ErtsAlcType_t alloc_type, int 
 	bytes = erts_get_aligned_binary_bytes(name, &temp_alloc);
 	if (encoding != ERL_FILENAME_WIN_WCHAR) {
 	    /*Add 0 termination only*/
-	    name_buf = (char *) erts_alloc(alloc_type, size+1);
+	    if (used) 
+		*used = (Sint) size+1;
+	    if (size+1 > statbuf_size) {
+		name_buf = (char *) erts_alloc(alloc_type, size+1);
+	    } else {
+		name_buf = statbuf;
+	    }
 	    memcpy(name_buf,bytes,size);
 	    name_buf[size]=0;
 	} else if (erts_analyze_utf8(bytes,size,&err_pos,&num_chars,NULL) != ERTS_UTF8_OK || 
 		   erts_get_user_requested_filename_encoding() ==  ERL_FILENAME_LATIN1) {
 	    byte *p;
 	    /* What to do now? Maybe latin1, so just take byte for byte instead */
-	    name_buf = (char *) erts_alloc(alloc_type, (size+1)*2);
+	    if (used) 
+		*used = (Sint) (size+1)*2;
+	    if ((size+1)*2 > statbuf_size) {
+		name_buf = (char *) erts_alloc(alloc_type, (size+1)*2);
+	    } else {
+		name_buf = statbuf;
+	    }
 	    p = (byte *) name_buf;
 	    while (size--) {
 		*p++ = *bytes++;
@@ -2033,7 +2048,13 @@ char *erts_convert_filename_to_native(Eterm name, ErtsAlcType_t alloc_type, int 
 	    *p++ = 0;
 	    *p++ = 0;
 	} else { /* WIN_WCHAR and valid UTF8 */
-	    name_buf = (char *) erts_alloc(alloc_type, (num_chars+1)*2);
+	    if (used) 
+		*used = (Sint) (num_chars+1)*2;
+	    if ((num_chars+1)*2 > statbuf_size) {
+		name_buf = (char *) erts_alloc(alloc_type, (num_chars+1)*2);
+	    } else {
+		name_buf = statbuf;
+	    }
 	    erts_copy_utf8_to_utf16_little((byte *) name_buf, bytes, num_chars);
 	    name_buf[num_chars*2] = 0;
 	    name_buf[num_chars*2+1] = 0;
@@ -2043,6 +2064,71 @@ char *erts_convert_filename_to_native(Eterm name, ErtsAlcType_t alloc_type, int 
 	return NULL;
     }
     return name_buf;
+}
+
+static int filename_len_16bit(byte *str) 
+{
+    byte *p = str;
+    while(*p != '\0' || p[1] != '\0') {
+	p += 2;
+    }
+    return (p - str);
+}
+Eterm erts_convert_native_to_filename(Process *p, byte *bytes)
+{
+    Uint size,num_chars;
+    Eterm *hp;
+    byte *err_pos;
+    Uint num_built; /* characters */
+    Uint num_eaten; /* bytes */
+    Eterm ret;
+    int mac = 0;
+
+    switch (erts_get_native_filename_encoding()) {
+    case ERL_FILENAME_LATIN1:
+	goto noconvert;
+    case ERL_FILENAME_UTF8_MAC:
+	mac = 1;
+    case ERL_FILENAME_UTF8:
+	size = strlen((char *) bytes);
+	if (erts_analyze_utf8(bytes,size,&err_pos,&num_chars,NULL) != ERTS_UTF8_OK) {
+	    goto noconvert;
+	}
+	num_built = 0;
+	num_eaten = 0;
+	if (mac) {
+	    ret = do_utf8_to_list_normalize(p, num_chars, bytes, size);
+	} else {
+	    ret = do_utf8_to_list(p, num_chars, bytes, size, num_chars, &num_built, &num_eaten, NIL);
+	} 
+	return ret;
+    case ERL_FILENAME_WIN_WCHAR:
+	size=filename_len_16bit(bytes);
+	if ((size % 2) != 0) { /* Panic fixup to avoid crashing the emulator */
+	    size--;
+	    hp = HAlloc(p, size+2);
+	    ret = CONS(hp,make_small((Uint) bytes[size]),NIL);
+	    hp += 2;
+	} else {
+	    hp = HAlloc(p, size);
+	    ret = NIL;
+	}
+	bytes += size-1;
+	while (size > 0) {
+	    Uint x = ((Uint) *bytes--) << 8;
+	    x |= ((Uint) *bytes--);
+	    size -= 2;
+	    ret = CONS(hp,make_small(x),ret);
+	    hp += 2;
+	}	    
+	return ret;
+    default:
+	goto noconvert;
+    }
+ noconvert:
+    size = strlen((char *) bytes);
+    hp = HAlloc(p, 2 * size);
+    return erts_bin_bytes_to_list(NIL, hp, bytes, size, 0);
 }
 
 
@@ -2487,8 +2573,20 @@ BIF_RETTYPE prim_file_internal_native2name_1(BIF_ALIST_1)
     case ERL_FILENAME_UTF8:
 	bytes = erts_get_aligned_binary_bytes(BIF_ARG_1, &temp_alloc);
 	if (erts_analyze_utf8(bytes,size,&err_pos,&num_chars,NULL) != ERTS_UTF8_OK) {
+	    Eterm *hp = HAlloc(BIF_P,3);
+	    Eterm warn_type = NIL;
 	    erts_free_aligned_binary_bytes(temp_alloc);
-	    goto noconvert;
+	    switch (erts_get_filename_warning_type()) {
+	    case ERL_FILENAME_WARNING_IGNORE:
+		warn_type = am_ignore;
+		break;
+	    case ERL_FILENAME_WARNING_ERROR:
+		warn_type = am_error;
+		break;
+	    default:
+		warn_type = am_warning;
+	    }
+	    BIF_RET(TUPLE2(hp,am_error,warn_type));
 	}
 	num_built = 0;
 	num_eaten = 0;
@@ -2521,9 +2619,8 @@ BIF_RETTYPE prim_file_internal_native2name_1(BIF_ALIST_1)
 	erts_free_aligned_binary_bytes(temp_alloc);
 	BIF_RET(ret);
     default:
-	goto noconvert;
+	break;
     }
- noconvert:
     BIF_RET(BIF_ARG_1);
 }
 
@@ -2560,6 +2657,52 @@ BIF_RETTYPE prim_file_internal_normalize_utf8_1(BIF_ALIST_1)
     BIF_RET(ret);
 }  
 
+BIF_RETTYPE prim_file_is_translatable_1(BIF_ALIST_1)
+{
+    ERTS_DECLARE_DUMMY(Eterm real_bin);
+    ERTS_DECLARE_DUMMY(Uint offset);
+    Uint size;
+    Uint num_chars;
+    Uint bitsize;
+    ERTS_DECLARE_DUMMY(Uint bitoffs);
+    byte *temp_alloc = NULL;
+    byte *bytes;
+    byte *err_pos;
+    int status;
+
+    if (is_not_binary(BIF_ARG_1)) {
+	BIF_ERROR(BIF_P,BADARG);
+    }
+    size = binary_size(BIF_ARG_1);
+    ERTS_GET_REAL_BIN(BIF_ARG_1, real_bin, offset, bitoffs, bitsize);
+    if (bitsize != 0) {
+	BIF_ERROR(BIF_P,BADARG);
+    }
+    if (size == 0) {
+	BIF_RET(am_true);
+    }
+
+    /*
+     * If the encoding is latin1, the pathname is always translatable.
+     */
+    switch (erts_get_native_filename_encoding()) {
+    case ERL_FILENAME_LATIN1:
+	BIF_RET(am_true);
+    case ERL_FILENAME_WIN_WCHAR:
+	if (erts_get_user_requested_filename_encoding() == ERL_FILENAME_LATIN1) {
+	    BIF_RET(am_true);
+	}
+    }
+
+    /*
+     * Check whether the binary contains legal UTF-8 sequences.
+     */
+    bytes = erts_get_aligned_binary_bytes(BIF_ARG_1, &temp_alloc);
+    status = erts_analyze_utf8(bytes, size, &err_pos, &num_chars, NULL);
+    erts_free_aligned_binary_bytes(temp_alloc);
+    BIF_RET(status == ERTS_UTF8_OK ? am_true : am_false);
+}  
+
 BIF_RETTYPE file_native_name_encoding_0(BIF_ALIST_0)
 {
     switch (erts_get_native_filename_encoding()) {
@@ -2576,5 +2719,39 @@ BIF_RETTYPE file_native_name_encoding_0(BIF_ALIST_0)
 	}
     default:
 	BIF_RET(am_undefined);
+    }
+}
+
+int erts_utf8_to_latin1(byte* dest, const byte* source, int slen)
+{
+    /*
+     * Assumes source contains valid utf8 that can be encoded as latin1,
+     * and that dest has enough room.
+     */
+    byte* dp = dest;
+
+    while (slen > 0) {
+	if ((source[0] & 0x80) == 0) {
+	    *dp++ = *source++;
+	    --slen;
+	}
+	else {
+	    ASSERT(slen > 1);
+	    ASSERT((source[0] & 0xFE) == 0xC2);
+	    ASSERT((source[1] & 0xC0) == 0x80);
+	    *dp++ = (char) ((source[0] << 6) | (source[1] & 0x3F));
+	    source += 2;
+	    slen -= 2;
+	}
+    }
+    return dp - dest;
+}
+
+BIF_RETTYPE io_printable_range_0(BIF_ALIST_0)
+{
+    if (erts_get_printable_characters() == ERL_PRINTABLE_CHARACTERS_UNICODE) {
+	BIF_RET(am_unicode);
+    } else {
+	BIF_RET(am_latin1);
     }
 }

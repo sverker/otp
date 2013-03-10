@@ -86,7 +86,7 @@ main(Erule) ->
 
 
 ranap(_Erule) ->    
-    ?line PIEVal2 = [{'ProtocolIE-Field',4,ignore,{'Cause',{radioNetwork,'rab-pre-empted'}}}],
+    PIEVal2 = [{'ProtocolIE-Field',4,ignore,{radioNetwork,'rab-pre-empted'}}],
     ?line Val2 = 
 	#'InitiatingMessage'{procedureCode=1,
 			     criticality=ignore,
@@ -98,7 +98,7 @@ ranap(_Erule) ->
     
     ok.
 
-open_type(uper_bin,Val) when is_list(Val) ->
+open_type(uper,Val) when is_list(Val) ->
     list_to_binary(Val);
 open_type(_,Val) ->
     Val.

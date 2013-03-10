@@ -4,7 +4,7 @@
 <erlref>
   <header>
     <copyright>
-      <year>1999</year><year>2012</year>
+      <year>1999</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -36,12 +36,16 @@
 
     <list type="bulleted">
       <item>ssl requires the crypto and public_key applications.</item>
-      <item>Supported SSL/TLS-versions are SSL-3.0 and TLS-1.0 </item>
+      <item>Supported SSL/TLS-versions are SSL-3.0, TLS-1.0,
+      TLS-1.1 and TLS-1.2 (no support for elliptic curve cipher suites yet).</item>
       <item>For security reasons sslv2 is not supported.</item>
       <item>Ephemeral Diffie-Hellman cipher suites are supported
       but not Diffie Hellman Certificates cipher suites.</item>
       <item>Export cipher suites are not supported as the
       U.S. lifted its export restrictions in early 2000.</item>
+      <item>IDEA cipher suites are not supported as they have
+      become deprecated by the latest TLS spec so there is not any
+      real motivation to implement them.</item>
       <item>CRL and policy certificate
             extensions are not supported yet. </item>
     </list>
@@ -75,13 +79,18 @@
       {keyfile, path()} | {password, string()} |
       {cacerts, [der_encoded()]} | {cacertfile, path()} |
       |{dh, der_encoded()} | {dhfile, path()} | {ciphers, ciphers()} |
-      {ssl_imp, ssl_imp()} | {reuse_sessions, boolean()} | {reuse_session, fun()} 
+      {ssl_imp, ssl_imp()} | {reuse_sessions, boolean()} | {reuse_session, fun()}
+      {next_protocols_advertised, list(binary()} |
+      {client_preferred_next_protocols, binary(), client | server, list(binary())}
     </c></p>
 
-    <p><c>transportoption() = {CallbackModule, DataTag, ClosedTag}
-	- defaults to {gen_tcp, tcp, tcp_closed}. Ssl may be
-	run over any reliable transport protocol that has
-	an equivalent API to gen_tcp's.</c></p>
+    <p><c>transportoption() = {cb_info, {CallbackModule::atom(), DataTag::atom(), ClosedTag::atom(), ErrTag:atom()}}
+	- defaults to {gen_tcp, tcp, tcp_closed, tcp_error}. Can be used to customize
+	the transport layer. The callback module must implement a reliable transport
+	protocol and behave as gen_tcp and in addition have functions corresponding to
+	inet:setopts/2, inet:getopts/2, inet:peername/1, inet:sockname/1 and inet:port/1.
+	The callback gen_tcp is treated specially and will call inet directly.
+    </c></p>
     
     <p><c>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CallbackModule =
 	atom()</c>
@@ -106,7 +115,7 @@
 
     <p><c>sslsocket() - opaque to the user. </c></p>
     
-    <p><c>protocol() = sslv3 | tlsv1 </c></p>
+    <p><c>protocol() = sslv3 | tlsv1 | 'tlsv1.1' | 'tlsv1.2' </c></p>
     
     <p><c>ciphers() = [ciphersuite()] | string() (according to old API)</c></p>
     
@@ -269,11 +278,18 @@ fun(OtpCert :: #'OTPCertificate'{}, Event :: {bad_cert, Reason :: atom()} |
 <p> {bad_cert, cert_expired}, {bad_cert, invalid_issuer}, {bad_cert, invalid_signature}, {bad_cert, unknown_ca},{bad_cert, selfsigned_peer}, {bad_cert, name_not_permitted}, {bad_cert, missing_basic_constraint}, {bad_cert, invalid_key_usage}</p>
       </item>
 
+      <tag>{versions, [protocol()]}</tag>
+      <item>TLS protocol versions that will be supported by started clients and servers.
+      This option overrides the application environment option <c>protocol_version</c>. If the
+      environment option is not set it defaults to all versions supported by the SSL application. See also
+      <seealso marker="ssl:ssl_app">ssl(6)</seealso>
+      </item>
+
       <tag>{hibernate_after, integer()|undefined}</tag>
-      <item>When an integer-value is specified, the <code>ssl_connection</code>
+      <item>When an integer-value is specified, the <c>ssl_connection</c>
             will go into hibernation after the specified number of milliseconds
             of inactivity, thus reducing its memory footprint. When
-            <code>undefined</code> is specified (this is the default), the process
+            <c>undefined</c> is specified (this is the default), the process
             will never go into hibernation.
       </item>
     </taglist>
@@ -297,8 +313,29 @@ fun(OtpCert :: #'OTPCertificate'{}, Event :: {bad_cert, Reason :: atom()} |
       when possible.
       </item>
 
+      <tag>{client_preferred_next_protocols,  Precedence:: server | client, ClientPrefs::[binary()]}
+           {client_preferred_next_protocols,  Precedence:: server | client, ClientPrefs::[binary()] , Default :: binary()}}</tag>
+
+	   <item> <p>Indicates the client will try to perform Next Protocol
+	   Negotiation.</p>
+
+	    <p>If precedence is server the negaotiated protocol will be the
+	   first protocol that appears on the server advertised list that is
+	   also on the clients preference list.</p>
+
+	   <p>If the precedence is client the negaotiated protocol will be the
+	   first protocol that appears on the clients preference list that is
+	   also on the server advertised list.</p>
+
+	  <p> If the client does not support any of the servers advertised
+	   protocols or the server does not advertise any protocols the
+	   client will fallback to the first protocol in its list or if a
+	   default is supplied it will fallback to that instead. If the
+	   server does not support next protocol renegotiation the
+	   connection will be aborted if no default protocol is supplied.</p>
+	   </item>
     </taglist>
-  </section>
+   </section>
 
   <section>
     <title>SSL OPTION DESCRIPTIONS - SERVER SIDE</title>
@@ -349,6 +386,14 @@ fun(OtpCert :: #'OTPCertificate'{}, Event :: {bad_cert, Reason :: atom()} |
       SuggestedSessionId is a binary(),  PeerCert is a DER encoded
       certificate, Compression is an enumeration integer
       and CipherSuite is of type ciphersuite().
+    </item>
+
+      <tag>{next_protocols_advertised, Protocols :: list(binary())}</tag>
+      <item>The list of protocols to send to the client if the client indicates
+      it supports the Next Protocol extension. The client may select a protocol
+      that is not on this list. The list of protocols must not contain an empty
+      binary. If the server negotiates a Next Protocol it can be accessed
+      using <c>negotiated_next_protocol/1</c> method.
       </item>
 
     </taglist>
@@ -762,8 +807,23 @@ fun(OtpCert :: #'OTPCertificate'{}, Event :: {bad_cert, Reason :: atom()} |
 	  ssl application.</p>
       </desc>
     </func>
+    <func>
+      <name>negotiated_next_protocol(Socket) -> {ok, Protocol} | {error, next_protocol_not_negotiated}</name>
+      <fsummary>Returns the Next Protocol negotiated.</fsummary>
+      <type>
+        <v>Socket = sslsocket()</v>
+        <v>Protocol = binary()</v>
+      </type>
+      <desc>
+        <p>
+          Returns the Next Protocol negotiated.
+        </p>
+      </desc>
+    </func>
+
+
   </funcs> 
-      
+
   <section>
     <title>SEE ALSO</title>
     <p><seealso marker="kernel:inet">inet(3) </seealso> and 

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -35,6 +35,13 @@ extern Export* erts_format_cpu_topology_trap;
 #define BIF_ARG_2  (BIF__ARGS[1])
 #define BIF_ARG_3  (BIF__ARGS[2])
 
+#define ERTS_IS_PROC_OUT_OF_REDS(p)		\
+    ((p)->fcalls > 0				\
+     ? 0					\
+     : (!ERTS_PROC_GET_SAVED_CALLS_BUF((p))	\
+	? (p)->fcalls == 0			\
+	: ((p)->fcalls == -CONTEXT_REDS)))
+
 #define BUMP_ALL_REDS(p) do {			\
     if (!ERTS_PROC_GET_SAVED_CALLS_BUF((p))) 	\
 	(p)->fcalls = 0; 			\
@@ -59,6 +66,8 @@ do {									\
 } while(0)
 
 #define BUMP_REDS(p, gc) do {			   \
+     ASSERT(p);		 			   \
+     ERTS_SMP_LC_ASSERT(ERTS_PROC_LOCK_MAIN & erts_proc_lc_my_proc_locks(p));\
      (p)->fcalls -= (gc); 			   \
      if ((p)->fcalls < 0) { 			   \
 	if (!ERTS_PROC_GET_SAVED_CALLS_BUF((p)))   \
@@ -321,27 +330,6 @@ do {					\
     if (ERTS_PROC_IS_EXITING((PROC)))	\
 	ERTS_BIF_EXITED((PROC));	\
 } while (0)
-
-#ifdef ERTS_SMP
-#define ERTS_SMP_BIF_CHK_PENDING_EXIT(P, L)				\
-do {									\
-    ERTS_SMP_LC_ASSERT((L) == erts_proc_lc_my_proc_locks((P)));		\
-    ERTS_SMP_LC_ASSERT(ERTS_PROC_LOCK_MAIN & (L));			\
-    if (!((L) & ERTS_PROC_LOCK_STATUS))					\
-	erts_smp_proc_lock((P), ERTS_PROC_LOCK_STATUS);			\
-    if (ERTS_PROC_PENDING_EXIT((P))) {					\
-	erts_handle_pending_exit((P), (L)|ERTS_PROC_LOCK_STATUS);	\
-	erts_smp_proc_unlock((P),					\
-			     (((L)|ERTS_PROC_LOCK_STATUS)		\
-			      & ~ERTS_PROC_LOCK_MAIN));			\
-	ERTS_BIF_EXITED((P));						\
-    }									\
-    if (!((L) & ERTS_PROC_LOCK_STATUS))					\
-	erts_smp_proc_unlock((P), ERTS_PROC_LOCK_STATUS);		\
-} while (0)
-#else
-#define ERTS_SMP_BIF_CHK_PENDING_EXIT(P, L)
-#endif
 
 /*
  * The ERTS_BIF_*_AWAIT_X_*_TRAP makros either exits the caller, or

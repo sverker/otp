@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -37,6 +37,7 @@
          otp_6977/1,
 	 otp_7550/1,
          otp_8133/1,
+         otp_10622/1,
          funs/1,
 	 try_catch/1,
 	 eval_expr_5/1,
@@ -79,7 +80,7 @@ all() ->
      pattern_expr, match_bin, guard_3, guard_4, lc,
      simple_cases, unary_plus, apply_atom, otp_5269,
      otp_6539, otp_6543, otp_6787, otp_6977, otp_7550,
-     otp_8133, funs, try_catch, eval_expr_5, zero_width].
+     otp_8133, otp_10622, funs, try_catch, eval_expr_5, zero_width].
 
 groups() -> 
     [].
@@ -216,13 +217,13 @@ guard_4(doc) ->
 guard_4(suite) ->
     [];
 guard_4(Config) when is_list(Config) ->
-    ?line check(fun() -> if {erlang,'+'}(3,a) -> true ; true -> false end end,
-                "if {erlang,'+'}(3,a) -> true ; true -> false end.",
-                false),
-    ?line check(fun() -> if {erlang,is_integer}(3) -> true ; true -> false end
-                end,
-                "if {erlang,is_integer}(3) -> true ; true -> false end.",
-                true),
+    check(fun() -> if erlang:'+'(3,a) -> true ; true -> false end end,
+	  "if erlang:'+'(3,a) -> true ; true -> false end.",
+	  false),
+    check(fun() -> if erlang:is_integer(3) -> true ; true -> false end
+	  end,
+	  "if erlang:is_integer(3) -> true ; true -> false end.",
+	  true),
     ?line check(fun() -> [X || X <- [1,2,3], erlang:is_integer(X)] end,
                 "[X || X <- [1,2,3], erlang:is_integer(X)].",
                 [1,2,3]),
@@ -230,11 +231,11 @@ guard_4(Config) when is_list(Config) ->
                 end,
                 "if is_atom(is_integer(a)) -> true ; true -> false end.",
                 true),
-    ?line check(fun() -> if {erlang,is_atom}({erlang,is_integer}(a)) -> true;
-                            true -> false end end,
-                "if {erlang,is_atom}({erlang,is_integer}(a)) -> true; "
-                "true -> false end.",
-                true),
+    check(fun() -> if erlang:is_atom(erlang:is_integer(a)) -> true;
+		      true -> false end end,
+	  "if erlang:is_atom(erlang:is_integer(a)) -> true; "
+	  "true -> false end.",
+	  true),
     ?line check(fun() -> if is_atom(3+a) -> true ; true -> false end end,
                 "if is_atom(3+a) -> true ; true -> false end.",
                 false),
@@ -960,6 +961,7 @@ otp_8133(Config) when is_list(Config) ->
                   E = fun(N) -> 
                               if 
                                   is_integer(N) -> <<N/integer>>; 
+
                                   true -> erlang:error(foo) 
                               end 
                       end,
@@ -978,6 +980,48 @@ otp_8133(Config) when is_list(Config) ->
                  end
              end.",
             ok),
+    ok.
+
+otp_10622(doc) ->
+    ["OTP-10622. Bugs."];
+otp_10622(suite) ->
+    [];
+otp_10622(Config) when is_list(Config) ->
+    check(fun() -> <<0>> = <<"\x{400}">> end,
+          "<<0>> = <<\"\\x{400}\">>. ",
+          <<0>>),
+    check(fun() -> <<"\x{aa}ff"/utf8>> = <<"\x{aa}ff"/utf8>> end,
+          "<<\"\\x{aa}ff\"/utf8>> = <<\"\\x{aa}ff\"/utf8>>. ",
+          <<"Â\xaaff">>),
+    %% The same bug as last example:
+    check(fun() -> case <<"foo"/utf8>> of
+                       <<"foo"/utf8>> -> true
+                   end
+          end,
+          "case <<\"foo\"/utf8>> of <<\"foo\"/utf8>> -> true end.",
+          true),
+    check(fun() -> <<"\x{400}"/utf8>> = <<"\x{400}"/utf8>> end,
+          "<<\"\\x{400}\"/utf8>> = <<\"\\x{400}\"/utf8>>. ",
+          <<208,128>>),
+    error_check("<<\"\\x{aaa}\">> = <<\"\\x{aaa}\">>.",
+                {badmatch,<<"\xaa">>}),
+
+    check(fun() -> [a || <<"\x{aaa}">> <= <<2703:16>>] end,
+          "[a || <<\"\\x{aaa}\">> <= <<2703:16>>]. ",
+          []),
+    check(fun() -> [a || <<"\x{aa}"/utf8>> <= <<"\x{aa}"/utf8>>] end,
+          "[a || <<\"\\x{aa}\"/utf8>> <= <<\"\\x{aa}\"/utf8>>]. ",
+          [a]),
+    check(fun() -> [a || <<"\x{aa}x"/utf8>> <= <<"\x{aa}y"/utf8>>] end,
+          "[a || <<\"\\x{aa}x\"/utf8>> <= <<\"\\x{aa}y\"/utf8>>]. ",
+          []),
+    check(fun() -> [a || <<"\x{aaa}">> <= <<"\x{aaa}">>] end,
+          "[a || <<\"\\x{aaa}\">> <= <<\"\\x{aaa}\">>]. ",
+          []),
+    check(fun() -> [a || <<"\x{aaa}"/utf8>> <= <<"\x{aaa}"/utf8>>] end,
+          "[a || <<\"\\x{aaa}\"/utf8>> <= <<\"\\x{aaa}\"/utf8>>]. ",
+          [a]),
+
     ok.
 
 funs(doc) ->
@@ -1042,6 +1086,10 @@ funs(Config) when is_list(Config) ->
 		"begin M = lists, F = fun M:reverse/1,"
 		" [1,2] = F([2,1]), ok end.",
 		ok),
+
+    %% Test that {M,F} is not accepted as a fun.
+    error_check("{" ?MODULE_STRING ",module_info}().",
+		{badfun,{?MODULE,module_info}}),
     ok.
 
 run_many_args({S, As}) ->
@@ -1077,11 +1125,6 @@ do_funs(LFH, EFH) ->
                 concat(["begin F1 = fun(F,N) -> apply(", M, 
                         ",count_down,[F, N]) end, F1(F1,1000) end."]),
 		0, ['F1'], LFH, EFH),
-    ?line check(fun() -> F1 = fun(F,N) -> {?MODULE,count_down}(F,N)
-                              end, F1(F1, 1000) end,
-                concat(["begin F1 = fun(F,N) -> {", M, 
-                        ",count_down}(F, N) end, F1(F1,1000) end."]),
-		0, ['F1'], LFH, EFH),
     ?line check(fun() -> F = fun(F,N) when N > 0 -> apply(F,[F,N-1]); 
                                 (_F,0) -> ok end, 
                          F(F, 1000)
@@ -1113,11 +1156,11 @@ do_funs(LFH, EFH) ->
                          true = {2,3} == F(2) end,
                 "begin F = fun(X) -> A = 1+X, {X,A} end, 
                        true = {2,3} == F(2) end.", true, ['F'], LFH, EFH),
-    ?line check(fun() -> F = fun(X) -> {erlang,'+'}(X,2) end, 
-                         true = 3 == F(1) end,
-                "begin F = fun(X) -> {erlang,'+'}(X,2) end," 
-                "      true = 3 == F(1) end.", true, ['F'],
-               LFH, EFH),
+    check(fun() -> F = fun(X) -> erlang:'+'(X,2) end,
+		   true = 3 == F(1) end,
+	  "begin F = fun(X) -> erlang:'+'(X,2) end,"
+	  "      true = 3 == F(1) end.", true, ['F'],
+	  LFH, EFH),
     ?line check(fun() -> F = fun(X) -> byte_size(X) end,
                          ?MODULE:do_apply(F,<<"hej">>) end, 
                 concat(["begin F = fun(X) -> size(X) end,",
@@ -1165,24 +1208,6 @@ do_funs(LFH, EFH) ->
                 concat(["begin F = fun(F, N) -> [", M, 
                        ":count_down(F,N) || X <-[1]] end, F(F,2) end."]),
                 [[[0]]], ['F'], LFH, EFH),
-
-    %% Tests for a bug found by the Dialyzer - used to crash.
-    case test_server:is_native(erl_eval) of
-	true ->
-	    %% Parameterized modules are not supported by HiPE.
-	    ok;
-	false ->
-	    check(fun() -> Pmod = erl_eval_helper:new(42), Pmod:add(5) end,
-		  "begin Pmod = erl_eval_helper:new(42), Pmod:add(5) end.",
-		  47,
-		  ['Pmod'], LFH, EFH),
-	    check(fun() -> Pmod = erl_eval_helper:new(42),
-			   B = Pmod:add(7), B end,
-		  "begin Pmod = erl_eval_helper:new(42), "
-		  "B = Pmod:add(7), B end.",
-		  49,
-		  ['B','Pmod'], LFH, EFH)
-    end,
     ok.
 
 count_down(F, N) when N > 0 ->

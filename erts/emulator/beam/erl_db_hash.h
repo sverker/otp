@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1998-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1998-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -33,7 +33,7 @@ typedef struct hash_db_term {
     DbTerm dbterm;         /* The actual term */
 } HashDbTerm;
 
-#define DB_HASH_LOCK_CNT 16
+#define DB_HASH_LOCK_CNT 64
 typedef struct db_table_hash_fine_locks {
     union {
 	erts_smp_rwmtx_t lck;

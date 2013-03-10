@@ -101,34 +101,34 @@ archive: opt
 # ----------------------------------------------------
 
 $(APP_TARGET): $(APP_SRC) ../vsn.mk Makefile
-	sed -e 's;%GEN_MODS%;$(GEN_MODS);' $< > $@.tmp
-	sed -e 's;%VSN%;$(VSN);' $@.tmp > $@
-	rm $@.tmp
+	$(gen_verbose)sed -e 's;%GEN_MODS%;$(GEN_MODS);' $< > $@.tmp
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $@.tmp > $@
+	$(V_at)rm $@.tmp
 
 $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk Makefile
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 # Rules
 $(EBIN)/%.beam: $(ESRC)/%.erl $(HEADER_FILES)
-	$(ERLC) -W -bbeam $(ERL_FLAGS) $(ERL_COMPILE_FLAGS) -o$(EBIN) $< 
+	$(V_ERLC) -W -bbeam $(ERL_FLAGS) $(ERL_COMPILE_FLAGS) -o$(EBIN) $<
 
 $(EBIN)/%.beam: $(EGEN)/%.erl $(HEADER_FILES)
-	$(ERLC) -W -bbeam $(ERL_FLAGS) $(ERL_COMPILE_FLAGS) -o$(EBIN) $< 
+	$(V_ERLC) -W -bbeam $(ERL_FLAGS) $(ERL_COMPILE_FLAGS) -o$(EBIN) $<
 
 # ----------------------------------------------------
 # Release Target
 # ---------------------------------------------------- 
 include $(ERL_TOP)/make/otp_release_targets.mk
 release_spec: opt 
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(HRL_FILES) $(ERL_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/src/gen
-	$(INSTALL_DATA) $(GEN_HRL) $(GEN_FILES) $(RELSYSDIR)/src/gen
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DATA) $(EXT_HRL) $(RELSYSDIR)/include
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(TARGET_FILES) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(APP_TARGET) $(APPUP_TARGET) $(RELSYSDIR)/ebin
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(HRL_FILES) $(ERL_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/src/gen"
+	$(INSTALL_DATA) $(GEN_HRL) $(GEN_FILES) "$(RELSYSDIR)/src/gen"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DATA) $(EXT_HRL) "$(RELSYSDIR)/include"
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(TARGET_FILES) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(APP_TARGET) $(APPUP_TARGET) "$(RELSYSDIR)/ebin"
 #	$(INSTALL_DATA) ../$(ARCHIVE) $(RELEASE_PATH)/lib
 
 release_docs_spec:

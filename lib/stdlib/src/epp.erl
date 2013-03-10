@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -23,13 +23,19 @@
 -export([open/2,open/3,open/5,close/1,format_error/1]).
 -export([scan_erl_form/1,parse_erl_form/1,macro_defs/1]).
 -export([parse_file/1, parse_file/3]).
+-export([default_encoding/0, encoding_to_string/1,
+         read_encoding_from_binary/1, read_encoding_from_binary/2,
+         set_encoding/1, read_encoding/1, read_encoding/2]).
 -export([interpret_file_attribute/1]).
 -export([normalize_typed_record_fields/1,restore_typed_record_fields/1]).
 
 %%------------------------------------------------------------------------
 
+-export_type([source_encoding/0]).
+
 -type macros() :: [{atom(), term()}].
 -type epp_handle() :: pid().
+-type source_encoding() :: latin1 | utf8.
 
 %% Epp state record.
 -record(epp, {file,				%Current file
@@ -213,6 +219,201 @@ parse_file(Epp) ->
 	    [{eof,Location}]
     end.
 
+-define(DEFAULT_ENCODING, latin1).
+
+-spec default_encoding() -> source_encoding().
+
+default_encoding() ->
+    ?DEFAULT_ENCODING.
+
+-spec encoding_to_string(Encoding) -> string() when
+      Encoding :: source_encoding().
+
+encoding_to_string(latin1) -> "coding: latin-1";
+encoding_to_string(utf8) -> "coding: utf-8".
+
+-spec read_encoding(FileName) -> source_encoding() | none when
+      FileName :: file:name().
+
+read_encoding(Name) ->
+    read_encoding(Name, []).
+
+-spec read_encoding(FileName, Options) -> source_encoding() | none when
+      FileName :: file:name(),
+      Options :: [Option],
+      Option :: {in_comment_only, boolean()}.
+
+read_encoding(Name, Options) ->
+    InComment = proplists:get_value(in_comment_only, Options, true),
+    case file:open(Name, [read]) of
+        {ok,File} ->
+            try read_encoding_from_file(File, InComment)
+            after ok = file:close(File)
+            end;
+        _Error ->
+            none
+    end.
+
+-spec set_encoding(File) -> source_encoding() | none when
+      File :: io:device(). % pid(); raw files don't work
+
+set_encoding(File) ->
+    Encoding = read_encoding_from_file(File, true),
+    Enc = case Encoding of
+              none -> default_encoding();
+              Encoding -> Encoding
+          end,
+    ok = io:setopts(File, [{encoding, Enc}]),
+    Encoding.
+
+-spec read_encoding_from_binary(Binary) -> source_encoding() | none when
+      Binary :: binary().
+
+-define(ENC_CHUNK, 32).
+-define(N_ENC_CHUNK, 16). % a total of 512 bytes
+
+read_encoding_from_binary(Binary) ->
+    read_encoding_from_binary(Binary, []).
+
+-spec read_encoding_from_binary(Binary, Options) ->
+                                       source_encoding() | none when
+      Binary :: binary(),
+      Options :: [Option],
+      Option :: {in_comment_only, boolean()}.
+
+read_encoding_from_binary(Binary, Options) ->
+    InComment = proplists:get_value(in_comment_only, Options, true),
+    try
+        com_nl(Binary, fake_reader(0), 0, InComment)
+    catch
+        throw:no ->
+            none
+    end.
+
+fake_reader(N) ->
+    fun() when N =:= ?N_ENC_CHUNK ->
+            throw(no);
+       () ->
+            {<<>>, fake_reader(N+1)}
+    end.
+
+-spec read_encoding_from_file(File, InComment) -> source_encoding() | none when
+      File :: io:device(),
+      InComment :: boolean().
+
+read_encoding_from_file(File, InComment) ->
+    {ok, Pos0} = file:position(File, cur),
+    Opts = io:getopts(File),
+    Encoding0 = lists:keyfind(encoding, 1, Opts),
+    Binary0 = lists:keyfind(binary, 1, Opts),
+    ok = io:setopts(File, [binary, {encoding, latin1}]),
+    try
+        {B, Fun} = (reader(File, 0))(),
+        com_nl(B, Fun, 0, InComment)
+    catch
+        throw:no ->
+            none
+    after
+        {ok, Pos0} = file:position(File, Pos0),
+        ok = io:setopts(File, [Binary0, Encoding0])
+    end.
+
+reader(Fd, N) ->
+    fun() when N =:= ?N_ENC_CHUNK ->
+            throw(no);
+       () ->
+            case file:read(Fd, ?ENC_CHUNK) of
+                eof ->
+                    {<<>>, reader(Fd, N+1)};
+                {ok, Bin} ->
+                    {Bin, reader(Fd, N+1)};
+                {error, _} ->
+                    throw(no) % ignore errors
+            end
+    end.
+
+com_nl(_, _, 2, _) ->
+    throw(no);
+com_nl(B, Fun, N, false=Com) ->
+    com_c(B, Fun, N, Com);
+com_nl(B, Fun, N, true=Com) ->
+    com(B, Fun, N, Com).
+
+com(<<"\n",B/binary>>, Fun, N, Com) ->
+    com_nl(B, Fun, N+1, Com);
+com(<<"%", B/binary>>, Fun, N, Com) ->
+    com_c(B, Fun, N, Com);
+com(<<_:1/unit:8,B/binary>>, Fun, N, Com) ->
+    com(B, Fun, N, Com);
+com(<<>>, Fun, N, Com) ->
+    {B, Fun1} = Fun(),
+    com(B, Fun1, N, Com).
+
+com_c(<<"c",B/binary>>, Fun, N, Com) ->
+    com_oding(B, Fun, N, Com);
+com_c(<<"\n",B/binary>>, Fun, N, Com) ->
+    com_nl(B, Fun, N+1, Com);
+com_c(<<_:1/unit:8,B/binary>>, Fun, N, Com) ->
+    com_c(B, Fun, N, Com);
+com_c(<<>>, Fun, N, Com) ->
+    {B, Fun1} = Fun(),
+    com_c(B, Fun1, N, Com).
+
+com_oding(<<"oding",B/binary>>, Fun, N, Com) ->
+    com_sep(B, Fun, N, Com);
+com_oding(B, Fun, N, Com) when byte_size(B) >= length("oding") ->
+    com_c(B, Fun, N, Com);
+com_oding(B, Fun, N, Com) ->
+    {B1, Fun1} = Fun(),
+    com_oding(list_to_binary([B, B1]), Fun1, N, Com).
+
+com_sep(<<":",B/binary>>, Fun, N, Com) ->
+    com_space(B, Fun, N, Com);
+com_sep(<<"=",B/binary>>, Fun, N, Com) ->
+    com_space(B, Fun, N, Com);
+com_sep(<<"\s",B/binary>>, Fun, N, Com) ->
+    com_sep(B, Fun, N, Com);
+com_sep(<<>>, Fun, N, Com) ->
+    {B, Fun1} = Fun(),
+    com_sep(B, Fun1, N, Com);
+com_sep(B, Fun, N, Com) ->
+    com_c(B, Fun, N, Com).
+
+com_space(<<"\s",B/binary>>, Fun, N, Com) ->
+    com_space(B, Fun, N, Com);
+com_space(<<>>, Fun, N, Com) ->
+    {B, Fun1} = Fun(),
+    com_space(B, Fun1, N, Com);
+com_space(B, Fun, N, _Com) ->
+    com_enc(B, Fun, N, [], []).
+
+com_enc(<<C:1/unit:8,B/binary>>, Fun, N, L, Ps) when C >= $a, C =< $z;
+                                                     C >= $A, C =< $Z;
+                                                     C >= $0, C =< $9 ->
+    com_enc(B, Fun, N, [C | L], Ps);
+com_enc(<<>>, Fun, N, L, Ps) ->
+    case Fun() of
+        {<<>>, _} ->
+            com_enc_end([L | Ps]);
+        {B, Fun1} ->
+            com_enc(B, Fun1, N, L, Ps)
+    end;
+com_enc(<<"-",B/binary>>, Fun, N, L, Ps) ->
+    com_enc(B, Fun, N, [], [L | Ps]);
+com_enc(_B, _Fun, _N, L, Ps) ->
+    com_enc_end([L | Ps]).
+
+com_enc_end(Ps0) ->
+    Ps = lists:reverse([lists:reverse(string:to_lower(P)) || P <- Ps0]),
+    com_encoding(Ps).
+
+com_encoding(["latin","1"|_]) ->
+    latin1;
+com_encoding(["utf","8"|_]) ->
+    utf8;
+com_encoding(_) ->
+    throw(no). % Don't try any further
+
 normalize_typed_record_fields([]) ->
     {typed, []};
 normalize_typed_record_fields(Fields) ->
@@ -266,14 +467,17 @@ init_server(Pid, Name, File, AtLocation, Path, Pdm, Pre) ->
     Ms0 = predef_macros(Name),
     case user_predef(Pdm, Ms0) of
 	{ok,Ms1} ->
-	    epp_reply(Pid, {ok,self()}),
-            %% ensure directory of current source file is first in path
+            _ = set_encoding(File),
+            epp_reply(Pid, {ok,self()}),
+            %% ensure directory of current source file is
+            %% first in path
             Path1 = [filename:dirname(Name) | Path],
-	    St = #epp{file=File, location=AtLocation, delta=0, name=Name,
-                      name2=Name, path=Path1, macs=Ms1, pre_opened = Pre},
-	    From = wait_request(St),
-	    enter_file_reply(From, Name, AtLocation, AtLocation),
-	    wait_req_scan(St);
+            St = #epp{file=File, location=AtLocation, delta=0,
+                      name=Name, name2=Name, path=Path1, macs=Ms1,
+                      pre_opened = Pre},
+            From = wait_request(St),
+            enter_file_reply(From, Name, AtLocation, AtLocation),
+            wait_req_scan(St);
 	{error,E} ->
 	    epp_reply(Pid, {error,E})
     end.
@@ -385,19 +589,20 @@ enter_file(NewName, Inc, From, St) ->
 %% enter_file2(File, FullName, From, EppState, AtLocation) -> EppState.
 %%  Set epp to use this file and "enter" it.
 
-enter_file2(NewF, Pname, From, St, AtLocation) ->
+enter_file2(NewF, Pname, From, St0, AtLocation) ->
     Loc = start_loc(AtLocation),
     enter_file_reply(From, Pname, Loc, AtLocation),
-    Ms = dict:store({atom,'FILE'}, {none,[{string,Loc,Pname}]}, St#epp.macs),
+    Ms = dict:store({atom,'FILE'}, {none,[{string,Loc,Pname}]}, St0#epp.macs),
     %% update the head of the include path to be the directory of the new
     %% source file, so that an included file can always include other files
     %% relative to its current location (this is also how C does it); note
     %% that the directory of the parent source file (the previous head of
     %% the path) must be dropped, otherwise the path used within the current
     %% file will depend on the order of file inclusions in the parent files
-    Path = [filename:dirname(Pname) | tl(St#epp.path)],
+    Path = [filename:dirname(Pname) | tl(St0#epp.path)],
+    _ = set_encoding(NewF),
     #epp{file=NewF,location=Loc,name=Pname,delta=0,
-         sstk=[St|St#epp.sstk],path=Path,macs=Ms}.
+         sstk=[St0|St0#epp.sstk],path=Path,macs=Ms}.
 
 enter_file_reply(From, Name, Location, AtLocation) ->
     Attr = loc_attr(AtLocation),
@@ -409,7 +614,7 @@ enter_file_reply(From, Name, Location, AtLocation) ->
 
 %% Flatten filename to a string. Must be a valid filename.
 
-file_name([C | T]) when is_integer(C), C > 0, C =< 255 ->
+file_name([C | T]) when is_integer(C), C > 0 ->
     [C | file_name(T)];
 file_name([H|T]) ->
     file_name(H) ++ file_name(T);
@@ -1048,8 +1253,6 @@ macro_arg([{'try',Lr}|Toks], E, Arg) ->
     macro_arg(Toks, ['end'|E], [{'try',Lr}|Arg]);
 macro_arg([{'cond',Lr}|Toks], E, Arg) ->
     macro_arg(Toks, ['end'|E], [{'cond',Lr}|Arg]);
-macro_arg([{'query',Lr}|Toks], E, Arg) ->
-    macro_arg(Toks, ['end'|E], [{'query',Lr}|Arg]);
 macro_arg([{Rb,Lrb}|Toks], [Rb|E], Arg) ->	%Found matching close
     macro_arg(Toks, E, [{Rb,Lrb}|Arg]);
 macro_arg([T|Toks], E, Arg) ->
@@ -1094,6 +1297,7 @@ expand_arg([], Ts, L, Rest, Bs) ->
 %%% tokenized would yield the token list Ts.
 
 %% erl_scan:token_info(T, text) is not backward compatible with this.
+%% Note that escaped characters will be replaced by themselves.
 token_src({dot, _}) ->
     ".";
 token_src({X, _}) when is_atom(X) ->
@@ -1103,14 +1307,14 @@ token_src({var, _, X}) ->
 token_src({char,_,C}) ->
     io_lib:write_char(C);
 token_src({string, _, X}) ->
-    lists:flatten(io_lib:format("~p", [X]));
+    io_lib:write_string(X);
 token_src({_, _, X}) ->
-    lists:flatten(io_lib:format("~w", [X])).
+    io_lib:format("~w", [X]).
 
 stringify1([]) ->
     [];
 stringify1([T | Tokens]) ->
-    [io_lib:format(" ~s", [token_src(T)]) | stringify1(Tokens)].
+    [io_lib:format(" ~ts", [token_src(T)]) | stringify1(Tokens)].
 
 stringify(Ts, L) ->
     [$\s | S] = lists:flatten(stringify1(Ts)),

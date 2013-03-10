@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2005-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2005-2012. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -102,9 +102,10 @@ void erts_lc_unrequire_lock_flg(erts_lc_lock_t *lck, Uint16 op_flags);
 void erts_lc_require_lock(erts_lc_lock_t *lck);
 void erts_lc_unrequire_lock(erts_lc_lock_t *lck);
 
+int erts_lc_is_emu_thr(void);
 
 #define ERTS_LC_ASSERT(A) \
-  ((void) ((A) ? 1 : erts_lc_assert_failed(__FILE__, __LINE__, #A)))
+    ((void) (((A) || ERTS_SOMEONE_IS_CRASH_DUMPING) ? 1 : erts_lc_assert_failed(__FILE__, __LINE__, #A)))
 #ifdef ERTS_SMP
 #define ERTS_SMP_LC_ASSERT(A) ERTS_LC_ASSERT(A)
 #else

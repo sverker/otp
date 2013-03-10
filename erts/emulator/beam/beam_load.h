@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1999-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -49,7 +49,6 @@ extern void** beam_ops;
 extern BeamInstr beam_debug_apply[];
 extern BeamInstr* em_call_error_handler;
 extern BeamInstr* em_apply_bif;
-extern BeamInstr* em_call_traced_function;
 
 /*
  * The following variables keep a sorted list of address ranges for

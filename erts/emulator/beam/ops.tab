@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1997-2012. All Rights Reserved.
+# Copyright Ericsson AB 1997-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -62,11 +62,8 @@ label L
 i_func_info I a a I
 int_code_end
 
-i_trace_breakpoint
-i_mtrace_breakpoint
+i_generic_breakpoint
 i_debug_breakpoint
-i_count_breakpoint
-i_time_breakpoint
 i_return_time_trace
 i_return_to_trace
 i_yield
@@ -522,7 +519,6 @@ apply_bif
 call_nif
 call_error_handler
 error_action_code
-call_traced_function
 return_trace
 
 #
@@ -1025,7 +1021,7 @@ bif0 u$bif:erlang:node/0 Dst=d => node Dst
 
 bif1 Fail Bif=u$bif:erlang:get/1 Src=s Dst=d => i_get Src Dst
 
-bif2 Jump=j u$bif:erlang:element/2 S1=s S2=s Dst=d => gen_element(Jump, S1, S2, Dst)
+bif2 Jump=j u$bif:erlang:element/2 S1=s S2=rxy Dst=d => gen_element(Jump, S1, S2, Dst)
 
 bif1 Fail Bif Literal=q Dst => move Literal x | bif1 Fail Bif x Dst
 bif1 p Bif S1 Dst => bif1_body Bif S1 Dst

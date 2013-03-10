@@ -2,7 +2,7 @@
 %%-----------------------------------------------------------------------
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2006-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2006-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -116,7 +116,7 @@ spawn_jobs(Mode, Jobs, InitData, Timing) ->
     fun(Job, Count) ->
 	Pid = dialyzer_worker:launch(Mode, Job, InitData, Coordinator),
 	case TypesigOrDataflow of
-	  true  -> true = ets:insert(SCCtoPID, {Job, Pid});
+	  true  -> true = ets:insert(SCCtoPID, {Job, Pid}), ok;
 	  false -> request_activation(Regulator, Pid)
 	end,
 	Count + 1
@@ -217,7 +217,8 @@ request_activation({_Collector, Regulator, _SCCtoPID}) ->
   wait_activation().
 
 request_activation(Regulator, Pid) ->
-  Regulator ! {req, Pid}.
+  Regulator ! {req, Pid},
+  ok.
 
 spawn_regulator() ->
   InitTickets = dialyzer_utils:parallelism(),

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -633,7 +633,7 @@ last_merge(R, W) when length(R) =< W#w.no_files ->
     case W#w.out of
         Fun when is_function(Fun) ->
             {Fs, W1} = init_merge(lists:reverse(R), 1, [], W),
-            ?DEBUG("merging ~p~n", [lists:reverse(R)]),
+            ?DEBUG("merging ~tp~n", [lists:reverse(R)]),
             W2 = merge_files(Fs, [], 0, nolast, W1),
             NW = close_input(W2),
             outfun(close, NW);
@@ -659,7 +659,7 @@ merge_runs([R, R1 | Rs], NRs0, W) ->
 
 merge_files(R, W) ->
     {W1, Temp} = next_temp(W),
-    ?DEBUG("merging ~p~nto ~p~n", [lists:reverse(R), Temp]),
+    ?DEBUG("merging ~tp~nto ~tp~n", [lists:reverse(R), Temp]),
     {Temp, merge_files(R, W1, Temp)}.
     
 merge_files(R, W, FileName) ->
@@ -1501,7 +1501,7 @@ close_out(_) ->
 
 close_file(Fd, W) ->
     {Fd, FileName} = lists:keyfind(Fd, 1, W#w.temp),
-    ?DEBUG("closing ~p~n", [FileName]),
+    ?DEBUG("closing ~tp~n", [FileName]),
     file:close(Fd),
     W#w{temp = [FileName | lists:keydelete(Fd, 1, W#w.temp)]}.
 

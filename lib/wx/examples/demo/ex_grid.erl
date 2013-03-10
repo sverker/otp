@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2009-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2009-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -77,6 +77,10 @@ handle_event(#wx{event = #wxGrid{type = grid_cell_change,
 %% Callbacks handled as normal gen_server callbacks
 handle_info(_Msg, State) ->
     {noreply, State}.
+
+handle_call(shutdown, _From, State=#state{parent=Panel}) ->
+    wxPanel:destroy(Panel),
+    {stop, normal, ok, State};
 
 handle_call(_Msg, _From, State) ->
     {reply,{error, nyi}, State}.

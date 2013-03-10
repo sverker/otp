@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2002-2009. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -213,11 +213,11 @@ decode_message(compact, BinMsg) ->
     Conf = [{version3,?V3}],
     do_decode(Mod, Conf, BinMsg);
 decode_message(ber, BinMsg) ->
-    Mod  = megaco_ber_bin_encoder,
+    Mod  = megaco_ber_encoder,
     Conf = [{version3,?V3}],
     do_decode(Mod, Conf, BinMsg);
 decode_message(per, BinMsg) ->
-    Mod  = megaco_per_bin_encoder,
+    Mod  = megaco_per_encoder,
     Conf = [{version3,?V3}],
     do_decode(Mod, Conf, BinMsg);
 decode_message(erlang, BinMsg) ->

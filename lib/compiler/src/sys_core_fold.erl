@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -132,7 +132,12 @@ body(Body, Sub) ->
 
 body(#c_values{anno=A,es=Es0}, Ctxt, Sub) ->
     Es1 = expr_list(Es0, Ctxt, Sub),
-    #c_values{anno=A,es=Es1};
+    case Ctxt of
+	value ->
+	    #c_values{anno=A,es=Es1};
+	effect ->
+	    make_effect_seq(Es1, Sub)
+    end;
 body(E, Ctxt, Sub) ->
     ?ASSERT(verify_scope(E, Sub)),
     expr(E, Ctxt, Sub).
@@ -686,11 +691,14 @@ call_1(#c_call{anno=Anno}, lists, all, [Arg1,Arg2], Sub) ->
     C1 = #c_clause{pats=[#c_cons{hd=X, tl=Xs}], guard=#c_literal{val=true},
 		   body=#c_case{arg=#c_apply{anno=Anno, op=F, args=[X]},
 				clauses = [CC1, CC2, CC3]}},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=1}]},
 		   body=#c_literal{val=true}},
-    Err2 = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    Err2 = #c_tuple{es=[#c_literal{val='function_clause'}, F, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err2)},
+		   body=match_fail([{function_name,{'lists^all',1}}|Anno], Err2)},
     Fun = #c_fun{vars=[Xs],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -713,11 +721,14 @@ call_1(#c_call{anno=Anno}, lists, any, [Arg1,Arg2], Sub) ->
     C1 = #c_clause{pats=[#c_cons{hd=X, tl=Xs}], guard=#c_literal{val=true},
 		   body=#c_case{arg=#c_apply{anno=Anno, op=F, args=[X]},
 				clauses = [CC1, CC2, CC3]}},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=1}]},
 		   body=#c_literal{val=false}},
-    Err2 = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    Err2 = #c_tuple{es=[#c_literal{val='function_clause'}, F, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err2)},
+		   body=match_fail([{function_name,{'lists^any',1}}|Anno], Err2)},
     Fun = #c_fun{vars=[Xs],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -733,11 +744,14 @@ call_1(#c_call{anno=Anno}, lists, foreach, [Arg1,Arg2], Sub) ->
     C1 = #c_clause{pats=[#c_cons{hd=X, tl=Xs}], guard=#c_literal{val=true},
 		   body=#c_seq{arg=#c_apply{anno=Anno, op=F, args=[X]},
 			       body=#c_apply{anno=Anno, op=Loop, args=[Xs]}}},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=1}]},
 		   body=#c_literal{val=ok}},
-    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, F, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err)},
+		   body=match_fail([{function_name,{'lists^foreach',1}}|Anno], Err)},
     Fun = #c_fun{vars=[Xs],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -756,14 +770,18 @@ call_1(#c_call{anno=Anno}, lists, map, [Arg1,Arg2], Sub) ->
 						      op=F,
 						      args=[X]},
 			       body=#c_cons{hd=H,
+					    anno=[compiler_generated],
 					    tl=#c_apply{anno=Anno,
 							op=Loop,
 							args=[Xs]}}}},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=1}]},
 		   body=#c_literal{val=[]}},
-    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, F, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err)},
+		   body=match_fail([{function_name,{'lists^map',1}}|Anno], Err)},
     Fun = #c_fun{vars=[Xs],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -780,18 +798,21 @@ call_1(#c_call{anno=Anno}, lists, flatmap, [Arg1,Arg2], Sub) ->
     C1 = #c_clause{pats=[#c_cons{hd=X, tl=Xs}], guard=#c_literal{val=true},
 		   body=#c_let{vars=[H],
 			       arg=#c_apply{anno=Anno, op=F, args=[X]},
-			       body=#c_call{anno=Anno,
+			       body=#c_call{anno=[compiler_generated|Anno],
 					    module=#c_literal{val=erlang},
 					    name=#c_literal{val='++'},
 					    args=[H,
 						  #c_apply{anno=Anno,
 							   op=Loop,
 							   args=[Xs]}]}}},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=1}]},
 		   body=#c_literal{val=[]}},
-    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, F, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err)},
+		   body=match_fail([{function_name,{'lists^flatmap',1}}|Anno], Err)},
     Fun = #c_fun{vars=[Xs],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -807,7 +828,7 @@ call_1(#c_call{anno=Anno}, lists, filter, [Arg1,Arg2], Sub) ->
     B = #c_var{name='B'},
     Err1 = #c_tuple{es=[#c_literal{val='case_clause'}, X]},
     CC1 = #c_clause{pats=[#c_literal{val=true}], guard=#c_literal{val=true},
-		    body=#c_cons{hd=X, tl=Xs}},
+		    body=#c_cons{anno=[compiler_generated], hd=X, tl=Xs}},
     CC2 = #c_clause{pats=[#c_literal{val=false}], guard=#c_literal{val=true},
 		    body=Xs},
     CC3 = #c_clause{pats=[X], guard=#c_literal{val=true},
@@ -821,11 +842,14 @@ call_1(#c_call{anno=Anno}, lists, filter, [Arg1,Arg2], Sub) ->
 							op=Loop,
 							args=[Xs]},
 					   body=Case}}},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=1}]},
 		   body=#c_literal{val=[]}},
-    Err2 = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    Err2 = #c_tuple{es=[#c_literal{val='function_clause'}, F, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err2)},
+		   body=match_fail([{function_name,{'lists^filter',1}}|Anno], Err2)},
     Fun = #c_fun{vars=[Xs],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -845,10 +869,14 @@ call_1(#c_call{anno=Anno}, lists, foldl, [Arg1,Arg2,Arg3], Sub) ->
 				 args=[Xs, #c_apply{anno=Anno,
 						    op=F,
 						    args=[X, A]}]}},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true}, body=A},
-    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=2}]},
+		   body=A},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, F, A, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err)},
+		   body=match_fail([{function_name,{'lists^foldl',2}}|Anno], Err)},
     Fun = #c_fun{vars=[Xs, A],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -868,10 +896,14 @@ call_1(#c_call{anno=Anno}, lists, foldr, [Arg1,Arg2,Arg3], Sub) ->
 				 args=[X, #c_apply{anno=Anno,
 						   op=Loop,
 						   args=[Xs, A]}]}},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true}, body=A},
-    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=2}]},
+		   body=A},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, F, A, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err)},
+		   body=match_fail([{function_name,{'lists^foldr',2}}|Anno], Err)},
     Fun = #c_fun{vars=[Xs, A],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -901,7 +933,10 @@ call_1(#c_call{anno=Anno}, lists, mapfoldl, [Arg1,Arg2,Arg3], Sub) ->
 					     op=Loop,
 					     args=[Xs, Avar]},
 				    #c_tuple{es=[Xs, Avar]},
-				    #c_tuple{es=[#c_cons{hd=X, tl=Xs}, Avar]})
+				    #c_tuple{anno=[compiler_generated],
+					     es=[#c_cons{anno=[compiler_generated],
+							 hd=X, tl=Xs},
+						 Avar]})
 %%% Multiple-value version
 %%% 			      #c_let{vars=[Xs,A],
 %%% 				     %% The tuple here will be optimised
@@ -910,14 +945,18 @@ call_1(#c_call{anno=Anno}, lists, mapfoldl, [Arg1,Arg2,Arg3], Sub) ->
 %%% 				     body=#c_values{es=[#c_cons{hd=X, tl=Xs},
 %%% 							A]}}
 			     )},
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=2}]},
 %%% Tuple passing version
-		   body=#c_tuple{es=[#c_literal{val=[]}, Avar]}},
+		   body=#c_tuple{anno=[compiler_generated],
+				 es=[#c_literal{val=[]}, Avar]}},
 %%% Multiple-value version
 %%% 		   body=#c_values{es=[#c_literal{val=[]}, A]}},
-    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, F, Avar, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err)},
+		   body=match_fail([{function_name,{'lists^mapfoldl',2}}|Anno], Err)},
     Fun = #c_fun{vars=[Xs, Avar],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -955,7 +994,9 @@ call_1(#c_call{anno=Anno}, lists, mapfoldr, [Arg1,Arg2,Arg3], Sub) ->
 			      #c_tuple{es=[Xs, Avar]},
 			      Match(#c_apply{anno=Anno, op=F, args=[X, Avar]},
 				    #c_tuple{es=[X, Avar]},
-				    #c_tuple{es=[#c_cons{hd=X, tl=Xs}, Avar]}))
+				    #c_tuple{anno=[compiler_generated],
+					     es=[#c_cons{anno=[compiler_generated],
+							 hd=X, tl=Xs}, Avar]}))
 %%% Multiple-value version
 %%% 		   body=#c_let{vars=[Xs,A],
 %%% 			       %% The tuple will be optimised away
@@ -965,14 +1006,18 @@ call_1(#c_call{anno=Anno}, lists, mapfoldr, [Arg1,Arg2,Arg3], Sub) ->
 %%% 					  #c_values{es=[#c_cons{hd=X, tl=Xs},
 %%% 						        A]})}
 		  },
-    C2 = #c_clause{pats=[#c_literal{val=[]}], guard=#c_literal{val=true},
+    C2 = #c_clause{pats=[#c_literal{val=[]}],
+		   guard=#c_call{module=#c_literal{val=erlang},
+				 name=#c_literal{val=is_function},
+				 args=[F, #c_literal{val=2}]},
 %%% Tuple passing version
-		   body=#c_tuple{es=[#c_literal{val=[]}, Avar]}},
+		   body=#c_tuple{anno=[compiler_generated],
+				 es=[#c_literal{val=[]}, Avar]}},
 %%% Multiple-value version
 %%% 		   body=#c_values{es=[#c_literal{val=[]}, A]}},
-    Err = #c_tuple{es=[#c_literal{val='function_clause'}, Xs]},
+    Err = #c_tuple{es=[#c_literal{val='function_clause'}, F, Avar, Xs]},
     C3 = #c_clause{pats=[Xs], guard=#c_literal{val=true},
-		   body=match_fail(Anno, Err)},
+		   body=match_fail([{function_name,{'lists^mapfoldr',2}}|Anno], Err)},
     Fun = #c_fun{vars=[Xs, Avar],
 		 body=#c_case{arg=Xs, clauses=[C1, C2, C3]}},
     L = #c_var{name='L'},
@@ -1232,6 +1277,8 @@ eval_element(Call, #c_literal{val=Pos}, #c_var{name=V}, Types)
 		true ->
 		    eval_failure(Call, badarg)
 	    end;
+	{ok,_} ->
+	    eval_failure(Call, badarg);
 	error ->
 	    Call
     end;
@@ -2632,16 +2679,19 @@ bsm_nonempty([#c_clause{pats=Ps}|Cs], Pos) ->
 bsm_nonempty([], _ ) -> false.
 
 %% bsm_ensure_no_partition(Cs, Pos) -> ok     (exception if problem)
-%%  We must make sure that binary matching is not partitioned between
+%%  We must make sure that matching is not partitioned between
 %%  variables like this:
 %%             foo(<<...>>) -> ...
-%%             foo(Var) when ... -> ...
-%%             foo(<<...>>) ->
+%%             foo(<Variable>) when ... -> ...
+%%             foo(<Any non-variable pattern>) ->
 %%  If there is such partition, we are not allowed to reuse the binary variable
-%%  for the match context. Also, arguments to the left of the argument that
-%%  is matched against a binary, are only allowed to be simple variables, not
-%%  used in guards. The reason is that we must know that the binary is only
-%%  matched in one place.
+%%  for the match context.
+%%
+%%  Also, arguments to the left of the argument that is matched
+%%  against a binary, are only allowed to be simple variables, not
+%%  used in guards. The reason is that we must know that the binary is
+%%  only matched in one place (i.e. there must be only one bs_start_match2
+%%  instruction emitted).
 
 bsm_ensure_no_partition(Cs, Pos) ->
     bsm_ensure_no_partition_1(Cs, Pos, before).
@@ -2649,6 +2699,12 @@ bsm_ensure_no_partition(Cs, Pos) ->
 %% Loop through each clause.
 bsm_ensure_no_partition_1([#c_clause{pats=Ps,guard=G}|Cs], Pos, State0) ->
     State = bsm_ensure_no_partition_2(Ps, Pos, G, simple_vars, State0),
+    case State of
+	'after' ->
+	    bsm_ensure_no_partition_after(Cs, Pos);
+	_ ->
+	    ok
+    end,
     bsm_ensure_no_partition_1(Cs, Pos, State);
 bsm_ensure_no_partition_1([], _, _) -> ok.
 
@@ -2658,8 +2714,7 @@ bsm_ensure_no_partition_2([#c_binary{}=Where|_], 1, _, Vstate, State) ->
 	before when Vstate =:= simple_vars -> within;
 	before -> bsm_problem(Where, Vstate);
 	within when Vstate =:= simple_vars -> within;
-	within -> bsm_problem(Where, Vstate);
-	'after' -> bsm_problem(Where, bin_partition)
+	within -> bsm_problem(Where, Vstate)
     end;
 bsm_ensure_no_partition_2([#c_alias{}=Alias|_], 1, N, Vstate, State) ->
     %% Retrieve the real pattern that the alias refers to and check that.
@@ -2708,6 +2763,15 @@ bsm_ensure_no_partition_2([#c_var{name=V}|Ps], N, G, Vstate, S) ->
 bsm_ensure_no_partition_2([_|Ps], N, G, _, S) ->
     bsm_ensure_no_partition_2(Ps, N-1, G, bin_argument_order, S).
 
+bsm_ensure_no_partition_after([#c_clause{pats=Ps}|Cs], Pos) ->
+    case nth(Pos, Ps) of
+	#c_var{} ->
+	    bsm_ensure_no_partition_after(Cs, Pos);
+	P ->
+	    bsm_problem(P, bin_partition)
+    end;
+bsm_ensure_no_partition_after([], _) -> ok.
+    
 bsm_could_match_binary(#c_alias{pat=P}) -> bsm_could_match_binary(P);
 bsm_could_match_binary(#c_cons{}) -> false;
 bsm_could_match_binary(#c_tuple{}) -> false;
@@ -2832,7 +2896,7 @@ format_error(useless_building) ->
 format_error(bin_opt_alias) ->
     "INFO: the '=' operator will prevent delayed sub binary optimization";
 format_error(bin_partition) ->
-    "INFO: non-consecutive clauses that match binaries "
+    "INFO: matching non-variables after a previous clause matching a variable "
 	"will prevent delayed sub binary optimization";
 format_error(bin_left_var_used_in_guard) ->
     "INFO: a variable to the left of the binary pattern is used in a guard; "

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -38,7 +38,7 @@
 
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2, 
-	 not_run/1, newly_started/1, basic_v8/1, basic_v9/1,
+	 newly_started/1, basic_v8/1, basic_v9/1,
 	 open_v8/1, open_v9/1, sets_v8/1, sets_v9/1, bags_v8/1,
 	 bags_v9/1, duplicate_bags_v8/1, duplicate_bags_v9/1,
 	 access_v8/1, access_v9/1, dirty_mark/1, dirty_mark2/1,
@@ -95,27 +95,25 @@ end_per_testcase(_Case, _Config) ->
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    case os:type() of
-	vxworks -> [not_run];
-	_ ->
-	    [basic_v8, basic_v9, open_v8, open_v9, sets_v8, sets_v9,
-	     bags_v8, bags_v9, duplicate_bags_v8, duplicate_bags_v9,
-	     newly_started, open_file_v8, open_file_v9,
-	     init_table_v8, init_table_v9, repair_v8, repair_v9,
-	     access_v8, access_v9, oldbugs_v8, oldbugs_v9,
-	     unsafe_assumptions, truncated_segment_array_v8,
-	     truncated_segment_array_v9, dirty_mark, dirty_mark2,
-	     bag_next_v8, bag_next_v9, hash_v8b_v8c, phash, fold_v8,
-	     fold_v9, fixtable_v8, fixtable_v9, match_v8, match_v9,
-	     select_v8, select_v9, update_counter, badarg,
-	     cache_sets_v8, cache_sets_v9, cache_bags_v8,
-	     cache_bags_v9, cache_duplicate_bags_v8,
-	     cache_duplicate_bags_v9, otp_4208, otp_4989,
-	     many_clients, otp_4906, otp_5402, simultaneous_open,
-	     insert_new, repair_continuation, otp_5487, otp_6206,
-	     otp_6359, otp_4738, otp_7146, otp_8070, otp_8856, otp_8898,
-	     otp_8899, otp_8903, otp_8923, otp_9282, otp_9607]
-    end.
+    [
+	basic_v8, basic_v9, open_v8, open_v9, sets_v8, sets_v9,
+	bags_v8, bags_v9, duplicate_bags_v8, duplicate_bags_v9,
+	newly_started, open_file_v8, open_file_v9,
+	init_table_v8, init_table_v9, repair_v8, repair_v9,
+	access_v8, access_v9, oldbugs_v8, oldbugs_v9,
+	unsafe_assumptions, truncated_segment_array_v8,
+	truncated_segment_array_v9, dirty_mark, dirty_mark2,
+	bag_next_v8, bag_next_v9, hash_v8b_v8c, phash, fold_v8,
+	fold_v9, fixtable_v8, fixtable_v9, match_v8, match_v9,
+	select_v8, select_v9, update_counter, badarg,
+	cache_sets_v8, cache_sets_v9, cache_bags_v8,
+	cache_bags_v9, cache_duplicate_bags_v8,
+	cache_duplicate_bags_v9, otp_4208, otp_4989,
+	many_clients, otp_4906, otp_5402, simultaneous_open,
+	insert_new, repair_continuation, otp_5487, otp_6206,
+	otp_6359, otp_4738, otp_7146, otp_8070, otp_8856, otp_8898,
+	otp_8899, otp_8903, otp_8923, otp_9282, otp_9607
+    ].
 
 groups() -> 
     [].
@@ -131,10 +129,6 @@ init_per_group(_GroupName, Config) ->
 
 end_per_group(_GroupName, Config) ->
     Config.
-
-not_run(suite) -> [];
-not_run(Conf) when is_list(Conf) ->
-    {comment, "Not runnable VxWorks/NFS"}.
 
 newly_started(doc) ->
     ["OTP-3621"];
@@ -1949,7 +1943,7 @@ match(Config, Version) ->
     %% match, badarg
     MSpec = [{'_',[],['$_']}],
     ?line check_badarg(catch dets:match(no_table, '_'),
-		       dets, safe_fixtable, [no_table,true]),
+		       dets, match, [no_table,'_']),
     ?line check_badarg(catch dets:match(T, '_', not_a_number),
 		       dets, match, [T,'_',not_a_number]),
     ?line {EC1, _} = dets:select(T, MSpec, 1),
@@ -1958,7 +1952,7 @@ match(Config, Version) ->
 
     %% match_object, badarg
     ?line check_badarg(catch dets:match_object(no_table, '_'),
-		       dets, safe_fixtable, [no_table,true]),
+		       dets, match_object, [no_table,'_']),
     ?line check_badarg(catch dets:match_object(T, '_', not_a_number),
 		       dets, match_object, [T,'_',not_a_number]),
     ?line {EC2, _} = dets:select(T, MSpec, 1),
@@ -2127,7 +2121,7 @@ select(Config, Version) ->
     %% badarg
     MSpec = [{'_',[],['$_']}],
     ?line check_badarg(catch dets:select(no_table, MSpec),
-		       dets, safe_fixtable, [no_table,true]),
+		       dets, select, [no_table,MSpec]),
     ?line check_badarg(catch dets:select(T, <<17>>),
 		       dets, select, [T,<<17>>]),
     ?line check_badarg(catch dets:select(T, []),
@@ -2330,7 +2324,7 @@ badarg(Config) when is_list(Config) ->
 
     %% match_delete
     ?line check_badarg(catch dets:match_delete(no_table, '_'),
-		       dets, safe_fixtable, [no_table,true]),
+                 dets, match_delete, [no_table,'_']),
 
     %% delete_all_objects
     ?line check_badarg(catch dets:delete_all_objects(no_table),
@@ -2339,17 +2333,19 @@ badarg(Config) when is_list(Config) ->
     %% select_delete
     MSpec = [{'_',[],['$_']}],
     ?line check_badarg(catch dets:select_delete(no_table, MSpec),
-		       dets, safe_fixtable, [no_table,true]),
+                       dets, select_delete, [no_table,MSpec]),
     ?line check_badarg(catch dets:select_delete(T, <<17>>),
 		       dets, select_delete, [T, <<17>>]),
 
     %% traverse, fold
-    ?line check_badarg(catch dets:traverse(no_table, fun(_) -> continue end),
-		       dets, safe_fixtable, [no_table,true]),
-    ?line check_badarg(catch dets:foldl(fun(_, A) -> A end, [], no_table),
-		       dets, safe_fixtable, [no_table,true]),
-    ?line check_badarg(catch dets:foldr(fun(_, A) -> A end, [], no_table),
-		       dets, safe_fixtable, [no_table,true]),
+    TF = fun(_) -> continue end,
+    ?line check_badarg(catch dets:traverse(no_table, TF),
+                       dets, traverse, [no_table,TF]),
+    FF = fun(_, A) -> A end,
+    ?line check_badarg(catch dets:foldl(FF, [], no_table),
+		       dets, foldl, [FF,[],no_table]),
+    ?line check_badarg(catch dets:foldr(FF, [], no_table),
+		       dets, foldl, [FF,[],no_table]),
 
     %% close
     ?line ok = dets:close(T),

@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1996-2011. All Rights Reserved.
+# Copyright Ericsson AB 1996-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -149,7 +149,7 @@ APPUP_TARGET= $(EBIN)/$(APPUP_FILE)
 ifeq ($(NATIVE_LIBS_ENABLED),yes)
 ERL_COMPILE_FLAGS += +native
 endif
-ERL_COMPILE_FLAGS += -I../include -I../../kernel/include
+ERL_COMPILE_FLAGS += -I../include -I../../kernel/include -Werror
 
 # ----------------------------------------------------
 # Targets
@@ -167,30 +167,33 @@ docs:
 # This is a trick so that the preloaded files will get the correct type
 # specifications.
 primary_bootstrap_compiler: \
+  $(BOOTSTRAP_COMPILER)/ebin/epp.beam \
   $(BOOTSTRAP_COMPILER)/ebin/erl_scan.beam \
   $(BOOTSTRAP_COMPILER)/ebin/erl_parse.beam \
   $(BOOTSTRAP_COMPILER)/ebin/erl_lint.beam \
+  $(BOOTSTRAP_COMPILER)/ebin/io.beam \
   $(BOOTSTRAP_COMPILER)/ebin/otp_internal.beam
 
 $(BOOTSTRAP_COMPILER)/ebin/erl_parse.beam: erl_parse.yrl
-	$(ERLC) -o $(BOOTSTRAP_COMPILER)/egen erl_parse.yrl
-	$(ERLC) -o $(BOOTSTRAP_COMPILER)/ebin $(BOOTSTRAP_COMPILER)/egen/erl_parse.erl
+	$(gen_verbose)
+	$(V_at)$(ERLC) -o $(BOOTSTRAP_COMPILER)/egen erl_parse.yrl
+	$(V_at)$(ERLC) -o $(BOOTSTRAP_COMPILER)/ebin $(BOOTSTRAP_COMPILER)/egen/erl_parse.erl
 
 $(BOOTSTRAP_TOP)/lib/stdlib/egen/erl_parse.erl: erl_parse.yrl
-	$(ERLC) $(YRL_FLAGS) -o$(BOOTSTRAP_TOP)/lib/stdlib/egen erl_parse.yrl
+	$(yecc_verbose)$(ERLC) $(YRL_FLAGS) -o$(BOOTSTRAP_TOP)/lib/stdlib/egen erl_parse.yrl
 
 $(BOOTSTRAP_COMPILER)/ebin/%.beam: %.erl
-	$(ERLC) -o $(BOOTSTRAP_COMPILER)/ebin $<
+	$(V_ERLC) -o $(BOOTSTRAP_COMPILER)/ebin $<
 
 # ----------------------------------------------------
 # Special Build Targets
 # ----------------------------------------------------
 
 $(APP_TARGET): $(APP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 # ----------------------------------------------------
 # Release Target
@@ -198,13 +201,13 @@ $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(ERL_FILES) erl_parse.yrl $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(INTERNAL_HRL_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DATA) $(HRL_FILES) $(RELSYSDIR)/include
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(TARGET_FILES) $(RELSYSDIR)/ebin
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(ERL_FILES) erl_parse.yrl "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(INTERNAL_HRL_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DATA) $(HRL_FILES) "$(RELSYSDIR)/include"
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(TARGET_FILES) "$(RELSYSDIR)/ebin"
 
 release_docs_spec:
 

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2005-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2005-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -33,7 +33,8 @@
 	 matching_meets_construction/1,simon/1,matching_and_andalso/1,
 	 otp_7188/1,otp_7233/1,otp_7240/1,otp_7498/1,
 	 match_string/1,zero_width/1,bad_size/1,haystack/1,
-	 cover_beam_bool/1]).
+	 cover_beam_bool/1,matched_out_size/1,follow_fail_branch/1,
+	 no_partition/1]).
 
 -export([coverage_id/1,coverage_external_ignore/2]).
 
@@ -44,19 +45,22 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     test_lib:recompile(?MODULE),
-    [fun_shadow, int_float, otp_5269, null_fields, wiger,
-     bin_tail, save_restore, shadowed_size_var,
-     partitioned_bs_match, function_clause, unit,
-     shared_sub_bins, bin_and_float, dec_subidentifiers,
-     skip_optional_tag, wfbm, degenerated_match, bs_sum,
-     coverage, multiple_uses, zero_label, followed_by_catch,
-     matching_meets_construction, simon,
-     matching_and_andalso, otp_7188, otp_7233, otp_7240,
-     otp_7498, match_string, zero_width, bad_size, haystack,
-     cover_beam_bool].
+    [{group,p}].
 
 groups() -> 
-    [].
+    [{p,test_lib:parallel(),
+      [fun_shadow,int_float,otp_5269,null_fields,wiger,
+       bin_tail,save_restore,shadowed_size_var,
+       partitioned_bs_match,function_clause,unit,
+       shared_sub_bins,bin_and_float,dec_subidentifiers,
+       skip_optional_tag,wfbm,degenerated_match,bs_sum,
+       coverage,multiple_uses,zero_label,followed_by_catch,
+       matching_meets_construction,simon,
+       matching_and_andalso,otp_7188,otp_7233,otp_7240,
+       otp_7498,match_string,zero_width,bad_size,haystack,
+       cover_beam_bool,matched_out_size,follow_fail_branch,
+       no_partition]}].
+
 
 init_per_suite(Config) ->
     Config.
@@ -800,11 +804,28 @@ matching_and_andalso(Config) when is_list(Config) ->
     ?line {'EXIT',{function_clause,_}} = (catch matching_and_andalso_1(<<1,2,3>>, -8)),
     ?line {'EXIT',{function_clause,_}} = (catch matching_and_andalso_1(<<1,2,3>>, blurf)),
     ?line {'EXIT',{function_clause,_}} = (catch matching_and_andalso_1(<<1,2,3>>, 19)),
+
+    {"abc",<<"xyz">>} = matching_and_andalso_2("abc", <<"-xyz">>),
+    {"abc",<<"">>} = matching_and_andalso_2("abc", <<($a-1)>>),
+    {"abc",<<"">>} = matching_and_andalso_2("abc", <<($z+1)>>),
+    {"abc",<<"">>} = matching_and_andalso_2("abc", <<($A-1)>>),
+    {"abc",<<"">>} = matching_and_andalso_2("abc", <<($Z+1)>>),
+    error = matching_and_andalso_2([], <<>>),
+    error = matching_and_andalso_2([], <<$A>>),
+    error = matching_and_andalso_2([], <<$Z>>),
+    error = matching_and_andalso_2([], <<$a>>),
+    error = matching_and_andalso_2([], <<$z>>),
     ok.
 
 matching_and_andalso_1(<<Bitmap/binary>>, K)
   when is_integer(K) andalso size(Bitmap) >= K andalso 0 < K ->
     ok.
+
+matching_and_andalso_2(Datetime, <<H,T/binary>>)
+  when not ((H >= $a) andalso (H =< $z)) andalso
+       not ((H >= $A) andalso (H =< $Z)) ->
+    {Datetime,T};
+matching_and_andalso_2(_, _) -> error.
 
 %% Thanks to Tomas Stejskal.
 otp_7188(Config) when is_list(Config) ->
@@ -1061,6 +1082,101 @@ do_cover_beam_bool(Bin, X) when X > 0 ->
     end;
 do_cover_beam_bool(<<_,Bin/binary>>, X) ->
     do_cover_beam_bool(Bin, X+1).
+
+matched_out_size(Config) when is_list(Config) ->
+    {253,16#DEADBEEF} = mos_int(<<8,253,16#DEADBEEF:32>>),
+    {6,16#BEEFDEAD} = mos_int(<<3,6:3,16#BEEFDEAD:32>>),
+    {53,16#CAFEDEADBEEFCAFE} = mos_int(<<16,53:16,16#CAFEDEADBEEFCAFE:64>>),
+    {23,16#CAFEDEADBEEFCAFE} = mos_int(<<5,23:5,16#CAFEDEADBEEFCAFE:64>>),
+
+    {<<1,2,3>>,4} = mos_bin(<<3,1,2,3,4,3>>),
+    {<<1,2,3,7>>,19,42} = mos_bin(<<4,1,2,3,7,19,4,42>>),
+    <<1,2,3,7>> = mos_bin(<<4,1,2,3,7,"abcdefghij">>),
+
+    ok.
+
+mos_int(<<L,I:L,X:32>>) ->
+    {I,X};
+mos_int(<<L,I:L,X:64>>) ->
+    {I,X}.
+
+mos_bin(<<L,Bin:L/binary,X:8,L>>) ->
+    L = byte_size(Bin),
+    {Bin,X};
+mos_bin(<<L,Bin:L/binary,X:8,L,Y:8>>) ->
+    L = byte_size(Bin),
+    {Bin,X,Y};
+mos_bin(<<L,Bin:L/binary,"abcdefghij">>) ->
+    L = byte_size(Bin),
+    Bin.
+
+follow_fail_branch(_) ->
+    42 = ffb_1(<<0,1>>, <<0>>),
+    8 = ffb_1(<<0,1>>, [a]),
+    42 = ffb_2(<<0,1>>, <<0>>, 17),
+    8 = ffb_2(<<0,1>>, [a], 0),
+    ok.
+
+ffb_1(<<_,T/bitstring>>, List) ->
+    case List of
+	<<_>> ->
+	    42;
+	[_|_] ->
+	    %% The fail branch of the bs_start_match2 instruction
+	    %% pointing to here would be ignored, making the compiler
+	    %% incorrectly assume that the delayed sub-binary
+	    %% optimization was safe.
+	    bit_size(T)
+    end.
+
+ffb_2(<<_,T/bitstring>>, List, A) ->
+    case List of
+	<<_>> when A =:= 17 -> 42;
+	[_|_] -> bit_size(T)
+    end.
+
+no_partition(_) ->
+    one = no_partition_1(<<"string">>, a1),
+    {two,<<"string">>} = no_partition_1(<<"string">>, a2),
+    {two,<<>>} = no_partition_1(<<>>, a2),
+    {two,a} = no_partition_1(a, a2),
+    three = no_partition_1(undefined, a3),
+    {four,a,[]} = no_partition_1([a], a4),
+    {five,a,b} = no_partition_1({a,b}, a5),
+
+    one = no_partition_2(<<"string">>, a1),
+    two = no_partition_2(<<"string">>, a2),
+    two = no_partition_2(<<>>, a2),
+    two = no_partition_2(a, a2),
+    three = no_partition_2(undefined, a3),
+    four = no_partition_2(42, a4),
+    five = no_partition_2([], a5),
+    six = no_partition_2(42.0, a6),
+    ok.
+
+no_partition_1(<<"string">>, a1) ->
+    one;
+no_partition_1(V, a2) ->
+    {two,V};
+no_partition_1(undefined, a3) ->
+    three;
+no_partition_1([H|T], a4) ->
+    {four,H,T};
+no_partition_1({A,B}, a5) ->
+    {five,A,B}.
+
+no_partition_2(<<"string">>, a1) ->
+    one;
+no_partition_2(_, a2) ->
+    two;
+no_partition_2(undefined, a3) ->
+    three;
+no_partition_2(42, a4) ->
+    four;
+no_partition_2([], a5) ->
+    five;
+no_partition_2(42.0, a6) ->
+    six.
 
 check(F, R) ->
     R = F().

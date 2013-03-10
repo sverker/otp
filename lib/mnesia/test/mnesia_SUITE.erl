@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -105,7 +105,6 @@ groups() ->
      {otp_r4b, [],
       [{mnesia_config_test, access_module},
        {mnesia_config_test, dump_log_load_regulation},
-       {mnesia_config_test, embedded_mnemosyne},
        {mnesia_config_test, ignore_fallback_at_startup},
        {mnesia_config_test, max_wait_for_decision},
        {mnesia_consistency_test, consistency_after_restore},

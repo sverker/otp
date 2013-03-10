@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -626,8 +626,32 @@ safe_binary_to_term2(Config) when is_list(Config) ->
 bad_terms(suite) -> [];
 bad_terms(Config) when is_list(Config) ->
     ?line test_terms(fun corrupter/1).
-			     
+
+corrupter(Term) when is_function(Term);
+		     is_function(hd(Term));
+		     is_function(element(2,element(2,element(2,Term)))) ->
+    %% Check if lists is native compiled. If it is, we do not try to
+    %% corrupt funs as this can create some very strange behaviour.
+    %% To show the error print `Byte` in the foreach fun in corrupter/2.
+    case erlang:system_info(hipe_architecture) of
+	undefined ->
+	    corrupter0(Term);
+	Architecture ->
+	    {lists, ListsBinary, _ListsFilename} = code:get_object_code(lists),
+	    ChunkName = hipe_unified_loader:chunk_name(Architecture),
+	    NativeChunk = beam_lib:chunks(ListsBinary, [ChunkName]),
+	    case NativeChunk of
+		{ok,{_,[{_,Bin}]}} when is_binary(Bin) ->
+		    S = io_lib:format("Skipping corruption of: ~P", [Term,12]),
+		    io:put_chars(S);
+		{error, beam_lib, _} ->
+		    corrupter0(Term)
+	    end
+    end;
 corrupter(Term) ->
+    corrupter0(Term).
+
+corrupter0(Term) ->
     ?line try
 	      S = io_lib:format("About to corrupt: ~P", [Term,12]),
 	      io:put_chars(S)
@@ -1135,15 +1159,8 @@ sleeper() ->
     ?line receive after infinity -> ok end.
 
 
-gc_test(doc) -> "Test that binaries are garbage collected properly.";
-gc_test(suite) -> [];
+%% Test that binaries are garbage collected properly.
 gc_test(Config) when is_list(Config) ->
-    case erlang:system_info(heap_type) of
-	private -> gc_test_1();
-	hybrid -> {skip,"Hybrid heap"}
-    end.
-
-gc_test_1() ->
     %% Note: This test is only relevant for REFC binaries.
     %% Therefore, we take care that all binaries are REFC binaries.
     B = list_to_binary(lists:seq(0, ?heap_binary_size)),

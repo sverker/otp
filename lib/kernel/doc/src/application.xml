@@ -4,7 +4,7 @@
 <erlref>
   <header>
     <copyright>
-      <year>1996</year><year>2011</year>
+      <year>1996</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -118,6 +118,15 @@
           the configuration parameter does not exist, or if the process
           executing the call does not belong to any application,
           the function returns <c>undefined</c>.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="get_env" arity="3"/>
+      <fsummary>Get the value of a configuration parameter using a default</fsummary>
+      <desc>
+        <p>Works like <seealso marker="#get_env/2">get_env/2</seealso> but returns
+          <c><anno>Def</anno></c> value when configuration parameter
+          <c><anno>Par</anno></c> does not exist.</p>
       </desc>
     </func>
     <func>

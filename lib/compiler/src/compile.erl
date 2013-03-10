@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -146,10 +146,17 @@ env_default_opts() ->
 
 do_compile(Input, Opts0) ->
     Opts = expand_opts(Opts0),
-    Self = self(),
-    Serv = spawn_link(fun() -> internal(Self, Input, Opts) end),
+    {Pid,Ref} =
+	spawn_monitor(fun() ->
+			      exit(try
+				       internal(Input, Opts)
+				   catch
+				       error:Reason ->
+					   {error,Reason}
+				   end)
+		      end),
     receive
-	{Serv,Rep} -> Rep
+	{'DOWN',Ref,process,Pid,Rep} -> Rep
     end.
 
 expand_opts(Opts0) ->
@@ -195,36 +202,38 @@ format_error(bad_crypto_key) ->
 format_error(no_crypto_key) ->
     "no crypto key supplied.";
 format_error({native, E}) ->
-    io_lib:fwrite("native-code compilation failed with reason: ~P.",
+    io_lib:fwrite("native-code compilation failed with reason: ~tP.",
 		  [E, 25]);
 format_error({native_crash,E,Stk}) ->
-    io_lib:fwrite("native-code compilation crashed with reason: ~P.\n~P\n",
+    io_lib:fwrite("native-code compilation crashed with reason: ~tP.\n~tP\n",
 		  [E,25,Stk,25]);
 format_error({open,E}) ->
-    io_lib:format("open error '~s'", [file:format_error(E)]);
+    io_lib:format("open error '~ts'", [file:format_error(E)]);
 format_error({epp,E}) ->
     epp:format_error(E);
 format_error(write_error) ->
     "error writing file";
 format_error({rename,From,To,Error}) ->
-    io_lib:format("failed to rename ~s to ~s: ~s",
+    io_lib:format("failed to rename ~ts to ~ts: ~ts",
 		  [From,To,file:format_error(Error)]);
 format_error({delete,File,Error}) ->
-    io_lib:format("failed to delete file ~s: ~s",
+    io_lib:format("failed to delete file ~ts: ~ts",
 		  [File,file:format_error(Error)]);
 format_error({delete_temp,File,Error}) ->
-    io_lib:format("failed to delete temporary file ~s: ~s",
+    io_lib:format("failed to delete temporary file ~ts: ~ts",
 		  [File,file:format_error(Error)]);
 format_error({parse_transform,M,R}) ->
-    io_lib:format("error in parse transform '~s': ~p", [M, R]);
+    io_lib:format("error in parse transform '~s': ~tp", [M, R]);
+format_error({undef_parse_transform,M}) ->
+    io_lib:format("undefined parse transform '~s'", [M]);
 format_error({core_transform,M,R}) ->
-    io_lib:format("error in core transform '~s': ~p", [M, R]);
+    io_lib:format("error in core transform '~s': ~tp", [M, R]);
 format_error({crash,Pass,Reason}) ->
-    io_lib:format("internal error in ~p;\ncrash reason: ~p", [Pass,Reason]);
+    io_lib:format("internal error in ~p;\ncrash reason: ~tp", [Pass,Reason]);
 format_error({bad_return,Pass,Reason}) ->
-    io_lib:format("internal error in ~p;\nbad return value: ~p", [Pass,Reason]);
+    io_lib:format("internal error in ~p;\nbad return value: ~tp", [Pass,Reason]);
 format_error({module_name,Mod,Filename}) ->
-    io_lib:format("Module name '~s' does not match file name '~s'",
+    io_lib:format("Module name '~s' does not match file name '~ts'",
 		  [Mod,Filename]).
 
 %% The compile state record.
@@ -239,18 +248,16 @@ format_error({module_name,Mod,Filename}) ->
 		  abstract_code=[],		%Abstract code for debugger.
 		  options=[]  :: [option()],	%Options for compilation
 		  mod_options=[]  :: [option()], %Options for module_info
+                  encoding=none :: none | epp:source_encoding(),
 		  errors=[],
 		  warnings=[]}).
 
-internal(Master, Input, Opts) ->
-    Master ! {self(), try internal(Input, Opts)
-		      catch error:Reason -> {error, Reason}
-		      end}.
-
-internal({forms,Forms}, Opts) ->
-    {_,Ps} = passes(forms, Opts),
-    internal_comp(Ps, "", "", #compile{code=Forms,options=Opts,
-				       mod_options=Opts});
+internal({forms,Forms}, Opts0) ->
+    {_,Ps} = passes(forms, Opts0),
+    Source = proplists:get_value(source, Opts0, ""),
+    Opts1 = proplists:delete(source, Opts0),
+    Compile = #compile{code=Forms,options=Opts1,mod_options=Opts1},
+    internal_comp(Ps, Source, "", Compile);
 internal({file,File}, Opts) ->
     {Ext,Ps} = passes(file, Opts),
     Compile = #compile{options=Opts,mod_options=Opts},
@@ -264,7 +271,7 @@ internal_comp(Passes, File, Suffix, St0) ->
 		      ofile=objfile(Base, St0)},
     Run = case member(time, St1#compile.options) of
 	      true  ->
-		  io:format("Compiling ~p\n", [File]),
+		  io:format("Compiling ~tp\n", [File]),
 		  fun run_tc/2;
 	      false -> fun({_Name,Fun}, St) -> catch Fun(St) end
 	  end,
@@ -547,12 +554,12 @@ select_list_passes_1([{iff,Flag,{done,Ext}}|Ps], Opts, Acc) ->
     end;
 select_list_passes_1([{iff=Op,Flag,List0}|Ps], Opts, Acc) when is_list(List0) ->
     case select_list_passes(List0, Opts) of
-	{done,_}=Done -> Done;
+	{done,List} -> {done,reverse(Acc) ++ List};
 	{not_done,List} -> select_list_passes_1(Ps, Opts, [{Op,Flag,List}|Acc])
     end;
 select_list_passes_1([{unless=Op,Flag,List0}|Ps], Opts, Acc) when is_list(List0) ->
     case select_list_passes(List0, Opts) of
-	{done,_}=Done -> Done;
+	{done,List} -> {done,reverse(Acc) ++ List};
 	{not_done,List} -> select_list_passes_1(Ps, Opts, [{Op,Flag,List}|Acc])
     end;
 select_list_passes_1([P|Ps], Opts, Acc) ->
@@ -626,7 +633,8 @@ kernel_passes() ->
 asm_passes() ->
     %% Assembly level optimisations.
     [{delay,
-      [{unless,no_postopt,
+      [{pass,beam_a},
+       {unless,no_postopt,
 	[{pass,beam_block},
 	 {iff,dblk,{listing,"block"}},
 	 {unless,no_except,{pass,beam_except}},
@@ -653,13 +661,11 @@ asm_passes() ->
 	 {iff,dtrim,{listing,"trim"}},
 	 {pass,beam_flatten}]},
 
-       %% If post optimizations are turned off, we still coalesce
-       %% adjacent labels and remove unused labels to keep the
-       %% HiPE compiler happy.
-       {iff,no_postopt,
-	[?pass(beam_unused_labels),
-	 {pass,beam_clean}]},
+       %% If post optimizations are turned off, we still
+       %% need to do a few clean-ups to code.
+       {iff,no_postopt,[{pass,beam_clean}]},
 
+       {pass,beam_z},
        {iff,dopt,{listing,"optimize"}},
        {iff,'S',{listing,"S"}},
        {iff,'to_asm',{done,"S"}}]},
@@ -677,7 +683,7 @@ binary_passes() ->
 
 %% Remove the target file so we don't have an old one if the compilation fail.
 remove_file(St) ->
-    file:delete(St#compile.ofile),
+    _ = file:delete(St#compile.ofile),
     {ok,St}.
 
 -record(asm_module, {module,
@@ -729,8 +735,9 @@ collect_asm([X | Rest], R) ->
 beam_consult_asm(St) ->
     case file:consult(St#compile.ifile) of
 	{ok, Forms0} ->
+            Encoding = epp:read_encoding(St#compile.ifile),
 	    {Module, Forms} = preprocess_asm_forms(Forms0),
-	    {ok,St#compile{module=Module, code=Forms}};
+	    {ok,St#compile{module=Module, code=Forms, encoding=Encoding}};
 	{error,E} ->
 	    Es = [{St#compile.ifile,[{none,?MODULE,{open,E}}]}],
 	    {error,St#compile{errors=St#compile.errors ++ Es}}
@@ -772,7 +779,8 @@ parse_module(St) ->
     R =  epp:parse_file(St#compile.ifile, IncludePath, pre_defs(Opts)),
     case R of
 	{ok,Forms} ->
-	    {ok,St#compile{code=Forms}};
+            Encoding = epp:read_encoding(St#compile.ifile),
+	    {ok,St#compile{code=Forms,encoding=Encoding}};
 	{error,E} ->
 	    Es = [{St#compile.ifile,[{none,?MODULE,{epp,E}}]}],
 	    {error,St#compile{errors=St#compile.errors ++ Es}}
@@ -846,6 +854,10 @@ foldl_transform(St, [T|Ts]) ->
 	{error,Es,Ws} ->
 	    {error,St#compile{warnings=St#compile.warnings ++ Ws,
 			      errors=St#compile.errors ++ Es}};
+	{'EXIT',{undef,_}} ->
+	    Es = [{St#compile.ifile,[{none,compile,
+				      {undef_parse_transform,T}}]}],
+	    {error,St#compile{errors=St#compile.errors ++ Es}};
 	{'EXIT',R} ->
 	    Es = [{St#compile.ifile,[{none,compile,{parse_transform,T,R}}]}],
 	    {error,St#compile{errors=St#compile.errors ++ Es}};
@@ -883,7 +895,6 @@ foldl_core_transforms(St, []) -> {ok,St}.
 
 %%% Fetches the module name from a list of forms. The module attribute must
 %%% be present.
-get_module([{attribute,_,module,{M,_As}} | _]) -> M;
 get_module([{attribute,_,module,M} | _]) -> M;
 get_module([_ | Rest]) ->
     get_module(Rest).
@@ -895,11 +906,8 @@ add_default_base(St, Forms) ->
     F = St#compile.filename,
     case F of
 	"" ->
- 	    M = case get_module(Forms) of
- 		    PackageModule when is_list(PackageModule) -> last(PackageModule);
-		    M0 -> M0
- 		end,
-	    St#compile{base = atom_to_list(M)};
+ 	    M = get_module(Forms),
+	    St#compile{base=atom_to_list(M)};
 	_ ->
 	    St
     end.
@@ -1081,10 +1089,10 @@ makedep_output(#compile{code=Code,options=Opts,ofile=Ofile}=St) ->
 	{ok,Output1,CloseOutput} ->
 	    try
 		%% Write the Makefile.
-		io:fwrite(Output1, "~s", [Code]),
+		io:fwrite(Output1, "~ts", [Code]),
 		%% Close the file if relevant.
 		if
-		    CloseOutput -> file:close(Output1);
+		    CloseOutput -> ok = file:close(Output1);
 		    true -> ok
 		end,
 		{ok,St}
@@ -1223,7 +1231,7 @@ encrypt(des3_cbc=Mode, {K1,K2,K3, IVec}, Bin0) ->
 
 random_bytes(N) ->
     {A,B,C} = now(),
-    random:seed(A, B, C),
+    _ = random:seed(A, B, C),
     random_bytes_1(N, []).
 
 random_bytes_1(0, Acc) -> Acc;
@@ -1231,10 +1239,6 @@ random_bytes_1(N, Acc) -> random_bytes_1(N-1, [random:uniform(255)|Acc]).
 
 save_core_code(St) ->
     {ok,St#compile{core_code=cerl:from_records(St#compile.code)}}.
-
-beam_unused_labels(#compile{code=Code0}=St) ->
-    Code = beam_jump:module_labels(Code0),
-    {ok,St#compile{code=Code}}.
 
 beam_asm(#compile{ifile=File,code=Code0,
 		  abstract_code=Abst,mod_options=Opts0}=St) ->
@@ -1334,16 +1338,12 @@ save_binary(#compile{code=none}=St) -> {ok,St};
 save_binary(#compile{module=Mod,ofile=Outfile,
 		     options=Opts}=St) ->
     %% Test that the module name and output file name match.
-    %% We must take care to not completely break a packaged module
-    %% (even though packages still is as an experimental, unsupported
-    %% feature) - so we will extract the last part of a packaged
-    %% module name and compare only that.
     case member(no_error_module_mismatch, Opts) of
 	true ->
 	    save_binary_1(St);
 	false ->
 	    Base = filename:rootname(filename:basename(Outfile)),
-	    case lists:last(packages:split(Mod)) of
+	    case atom_to_list(Mod) of
 		Base ->
 		    save_binary_1(St);
 		_ ->
@@ -1419,28 +1419,28 @@ report_warnings(#compile{options=Opts,warnings=Ws0}) ->
     end.
 
 format_message(F, P, [{{Line,Column}=Loc,Mod,E}|Es]) ->
-    M = {{F,Loc},io_lib:format("~s:~w:~w ~s~s\n",
+    M = {{F,Loc},io_lib:format("~ts:~w:~w ~s~ts\n",
                                 [F,Line,Column,P,Mod:format_error(E)])},
     [M|format_message(F, P, Es)];
 format_message(F, P, [{Line,Mod,E}|Es]) ->
-    M = {{F,{Line,0}},io_lib:format("~s:~w: ~s~s\n",
+    M = {{F,{Line,0}},io_lib:format("~ts:~w: ~s~ts\n",
                                 [F,Line,P,Mod:format_error(E)])},
     [M|format_message(F, P, Es)];
 format_message(F, P, [{Mod,E}|Es]) ->
-    M = {none,io_lib:format("~s: ~s~s\n", [F,P,Mod:format_error(E)])},
+    M = {none,io_lib:format("~ts: ~s~ts\n", [F,P,Mod:format_error(E)])},
     [M|format_message(F, P, Es)];
 format_message(_, _, []) -> [].
 
 %% list_errors(File, ErrorDescriptors) -> ok
 
 list_errors(F, [{{Line,Column},Mod,E}|Es]) ->
-    io:fwrite("~s:~w:~w: ~s\n", [F,Line,Column,Mod:format_error(E)]),
+    io:fwrite("~ts:~w:~w: ~ts\n", [F,Line,Column,Mod:format_error(E)]),
     list_errors(F, Es);
 list_errors(F, [{Line,Mod,E}|Es]) ->
-    io:fwrite("~s:~w: ~s\n", [F,Line,Mod:format_error(E)]),
+    io:fwrite("~ts:~w: ~ts\n", [F,Line,Mod:format_error(E)]),
     list_errors(F, Es);
 list_errors(F, [{Mod,E}|Es]) ->
-    io:fwrite("~s: ~s\n", [F,Mod:format_error(E)]),
+    io:fwrite("~ts: ~ts\n", [F,Mod:format_error(E)]),
     list_errors(F, Es);
 list_errors(_F, []) -> ok.
 
@@ -1496,10 +1496,12 @@ src_listing(Ext, St) ->
 	    Ext, St).
 
 do_src_listing(Lf, Fs) ->
-    foreach(fun (F) -> io:put_chars(Lf, [erl_pp:form(F),"\n"]) end,
+    Opts = [lists:keyfind(encoding, 1, io:getopts(Lf))],
+    foreach(fun (F) -> io:put_chars(Lf, [erl_pp:form(F, Opts),"\n"]) end,
 	    Fs).
 
-listing(Ext, St) ->
+listing(Ext, St0) ->
+    St = St0#compile{encoding = none},
     listing(fun(Lf, Fs) -> beam_listing:module(Lf, Fs) end, Ext, St).
 
 listing(LFun, Ext, St) ->
@@ -1507,6 +1509,7 @@ listing(LFun, Ext, St) ->
     case file:open(Lfile, [write,delayed_write]) of
 	{ok,Lf} ->
             Code = restore_expanded_types(Ext, St#compile.code),
+            output_encoding(Lf, St),
 	    LFun(Lf, Code),
 	    ok = file:close(Lf),
 	    {ok,St};
@@ -1514,6 +1517,12 @@ listing(LFun, Ext, St) ->
 	    Es = [{Lfile,[{none,compile,write_error}]}],
 	    {error,St#compile{errors=St#compile.errors ++ Es}}
     end.
+
+output_encoding(F, #compile{encoding = none}) ->
+    ok = io:setopts(F, [{encoding, epp:default_encoding()}]);
+output_encoding(F, #compile{encoding = Encoding}) ->
+    ok = io:setopts(F, [{encoding, Encoding}]),
+    ok = io:fwrite(F, <<"%% ~s\n">>, [epp:encoding_to_string(Encoding)]).
 
 restore_expanded_types("P", Fs) ->
     epp:restore_typed_record_fields(Fs);

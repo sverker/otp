@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2000</year><year>2011</year>
+      <year>2000</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -31,7 +31,22 @@
     <file>notes.xml</file>
   </header>
 
-  <section><title>cosNotification 1.1.18</title>
+  <section><title>cosNotification 1.1.19</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Misc build updates</p>
+          <p>
+	    Own Id: OTP-10784</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>cosNotification 1.1.18</title>
 
     <section><title>Improvements and New Features</title>
       <list>

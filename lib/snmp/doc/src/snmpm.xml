@@ -173,16 +173,16 @@ sec_level() = noAuthNoPriv | authNoPriv | authPriv
       </type>
       <desc>
         <p>Register the manager entity (=user) responsible for specific 
-          agent(s). </p>
+	agent(s). </p>
 
         <p><c>Module</c> is the callback module (snmpm_user behaviour) which 
-          will be called whenever something happens (detected 
-          agent, incoming reply or incoming trap/notification).
-          Note that this could have already been done as a 
-          consequence of the node config. (see users.conf).</p>
+	will be called whenever something happens (detected 
+	agent, incoming reply or incoming trap/notification).
+	Note that this could have already been done as a 
+	consequence of the node config. (see users.conf).</p>
 
-        <p>The argument <c>DefaultAgentConfig</c> is used as default values when 
-          this user register agents.</p>
+        <p>The argument <c>DefaultAgentConfig</c> is used as default 
+	values when this user register agents.</p>
 
         <p>The type of <c>Val</c> depends on <c>Item</c>: </p>
 <code type="none"><![CDATA[
@@ -279,7 +279,6 @@ sec_level = noAuthNoPriv | authNoPriv | authPriv
       <fsummary>Register this agent</fsummary>
       <type>
         <v>UserId = term()</v>
-        <v>Addr = ip_address()</v>
         <v>TargetName = target_name()</v>
         <v>Config = [agent_config()]</v>
         <v>agent_config() = {Item, Val}</v>
@@ -367,7 +366,7 @@ sec_level = noAuthNoPriv | authNoPriv | authPriv
         <p>Update agent config. The function <c>update_agent_info/3</c> 
 	should be used when several values needs to be updated atomically. </p>
 	<p>See function 
-	<seealso marker="#register_agent">register_agent</seealso>) 
+	<seealso marker="#register_agent">register_agent</seealso>
 	for more info about what kind of items are allowed. </p>
 
         <marker id="which_agents"></marker>

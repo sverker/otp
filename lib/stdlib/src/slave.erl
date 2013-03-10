@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -229,7 +229,7 @@ wait_for_slave(Parent, Host, Name, Node, Args, LinkTo, Prog) ->
     Waiter = register_unique_name(0),
     case mk_cmd(Host, Name, Args, Waiter, Prog) of
 	{ok, Cmd} ->
-%%	    io:format("Command: ~s~n", [Cmd]),
+%%	    io:format("Command: ~ts~n", [Cmd]),
 	    open_port({spawn, Cmd}, [stream]),
 	    receive
 		{SlavePid, slave_started} ->

@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2004-2012. All Rights Reserved.
+# Copyright Ericsson AB 2004-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -41,7 +41,9 @@ RELSYSDIR = $(RELEASE_PATH)/lib/ssh-$(VSN)
 BEHAVIOUR_MODULES= \
 	ssh_sftpd_file_api \
         ssh_channel \
-	ssh_key_api
+	ssh_daemon_channel \
+	ssh_client_key_api \
+	ssh_server_key_api
 
 MODULES= \
 	ssh \
@@ -118,10 +120,10 @@ clean:
 	rm -f errs core *~
 
 $(APP_TARGET):	$(APP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 $(APPUP_TARGET):	$(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 
 docs:
@@ -132,13 +134,13 @@ docs:
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(INTERNAL_HRL_FILES) $(ERL_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(INTERNAL_HRL_FILES) $(ERL_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
 	$(INSTALL_DATA) $(BEHAVIOUR_TARGET_FILES) $(TARGET_FILES) $(APP_TARGET) \
-	$(APPUP_TARGET) $(RELSYSDIR)/ebin
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DATA) $(PUBLIC_HRL_FILES) $(RELSYSDIR)/include
+	$(APPUP_TARGET) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DATA) $(PUBLIC_HRL_FILES) "$(RELSYSDIR)/include"
 
 release_docs_spec:
 

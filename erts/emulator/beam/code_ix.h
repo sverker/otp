@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2012. All Rights Reserved.
+ * Copyright Ericsson AB 2012-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -18,7 +18,7 @@
  */
 
 /* Description:
- *	This is the interface that facilitate changing the beam code
+ *	This is the interface that facilitates changing the beam code
  *      (load,upgrade,delete) while allowing executing Erlang processes to
  *      access the code without any locks or other expensive memory barriers.
  *
@@ -35,7 +35,7 @@
  *      The third code index is not explicitly used. It can be thought of as
  *      the "previous active" or the "next staging" index. It is needed to make
  *      sure that we do not reuse a code index for staging until we are sure
- *      that no executing BIFs are still referring it.
+ *      that no executing BIFs are still referencing it.
  *      We could get by with only two (0 and 1), but that would require that we
  *      must wait for all schedulers to re-schedule before each code change
  *      operation can start staging.
@@ -76,7 +76,7 @@ ErtsCodeIndex erts_active_code_ix(void);
 
 /* Return staging code ix.
  * Only used by a process performing code loading/upgrading/deleting/purging.
- * code_ix must be locked.
+ * Code write permission must be seized.
  */
 ERTS_GLB_INLINE
 ErtsCodeIndex erts_staging_code_ix(void);
@@ -84,9 +84,10 @@ ErtsCodeIndex erts_staging_code_ix(void);
 /* Try seize exclusive code write permission. Needed for code staging.
  * Main process lock (only) must be held.
  * System thread progress must not be blocked.
+ * Caller must not already hold the code write permission.
  * Caller is suspended and *must* yield if 0 is returned. 
  */
-int erts_try_seize_code_write_permission(struct process*);
+int erts_try_seize_code_write_permission(struct process* c_p);
 
 /* Release code write permission.
  * Will resume any suspended waiters.
@@ -116,7 +117,7 @@ void erts_commit_staging_code_ix(void);
 void erts_abort_staging_code_ix(void);
 
 #ifdef ERTS_ENABLE_LOCK_CHECK
-int erts_is_code_ix_locked(void);
+int erts_has_code_write_permission(void);
 #endif
 
 

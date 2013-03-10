@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 2001-2011. All Rights Reserved.
+# Copyright Ericsson AB 2001-2012. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -141,9 +141,9 @@ clean:
 	rm -f errs core *~
 
 $(APP_TARGET): $(APP_SRC)
-	sed -e 's;%VSN%;$(VSN);' $(APP_SRC) > $(APP_TARGET)
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $(APP_SRC) > $(APP_TARGET)
 $(APPUP_TARGET): $(APPUP_SRC)
-	sed -e 's;%VSN%;$(VSN);' $(APPUP_SRC) > $(APPUP_TARGET)
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $(APPUP_SRC) > $(APPUP_TARGET)
 
 docs:
 
@@ -151,9 +151,9 @@ docs:
 # Special Build Targets
 # ----------------------------------------------------
 IDL-GENERATED: CosEventDomainAdmin.idl
-	erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosEventDomainAdmin.cfg"}' CosEventDomainAdmin.idl
-	mv $(GEN_HRL_FILES) $(EXTERNAL_INC_PATH)
-	>IDL-GENERATED
+	$(gen_verbose)erlc $(ERL_IDL_FLAGS) +'{cfgfile,"CosEventDomainAdmin.cfg"}' CosEventDomainAdmin.idl
+	$(V_at)mv $(GEN_HRL_FILES) $(EXTERNAL_INC_PATH)
+	$(V_at)>IDL-GENERATED
 
 $(GEN_FILES): IDL-GENERATED
 
@@ -166,14 +166,14 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)
-	$(INSTALL_DATA) ../info $(RELSYSDIR)
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(TARGET_FILES) $(APP_TARGET) $(APPUP_TARGET) $(RELSYSDIR)/ebin
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(GEN_ERL_FILES) $(IDL_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DATA) $(EXTERNAL_GEN_HRL_FILES) $(RELSYSDIR)/include
+	$(INSTALL_DIR) "$(RELSYSDIR)"
+	$(INSTALL_DATA) ../info "$(RELSYSDIR)"
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(TARGET_FILES) $(APP_TARGET) $(APPUP_TARGET) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(ERL_FILES) $(HRL_FILES) $(GEN_ERL_FILES) $(IDL_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DATA) $(EXTERNAL_GEN_HRL_FILES) "$(RELSYSDIR)/include"
 
 
 release_docs_spec:

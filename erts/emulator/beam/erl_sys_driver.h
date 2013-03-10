@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2001-2009. All Rights Reserved.
+ * Copyright Ericsson AB 2001-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -31,7 +31,6 @@
 #define ERL_SYS_DRV
 
 typedef long ErlDrvEvent; /* An event to be selected on. */
-typedef long ErlDrvPort; /* A port descriptor. */
 
 /* typedef struct _SysDriverOpts SysDriverOpts; defined in sys.h */
 

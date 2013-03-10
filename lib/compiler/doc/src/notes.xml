@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2004</year><year>2011</year>
+      <year>2004</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -30,6 +30,180 @@
   </header>
   <p>This document describes the changes made to the Compiler
     application.</p>
+
+<section><title>Compiler 4.9.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The compiler would crash attempting to compile
+	    expressions such as "element(2, not_tuple)".</p>
+          <p>
+	    Own Id: OTP-10794</p>
+        </item>
+        <item>
+          <p>
+	    Forbid multiple values in Core Erlang sequence arguments.
+	    Thanks to José Valim and Anthony Ramine.</p>
+          <p>
+	    Own Id: OTP-10818</p>
+        </item>
+        <item>
+          <p>
+	    An unsafe optimization would cause the compiler to crash
+	    with an internal error for certain complex code
+	    sequences.</p>
+          <p>
+	    Own Id: OTP-10825 Aux Id: seq12247 </p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+	    <p>Integers in expression that will give a floating point
+	    result (such as "<c>X / 2</c>" will now be converted to
+	    floating point at compile-time. (Suggested by Richard
+	    O'Keefe.)</p>
+	    <p>Identical floating points constans in a module will
+	    now be coalesced to one entry in the constant pool.</p>
+          <p>
+	    Own Id: OTP-10788</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Compiler 4.9</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    The compiler optimizations have been polished, so that
+	    the code quality will be slightly better in some cases.</p>
+          <p>
+	    Own Id: OTP-10193</p>
+        </item>
+        <item>
+	    <p> Support for Unicode has been implemented. </p>
+          <p>
+	    Own Id: OTP-10302</p>
+        </item>
+        <item>
+	    <p>Where necessary a comment stating encoding has been
+	    added to Erlang files. The comment is meant to be removed
+	    in Erlang/OTP R17B when UTF-8 becomes the default
+	    encoding. </p>
+          <p>
+	    Own Id: OTP-10630</p>
+        </item>
+        <item>
+          <p>
+	    Fix some wrong warnings triggered by the option
+	    inline_list_funcs. Thanks to Anthony Ramine.</p>
+          <p>
+	    Own Id: OTP-10690</p>
+        </item>
+        <item>
+          <p>
+	    Forbid local fun variables in Core Erlang guards. Thanks
+	    to Anthony Ramine.</p>
+          <p>
+	    Own Id: OTP-10706</p>
+        </item>
+        <item>
+          <p>
+	    Binary syntax matches could cause an internal consistency
+	    error in in the compiler. (Thanks to Viktor Sovietov for
+	    reporting this bug.)</p>
+          <p>
+	    Own Id: OTP-10724</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Compiler 4.8.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Modules with very many functions would compile very
+	    slowly.</p>
+          <p>
+	    Own Id: OTP-10123</p>
+        </item>
+        <item>
+          <p>
+	    <c>compile:forms/2</c> will now use a
+	    {source,SourceFilePath} to set the source returned by
+	    <c>module_info(compile)</c> (Thanks to José Valim)</p>
+          <p>
+	    Own Id: OTP-10150</p>
+        </item>
+        <item>
+          <p>
+	    A process which had enabled trap_exit would receive EXIT
+	    messages after calling the compiler. (Thanks to Jeremy
+	    Heater.)</p>
+          <p>
+	    Own Id: OTP-10171</p>
+        </item>
+        <item>
+          <p>
+	    Fix messages ordering with column numbers</p>
+          <p>
+	    Own Id: OTP-10183</p>
+        </item>
+        <item>
+          <p>
+	    sys_pre_expand: Fix BASE never being set</p>
+          <p>
+	    Commit a612e99fb5aaa934fe5a8591db0f083d7fa0b20a turned
+	    module attributes from 2-tuples to 3-tuples but forgot to
+	    update get_base/1, breaking BASE for parametric modules.</p>
+          <p>
+	    Own Id: OTP-10184</p>
+        </item>
+        <item>
+          <p>
+	    The compiler will now issue a warning if literal tuple
+	    funs are used. For example, {erlang,is_tuple}(X) will now
+	    generate a warning.</p>
+          <p>
+	    Own Id: OTP-10185</p>
+        </item>
+        <item>
+          <p>
+	    The compiler will now warn for illegal sizes for segments
+	    in binary construction. For example,
+	    &lt;&lt;X:(2.5)&gt;&gt; will now cause the compiler to
+	    issue a warning.</p>
+          <p>
+	    Own Id: OTP-10197</p>
+        </item>
+        <item>
+          <p>
+	    Fix the erlc -MP flag</p>
+          <p>
+	    Because of a copy-and-paste error in erlc.c, the -MP flag
+	    had the same effect as -MG. As a workaround, you had to
+	    pass +makedep_phony to enable the MP option. This patch
+	    makes -MP work as intended.</p>
+          <p>
+	    Own Id: OTP-10211</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Compiler 4.8.1</title>
 

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2010. All Rights Reserved.
+ * Copyright Ericsson AB 2010-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -40,7 +40,7 @@ void erts_init_cpu_topology(void);
 #define ERTS_INIT_SCHED_BIND_TYPE_SUCCESS		0
 #define ERTS_INIT_SCHED_BIND_TYPE_NOT_SUPPORTED		1
 #define ERTS_INIT_SCHED_BIND_TYPE_ERROR_NO_CPU_TOPOLOGY	2
-#define ERTS_INIT_SCHED_BIND_TYPE_ERROR_NO_BAD_TYPE	3
+#define ERTS_INIT_SCHED_BIND_TYPE_ERROR_BAD_TYPE	3
 
 int erts_init_scheduler_bind_type_string(char *how);
 

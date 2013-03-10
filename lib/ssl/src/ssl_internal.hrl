@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -34,7 +34,7 @@
 -type host()		  :: inet:ip_address() | inet:hostname().
 -type session_id()        :: 0 | binary().
 -type tls_version()       :: {integer(), integer()}.
--type tls_atom_version()  :: sslv3 | tlsv1.
+-type tls_atom_version()  :: sslv3 | tlsv1 | 'tlsv1.1' | 'tlsv1.2'.
 -type certdb_ref()        :: reference().
 -type db_handle()         :: term().
 -type key_algo()          :: null | rsa | dhe_rsa | dhe_dss | dh_anon.
@@ -69,11 +69,11 @@
 -define(TRUE, 0).
 -define(FALSE, 1).
 
--define(DEFAULT_SUPPORTED_VERSIONS, [tlsv1, sslv3]). % TODO: This is temporary
-%-define(DEFAULT_SUPPORTED_VERSIONS, ['tlsv1.1', tlsv1, sslv3]).
+-define(ALL_SUPPORTED_VERSIONS, ['tlsv1.2', 'tlsv1.1', tlsv1, sslv3]).
+-define(MIN_SUPPORTED_VERSIONS, ['tlsv1.1', tlsv1, sslv3]).
 
 -record(ssl_options, {
-	  versions,   % 'tlsv1.1' | tlsv1 | sslv3
+	  versions,   % 'tlsv1.2' | 'tlsv1.1' | tlsv1 | sslv3
 	  verify,     %   verify_none | verify_peer
 	  verify_fun, % fun(CertVerifyErrors) -> boolean()
 	  fail_if_no_peer_cert, % boolean()
@@ -106,7 +106,9 @@
 			  % after which ssl_connection will
                           % go into hibernation
 	  %% This option should only be set to true by inet_tls_dist
-	  erl_dist = false 
+	  erl_dist = false,
+	  next_protocols_advertised = undefined, %% [binary()],
+	  next_protocol_selector = undefined  %% fun([binary()]) -> binary())
 	  }).
 
 -record(socket_options,

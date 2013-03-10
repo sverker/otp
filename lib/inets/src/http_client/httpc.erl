@@ -39,6 +39,7 @@
 	 cookie_header/1, cookie_header/2, cookie_header/3, 
 	 which_cookies/0, which_cookies/1, 
 	 reset_cookies/0, reset_cookies/1, 
+	 which_sessions/0, which_sessions/1, 
 	 stream_next/1,
 	 default_profile/0, 
 	 profile_name/1, profile_name/2,
@@ -267,6 +268,7 @@ set_option(Key, Value, Profile) ->
 %%   Reason - term()
 %% Description: Retrieves the current options. 
 %%-------------------------------------------------------------------------
+
 get_options() ->
     record_info(fields, options).
 
@@ -373,8 +375,6 @@ cookie_header(Url, Opts, Profile)
 	    {error, {not_started, Profile}}
     end.
     
-    
-
 
 %%--------------------------------------------------------------------------
 %% which_cookies() -> [cookie()]
@@ -394,6 +394,28 @@ which_cookies(Profile) ->
     catch 
 	exit:{noproc, _} ->
 	    {error, {not_started, Profile}}
+    end.
+
+
+%%--------------------------------------------------------------------------
+%% which_sessions() -> {GoodSession, BadSessions, NonSessions}
+%% which_sessions(Profile) -> {GoodSession, BadSessions, NonSessions}
+%%               
+%% Description: Debug function, dumping the sessions database, sorted 
+%%              into three groups (Good-, Bad- and Non-sessions).
+%%-------------------------------------------------------------------------
+which_sessions() ->
+    which_sessions(default_profile()).
+
+which_sessions(Profile) ->
+    ?hcrt("which sessions", [{profile, Profile}]),
+    try 
+	begin
+	    httpc_manager:which_sessions(profile_name(Profile))
+	end
+    catch 
+	exit:{noproc, _} ->
+	    {[], [], []}
     end.
 
 
@@ -895,6 +917,10 @@ validate_options([{proxy, Proxy} = Opt| Tail], Acc) ->
     validate_proxy(Proxy),
     validate_options(Tail, [Opt | Acc]);
 
+validate_options([{https_proxy, Proxy} = Opt| Tail], Acc) ->
+    validate_https_proxy(Proxy),
+    validate_options(Tail, [Opt | Acc]);
+
 validate_options([{max_sessions, Value} = Opt| Tail], Acc) ->
     validate_max_sessions(Value),
     validate_options(Tail, [Opt | Acc]);
@@ -956,6 +982,14 @@ validate_proxy({{ProxyHost, ProxyPort}, NoProxy} = Proxy)
     Proxy;
 validate_proxy(BadProxy) ->
     bad_option(proxy, BadProxy).
+
+validate_https_proxy({{ProxyHost, ProxyPort}, NoProxy} = Proxy) 
+  when is_list(ProxyHost) andalso 
+       is_integer(ProxyPort) andalso 
+       is_list(NoProxy) ->
+    Proxy;
+validate_https_proxy(BadProxy) ->
+    bad_option(https_proxy, BadProxy).
 
 validate_max_sessions(Value) when is_integer(Value) andalso (Value >= 0) ->
     Value;

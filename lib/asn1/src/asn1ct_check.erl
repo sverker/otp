@@ -2,7 +2,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -61,13 +61,13 @@
 
 -define(TAG_PRIMITIVE(Num),
 	case S#state.erule of
-	    ber_bin_v2 ->
+	    ber ->
 		#tag{class='UNIVERSAL',number=Num,type='IMPLICIT',form=0};
 	    _ -> []
 	end).
 -define(TAG_CONSTRUCTED(Num),
 	case S#state.erule of
-	    ber_bin_v2 ->
+	    ber ->
 		#tag{class='UNIVERSAL',number=Num,type='IMPLICIT',form=32};
 	    _ -> []
 	end).
@@ -1263,13 +1263,13 @@ check_object_list(S,ClassRef,[ObjOrSet|Objs],Acc) ->
 	    check_object_list(S,ClassRef,Objs,[{{no_mod,no_name},Def}|Acc]);
 	{'ObjectSetFromObjects',Os,FieldName} when is_tuple(Os) ->
 	    NewSet =
-		check_ObjectSetFromObjects(S,element(size(Os),Os),
+		check_ObjectSetFromObjects(S, element(tuple_size(Os), Os),
 					   FieldName,[]),
 	    check_object_list(S,ClassRef,Objs,NewSet++Acc);
 	{{'ObjectSetFromObjects',Os,FieldName},InterSection}
 	when is_tuple(Os) ->
 	    NewSet =
-		check_ObjectSetFromObjects(S, element(size(Os),Os),
+		check_ObjectSetFromObjects(S, element(tuple_size(Os), Os),
 					   FieldName,InterSection),
 	    check_object_list(S,ClassRef,Objs,NewSet++Acc);
 	Other ->
@@ -1570,7 +1570,7 @@ gen_incl_set(S,Fields,#typedef{typespec=#type{def=Eref}})
     gen_incl_set(S,Fields,CDef);
 gen_incl_set(S,Fields,ClassDef) ->
     case catch get_unique_fieldname(S,ClassDef) of
-	Tuple when is_tuple(Tuple), size(Tuple) =:= 3 ->
+	Tuple when tuple_size(Tuple) =:= 3 ->
 	    false;
 	_ ->
 	    gen_incl_set1(S,Fields,
@@ -1589,7 +1589,7 @@ gen_incl_set1(_,['EXTENSIONMARK'],_) ->
 gen_incl_set1(_,['EXTENSIONMARK'|_],_) ->
     true;
 gen_incl_set1(S,[Object|Rest],CFields)->
-    Fields = element(size(Object),Object),
+    Fields = element(tuple_size(Object), Object),
     case gen_incl1(S,Fields,CFields) of
 	true ->
 	    true;
@@ -3028,7 +3028,7 @@ is_record_normalized(S,Name,V = #'Externalvaluereference'{},NumComps) ->
 	_ -> false
     end;
 is_record_normalized(_S,Name,Value,NumComps) when is_tuple(Value) ->
-    (size(Value) =:= (NumComps + 1)) andalso (element(1,Value)=:=Name);
+    (tuple_size(Value) =:= (NumComps + 1)) andalso (element(1, Value) =:= Name);
 is_record_normalized(_,_,_,_) ->
     false.
 
@@ -3262,7 +3262,7 @@ check_type(S=#state{recordtopname=TopName},Type,Ts) when is_record(Ts,type) ->
 		       inlined=IsInlined},
     TestFun = 
 	fun(Tref) ->
-		{_,MaybeChoice} = get_referenced_type(S,Tref),
+		MaybeChoice = get_non_typedef(S, Tref),
 		case catch((MaybeChoice#typedef.typespec)#type.def) of
 		    {'CHOICE',_} ->
 			maybe_illicit_implicit_tag(choice,Tag);
@@ -3347,7 +3347,7 @@ check_type(S=#state{recordtopname=TopName},Type,Ts) when is_record(Ts,type) ->
 			TempNewDef#newt{
 			  type = check_externaltypereference(S,NewExt),
 			  tag = case S#state.erule of
-				    ber_bin_v2 ->
+				    ber ->
 					merge_tags(Ct,RefType#type.tag);
 				    _ ->
 					Ct
@@ -3617,6 +3617,14 @@ check_type(S=#state{recordtopname=TopName},Type,Ts) when is_record(Ts,type) ->
 check_type(_S,Type,Ts) ->
     exit({error,{asn1,internal_error,Type,Ts}}).
 
+get_non_typedef(S, Tref0) ->
+    case get_referenced_type(S, Tref0) of
+	{_,#typedef{typespec=#type{def=#'Externaltypereference'{}=Tref}}} ->
+	    get_non_typedef(S, Tref);
+	{_,Type} ->
+	    Type
+    end.
+
 %% tablecinf_choose. A SEQUENCE or SET may be inserted in another
 %% SEQUENCE or SET by the COMPONENTS OF directive. If this inserted
 %% type is a referenced type that already has been checked it already
@@ -3712,7 +3720,7 @@ maybe_open_type(S,ClassSpec=#objectclass{fields=Fs},
 	{typefieldreference,_} ->
 	    case {catch get_unique_fieldname(S,#classdef{typespec=ClassSpec}),
 		  asn1ct_gen:get_constraint(Constr,componentrelation)}of
-		{Tuple,_} when is_tuple(Tuple), size(Tuple) =:= 3 ->
+		{Tuple,_} when tuple_size(Tuple) =:= 3 ->
 		    OCFT#'ObjectClassFieldType'{fieldname=FieldNames,
 						type='ASN1_OPEN_TYPE'};
 		{_,no} ->
@@ -4159,7 +4167,7 @@ check_constraint(S,Ext) when is_record(Ext,'Externaltypereference') ->
 
 
 check_constraint(S,{'SizeConstraint',{Lb,Ub}}) 
-  when is_list(Lb);is_tuple(Lb),size(Lb)==2 ->
+  when is_list(Lb); tuple_size(Lb) =:= 2 ->
     NewLb = range_check(resolv_tuple_or_list(S,Lb)),
     NewUb = range_check(resolv_tuple_or_list(S,Ub)),
     {'SizeConstraint',{NewLb,NewUb}};
@@ -4177,7 +4185,7 @@ check_constraint(S,{'SizeConstraint',Lb}) ->
 
 check_constraint(S,{'SingleValue', L}) when is_list(L) ->
     F = fun(A) -> resolv_value(S,A) end,
-    {'SingleValue',lists:map(F,L)};
+    {'SingleValue',lists:sort(lists:map(F,L))};
     
 check_constraint(S,{'SingleValue', V}) when is_integer(V) ->
     Val = resolv_value(S,V),
@@ -4332,11 +4340,33 @@ permitted_alphabet_merge([C1|Rest],UorI,Acc) ->
 %% there will be no extension if the last constraint is without extension.
 %% The rootset of all constraints are considered in the "outermoust 
 %% intersection". See section 13.1.2 in Dubuisson.
-constraint_merge(_S,C=[H])when is_tuple(H) ->
+constraint_merge(St, Cs0) ->
+    Cs = constraint_merge_1(St, Cs0),
+    normalize_cs(Cs).
+
+normalize_cs([{'SingleValue',[V]}|Cs]) ->
+    [{'SingleValue',V}|normalize_cs(Cs)];
+normalize_cs([{'SingleValue',[_|_]=L0}|Cs]) ->
+    [H|T] = L = lists:usort(L0),
+    [case is_range(H, T) of
+	 false -> {'SingleValue',L};
+	 true -> {'ValueRange',{H,lists:last(T)}}
+     end|normalize_cs(Cs)];
+normalize_cs([{'ValueRange',{Sv,Sv}}|Cs]) ->
+    [{'SingleValue',Sv}|normalize_cs(Cs)];
+normalize_cs([{'ValueRange',{'MIN','MAX'}}|Cs]) ->
+    normalize_cs(Cs);
+normalize_cs(Other) -> Other.
+
+is_range(Prev, [H|T]) when Prev =:= H - 1 -> is_range(H, T);
+is_range(_, [_|_]) -> false;
+is_range(_, []) -> true.
+
+constraint_merge_1(_S, [H]=C) when is_tuple(H) ->
     C;
-constraint_merge(_S,[]) ->
+constraint_merge_1(_S, []) ->
     [];
-constraint_merge(S,C) ->
+constraint_merge_1(S, C) ->
     %% skip all extension but the last extension
     C1 = filter_extensions(C),
     %% perform all internal level intersections, intersections first
@@ -4359,17 +4389,16 @@ constraint_merge(S,C) ->
     %% get the least common size constraint
     SZs = get_constraints(C3,'SizeConstraint'),
     CombSZ = intersection_of_size(S,SZs),
-    CminusSVs=ordsets:subtract(ordsets:from_list(C3),ordsets:from_list(SVs)),
-    % CminusSVsVRs = ordsets:subtract(ordsets:from_list(CminusSVs),
-% 				    ordsets:from_list(VRs)),
-    RestC = ordsets:subtract(ordsets:from_list(CminusSVs),
-			     ordsets:from_list(SZs)),
+    RestC = ordsets:subtract(ordsets:from_list(C3),
+			     ordsets:from_list(SZs ++ VRs ++ SVs)),
     %% get the least common combined constraint. That is the union of each
-    %% deep costraint and merge of single value and value range constraints
-    NewCs = combine_constraints(S,CombSV,CombVR,CombSZ++RestC),
-    [X||X <- lists:flatten(NewCs),
-	X /= intersection,
-	X /= union].
+    %% deep constraint and merge of single value and value range constraints.
+    %% FIXME: Removing 'intersection' from the flattened list essentially
+    %% means that intersections are converted to unions!
+    Cs = combine_constraints(S, CombSV, CombVR, CombSZ++RestC),
+    [X || X <- lists:flatten(Cs),
+	  X =/= intersection,
+	  X =/= union].
 
 %% constraint_union(S,C) takes a list of constraints as input and
 %% merge them to a union. Unions are performed when two
@@ -4399,16 +4428,16 @@ constraint_union(_S,C) ->
 
 constraint_union1(S,[A={'ValueRange',_},union,B={'ValueRange',_}|Rest],Acc) ->
     AunionB = constraint_union_vr([A,B]),
-    constraint_union1(S,Rest,Acc ++ AunionB);
+    constraint_union1(S, AunionB++Rest, Acc);
 constraint_union1(S,[A={'SingleValue',_},union,B={'SingleValue',_}|Rest],Acc) ->
     AunionB = constraint_union_sv(S,[A,B]),
     constraint_union1(S,Rest,Acc ++ AunionB);
 constraint_union1(S,[A={'SingleValue',_},union,B={'ValueRange',_}|Rest],Acc) ->
     AunionB = union_sv_vr(S,A,B),
-    constraint_union1(S,Rest,Acc ++ AunionB);
+    constraint_union1(S, AunionB++Rest, Acc);
 constraint_union1(S,[A={'ValueRange',_},union,B={'SingleValue',_}|Rest],Acc) ->
     AunionB = union_sv_vr(S,B,A),
-    constraint_union1(S,Rest,Acc ++ AunionB);
+    constraint_union1(S, AunionB++Rest, Acc);
 constraint_union1(S,[union|Rest],Acc) -> %skip when unsupported constraints
     constraint_union1(S,Rest,Acc);
 constraint_union1(S,[A|Rest],Acc) ->
@@ -4441,15 +4470,8 @@ constraint_union_vr(VR) ->
 	   ({_,{A1,_B1}},{_,{A2,_B2}}) when is_integer(A1),is_integer(A2),A1<A2 -> true;
 	   ({_,{A,B1}},{_,{A,B2}}) when B1=<B2->true;
 	   (_,_)->false end,
-    % sort and remove duplicates
-    SortedVR = lists:sort(Fun,VR),
-    RemoveDup = fun([],_) ->[];
-		   ([H],_) -> [H];
-		   ([H,H|T],F) -> F([H|T],F);
-		   ([H|T],F) -> [H|F(T,F)]
-		end,
-    
-    constraint_union_vr(RemoveDup(SortedVR,RemoveDup),[]).
+    SortedVR = lists:usort(Fun,VR),
+    constraint_union_vr(SortedVR, []).
 
 constraint_union_vr([],Acc) ->
     lists:reverse(Acc);
@@ -4459,8 +4481,8 @@ constraint_union_vr([{_,{Lb,Ub2}}|Rest],[{_,{Lb,_Ub1}}|Acc]) -> %Ub2 > Ub1
     constraint_union_vr(Rest,[{'ValueRange',{Lb,Ub2}}|Acc]);
 constraint_union_vr([{_,{_,Ub}}|Rest],A=[{_,{_,Ub}}|_Acc]) ->
     constraint_union_vr(Rest,A);
-constraint_union_vr([{_,{Lb2,Ub2}}|Rest],[{_,{Lb1,Ub1}}|Acc]) when Lb2=<Ub1,
-								   Ub2>Ub1->
+constraint_union_vr([{_,{Lb2,Ub2}}|Rest], [{_,{Lb1,Ub1}}|Acc])
+  when Ub1 =< Lb2, Ub1 < Ub2 ->
     constraint_union_vr(Rest,[{'ValueRange',{Lb1,Ub2}}|Acc]);
 constraint_union_vr([{_,{_,Ub2}}|Rest],A=[{_,{_,Ub1}}|_Acc]) when Ub2=<Ub1->
     constraint_union_vr(Rest,A);
@@ -4581,9 +4603,11 @@ constraint_intersection(_S,C) ->
 
 constraint_intersection1(S,[A,intersection,B|Rest],Acc) ->
     AisecB = c_intersect(S,A,B),
-    constraint_intersection1(S,Rest,AisecB++Acc);
+    constraint_intersection1(S, AisecB++Rest, Acc);
 constraint_intersection1(S,[A|Rest],Acc) ->
     constraint_intersection1(S,Rest,[A|Acc]);
+constraint_intersection1(_, [], [C]) ->
+    C;
 constraint_intersection1(_,[],Acc) ->
     lists:reverse(Acc).
 
@@ -5193,7 +5217,7 @@ imported1(_Name,[]) ->
 check_integer(_S,[],_C) ->
     [];
 check_integer(S,NamedNumberList,_C) ->
-    case [X||X<-NamedNumberList,is_tuple(X),size(X)=:=2] of
+    case [X || X <- NamedNumberList, tuple_size(X) =:= 2] of
 	NamedNumberList ->
 	    %% An already checked integer with NamedNumberList
 	    NamedNumberList;
@@ -5289,7 +5313,7 @@ iof_associated_type(S,[]) ->
 	    AssociateSeq = iof_associated_type1(S,[]),
 	    Tag =
 		case S#state.erule of
-		    ber_bin_v2 ->
+		    ber ->
 			[?TAG_CONSTRUCTED(?N_INSTANCE_OF)];
 		    _ -> []
 		end,
@@ -5320,7 +5344,7 @@ iof_associated_type1(S,C) ->
 	end,
     {ObjIdTag,C1TypeTag}=
 	case S#state.erule of
-	    ber_bin_v2 -> 
+	    ber ->
 		{[{'UNIVERSAL',8}],
 		 [#tag{class='UNIVERSAL',
 		       number=6,
@@ -5551,8 +5575,9 @@ complist_as_tuple(_Per,[],Acc,Ext,_Acc2,ext) ->
 complist_as_tuple(_Per,[],Acc,Ext,Acc2,root2) ->
     {lists:reverse(Acc),lists:reverse(Ext),lists:reverse(Acc2)}.
 
-is_erule_per(Erule) ->
-    lists:member(Erule,[per,per_bin,uper_bin]).
+is_erule_per(per) -> true;
+is_erule_per(uper) -> true;
+is_erule_per(ber) -> false.
 
 expand_components(S, [{'COMPONENTS OF',Type}|T]) ->
     CompList = expand_components2(S,get_referenced_type(S,Type#type.def)),
@@ -5641,7 +5666,7 @@ check_set(S,Type,Components) ->
 	{true,_} ->
 	    {Sorted,SortedComponents} = sort_components(der,S,NewComponents),
 	    {Sorted,TableCInf,SortedComponents};
-	{_,PER} when PER =:= per; PER =:= per_bin; PER =:= uper_bin ->
+	{_,PER} when PER =:= per; PER =:= uper ->
 	    {Sorted,SortedComponents} = sort_components(per,S,NewComponents),
 	    {Sorted,TableCInf,SortedComponents};
 	_ ->
@@ -5765,7 +5790,7 @@ sort_universal_type(Components) ->
 decode_type(I) when is_integer(I) ->
     I;
 decode_type(T) ->
-    asn1ct_gen_ber:decode_type(T).
+    asn1ct_gen_ber_bin_v2:decode_type(T).
 
 untagged_choice(_S,[#'ComponentType'{typespec=#type{tag=[],def={'CHOICE',_}}}|_Rest]) ->
     true;
@@ -5991,17 +6016,25 @@ generate_automatic_tags1([H|T],[TagNo|TagNos]) when is_record(H,'ComponentType')
 			     type={default,'IMPLICIT'},
 			     form= 0 }]}, % PRIMITIVE
     [H#'ComponentType'{typespec=NewTs}|generate_automatic_tags1(T,[TagNo+1|TagNos])];
-generate_automatic_tags1([ExtMark|T],[_TagNo|TagNos]) -> % EXTENSIONMARK
+generate_automatic_tags1([ExtMark = #'EXTENSIONMARK'{}|T],[_TagNo|TagNos]) -> 
     [ExtMark | generate_automatic_tags1(T,TagNos)];
+generate_automatic_tags1([H|T],TagList) -> % ExtensionAdditionGroup etc are just ignored
+    [H | generate_automatic_tags1(T,TagList)];
 generate_automatic_tags1([],_) ->
     [].
 
-any_manual_tag([#'ComponentType'{typespec=#type{tag=[]}}|Rest]) ->
-    any_manual_tag(Rest);
-any_manual_tag([#'EXTENSIONMARK'{}|Rest]) ->
-    any_manual_tag(Rest);
-any_manual_tag([_|_Rest]) ->
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Returns true if there is at least one ComponentType with a manually 
+%% specified tag. No manual tag is indicated by typespec=#type{tag=[]}
+%% so we check if we find a tag =/= [] and return true in that case
+%% all other things in the componentlist like (EXTENSIONMARK, 
+%% ExtensionAdditionGroup,...) except ComponentType is simply
+%% ignored/skipped
+any_manual_tag([#'ComponentType'{typespec=#type{tag=Tag}}|_Rest]) 
+  when Tag =/= []->
     true;
+any_manual_tag([_|Rest]) ->
+    any_manual_tag(Rest);
 any_manual_tag([]) ->
     false.
 
@@ -6876,16 +6909,16 @@ get_taglist(S,{ObjCl,FieldNameList}) when is_record(ObjCl,objectclass),
 	{TypeFieldName,_} when is_atom(TypeFieldName) -> []%should check if allowed
     end;
 get_taglist(S,Def) ->
-    case lists:member(S#state.erule,[ber_bin_v2]) of
-	false ->
+    case S#state.erule of
+	ber ->
+	    [];
+	_ ->
 	    case Def of
 		'ASN1_OPEN_TYPE' -> % open_type has no UNIVERSAL tag as such
 		    [];
 		_ ->
 		    [asn1ct_gen:def_to_tag(Def)]
-	    end;
-	_ -> 
-	    []
+	    end
     end.
 
 get_taglist1(S,[#'ComponentType'{name=_Cname,tags=TagL}|Rest]) when is_list(TagL) -> 

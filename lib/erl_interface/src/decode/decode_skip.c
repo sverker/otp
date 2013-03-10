@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2002-2010. All Rights Reserved.
+ * Copyright Ericsson AB 2002-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -30,7 +30,8 @@ int ei_skip_term(const char* buf, int* index)
     switch (ty) {
     case ERL_ATOM_EXT:
 	/* FIXME: what if some weird locale is in use? */
-	if (ei_decode_atom(buf, index, NULL) < 0) return -1;
+	if (ei_decode_atom_as(buf, index, NULL, MAXATOMLEN_UTF8, (ERLANG_LATIN1|ERLANG_UTF8),
+			      NULL, NULL) < 0) return -1;
 	break;
     case ERL_PID_EXT:
 	if (ei_decode_pid(buf, index, NULL) < 0) return -1;

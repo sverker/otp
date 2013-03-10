@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2002</year><year>2012</year>
+      <year>2002</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -13,12 +13,12 @@
       compliance with the License. You should have received a copy of the
       Erlang Public License along with this software. If not, it can be
       retrieved online at http://www.erlang.org/.
-
+      
       Software distributed under the License is distributed on an "AS IS"
       basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
       the License for the specific language governing rights and limitations
       under the License.
-
+      
     </legalnotice>
     
     <title>Inets Release Notes</title>
@@ -32,16 +32,182 @@
     <file>notes.xml</file>
   </header>
   
-
-  <section><title>Inets 5.9</title>
+  
+  <section><title>Inets 5.9.4</title>
 
     <section><title>Improvements and New Features</title>
-<!--
-    <p>-</p>
--->
-
       <list>
         <item>
+          <p>
+	    httpd: The modules option now defaults to the documented
+	    value.</p>
+          <p>
+	    Own Id: OTP-10844</p>
+        </item>
+        <item>
+          <p>
+	    httpc: Fixed persistent connection implementation that
+	    was broken by a patch to R13. The patch made persisten
+	    connections behaved the same way as pipelining.</p>
+          <p>
+	    Own Id: OTP-10845</p>
+        </item>
+        <item>
+          <p>
+	    httpd: Simplified configuration of ssl in httpd, this
+	    also enables all ssl options to be configured. The old
+	    and limited way is no longer documented but will be
+	    supported for backwards comatibility for some time.</p>
+          <p>
+	    Own Id: OTP-10846</p>
+        </item>
+        <item>
+          <p>
+	    Handle correctly the "No files found or file unavailable"
+	    error code. Thanks to Serge Aleynikov</p>
+          <p>
+	    Own Id: OTP-10886</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Inets 5.9.3</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    httpc: The HTTP client now supports HTTPS through proxies</p>
+          <p>
+	    Own Id: OTP-10256 Aux Id: kunagi-2
+	    [ce2e800e-c99f-4050-a1c4-f47023d9c7aa-1] </p>
+        </item>
+        <item>
+	    <p> Some examples overflowing the width of PDF pages have
+	    been corrected. </p>
+          <p>
+	    Own Id: OTP-10665</p>
+        </item>
+        <item>
+          <p>
+	    Fix autoredirect for POST requests responding 303. Thanks
+	    to Hans Svensson.</p>
+          <p>
+	    Own Id: OTP-10765</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Inets 5.9.2</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Minimum bytes per second</p>
+          <p>
+	    New option to http server, {minimum_bytes_per_second,
+	    integer()}, for a connection, if it is not reached the
+	    socket will close for that specific connection. Can be
+	    used to prevent hanging requests from faulty clients.</p>
+          <p>
+	    Own Id: OTP-10392</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section>
+    <title>Inets 5.9.1</title>
+  
+    <section>
+      <title>Improvements and New Features</title>
+      <!--
+	  <p>-</p>
+      -->
+      
+      <list>
+        <item>
+          <p>Better handling of errorI(s) during update of the session 
+	  database. </p>
+	  <p>Also added and updated some debugging functions 
+	  <seealso marker="httpc#which_sessions">which_sessions/10,1</seealso>
+	  and 
+	  <seealso marker="httpc#info">info/0</seealso>. </p>
+	  <p>Own Id: OTP-10093</p>
+          <p>Aux Id: Seq 12062</p>
+        </item>
+
+	<item>
+	  <p>Removed R14B compatible version of (inets-service and
+	  tftp) behaviour definition. </p>
+	  <p>Own Id: OTP-10095</p>
+	</item>
+	
+	<item>
+	  <p>[httpc] Documentation of KeepAlive and Pipeline timeout 
+	  options have been improved. </p>
+	  <p>Own Id: OTP-10114</p>
+	</item>
+      </list>
+      
+    </section>
+
+    <section>
+      <title>Fixed Bugs and Malfunctions</title>
+      <!--
+      <p>-</p>
+      -->
+	  
+      <list>
+        <item>
+          <p>[httpc] Cancel request does not work due to incorrect 
+	  handler table creation (wrong keypos). </p>
+	  <p>Vyacheslav Vorobyov</p>
+	  <p>Own Id: OTP-10092</p>
+        </item>
+
+      </list>
+
+    </section>
+    
+    <section>
+      <title>Incompatibilities</title>
+      <p>-</p>
+	
+    <!--
+	<list>
+	<item>
+	<p>[httpc|httpd] The old ssl implementation (based on OpenSSL), 
+	has been deprecated. The config option that specified usage of 
+	this version of the ssl app, <c>ossl</c>, has been removed. </p>
+	<p>Own Id: OTP-9522</p>
+	</item>
+	
+	</list>
+    -->
+	
+    </section>
+    
+  </section> <!-- 5.9.1 -->
+  
+  
+  <section>
+    <title>Inets 5.9</title>
+    
+    <section>
+      <title>Improvements and New Features</title>
+      <!--
+	  <p>-</p>
+      -->
+      
+      <list>
+	<item>
           <p>[httpd] Make the server header configurable with new config
 	  option 
 	  <seealso marker="httpd#prop_server_tokens">server_tokens</seealso>.
@@ -102,11 +268,11 @@
 
     </section>
 
+<!--
     <section>
       <title>Incompatibilities</title>
       <p>-</p>
 
-<!--
       <list>
         <item>
           <p>[httpc|httpd] The old ssl implementation (based on OpenSSL), 
@@ -116,9 +282,9 @@
         </item>
 
       </list>
--->
 
     </section>
+-->
 
   </section> <!-- 5.9 -->
 
@@ -285,31 +451,6 @@
 
     </section>
 
-    <section>
-      <title>Incompatibilities</title>
-<!--
-      <p>-</p>
--->
-
-      <list>
-        <item>
-          <p>[httpc] Deprecated interface module <c>http</c> has been removed. 
-	  It has (long) been replaced by http client interface module 
-	  <seealso marker="httpc#">httpc</seealso>. </p>
-	  <p>Own Id: OTP-9359</p>
-        </item>
-
-        <item>
-          <p>[httpc|httpd] The old ssl implementation (based on OpenSSL), 
-	  has been deprecated. The config option that specified usage of 
-	  this version of the ssl app, <c>ossl</c>, has been removed. </p>
-	  <p>Own Id: OTP-9522</p>
-        </item>
-
-      </list>
-
-    </section>
-
     <section><title>Fixed Bugs and Malfunctions</title>
 <!--
     <p>-</p>
@@ -332,6 +473,24 @@
       </list>
     </section>
   
+<!--
+    <section>
+      <title>Incompatibilities</title>
+      <p>-</p>
+
+      <list>
+        <item>
+          <p>[httpc] Deprecated interface module <c>http</c> has been removed. 
+	  It has (long) been replaced by http client interface module 
+	  <seealso marker="httpc#">httpc</seealso>. </p>
+	  <p>Own Id: OTP-9359</p>
+        </item>
+
+      </list>
+
+    </section>
+-->
+
   </section> <!-- 5.7.2 -->
 
 

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -42,7 +42,7 @@
 
 -export([i/0, i/1, i/2, i/3]).
 
--export_type([tab/0, tid/0, match_spec/0]).
+-export_type([tab/0, tid/0, match_spec/0, comp_match_spec/0, match_pattern/0]).
 
 %%-----------------------------------------------------------------------------
 
@@ -445,7 +445,7 @@ update_element(_, _, _) ->
 
 %%% End of BIFs
 
--opaque comp_match_spec() :: any().  %% this one is REALLY opaque
+-opaque comp_match_spec() :: binary().  %% this one is REALLY opaque
 
 -spec match_spec_run(List, CompiledMatchSpec) -> list() when
       List :: [tuple()],
@@ -501,7 +501,7 @@ fun2ms(ShellFun) when is_function(ShellFun) ->
             case ms_transform:transform_from_shell(
                    ?MODULE,Clauses,ImportList) of
                 {error,[{_,[{_,_,Code}|_]}|_],_} ->
-                    io:format("Error: ~s~n",
+                    io:format("Error: ~ts~n",
                               [ms_transform:format_error(Code)]),
                     {error,transform_error};
                 Else ->
@@ -1586,7 +1586,7 @@ choice(Height, Width, P, Mode, Tab, Key, Turn, Opos) ->
 		{ok,Re} ->
 		    re_search(Height, Width, Tab, ets:first(Tab), Re, 1, 1);
 		{error,{ErrorString,_Pos}} ->
-		    io:format("~s\n", [ErrorString]),
+		    io:format("~ts\n", [ErrorString]),
 		    choice(Height, Width, P, Mode, Tab, Key, Turn, Opos)
 	    end;
 	_  ->

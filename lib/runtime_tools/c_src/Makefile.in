@@ -46,9 +46,6 @@ LDFLAGS += $(DED_LDFLAGS)
 DTRACE_LIBNAME = dyntrace
 
 SYSINCLUDE = $(DED_SYS_INCLUDE)
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-	SYSINCLUDE += -I$(ERL_TOP)/erts/etc/vxworks
-endif
 
 TRACE_DRV_INCLUDES = $(SYSINCLUDE)
 
@@ -101,11 +98,7 @@ ifeq ($(findstring win32,$(TARGET)), win32)
 SOLIBS = $(LIBDIR)/trace_ip_drv.dll $(LIBDIR)/trace_file_drv.dll
 LN=cp
 else
-ifeq ($(findstring vxworks,$(TARGET)),vxworks)
-SOLIBS = $(LIBDIR)/trace_ip_drv.eld $(LIBDIR)/trace_file_drv.eld
-else
 SOLIBS = $(LIBDIR)/trace_ip_drv.so $(LIBDIR)/trace_file_drv.so
-endif
 endif
 # ----------------------------------------------------
 # Targets
@@ -118,11 +111,11 @@ debug opt valgrind: $(SOLIBS) $(OBJDIR) $(LIBDIR) $(NIF_LIB)
 ifdef DTRACE_ENABLED
 DTRACE_USER_HEADER=$(OBJDIR)/dtrace_user.h
 $(OBJDIR)/dtrace_user.h: ./dtrace_user.d
-	dtrace -h -C $(INCLUDES) \
+	$(dtrace_verbose)dtrace -h -C $(INCLUDES) \
 	  -s ./dtrace_user.d \
 	  -o ./dtrace_user.tmp
-	sed -e '/^#define[ 	]*ERLANG_[A-Z0-9_]*(.*)/y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/' ./dtrace_user.tmp > $@
-	rm ./dtrace_user.tmp
+	$(V_at)sed -e '/^#define[ 	]*ERLANG_[A-Z0-9_]*(.*)/y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghijklmnopqrstuvwxyz/' ./dtrace_user.tmp > $@
+	$(V_at)rm ./dtrace_user.tmp
 else
 DTRACE_USER_HEADER=
 endif
@@ -131,7 +124,7 @@ DTRACE_OBJS =
 ifdef DTRACE_ENABLED_2STEP
 DTRACE_OBJS += $(OBJDIR)/dtrace_user.o
 $(OBJDIR)/dtrace_user.o: $(before_DTrace_OBJS) $(OBJDIR)/dtrace_user.h
-	dtrace -G -C \
+	$(dtrace_verbose)dtrace -G -C \
 	  -s ./dtrace_user.d \
 	  -o $@ $(before_DTrace_OBJS)
 endif
@@ -145,35 +138,26 @@ $(LIBDIR):
 	-@mkdir -p $(LIBDIR)
 
 $(OBJDIR)/dyntrace$(TYPEMARKER).o: dyntrace.c $(DTRACE_USER_HEADER)
-	$(INSTALL_DIR) $(OBJDIR)
-	$(CC) -c -o $@ $(ALL_CFLAGS) $<
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -c -o $@ $(ALL_CFLAGS) $<
 
 $(NIF_LIB): $(DYNTRACE_OBJS)
-	$(INSTALL_DIR) $(LIBDIR)
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(OBJDIR)/%.o: %.c
-	$(CC) -c -o $@ $(ALL_CFLAGS) $<
+	$(V_CC) -c -o $@ $(ALL_CFLAGS) $<
 
 $(LIBDIR)/trace_ip_drv.so: $(TRACE_IP_DRV_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $^ -lc $(LIBS)
+	$(V_LD) $(LDFLAGS) -o $@ $^ -lc $(LIBS)
 
 $(LIBDIR)/trace_file_drv.so: $(TRACE_FILE_DRV_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $^ -lc $(LIBS)
+	$(V_LD) $(LDFLAGS) -o $@ $^ -lc $(LIBS)
 
 $(LIBDIR)/trace_ip_drv.dll: $(TRACE_IP_DRV_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(V_LD) $(LDFLAGS) -o $@ $^ $(LIBS)
 $(LIBDIR)/trace_file_drv.dll: $(TRACE_FILE_DRV_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
-#
-# VxWorks is simply to different from Unix in this sense.
-# Here are the inference rules for VxWorks
-#
-$(LIBDIR)/trace_ip_drv.eld: $(TRACE_IP_DRV_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $^ 
-
-$(LIBDIR)/trace_file_drv.eld: $(TRACE_FILE_DRV_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $^ 
+	$(V_LD) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:
 	rm -f $(SOLIBS) $(TRACE_IP_DRV_OBJS) $(TRACE_FILE_DRV_OBJS)
@@ -193,10 +177,10 @@ docs:
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/priv/obj
-	$(INSTALL_DIR) $(RELSYSDIR)/priv/lib
-	$(INSTALL_PROGRAM) $(DYNTRACE_OBJS) $(RELSYSDIR)/priv/obj
-	$(INSTALL_PROGRAM) $(NIF_LIB) $(SOLIBS) $(RELSYSDIR)/priv/lib
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv/obj"
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv/lib"
+	$(INSTALL_PROGRAM) $(DYNTRACE_OBJS) "$(RELSYSDIR)/priv/obj"
+	$(INSTALL_PROGRAM) $(NIF_LIB) $(SOLIBS) "$(RELSYSDIR)/priv/lib"
 
 release_docs_spec:
 

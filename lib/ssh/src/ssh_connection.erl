@@ -177,7 +177,7 @@ close(ConnectionManager, ChannelId) ->
 %% Description: Send status replies to requests that want such replies.
 %%--------------------------------------------------------------------
 reply_request(ConnectionManager, true, Status, ChannelId) ->
-    ConnectionManager ! {ssh_cm, self(), {Status, ChannelId}},
+    ssh_connection_manager:reply_request(ConnectionManager, Status, ChannelId),
     ok;
 reply_request(_,false, _, _) ->
     ok.
@@ -318,21 +318,22 @@ channel_data(ChannelId, DataType, Data,
 	     From) ->
     
     case ssh_channel:cache_lookup(Cache, ChannelId) of
-	#channel{remote_id = Id} = Channel0 ->
-	    {SendList, Channel} = update_send_window(Channel0, DataType, 
+	#channel{remote_id = Id, sent_close = false} = Channel0 ->
+	    {SendList, Channel} = update_send_window(Channel0#channel{flow_control = From}, DataType,
 						     Data, Connection),
 	    Replies = 
 		lists:map(fun({SendDataType, SendData}) -> 
-				      {connection_reply, ConnectionPid, 
-				       channel_data_msg(Id, 
-							SendDataType, 
-							SendData)}
+				  {connection_reply, ConnectionPid,
+				   channel_data_msg(Id,
+						    SendDataType,
+						    SendData)}
 			  end, SendList),
 	    FlowCtrlMsgs = flow_control(Replies, 
-					Channel#channel{flow_control = From}, 
+					Channel,
 					Cache),
 	    {{replies, Replies ++ FlowCtrlMsgs}, Connection};
-	undefined ->
+	_ ->
+	    gen_server:reply(From, {error, closed}),
 	    {noreply, Connection}
     end.
 
@@ -386,20 +387,30 @@ handle_msg(#ssh_msg_channel_close{recipient_channel = ChannelId},
 	   ConnectionPid, _) ->
 
 	case ssh_channel:cache_lookup(Cache, ChannelId) of
-	    #channel{sent_close = Closed, remote_id = RemoteId} = Channel ->
+		#channel{sent_close = Closed, remote_id = RemoteId, flow_control = FlowControl} = Channel ->
 		ssh_channel:cache_delete(Cache, ChannelId),
 		{CloseMsg, Connection} = 
 		    reply_msg(Channel, Connection0, {closed, ChannelId}),
+
+			ConnReplyMsgs =
 		case Closed of
-		    true ->
-			{{replies, [CloseMsg]}, Connection};
+					true -> [];
 		    false ->
 			RemoteCloseMsg = channel_close_msg(RemoteId),
-			{{replies, 
-			  [{connection_reply, 
-				      ConnectionPid, RemoteCloseMsg},
-			   CloseMsg]}, Connection}
-		end;
+						[{connection_reply, ConnectionPid, RemoteCloseMsg}]
+				end,
+
+			%% if there was a send() in progress, make it fail
+			SendReplyMsgs =
+				case FlowControl of
+					undefined -> [];
+					From ->
+						[{flow_control, From, {error, closed}}]
+				end,
+
+			Replies = ConnReplyMsgs ++ [CloseMsg] ++ SendReplyMsgs,
+			{{replies, Replies}, Connection};
+
 	    undefined ->
 		{{replies, []}, Connection0}
 	end;
@@ -436,32 +447,32 @@ handle_msg(#ssh_msg_channel_window_adjust{recipient_channel = ChannelId,
 	   #connection{channel_cache = Cache} = Connection, 
 	   ConnectionPid, _) ->
     
-    #channel{send_window_size = Size} = 
+    #channel{send_window_size = Size, remote_id = RemoteId} = 
 	Channel0 = ssh_channel:cache_lookup(Cache, ChannelId), 
-
+    
     {SendList, Channel} =  %% TODO: Datatype 0 ?
 	update_send_window(Channel0#channel{send_window_size = Size + Add},
-			   0, <<>>, Connection),
+			   0, undefined, Connection),
     
     Replies = lists:map(fun({Type, Data}) -> 
 				{connection_reply, ConnectionPid,
-				 channel_data_msg(ChannelId, Type, Data)}
+				 channel_data_msg(RemoteId, Type, Data)}
 			end, SendList),
     FlowCtrlMsgs = flow_control(Channel, Cache),
     {{replies, Replies ++ FlowCtrlMsgs}, Connection};
 
 handle_msg(#ssh_msg_channel_open{channel_type = "session" = Type,
-				 sender_channel = ChannelId,
+				 sender_channel = RemoteId,
 				 initial_window_size = WindowSz,
 				 maximum_packet_size = PacketSz}, Connection0, 
 	   ConnectionPid, server) ->
    
-    try setup_session(Connection0, ConnectionPid, ChannelId,
+    try setup_session(Connection0, ConnectionPid, RemoteId,
 		     Type, WindowSz, PacketSz) of
 	Result ->
 	    Result
     catch _:_ ->
-	    FailMsg = channel_open_failure_msg(ChannelId, 
+	    FailMsg = channel_open_failure_msg(RemoteId, 
 					       ?SSH_OPEN_CONNECT_FAILED,
 					       "Connection refused", "en"),
 	    {{replies, [{connection_reply, ConnectionPid, FailMsg}]}, 
@@ -532,9 +543,9 @@ handle_msg(#ssh_msg_channel_open{channel_type = "forwarded-tcpip",
     {{replies, [{connection_reply, ConnectionPid, FailMsg}]}, Connection};
 
 
-handle_msg(#ssh_msg_channel_open{sender_channel = ChannelId}, Connection, 
+handle_msg(#ssh_msg_channel_open{sender_channel = RemoteId}, Connection, 
 	   ConnectionPid, _) ->
-    FailMsg = channel_open_failure_msg(ChannelId, 
+    FailMsg = channel_open_failure_msg(RemoteId, 
 				       ?SSH_OPEN_ADMINISTRATIVELY_PROHIBITED,
 				       "Not allowed", "en"),
     {{replies, [{connection_reply, ConnectionPid, FailMsg}]}, Connection};
@@ -1073,14 +1084,15 @@ request_reply_or_data(#channel{local_id = ChannelId, user = ChannelPid},
 	false ->
 	    {{channel_data, ChannelPid, Reply}, Connection}
     end.
+update_send_window(Channel, _, undefined,
+		   #connection{channel_cache = Cache}) ->
+    do_update_send_window(Channel,  Channel#channel.send_buf, Cache);
 
-update_send_window(Channel0, DataType, Data,  
-			#connection{channel_cache = Cache}) ->
-    Buf0 = if Data == <<>> ->
-		   Channel0#channel.send_buf;
-	      true ->
-		   Channel0#channel.send_buf ++ [{DataType, Data}]
-	   end,
+update_send_window(Channel, DataType, Data,
+		   #connection{channel_cache = Cache}) ->
+    do_update_send_window(Channel, Channel#channel.send_buf ++ [{DataType, Data}], Cache).
+
+do_update_send_window(Channel0, Buf0, Cache) ->
     {Buf1, NewSz, Buf2} = get_window(Buf0, 
 				     Channel0#channel.send_packet_size,
 				     Channel0#channel.send_window_size),
@@ -1125,13 +1137,13 @@ flow_control(Channel, Cache) ->
 flow_control([], Channel, Cache) ->
     ssh_channel:cache_update(Cache, Channel),
     [];
-flow_control([_|_], #channel{flow_control = From} = Channel, Cache) ->
-    case From of
-	undefined ->
-	    [];
-	_ ->
-	    [{flow_control, Cache,  Channel, From, ok}]
-    end.
+
+flow_control([_|_], #channel{flow_control = From,
+							 send_buf = []} = Channel, Cache) when From =/= undefined ->
+	[{flow_control, Cache, Channel, From, ok}];
+flow_control(_,_,_) ->
+	[].
+
 
 encode_pty_opts(Opts) ->
     Bin = list_to_binary(encode_pty_opts2(Opts)),

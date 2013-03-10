@@ -1,7 +1,7 @@
 --
 -- %CopyrightBegin%
 --
--- Copyright Ericsson AB 2001-2010. All Rights Reserved.
+-- Copyright Ericsson AB 2001-2013. All Rights Reserved.
 --
 -- The contents of this file are subject to the Erlang Public License,
 -- Version 1.1, (the "License"); you may not use this file except in
@@ -79,4 +79,43 @@ Ax3 ::= SEQUENCE {
 }
 
 -- { a 253, b TRUE, s {sa 17, sb TRUE, sextaddgroup 11}}
+
+-- This is to test the case with more than one ExtensionAdditionGroup
+-- which did not work before
+
+AS-Config ::=				SEQUENCE {
+        a INTEGER,
+        b BOOLEAN,
+        c OCTET STRING,
+	...,
+	[[	sourceSystemInformationBlockType1Ext	OCTET STRING OPTIONAL,
+		sourceOtherConfig-r9			INTEGER
+	]],
+	[[	sourceSCellConfigList-r10	OCTET STRING OPTIONAL
+	]]
+}
+
+SystemInformationBlockType2 ::= SEQUENCE {
+  timeAlignmentTimerCommon TimeAlignmentTimer,
+  ...,
+  lateNonCriticalExtension OCTET STRING OPTIONAL,
+  [[ ssac-BarringForMMTEL-Voice-r9 AC-BarringConfig OPTIONAL,
+     ssac-BarringForMMTEL-Video-r9 AC-BarringConfig OPTIONAL
+  ]],
+  [[ ac-BarringForCSFB-r10 AC-BarringConfig OPTIONAL
+  ]]
+}
+
+TimeAlignmentTimer ::= ENUMERATED {
+  sf500, sf750, sf1280, sf1920, sf2560, sf5120,
+  sf10240, infinity}
+
+AC-BarringConfig ::= SEQUENCE {
+  ac-BarringFactor ENUMERATED {
+    p00, p05, p10, p15, p20, p25, p30, p40,
+    p50, p60, p70, p75, p80, p85, p90, p95},
+  ac-BarringTime ENUMERATED {s4, s8, s16, s32, s64, s128, s256, s512},
+  ac-BarringForSpecialAC BIT STRING (SIZE(5))
+}
+
 END

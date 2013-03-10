@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -57,6 +57,15 @@ transform(#'OTPTBSCertificate'{}= TBS, decode) ->
 transform(#'AttributeTypeAndValue'{type=Id,value=Value0} = ATAV, Func) ->
     {ok, Value} =
         case attribute_type(Id) of
+	    'X520countryName'when Func == decode ->
+		%% Workaround that some certificates break the ASN-1 spec
+		%% and encode countryname as utf8
+		case 'OTP-PUB-KEY':Func('OTP-X520countryname', Value0) of
+		    {ok, {utf8String, Utf8Value}} ->
+			{ok, unicode:characters_to_list(Utf8Value)};
+		    {ok, {printableString, ASCCI}} ->
+			{ok, ASCCI}
+		end;
             Type when is_atom(Type) -> 'OTP-PUB-KEY':Func(Type, Value0);
             _UnknownType            -> {ok, Value0}
         end,
@@ -110,7 +119,7 @@ encode_supportedPublicKey(#'OTPSubjectPublicKeyInfo'{algorithm= PA =
 						     subjectPublicKey = SPK0}) ->
     Type = supportedPublicKeyAlgorithms(Algo),
     {ok, SPK} = 'OTP-PUB-KEY':encode(Type, SPK0),
-    #'OTPSubjectPublicKeyInfo'{subjectPublicKey = {0,list_to_binary(SPK)}, algorithm=PA}.
+    #'OTPSubjectPublicKeyInfo'{subjectPublicKey = {0,SPK}, algorithm=PA}.
 
 %%% Extensions
 
@@ -152,7 +161,7 @@ decode_extensions(Exts) ->
 		      case extension_id(Id) of
 			  undefined -> Ext;
 			  Type ->
-			      {ok, Value} = 'OTP-PUB-KEY':decode(Type, list_to_binary(Value0)),
+			      {ok, Value} = 'OTP-PUB-KEY':decode(Type, iolist_to_binary(Value0)),
 			      Ext#'Extension'{extnValue=transform(Value,decode)}
 		      end
 	      end, Exts).
@@ -167,7 +176,7 @@ encode_extensions(Exts) ->
 			  Type ->
 			      Value1 = transform(Value0,encode),
 			      {ok, Value} = 'OTP-PUB-KEY':encode(Type, Value1),
-			      Ext#'Extension'{extnValue=list_to_binary(Value)}
+			      Ext#'Extension'{extnValue=Value}
 		      end
 	      end, Exts).
 

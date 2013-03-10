@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -36,7 +36,8 @@
 -export([set_cookie/2, get_cookie/0]).
 -export([nodes/0]).
 
--export([list_to_integer/2,integer_to_list/2]).
+-export([integer_to_list/2]).
+-export([integer_to_binary/2]).
 -export([flush_monitor_message/2]).
 -export([set_cpu_topology/1, format_cpu_topology/1]).
 -export([await_proc_exit/3]).
@@ -73,26 +74,34 @@
 
 -export([adler32/1, adler32/2, adler32_combine/3, append_element/2]).
 -export([atom_to_binary/2, atom_to_list/1, binary_part/2, binary_part/3]).
--export([binary_to_atom/2, binary_to_existing_atom/2, binary_to_list/1]).
+-export([binary_to_atom/2, binary_to_existing_atom/2, binary_to_float/1]).
+-export([binary_to_integer/1,binary_to_integer/2]).
+-export([binary_to_list/1]).
 -export([binary_to_list/3, binary_to_term/1, binary_to_term/2]).
 -export([bit_size/1, bitsize/1, bitstr_to_list/1, bitstring_to_list/1]).
 -export([bump_reductions/1, byte_size/1, call_on_load_function/1]).
 -export([cancel_timer/1, check_old_code/1, check_process_code/2, crc32/1]).
 -export([crc32/2, crc32_combine/3, date/0, decode_packet/3]).
+-export([delete_element/2]).
 -export([delete_module/1, demonitor/1, demonitor/2, display/1]).
 -export([display_nl/0, display_string/1, dist_exit/3, erase/0, erase/1]).
 -export([error/1, error/2, exit/1, exit/2, external_size/1]).
 -export([external_size/2, finish_after_on_load/2, finish_loading/1, float/1]).
--export([float_to_list/1, fun_info/2, fun_to_list/1, function_exported/3]).
+-export([float_to_binary/1, float_to_binary/2,
+	 float_to_list/1, float_to_list/2]).
+-export([fun_info/2, fun_to_list/1, function_exported/3]).
 -export([garbage_collect/0, garbage_collect/1]).
 -export([garbage_collect_message_area/0, get/0, get/1, get_keys/1]).
 -export([get_module_info/1, get_stacktrace/0, group_leader/0]).
 -export([group_leader/2, halt/0, halt/1, halt/2, hash/2, hibernate/3]).
--export([integer_to_list/1, iolist_size/1, iolist_to_binary/1]).
+-export([insert_element/3]).
+-export([integer_to_binary/1, integer_to_list/1]).
+-export([iolist_size/1, iolist_to_binary/1]).
 -export([is_alive/0, is_builtin/3, is_process_alive/1, length/1, link/1]).
 -export([list_to_atom/1, list_to_binary/1, list_to_bitstr/1]).
 -export([list_to_bitstring/1, list_to_existing_atom/1, list_to_float/1]).
--export([list_to_integer/1, list_to_pid/1, list_to_tuple/1, loaded/0]).
+-export([list_to_integer/1, list_to_integer/2]).
+-export([list_to_pid/1, list_to_tuple/1, loaded/0]).
 -export([localtime/0, make_ref/0, match_spec_test/3, md5/1, md5_final/1]).
 -export([md5_init/0, md5_update/2, module_loaded/1, monitor/2]).
 -export([monitor_node/2, monitor_node/3, nif_error/1, nif_error/2
@@ -314,6 +323,25 @@ binary_to_atom(_Binary, _Encoding) ->
 binary_to_existing_atom(_Binary, _Encoding) ->
     erlang:nif_error(undefined).
 
+%% binary_to_float/1
+-spec binary_to_float(Binary) -> float() when
+      Binary :: binary().
+binary_to_float(_Binary) ->
+    erlang:nif_error(undefined).
+
+%% binary_to_integer/1
+-spec binary_to_integer(Binary) -> integer() when
+      Binary :: binary().
+binary_to_integer(_Binary) ->
+    erlang:nif_error(undefined).
+
+%% binary_to_integer/2
+-spec binary_to_integer(Binary,Base) -> integer() when
+      Binary :: binary(),
+      Base :: 2..36.
+binary_to_integer(_Binary,_Base) ->
+    erlang:nif_error(undefined).
+
 %% binary_to_list/1
 -spec binary_to_list(Binary) -> [byte()] when
       Binary :: binary().
@@ -529,6 +557,14 @@ date() ->
 decode_packet(_Type, _Bin, _Options) ->
     erlang:nif_error(undefined).
 
+%% delete_element/2
+-spec erlang:delete_element(Index, Tuple1) -> Tuple2 when
+      Index  :: pos_integer(),
+      Tuple1 :: tuple(),
+      Tuple2 :: tuple().
+delete_element(_Index, _Tuple1) ->
+    erlang:nif_error(undefined).
+
 %% delete_module/1
 -spec delete_module(Module) -> true | undefined when
       Module :: module().
@@ -695,10 +731,36 @@ finish_after_on_load(_P1, _P2) ->
 float(_Number) ->
     erlang:nif_error(undefined).
 
+%% float_to_binary/1
+-spec float_to_binary(Float) -> binary() when
+      Float :: float().
+float_to_binary(_Float) ->
+    erlang:nif_error(undefined).
+
+%% float_to_binary/2
+-spec float_to_binary(Float, Options) -> binary() when
+      Float :: float(),
+      Options :: [Option],
+      Option  :: {decimals, Decimals :: 0..253} |
+                 {scientific, Decimals :: 0..249} |
+                 compact.
+float_to_binary(_Float, _Options) ->
+    erlang:nif_error(undefined).
+
 %% float_to_list/1
 -spec float_to_list(Float) -> string() when
       Float :: float().
 float_to_list(_Float) ->
+    erlang:nif_error(undefined).
+
+%% float_to_list/2
+-spec float_to_list(Float, Options) -> string() when
+      Float :: float(),
+      Options :: [Option],
+      Option  :: {decimals, Decimals :: 0..253} |
+                 {scientific, Decimals :: 0..249} |
+                 compact.
+float_to_list(_Float, _Options) ->
     erlang:nif_error(undefined).
 
 %% fun_info/2
@@ -820,6 +882,21 @@ hash(_Term, _Range) ->
 hibernate(_Module, _Function, _Args) ->
     erlang:nif_error(undefined).
 
+%% insert_element/3
+-spec erlang:insert_element(Index, Tuple1, Term) -> Tuple2 when
+      Index  :: pos_integer(),
+      Tuple1 :: tuple(),
+      Tuple2 :: tuple(),
+      Term   :: term().
+insert_element(_Index, _Tuple1, _Term) ->
+    erlang:nif_error(undefined).
+
+%% integer_to_binary/1
+-spec integer_to_binary(Integer) -> binary() when
+      Integer :: integer().
+integer_to_binary(_Integer) ->
+    erlang:nif_error(undefined).
+
 %% integer_to_list/1
 -spec integer_to_list(Integer) -> string() when
       Integer :: integer().
@@ -910,6 +987,13 @@ list_to_float(_String) ->
 -spec list_to_integer(String) -> integer() when
       String :: string().
 list_to_integer(_String) ->
+    erlang:nif_error(undefined).
+
+%% list_to_integer/2
+-spec list_to_integer(String, Base) -> integer() when
+      String :: string(),
+      Base :: 2..36.
+list_to_integer(_String,_Base) ->
     erlang:nif_error(undefined).
 
 %% list_to_pid/1
@@ -1073,57 +1157,6 @@ phash2(_Term, _Range) ->
 -spec pid_to_list(Pid) -> string() when
       Pid :: pid().
 pid_to_list(_Pid) ->
-    erlang:nif_error(undefined).
-
-%% port_close/1
--spec port_close(Port) -> true when
-      Port :: port() | atom().
-port_close(_Port) ->
-    erlang:nif_error(undefined).
-
-%% port_command/2
--spec port_command(Port, Data) -> true when
-      Port :: port() | atom(),
-      Data :: iodata().
-port_command(_Port, _Data) ->
-    erlang:nif_error(undefined).
-
-%% port_command/3
--spec port_command(Port, Data, OptionList) -> boolean() when
-      Port :: port() | atom(),
-      Data :: iodata(),
-      OptionList :: [Option],
-      Option :: force | nosuspend.
-port_command(_Port, _Data, _OptionList) ->
-    erlang:nif_error(undefined).
-
-%% port_connect/2
--spec port_connect(Port, Pid) -> true when
-      Port :: port() | atom(),
-      Pid :: pid().
-port_connect(_Port, _Pid) ->
-    erlang:nif_error(undefined).
-
-%% port_control/3
--spec port_control(Port, Operation, Data) -> Res when
-      Port :: port() | atom(),
-      Operation :: integer(),
-      Data :: iodata(),
-      Res :: string() | binary().
-port_control(_Port, _Operation, _Data) ->
-    erlang:nif_error(undefined).
-
-%% port_get_data/1
--spec erlang:port_get_data(P1) -> term() when
-      P1 :: port() | atom().
-port_get_data(_P1) ->
-    erlang:nif_error(undefined).
-
-%% port_set_data/2
--spec erlang:port_set_data(P1, P2) -> true when
-      P1 :: port() | atom(),
-      P2 :: term().
-port_set_data(_P1, _P2) ->
     erlang:nif_error(undefined).
 
 %% port_to_list/1
@@ -1699,58 +1732,10 @@ nodes(_Arg) ->
            | in
            | out
            | binary
-           | eof.
+           | eof
+	   | {parallelism, Boolean :: boolean()}
+	   | hide.
 open_port(_PortName,_PortSettings) ->
-    erlang:nif_error(undefined).
-
-%% Shadowed by erl_bif_types: erlang:port_call/2
--spec erlang:port_call(Port, Data) -> term() when
-      Port :: port() | atom(),
-      Data :: term().
-port_call(_Port, _Data) ->
-    erlang:nif_error(undefined).
-
-%% Shadowed by erl_bif_types: erlang:port_call/3
--spec erlang:port_call(Port, Operation, Data) -> term() when
-      Port :: port() | atom(),
-      Operation :: integer(),
-      Data :: term().
-port_call(_Port, _Operation, _Data) ->
-    erlang:nif_error(undefined).
-
--type port_info_item() ::
-      registered_name |
-      id |
-      connected |
-      links |
-      name |
-      input |
-      output |
-      os_pid.
-
--type port_info_result_item() ::
-      {registered_name, RegName :: atom()} |
-      {id, Index :: non_neg_integer()} |
-      {connected, Pid :: pid()} |
-      {links, Pids :: [pid()]} |
-      {name, String :: string()} |
-      {input, Bytes :: non_neg_integer()} |
-      {output, Bytes :: non_neg_integer()} |
-      {os_pid, OsPid :: non_neg_integer() | 'undefined'}.
-
-%% Shadowed by erl_bif_types: erlang:port_info/1
--spec erlang:port_info(Port) -> Result when
-      Port :: port() | atom(),
-      Result :: [port_info_result_item()] | undefined.
-port_info(_Result) ->
-    erlang:nif_error(undefined).
-
-%% Shadowed by erl_bif_types: erlang:port_info/2
--spec erlang:port_info(Port, Item) -> Result when
-      Port :: port() | atom(),
-      Item :: port_info_item(),
-      Result :: port_info_result_item() | undefined.
-port_info(_Result, _Item) ->
     erlang:nif_error(undefined).
 
 -type priority_level() ::
@@ -1800,7 +1785,6 @@ process_flag(_Flag, _Value) ->
       links |
       last_calls |
       memory |
-      message_binary |
       message_que_len |
       messages |
       min_heap_size |
@@ -1837,10 +1821,9 @@ process_flag(_Flag, _Value) ->
       {group_leader, GroupLeader :: pid()} |
       {heap_size, Size :: non_neg_integer()} |
       {initial_call, mfa()} |
-      {links, Pids :: [pid()]} |
+      {links, PidsAndPorts :: [pid() | port()]} |
       {last_calls, false | (Calls :: [mfa()])} |
       {memory, Size :: non_neg_integer()} |
-      {message_binary, BinInfo :: term()} |
       {message_que_len, MessageQueueLen :: non_neg_integer()} |
       {messages, MessageQueue :: [term()]} |
       {min_heap_size, MinHeapSize :: non_neg_integer()} |
@@ -2123,9 +2106,8 @@ tuple_to_list(_Tuple) ->
          (dist_buf_busy_limit) -> non_neg_integer();
          (fullsweep_after) -> {fullsweep_after, non_neg_integer()};
          (garbage_collection) -> [{atom(), integer()}];
-         (global_heaps_size) -> non_neg_integer();
          (heap_sizes) -> [non_neg_integer()];
-         (heap_type) -> private | shared | hybrid;
+         (heap_type) -> private;
          (info) -> binary();
          (kernel_poll) -> boolean();
          (loaded) -> binary();
@@ -2140,6 +2122,8 @@ tuple_to_list(_Tuple) ->
          (multi_scheduling) -> disabled | blocked | enabled;
          (multi_scheduling_blockers) -> [PID :: pid()];
          (otp_release) -> string();
+         (port_count) -> non_neg_integer();
+         (port_limit) -> pos_integer();
          (process_count) -> pos_integer();
          (process_limit) -> pos_integer();
          (procs) -> binary();
@@ -2533,6 +2517,216 @@ suspend_process(P) ->
     end.
 
 %%
+%% Port BIFs
+%%
+%%       Currently all port BIFs calls the corresponding
+%%       erts_internal:port_*() native function which perform
+%%       most of the actual work. These native functions should
+%%       *never* be called directly by other functionality. The
+%%       native functions may be changed, or removed without any
+%%       notice whatsoever!
+%%
+%% IMPORTANT NOTE:
+%%       When the erts_internal:port_*() native functions return
+%%       a reference, they have also internally prepared the
+%%       message queue of the caller for a receive that will
+%%       unconditionally wait for a message containing this
+%%       reference. If the erlang code calling these native
+%%       functions do not do this, subsequent receives will not
+%%       work as expected! That is, it is of *vital importance*
+%%       that the receive is performed as described above!
+%%
+
+-spec port_command(Port, Data) -> 'true' when
+      Port :: port() | atom(),
+      Data :: iodata().
+
+port_command(Port, Data) ->
+    case case erts_internal:port_command(Port, Data, []) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	true -> true;
+	Error -> erlang:error(Error, [Port, Data])
+    end.
+
+-spec port_command(Port, Data, OptionList) -> boolean() when
+      Port :: port() | atom(),
+      Data :: iodata(),
+      Option :: force | nosuspend,
+      OptionList :: [Option].
+
+port_command(Port, Data, Flags) ->
+    case case erts_internal:port_command(Port, Data, Flags) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	Bool when Bool == true; Bool == false -> Bool;
+	Error -> erlang:error(Error, [Port, Data, Flags])
+    end.
+
+-spec port_connect(Port, Pid) -> 'true' when
+      Port :: port() | atom(),
+      Pid :: pid().
+
+port_connect(Port, Pid) ->
+    case case erts_internal:port_connect(Port, Pid) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	true -> true;
+	Error -> erlang:error(Error, [Port, Pid])
+    end.
+
+-spec port_close(Port) -> 'true' when
+      Port :: port() | atom().
+
+port_close(Port) ->
+    case case erts_internal:port_close(Port) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	true -> true;
+	Error -> erlang:error(Error, [Port])
+    end.
+
+-spec port_control(Port, Operation, Data) -> iodata() | binary() when
+      Port :: port() | atom(),
+      Operation :: integer(),
+      Data :: iodata().
+
+port_control(Port, Operation, Data) ->
+    case case erts_internal:port_control(Port, Operation, Data) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	badarg -> erlang:error(badarg, [Port, Operation, Data]);
+	Result -> Result
+    end.
+
+-spec erlang:port_call(Port, Data) -> term() when
+      Port :: port() | atom(),
+      Data :: term().
+
+port_call(Port, Data) ->
+    case case erts_internal:port_call(Port, 0, Data) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	{ok, Result} -> Result;
+	Error -> erlang:error(Error, [Port, Data])
+    end.
+
+-spec erlang:port_call(Port, Operation, Data) -> term() when
+      Port :: port() | atom(),
+      Operation :: integer(),
+      Data :: term().
+
+port_call(Port, Operation, Data) ->
+    case case erts_internal:port_call(Port, Operation, Data) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	{ok, Result} -> Result;
+	Error -> erlang:error(Error, [Port, Operation, Data])
+    end.
+
+-spec erlang:port_info(Port) -> Result when
+      Port :: port() | atom(),
+      ResultItem :: {registered_name, RegisteredName :: atom()}
+		  | {id, Index :: non_neg_integer()}
+		  | {connected, Pid :: pid()}
+		  | {links, Pids :: [pid()]}
+		  | {name, String :: string()}
+		  | {input, Bytes :: non_neg_integer()}
+		  | {output, Bytes :: non_neg_integer()}
+		  | {os_pid, OsPid :: non_neg_integer() | 'undefined'},
+      Result :: [ResultItem] | 'undefined'.
+
+port_info(Port) ->
+    case case erts_internal:port_info(Port) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	badarg -> erlang:error(badarg, [Port]);
+	Result -> Result
+    end.
+
+-spec erlang:port_info(Port, connected) -> {connected, Pid} | 'undefined' when
+      Port :: port() | atom(),
+      Pid :: pid();
+		      (Port, id) -> {id, Index} | 'undefined' when
+      Port :: port() | atom(),
+      Index :: non_neg_integer();
+		      (Port, input) -> {input, Bytes} | 'undefined' when
+      Port :: port() | atom(),
+      Bytes :: non_neg_integer();
+		      (Port, links) -> {links, Pids} | 'undefined' when
+      Port :: port() | atom(),
+      Pids :: [pid()];
+		      (Port, locking) -> {locking, Locking} | 'undefined' when
+      Port :: port() | atom(),
+      Locking :: 'false' | 'port_level' | 'driver_level';
+		      (Port, memory) -> {memory, Bytes} | 'undefined' when
+      Port :: port() | atom(),
+      Bytes :: non_neg_integer();
+		      (Port, monitors) -> {monitors, Monitors} | 'undefined' when
+      Port :: port() | atom(),
+      Monitors :: [{process, pid()}];
+		      (Port, name) -> {name, Name} | 'undefined' when
+      Port :: port() | atom(),
+      Name :: string();
+		      (Port, os_pid) -> {os_pid, OsPid} | 'undefined' when
+      Port :: port() | atom(),
+      OsPid :: non_neg_integer() | 'undefined';
+		      (Port, output) -> {output, Bytes} | 'undefined' when
+      Port :: port() | atom(),
+      Bytes :: non_neg_integer();
+		      (Port, parallelism) -> {parallelism, Boolean} | 'undefined' when
+      Port :: port() | atom(),
+      Boolean :: boolean();
+		      (Port, queue_size) -> {queue_size, Bytes} | 'undefined' when
+      Port :: port() | atom(),
+      Bytes :: non_neg_integer();
+		      (Port, registered_name) -> {registered_name, RegisteredName} | [] | 'undefined' when
+      Port :: port() | atom(),
+      RegisteredName :: atom().
+
+port_info(Port, Item) ->
+    case case erts_internal:port_info(Port, Item) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	badarg -> erlang:error(badarg, [Port, Item]);
+	Result -> Result
+    end.
+
+-spec erlang:port_set_data(Port, Data) -> 'true' when
+      Port :: port() | atom(),
+      Data :: term().
+    
+port_set_data(Port, Data) ->
+    case case erts_internal:port_set_data(Port, Data) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	badarg -> erlang:error(badarg, [Port, Data]);
+	Result -> Result
+    end.
+
+-spec erlang:port_get_data(Port) -> term() when
+      Port :: port() | atom().
+
+port_get_data(Port) ->
+    case case erts_internal:port_get_data(Port) of
+	     Ref when erlang:is_reference(Ref) -> receive {Ref, Res} -> Res end;
+	     Res -> Res
+	 end of
+	{ok, Data} -> Data;
+	Error -> erlang:error(Error, [Port])
+    end.
+
+%%
 %% If the emulator wants to perform a distributed command and
 %% a connection is not established to the actual node the following 
 %% functions are called in order to set up the connection and then
@@ -2698,51 +2892,32 @@ integer_to_list(I0, Base, R0) ->
 	    integer_to_list(I1, Base, R1)
     end.
 
-
--spec list_to_integer(String, Base) -> integer() when
-      String :: string(),
+-spec integer_to_binary(Integer, Base) -> binary() when
+      Integer :: integer(),
       Base :: 2..36.
-list_to_integer(L, 10) ->
-    erlang:list_to_integer(L);
-list_to_integer(L, Base)
-  when erlang:is_list(L), erlang:is_integer(Base),
+integer_to_binary(I, 10) ->
+    erlang:integer_to_binary(I);
+integer_to_binary(I, Base) 
+  when erlang:is_integer(I), erlang:is_integer(Base),
        Base >= 2, Base =< 1+$Z-$A+10 ->
-    case list_to_integer_sign(L, Base) of 
-	I when erlang:is_integer(I) ->
-	    I;
-	Fault ->
-	    erlang:error(Fault, [L,Base])
+    if I < 0 ->
+	    <<"$-",(integer_to_binary(-I, Base, []))/binary>>;
+       true ->
+	    integer_to_binary(I, Base, <<>>)
     end;
-list_to_integer(L, Base) ->
-    erlang:error(badarg, [L,Base]).
+integer_to_binary(I, Base) ->
+    erlang:error(badarg, [I, Base]).
 
-list_to_integer_sign([$-|[_|_]=L], Base) ->
-    case list_to_integer(L, Base, 0) of
-	I when erlang:is_integer(I) ->
-	    -I;
-	I ->
-	    I
-    end;
-list_to_integer_sign([$+|[_|_]=L], Base) ->
-    list_to_integer(L, Base, 0);
-list_to_integer_sign([_|_]=L, Base) ->
-    list_to_integer(L, Base, 0);
-list_to_integer_sign(_, _) ->
-    badarg.
-
-list_to_integer([D|L], Base, I) 
-  when erlang:is_integer(D), D >= $0, D =< $9, D < Base+$0 ->
-    list_to_integer(L, Base, I*Base + D-$0);
-list_to_integer([D|L], Base, I) 
-  when erlang:is_integer(D), D >= $A, D < Base+$A-10 ->
-    list_to_integer(L, Base, I*Base + D-$A+10);
-list_to_integer([D|L], Base, I) 
-  when erlang:is_integer(D), D >= $a, D < Base+$a-10 ->
-    list_to_integer(L, Base, I*Base + D-$a+10);
-list_to_integer([], _, I) ->
-    I;
-list_to_integer(_, _, _) ->
-    badarg.
+integer_to_binary(0, _Base, R0) ->
+    R0;
+integer_to_binary(I0, Base, R0) ->
+    D = I0 rem Base,
+    I1 = I0 div Base,
+    if D >= 10 ->
+	    integer_to_binary(I1,Base,<<(D-10+$A),R0/binary>>);
+       true ->
+	    integer_to_binary(I1,Base,<<(D+$0),R0/binary>>)
+    end.
 
 %% erlang:flush_monitor_message/2 is for internal use only!
 %%

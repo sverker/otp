@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2006-2012. All Rights Reserved.
+ * Copyright Ericsson AB 2006-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -39,7 +39,6 @@
 #include "dtrace-wrapper.h"
 
 #ifdef ERTS_SYS_CONTINOUS_FD_NUMBERS
-#  define ERTS_DRV_EV_STATE_EXTRA_SIZE 128
 #else
 #  include "safe_hash.h"
 #  define DRV_EV_STATE_HTAB_SIZE 1024
@@ -201,17 +200,6 @@ static void event_large_fd_error(ErlDrvPort, ErtsSysFdType, ErlDrvEventData);
 #endif
 static void steal_pending_stop_select(erts_dsprintf_buf_t*, ErlDrvPort,
 				      ErtsDrvEventState*, int mode, int on);
-static ERTS_INLINE Eterm
-drvport2id(ErlDrvPort dp)
-{
-    Port *pp = erts_drvport2port(dp);
-    if (pp)
-	return pp->id;
-    else {
-	ASSERT(0);
-	return am_undefined;
-    }
-}
 
 #ifdef ERTS_SMP
 ERTS_SCHED_PREF_QUICK_ALLOC_IMPL(removed_fd, struct removed_fd, 64, ERTS_ALC_T_FD_LIST)
@@ -334,7 +322,9 @@ static void
 grow_drv_ev_state(int min_ix)
 {
     int i;
-    int new_len = min_ix + 1 + ERTS_DRV_EV_STATE_EXTRA_SIZE;
+    int new_len;
+
+    new_len = ERTS_POLL_EXPORT(erts_poll_get_table_len)(min_ix + 1);
     if (new_len > max_fds)
 	new_len = max_fds;
 
@@ -377,7 +367,7 @@ abort_task(Eterm id, ErtsPortTaskHandle *pthp, EventStateType type)
 	       || !erts_port_task_is_scheduled(pthp));
     }
     else if (erts_port_task_is_scheduled(pthp)) {
-	erts_port_task_abort(id, pthp);
+	erts_port_task_abort(pthp);
 	ASSERT(erts_is_port_alive(id));
     }
 }
@@ -491,7 +481,8 @@ ERTS_CIO_EXPORT(driver_select)(ErlDrvPort ix,
 			       int on)
 {
     void (*stop_select_fn)(ErlDrvEvent, void*) = NULL;
-    Eterm id = drvport2id(ix);
+    Port *prt = erts_drvport2port(ix);
+    Eterm id = erts_drvport2id(ix);
     ErtsSysFdType fd = (ErtsSysFdType) e;
     ErtsPollEvents ctl_events = (ErtsPollEvents) 0;
     ErtsPollEvents new_events, old_events;
@@ -501,9 +492,11 @@ ERTS_CIO_EXPORT(driver_select)(ErlDrvPort ix,
 #ifdef USE_VM_PROBES
     DTRACE_CHARBUF(name, 64);
 #endif
-    
-    ERTS_SMP_LC_ASSERT(erts_drvport2port(ix)
-		       && erts_lc_is_port_locked(erts_drvport2port(ix)));
+
+    if (prt == ERTS_INVALID_ERL_DRV_PORT)
+	return -1;
+
+    ERTS_SMP_LC_ASSERT(erts_lc_is_port_locked(prt));
 
 #ifdef ERTS_SYS_CONTINOUS_FD_NUMBERS
     if ((unsigned)fd >= (unsigned)erts_smp_atomic_read_nob(&drv_ev_state_len)) {
@@ -529,9 +522,9 @@ ERTS_CIO_EXPORT(driver_select)(ErlDrvPort ix,
     if (!on && (mode&ERL_DRV_USE_NO_CALLBACK) == ERL_DRV_USE) {
 	if (IS_FD_UNKNOWN(state)) {
 	    /* fast track to stop_select callback */
-	    stop_select_fn = erts_drvport2port(ix)->drv_ptr->stop_select;
+	    stop_select_fn = prt->drv_ptr->stop_select;
 #ifdef USE_VM_PROBES
-	    strncpy(name, erts_drvport2port(ix)->drv_ptr->name, sizeof(name)-1);
+	    strncpy(name, prt->drv_ptr->name, sizeof(name)-1);
 	    name[sizeof(name)-1] = '\0';
 #endif
 	    ret = 0;
@@ -664,14 +657,14 @@ ERTS_CIO_EXPORT(driver_select)(ErlDrvPort ix,
 		}
 	    }
 	    if ((mode & ERL_DRV_USE_NO_CALLBACK) == ERL_DRV_USE) {
-		erts_driver_t* drv_ptr = erts_drvport2port(ix)->drv_ptr;
+		erts_driver_t* drv_ptr = prt->drv_ptr;
 		ASSERT(new_events==0);
 		if (state->remove_cnt == 0 || !wake_poller) {
 		    /* Safe to close fd now as it is not in pollset
 		       or there was no need to eject fd (kernel poll) */
 		    stop_select_fn = drv_ptr->stop_select;
 #ifdef USE_VM_PROBES
-		    strncpy(name, erts_drvport2port(ix)->drv_ptr->name, sizeof(name)-1);
+		    strncpy(name, prt->drv_ptr->name, sizeof(name)-1);
 		    name[sizeof(name)-1] = '\0';
 #endif
 		}
@@ -718,13 +711,16 @@ ERTS_CIO_EXPORT(driver_event)(ErlDrvPort ix,
     ErtsPollEvents events;
     ErtsPollEvents add_events;
     ErtsPollEvents remove_events;
-    Eterm id = drvport2id(ix);
+    Eterm id = erts_drvport2id(ix);
     ErtsDrvEventState *state;
     int do_wake = 0;
     int ret;
+    Port *prt = erts_drvport2port(ix);
 
-    ERTS_SMP_LC_ASSERT(erts_drvport2port(ix)
-		       && erts_lc_is_port_locked(erts_drvport2port(ix)));
+    if (prt == ERTS_INVALID_ERL_DRV_PORT)
+	return -1;
+
+    ERTS_SMP_LC_ASSERT(erts_lc_is_port_locked(prt));
 
 #ifdef ERTS_SYS_CONTINOUS_FD_NUMBERS
     if ((unsigned)fd >= (unsigned)erts_smp_atomic_read_nob(&drv_ev_state_len)) {
@@ -970,8 +966,8 @@ print_select_op(erts_dsprintf_buf_t *dsbufp,
 		  mode & ERL_DRV_USE ? " ERL_DRV_USE" : "",
 		  mode & (ERL_DRV_USE_NO_CALLBACK & ~ERL_DRV_USE) ? "_NO_CALLBACK" : "",
 		  on);
-    print_driver_name(dsbufp, pp->id);
-    erts_dsprintf(dsbufp, "driver %T ", pp ? pp->id : NIL);
+    print_driver_name(dsbufp, pp != ERTS_INVALID_ERL_DRV_PORT ? pp->common.id : NIL);
+    erts_dsprintf(dsbufp, "driver %T ", pp != ERTS_INVALID_ERL_DRV_PORT ? pp->common.id : NIL);
 }
 
 static void
@@ -1030,8 +1026,9 @@ steal_pending_stop_select(erts_dsprintf_buf_t *dsbufp, ErlDrvPort ix,
 	state->driver.drv_ptr = NULL;
     }
     else if ((mode & ERL_DRV_USE_NO_CALLBACK) == ERL_DRV_USE) {
-	erts_driver_t* drv_ptr = erts_drvport2port(ix)->drv_ptr;
-	if (drv_ptr != state->driver.drv_ptr) {
+	Port *prt = erts_drvport2port(ix);
+	erts_driver_t* drv_ptr = prt != ERTS_INVALID_ERL_DRV_PORT ? prt->drv_ptr : NULL;
+	if (drv_ptr && drv_ptr != state->driver.drv_ptr) {
 	    /* Some other driver wants the stop_select callback */
 	    if (state->driver.drv_ptr->handle) {
 		erts_ddll_dereference_driver(state->driver.drv_ptr->handle);
@@ -1061,8 +1058,9 @@ print_event_op(erts_dsprintf_buf_t *dsbufp,
 		      (unsigned int) event_data->events,
 		      (unsigned int) event_data->revents);
     erts_dsprintf(dsbufp, ") by ");
-    print_driver_name(dsbufp, pp->id);
-    erts_dsprintf(dsbufp, "driver %T ", pp ? pp->id : NIL);
+    if (pp != ERTS_INVALID_ERL_DRV_PORT)
+	print_driver_name(dsbufp, pp->common.id);
+    erts_dsprintf(dsbufp, "driver %T ", pp != ERTS_INVALID_ERL_DRV_PORT ? pp->common.id : NIL);
 }
 
 static void
@@ -1099,8 +1097,7 @@ iready(Eterm id, ErtsDrvEventState *state)
     if (erts_port_task_schedule(id,
 				&state->driver.select->intask,
 				ERTS_PORT_TASK_INPUT,
-				(ErlDrvEvent) state->fd,
-				NULL) != 0) {
+				(ErlDrvEvent) state->fd) != 0) {
 	stale_drv_select(id, state, ERL_DRV_READ);
     }
 }
@@ -1111,8 +1108,7 @@ oready(Eterm id, ErtsDrvEventState *state)
     if (erts_port_task_schedule(id,
 				&state->driver.select->outtask,
 				ERTS_PORT_TASK_OUTPUT,
-				(ErlDrvEvent) state->fd,
-				NULL) != 0) {
+				(ErlDrvEvent) state->fd) != 0) {
 	stale_drv_select(id, state, ERL_DRV_WRITE);
     }
 }

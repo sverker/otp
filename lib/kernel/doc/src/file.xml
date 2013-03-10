@@ -4,7 +4,7 @@
 <erlref>
   <header>
     <copyright>
-      <year>1996</year><year>2012</year>
+      <year>1996</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -60,14 +60,6 @@
     converted, why the Unicode mode for file names is not default on
     systems having completely transparent file naming.</p>
 
-    <note>
-      <p>As of R14B01, the most basic file handling modules
-      (<c>file</c>, <c>prim_file</c>, <c>filelib</c> and
-      <c>filename</c>) accept raw file names, but the rest of OTP is not
-      guaranteed to handle them, why Unicode file naming on systems
-      where it is not default is still considered experimental.</p>
-    </note>
-
     <p>Raw file names is a new feature in OTP R14B01, which allows the
     user to supply completely uninterpreted file names to the
     underlying OS/filesystem. They are supplied as binaries, where it
@@ -100,21 +92,36 @@
       <name name="deep_list"/>
     </datatype>
     <datatype>
-      <name name="fd"/>
+      <name><marker id="type-fd">fd()</marker></name>
+      <desc>
+        <p>A file descriptor representing a file opened in <seealso
+          marker="#raw">raw</seealso> mode.</p>
+      </desc>
     </datatype>
     <datatype>
       <name name="filename"/>
     </datatype>
     <datatype>
+      <name name="filename_all"/>
+    </datatype>
+    <datatype>
       <name name="io_device"/>
       <desc>
         <p>As returned by
-          <seealso marker="#open/2">file:open/2</seealso>,
-          a process handling IO protocols.</p>
+          <seealso marker="#open/2">file:open/2</seealso>;
+          <c>pid()</c> is a process handling I/O-protocols.</p>
       </desc>
     </datatype>
     <datatype>
       <name name="name"/>
+      <desc>
+        <p>If VM is in Unicode filename mode, <c>string()</c> and <c>char()</c>
+          are allowed to be > 255.
+        </p>
+      </desc>
+    </datatype>
+    <datatype>
+      <name name="name_all"/>
       <desc>
         <p>If VM is in Unicode filename mode, <c>string()</c> and <c>char()</c>
           are allowed to be > 255.
@@ -152,9 +159,6 @@
     <datatype>
       <name name="file_info_option"/>
     </datatype>
-    <datatype>
-      <name name="sendfile_option"/>
-    </datatype>
    </datatypes>
 
   <funcs>
@@ -167,6 +171,18 @@
           data in a specific pattern in the future, thus allowing the
           operating system to perform appropriate optimizations.</p>
         <p>On some platforms, this function might have no effect.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="allocate" arity="3"/>
+      <fsummary>Allocate file space</fsummary>
+      <desc>
+        <p><c>allocate/3</c> can be used to preallocate space for a file.</p>
+        <p>This function only succeeds in platforms that implement this
+          feature. When it succeeds, space is preallocated for the file but
+          the file size might not be updated. This behaviour depends on the
+          preallocation implementation. To guarantee the file size is updated
+          one must truncate the file to the new size.</p>
       </desc>
     </func>
     <func>
@@ -261,6 +277,9 @@
         {person, "pelle", 30}.</code>
 <pre>1> <input>file:consult("f.txt").</input>
 {ok,[{person,"kalle",25},{person,"pelle",30}]}</pre>
+        <p>The encoding of of <c><anno>Filename</anno></c> can be set
+          by a comment as described in <seealso
+          marker="stdlib:epp#encoding">epp(3)</seealso>.</p>
       </desc>
     </func>
     <func>
@@ -399,6 +418,9 @@
               of the error.</p>
           </item>
         </taglist>
+        <p>The encoding of of <c><anno>Filename</anno></c> can be set
+          by a comment as described in <seealso
+          marker="stdlib:epp#encoding">epp(3)</seealso>.</p>
       </desc>
     </func>
     <func>
@@ -482,8 +504,40 @@
       <name name="list_dir" arity="1"/>
       <fsummary>List files in a directory</fsummary>
       <desc>
-        <p>Lists all the files in a directory. Returns
+        <p>Lists all files in a directory, <b>except</b> files
+	with "raw" names. Returns
           <c>{ok, <anno>Filenames</anno>}</c> if successful.
+          Otherwise, it returns <c>{error, <anno>Reason</anno>}</c>.
+          <c><anno>Filenames</anno></c> is a list of
+          the names of all the files in the directory. The names are
+          not sorted.</p>
+        <p>Typical error reasons are:</p>
+        <taglist>
+          <tag><c>eacces</c></tag>
+          <item>
+            <p>Missing search or write permissions for <c><anno>Dir</anno></c>
+              or one of its parent directories.</p>
+          </item>
+          <tag><c>enoent</c></tag>
+          <item>
+            <p>The directory does not exist.</p>
+          </item>
+          <tag><c>{no_translation, <anno>Filename</anno>}</c></tag>
+          <item>
+            <p><c><anno>Filename</anno></c> is a <c>binary()</c> with
+              characters coded in ISO-latin-1 and the VM was started
+              with the parameter <c>+fnue</c>.</p>
+          </item>
+        </taglist>
+      </desc>
+    </func>
+    <func>
+      <name name="list_dir_all" arity="1"/>
+      <fsummary>List all files in a directory</fsummary>
+      <desc>
+        <p>Lists all the files in a directory, including files with
+	"raw" names.
+	Returns <c>{ok, <anno>Filenames</anno>}</c> if successful.
           Otherwise, it returns <c>{error, <anno>Reason</anno>}</c>.
           <c><anno>Filenames</anno></c> is a list of
           the names of all the files in the directory. The names are
@@ -610,7 +664,7 @@
       <name name="open" arity="2"/>
       <fsummary>Open a file</fsummary>
       <desc>
-        <p>Opens the file <c><anno>Filename</anno></c> in the mode determined
+        <p>Opens the file <c><anno>File</anno></c> in the mode determined
           by <c><anno>Modes</anno></c>, which may contain one or more of the
           following items:</p>
         <taglist>
@@ -644,7 +698,8 @@
           </item>
           <tag><c>raw</c></tag>
           <item>
-            <p>The <c>raw</c> option allows faster access to a file,
+            <p><marker id="raw"/>
+              The <c>raw</c> option allows faster access to a file,
               because no Erlang process is needed to handle the file.
               However, a file opened in this way has the following
               limitations:</p>
@@ -767,6 +822,10 @@
 	    <p>The Encoding can be changed for a file "on the fly" by using the <seealso marker="stdlib:io#setopts/2">io:setopts/2</seealso> function, why a file can be analyzed in latin1 encoding for i.e. a BOM, positioned beyond the BOM and then be set for the right encoding before further reading.See the <seealso marker="stdlib:unicode">unicode(3)</seealso> module for functions identifying BOM's.</p>
 	    <p>This option is not allowed on <c>raw</c> files.</p>
           </item>
+          <tag><c>ram</c></tag>
+          <item>
+            <p><c>File</c> must be <c>iodata()</c>. Returns an <c>fd()</c> which lets the <c>file</c> module operate on the data in-memory as if it is a file.</p>
+          </item>
         </taglist>
         <p>Returns:</p>
         <taglist>
@@ -861,6 +920,9 @@
               the error.</p>
           </item>
         </taglist>
+        <p>The encoding of of <c><anno>Filename</anno></c> can be set
+          by a comment as described in <seealso
+          marker="stdlib:epp#encoding">epp(3)</seealso>.</p>
       </desc>
     </func>
     <func>
@@ -902,6 +964,9 @@
               of the error.</p>
           </item>
         </taglist>
+        <p>The encoding of of <c><anno>Filename</anno></c> can be set
+          by a comment as described in <seealso
+          marker="stdlib:epp#encoding">epp(3)</seealso>.</p>
       </desc>
     </func>
     <func>
@@ -971,7 +1036,10 @@
               of the error.</p>
           </item>
         </taglist>
-      </desc>
+        <p>The encoding of of <c><anno>Filename</anno></c> can be set
+          by a comment as described in <seealso
+          marker="stdlib:epp#encoding">epp(3)</seealso>.</p>
+   </desc>
     </func>
     <func>
       <name name="path_script" arity="3"/>
@@ -1220,11 +1288,11 @@
         
         <p>The record <c>file_info</c> contains the following fields.</p>
         <taglist>
-          <tag><c>size = integer()</c></tag>
+          <tag><c>size = integer() >= 0</c></tag>
           <item>
             <p>Size of file in bytes.</p>
           </item>
-          <tag><c>type = device | directory | regular | other</c></tag>
+          <tag><c>type = device | directory | other | regular | symlink</c></tag>
           <item>
             <p>The type of the file.</p>
           </item>
@@ -1232,22 +1300,22 @@
           <item>
             <p>The current system access to the file.</p>
           </item>
-          <tag><c>atime = <seealso marker="#type-date_time">date_time()</seealso> | integer() </c></tag> 
+          <tag><c>atime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
           <item>
             <p>The last time the file was read.</p>
           </item>
-          <tag><c>mtime = <seealso marker="#type-date_time">date_time()</seealso> | integer() </c></tag> 
+          <tag><c>mtime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
           <item>
             <p>The last time the file was written.</p>
           </item>
-          <tag><c>ctime = <seealso marker="#type-date_time">date_time()</seealso> | integer() </c></tag> 
+          <tag><c>ctime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >=0</c></tag>
           <item>
             <p>The interpretation of this time field depends on
               the operating system. On Unix, it is the last time
               the file or the inode was changed. In Windows, it is
               the create time.</p>
           </item>
-          <tag><c>mode = integer()</c></tag>
+          <tag><c>mode = integer() >= 0</c></tag>
           <item>
             <p>The file permissions as the sum of the following bit
               values:</p>
@@ -1278,33 +1346,33 @@
             <p>On Unix platforms, other bits than those listed above
               may be set.</p>
           </item>
-          <tag><c>links = integer()</c></tag>
+          <tag><c>links = integer() >= 0</c></tag>
           <item>
             <p>Number of links to the file (this will always be 1 for
               file systems which have no concept of links).</p>
           </item>
-          <tag><c>major_device = integer()</c></tag>
+          <tag><c>major_device = integer() >= 0</c></tag>
           <item>
             <p>Identifies the file system where the file is located.
               In Windows, the number indicates a drive as follows:
               0 means A:, 1 means B:, and so on.</p>
           </item>
-          <tag><c>minor_device = integer()</c></tag>
+          <tag><c>minor_device = integer() >= 0</c></tag>
           <item>
             <p>Only valid for character devices on Unix. In all other
               cases, this field is zero.</p>
           </item>
-          <tag><c>inode = integer()</c></tag>
+          <tag><c>inode = integer() >= 0</c></tag>
           <item>
             <p>Gives the <c>inode</c> number. On non-Unix file systems,
               this field will be zero.</p>
           </item>
-          <tag><c>uid = integer()</c></tag>
+          <tag><c>uid = integer() >= 0</c></tag>
           <item>
             <p>Indicates the owner of the file. Will be zero for
               non-Unix file systems.</p>
           </item>
-          <tag><c>gid = integer()</c></tag>
+          <tag><c>gid = integer() >= 0</c></tag>
           <item>
             <p>Gives the group that the owner of the file belongs to.
               Will be zero for non-Unix file systems.</p>
@@ -1373,10 +1441,41 @@
       <fsummary>See what a link is pointing to</fsummary>
       <desc>
         <p>This function returns <c>{ok, <anno>Filename</anno>}</c> if
+          <c><anno>Name</anno></c> refers to a symbolic link that is
+	  not a "raw" file name, or <c>{error, <anno>Reason</anno>}</c>
+	  otherwise.
+          On platforms that do not support symbolic links, the return
+          value will be <c>{error,enotsup}</c>.</p>
+        <p>Typical error reasons:</p>
+        <taglist>
+          <tag><c>einval</c></tag>
+          <item>
+            <p><c><anno>Name</anno></c> does not refer to a symbolic link
+	    or the name of the file that it refers to does not conform
+	    to the expected encoding.</p>
+          </item>
+          <tag><c>enoent</c></tag>
+          <item>
+            <p>The file does not exist.</p>
+          </item>
+          <tag><c>enotsup</c></tag>
+          <item>
+            <p>Symbolic links are not supported on this platform.</p>
+          </item>
+        </taglist>
+      </desc>
+    </func>
+    <func>
+      <name name="read_link_all" arity="1"/>
+      <fsummary>See what a link is pointing to</fsummary>
+      <desc>
+        <p>This function returns <c>{ok, <anno>Filename</anno>}</c> if
           <c><anno>Name</anno></c> refers to a symbolic link or
           <c>{error, <anno>Reason</anno>}</c> otherwise.
           On platforms that do not support symbolic links, the return
           value will be <c>{error,enotsup}</c>.</p>
+	  <p>Note that <c><anno>Filename</anno></c> can be either a list
+	  or a binary.</p>
         <p>Typical error reasons:</p>
         <taglist>
           <tag><c>einval</c></tag>
@@ -1502,6 +1601,9 @@
               of the error.</p>
           </item>
         </taglist>
+        <p>The encoding of of <c><anno>Filename</anno></c> can be set
+          by a comment as described in <seealso
+          marker="stdlib:epp#encoding">epp(3)</seealso>.</p>
       </desc>
     </func>
     <func>
@@ -1540,6 +1642,12 @@
           <item>
             <p><c><anno>Dir</anno></c> had an improper type,
               such as tuple.</p>
+          </item>
+          <tag><c>no_translation</c></tag>
+          <item>
+            <p><c><anno>Dir</anno></c> is a <c>binary()</c> with
+              characters coded in ISO-latin-1 and the VM was started
+              with the parameter <c>+fnue</c>.</p>
           </item>
         </taglist>
         <warning>
@@ -1609,6 +1717,7 @@
     <func>
       <name name="sendfile" arity="5"/>
       <fsummary>send a file to a socket</fsummary>
+      <type name="sendfile_option"/>
       <desc>
         <p>Sends <c>Bytes</c> from the file
         referenced by <c>RawFile</c> beginning at <c>Offset</c> to
@@ -1732,22 +1841,22 @@
         <p>The following fields are used from the record, if they are
           given.</p>
         <taglist>
-          <tag><c>atime = <seealso marker="#type-date_time">date_time()</seealso> | integer()</c></tag>
+          <tag><c>atime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
           <item>
             <p>The last time the file was read.</p>
           </item>
-          <tag><c>mtime = <seealso marker="#type-date_time">date_time()</seealso> | integer()</c></tag>
+          <tag><c>mtime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
           <item>
             <p>The last time the file was written.</p>
           </item>
-          <tag><c>ctime = <seealso marker="#type-date_time">date_time()</seealso> | integer()</c></tag>
+          <tag><c>ctime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
           <item>
             <p>On Unix, any value give for this field will be ignored
               (the "ctime" for the file will be set to the current
               time). On Windows, this field is the new creation time to
               set for the file.</p>
           </item>
-          <tag><c>mode = integer()</c></tag>
+          <tag><c>mode = integer() >= 0</c></tag>
           <item>
             <p>The file permissions as the sum of the following bit
               values:</p>
@@ -1778,15 +1887,15 @@
             <p>On Unix platforms, other bits than those listed above
               may be set.</p>
           </item>
-          <tag><c>uid = integer()</c></tag>
+          <tag><c>uid = integer() >= 0</c></tag>
           <item>
             <p>Indicates the owner of the file. Ignored for non-Unix
               file systems.</p>
           </item>
-          <tag><c>gid = integer()</c></tag>
+          <tag><c>gid = integer() >= 0</c></tag>
           <item>
             <p>Gives the group that the owner of the file belongs to.
-              Ignored non-Unix file systems.</p>
+              Ignored for non-Unix file systems.</p>
           </item>
         </taglist>
         <p>Typical error reasons:</p>

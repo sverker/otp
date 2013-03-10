@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -152,7 +152,6 @@ heavy(Config) when is_list(Config) ->
     time(5000),
     ?M([],get()),
     case {os:type(),?t:is_debug()} of
-	{vxworks,_} -> ok;
 	{_,true} -> ok;	    
 	_ ->
 	    time(50000),

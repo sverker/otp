@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1999-2009. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2013. All Rights Reserved.
  * 
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -57,7 +57,10 @@ final public class Term extends Any {
   public boolean isAtom() {
 
     if (ObjV == null) { 
-      if (tag == com.ericsson.otp.erlang.OtpExternal.atomTag)
+      if (tag == com.ericsson.otp.erlang.OtpExternal.atomTag ||
+	  tag == com.ericsson.otp.erlang.OtpExternal.atomUtf8Tag ||
+	  tag == com.ericsson.otp.erlang.OtpExternal.smallAtomUtf8Tag)
+
 	return true;
 
       return false;

@@ -1,10 +1,32 @@
 <?xml version="1.0" encoding="latin1" ?>
-<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<!DOCTYPE erlref SYSTEM "erlref.dtd" [
+  <!ENTITY gen_tcp_connect3
+  '<seealso marker="kernel:gen_tcp#connect-3">gen_tcp:connect/3</seealso>'>
+  <!ENTITY gen_tcp_listen2
+  '<seealso marker="kernel:gen_tcp#listen-2">gen_tcp:listen/2</seealso>'>
+  <!ENTITY ip_address
+  '<seealso marker="kernel:inet#type-ip_address">inet:ip_address()</seealso>'>
+  <!ENTITY ssl_connect2
+  '<seealso marker="ssl:ssl#connect-2">ssl:connect/2</seealso>'>
+  <!ENTITY ssl_connect3
+  '<seealso marker="ssl:ssl#connect-3">ssl:connect/3</seealso>'>
+  <!ENTITY ssl_accept2
+  '<seealso marker="ssl:ssl#ssl_accept-2">ssl:ssl_accept/2</seealso>'>
+  <!ENTITY ssl_listen2
+  '<seealso marker="ssl:ssl#listen-2">ssl:listen/2</seealso>'>
+  <!ENTITY gen_tcp '<seealso marker="kernel:gen_tcp">gen_tcp(3)</seealso>'>
+  <!ENTITY inet '<seealso marker="kernel:inet">inet(3)</seealso>'>
+  <!ENTITY ssl '<seealso marker="ssl:ssl">ssl(3)</seealso>'>
+  <!ENTITY % also SYSTEM "seealso.ent" >
+  <!ENTITY % here SYSTEM "seehere.ent" >
+  %also;
+  %here;
+]>
 
 <erlref>
 <header>
 <copyright>
-<year>2011</year>
+<year>2011</year><year>2013</year>
 <holder>Ericsson AB. All Rights Reserved.</holder>
 </copyright>
 <legalnotice>
@@ -38,15 +60,13 @@ under the License.
 <description>
 
 <p>
-This module implements diameter transport over TCP using gen_tcp.
-It can be specified as the value of a transport_module option to
-<seealso
-marker="diameter#add_transport">diameter:add_transport/2</seealso>
+This module implements diameter transport over TCP using &gen_tcp;.
+It can be specified as the value of a <c>transport_module</c> option to
+&mod_add_transport;
 and implements the behaviour documented in
-<seealso marker="diameter_transport">diameter_transport(3)</seealso>.
-TLS security is supported, both as an upgrade following
-capabilities exchange as specified by RFC 3588 and
-at connection establishment as in the current draft standard.</p>
+&man_transport;.
+TLS security is supported, either as an upgrade following
+capabilities exchange or at connection establishment.</p>
 
 <p>
 Note that the ssl application is required for TLS and must be started
@@ -65,52 +85,63 @@ before configuring TLS capability on diameter transports.</p>
 <fsummary>Start a transport process.</fsummary>
 <type>
 <v>Type = connect | accept</v>
-<v>Ref = reference()</v>
+<v>Ref = &mod_transport_ref;</v>
 <v>Svc = #diameter_service{}</v>
-<v>Opt = OwnOpt | SslOpt | OtherOpt</v>
+<v>Opt = OwnOpt | SslOpt | TcpOpt</v>
 <v>Pid = pid()</v>
-<v>LAddr = ip_address()</v>
+<v>LAddr = &ip_address;</v>
 <v>Reason = term()</v>
-<v>OwnOpt = {raddr, ip_address()}
+<v>OwnOpt = {raddr, &ip_address;}
           | {rport, integer()}
-          | {port, integer()}</v>
+          | {port, integer()}
+          | {fragment_timer, infinity | 0..16#FFFFFFFF}</v>
 <v>SslOpt = {ssl_options, true | list()}</v>
-<v>OtherOpt = term()</v>
+<v>TcpOpt = term()</v>
 </type>
 <desc>
 
 <p>
-The start function required by <seealso
-marker="diameter_transport#start">diameter_transport(3)</seealso>.</p>
+The start function required by &man_transport;.</p>
 
 <p>
-The only diameter_tcp-specific argument is the options list.
 Options <c>raddr</c> and <c>rport</c> specify the remote address
 and port for a connecting transport and are not valid for a listening
 transport.
 Option <c>ssl_options</c> must be specified for a transport
-that must be able to support TLS: a value of <c>true</c> results in a
+that should support TLS: a value of <c>true</c> results in a
 TLS handshake immediately upon connection establishment while
-list() specifies options to be passed to ssl:connect/2 of ssl:ssl_accept/2
-after capabilities exchange if TLS is negotiated.
-Remaining options are any accepted by ssl:connect/3 or gen_tcp:connect/3 for
-a connecting transport, or ssl:listen/3 or gen_tcp:listen/2 for
+<c>list()</c> specifies options to be passed to &ssl_connect2; or
+&ssl_accept2;
+after capabilities exchange if TLS is negotiated.</p>
+
+<p>
+Option <c>fragment_timer</c> specifies the timeout, in milliseconds,
+of a timer used to flush messages from the incoming byte
+stream even if the number of bytes indicated in the Message Length
+field of its Diameter Header have not yet been accumulated:
+such a message is received over the transport interface after
+two successive timeouts without the reception of additional bytes.
+Defaults to 1000.</p>
+
+<p>
+Remaining options are any accepted by &ssl_connect3; or
+&gen_tcp_connect3; for
+a connecting transport, or &ssl_listen2; or &gen_tcp_listen2; for
 a listening transport, depending on whether or not <c>{ssl_options, true}</c>
 has been specified.
-Options <c>binary</c>, <c>packet</c> and <c>active</c> cannot be specified.
+Options <c>binary</c>,
+<c>packet</c> and <c>active</c> cannot be specified.
 Also, option <c>port</c> can be specified for a listening transport
 to specify the local listening port, the default being the standardized
 3868 if unspecified.
-Note that option <c>ip</c> specifies the local address.</p>
+Note that the option <c>ip</c> specifies the local address.</p>
 
 <p>
 An <c>ssl_options</c> list must be specified if and only if
-the transport in question has specified an Inband-Security-Id
-AVP with value TLS on the relevant call to
-<seealso
-marker="diameter#start_service">start_service/2</seealso> or
-<seealso
-marker="diameter#add_transport">add_transport/2</seealso>,
+the transport in question has set <c>Inband-Security-Id</c> to
+1 (<c>TLS</c>), as
+specified to either &mod_start_service; or
+&mod_add_transport;,
 so that the transport process will receive notification of
 whether or not to commence with a TLS handshake following capabilities
 exchange.
@@ -122,9 +153,9 @@ that will not be forthcoming, which will eventually cause the RFC 3539
 watchdog to take down the connection.</p>
 
 <p>
-If the service specifies more than one Host-IP-Address and
-option <c>ip</c> is unspecified then then the
-first of the service's addresses is used as the local address.</p>
+If the <c>#diameter_service{}</c> record has more than one
+<c>Host-IP-Address</c> and option <c>ip</c> is unspecified then the
+first of the these addresses is used as the local address.</p>
 
 <p>
 The returned local address list has length one.</p>
@@ -141,8 +172,7 @@ The returned local address list has length one.</p>
 <title>SEE ALSO</title>
 
 <p>
-<seealso marker="diameter">diameter(3)</seealso>,
-<seealso marker="diameter_transport">diameter_transport(3)</seealso></p>
+&man_main;, &man_transport;, &gen_tcp;, &inet;, &ssl;</p>
 
 </section>
 

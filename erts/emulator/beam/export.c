@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -137,7 +137,6 @@ export_alloc(struct export_entry* tmpl_e)
 	obj->code[2] = tmpl->code[2];
 	obj->code[3] = (BeamInstr) em_call_error_handler;
 	obj->code[4] = 0;
-	obj->match_prog_set = NULL;
 
 	for (ix=0; ix<ERTS_NUM_CODE_IX; ix++) {
 	    obj->addressv[ix] = obj->code+3;
@@ -270,8 +269,9 @@ erts_find_function(Eterm m, Eterm f, unsigned int a, ErtsCodeIndex code_ix)
     struct export_entry* ee;
 
     ee = hash_get(&export_tables[code_ix].htable, init_template(&templ, m, f, a));
-    if (ee == NULL || (ee->ep->addressv[code_ix] == ee->ep->code+3 &&
-		       ee->ep->code[3] != (BeamInstr) em_call_traced_function)) {
+    if (ee == NULL ||
+	(ee->ep->addressv[code_ix] == ee->ep->code+3 &&
+	 ee->ep->code[3] != (BeamInstr) BeamOp(op_i_generic_breakpoint))) {
 	return NULL;
     }
     return ee->ep;
@@ -393,7 +393,9 @@ void export_start_staging(void)
     IndexTable* dst = &export_tables[dst_ix];
     IndexTable* src = &export_tables[src_ix];
     struct export_entry* src_entry;
+#ifdef DEBUG
     struct export_entry* dst_entry;
+#endif
     int i;
 
     ASSERT(dst_ix != src_ix);
@@ -406,7 +408,10 @@ void export_start_staging(void)
     for (i = 0; i < src->entries; i++) {
 	src_entry = (struct export_entry*) erts_index_lookup(src, i);
         src_entry->ep->addressv[dst_ix] = src_entry->ep->addressv[src_ix];
-	dst_entry = (struct export_entry*) index_put_entry(dst, src_entry);
+#ifdef DEBUG
+	dst_entry = (struct export_entry*) 
+#endif
+	    index_put_entry(dst, src_entry);
 	ASSERT(entry_to_blob(src_entry) == entry_to_blob(dst_entry));
     }
     export_staging_unlock();

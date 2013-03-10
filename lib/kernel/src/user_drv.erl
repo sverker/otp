@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -129,7 +129,7 @@ server1(Iport, Oport, Shell) ->
     Gr = gr_add_cur(Gr1, Curr, Shell1),
     %% Print some information.
     io_request({put_chars, unicode,
-		flatten(io_lib:format("~s\n",
+		flatten(io_lib:format("~ts\n",
 				      [erlang:system_info(system_version)]))},
 	       Iport, Oport),
     %% Enter the server loop.

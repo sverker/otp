@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1996-2011. All Rights Reserved.
+# Copyright Ericsson AB 1996-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -107,7 +107,6 @@ MODULES = \
 	net_adm \
 	net_kernel \
 	os \
-	packages \
 	pg2 \
 	ram_file \
 	rpc \
@@ -149,7 +148,7 @@ APPUP_TARGET= $(EBIN)/$(APPUP_FILE)
 ifeq ($(NATIVE_LIBS_ENABLED),yes)
 ERL_COMPILE_FLAGS += +native
 endif
-ERL_COMPILE_FLAGS += -I../include
+ERL_COMPILE_FLAGS += -I../include -Werror
 
 # ----------------------------------------------------
 # Targets
@@ -171,13 +170,13 @@ docs:
 # ----------------------------------------------------
 
 ../../hipe/main/hipe.hrl: ../../hipe/vsn.mk ../../hipe/main/hipe.hrl.src
-	sed -e "s;%VSN%;$(HIPE_VSN);" ../../hipe/main/hipe.hrl.src > ../../hipe/main/hipe.hrl
+	$(vsn_verbose)sed -e "s;%VSN%;$(HIPE_VSN);" ../../hipe/main/hipe.hrl.src > ../../hipe/main/hipe.hrl
 
 $(APP_TARGET): $(APP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(KERNEL_VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(KERNEL_VSN);' $< > $@
 
 $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(KERNEL_VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(KERNEL_VSN);' $< > $@
 
 
 EPMD_FLAGS = -Depmd_port_no=$(EPMD_PORT_NO)	\
@@ -187,10 +186,10 @@ EPMD_FLAGS = -Depmd_port_no=$(EPMD_PORT_NO)	\
              -Derlang_daemon_port=$(EPMD_PORT_NO)
 
 $(ESRC)/inet_dns_record_adts.hrl: $(ESRC)/inet_dns_record_adts.pl
-	LANG=C $(PERL) $< > $@
+	$(gen_verbose)LANG=C $(PERL) $< > $@
 
 $(EBIN)/erl_epmd.beam: $(ESRC)/erl_epmd.erl
-	$(ERLC) $(ERL_COMPILE_FLAGS) $(EPMD_FLAGS) -o$(EBIN) $<
+	$(V_ERLC) $(ERL_COMPILE_FLAGS) $(EPMD_FLAGS) -o$(EBIN) $<
 
 # ----------------------------------------------------
 # Release Target
@@ -198,13 +197,13 @@ $(EBIN)/erl_epmd.beam: $(ESRC)/erl_epmd.erl
 include $(ERL_TOP)/make/otp_release_targets.mk
 
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(ERL_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(INTERNAL_HRL_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/include
-	$(INSTALL_DATA) $(HRL_FILES) $(RELSYSDIR)/include
-	$(INSTALL_DIR) $(RELSYSDIR)/ebin
-	$(INSTALL_DATA) $(TARGET_FILES) $(RELSYSDIR)/ebin
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(ERL_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(INTERNAL_HRL_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/include"
+	$(INSTALL_DATA) $(HRL_FILES) "$(RELSYSDIR)/include"
+	$(INSTALL_DIR) "$(RELSYSDIR)/ebin"
+	$(INSTALL_DATA) $(TARGET_FILES) "$(RELSYSDIR)/ebin"
 
 release_docs_spec:
 

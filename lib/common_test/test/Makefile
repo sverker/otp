@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2008-2012. All Rights Reserved.
+# Copyright Ericsson AB 2008-2013. All Rights Reserved.
 #
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -39,13 +39,26 @@ MODULES= \
 	ct_sequence_1_SUITE \
 	ct_repeat_1_SUITE \
 	ct_testspec_1_SUITE \
+	ct_testspec_2_SUITE \
+	ct_testspec_3_SUITE \
 	ct_skip_SUITE \
 	ct_error_SUITE \
 	ct_test_server_if_1_SUITE \
 	ct_config_SUITE \
 	ct_master_SUITE \
 	ct_misc_1_SUITE \
-	ct_hooks_SUITE
+	ct_hooks_SUITE \
+	ct_netconfc_SUITE \
+	ct_basic_html_SUITE \
+	ct_auto_compile_SUITE \
+	ct_verbosity_SUITE \
+	ct_shell_SUITE \
+	ct_system_error_SUITE \
+	ct_snmp_SUITE \
+	ct_group_leader_SUITE \
+	ct_cover_SUITE \
+	ct_groups_search_SUITE \
+	ct_surefire_SUITE
 
 ERL_FILES= $(MODULES:%=%.erl)
 
@@ -97,10 +110,10 @@ include $(ERL_TOP)/make/otp_release_targets.mk
 release_spec: opt
 
 release_tests_spec:
-	$(INSTALL_DIR) $(RELSYSDIR)
-	$(INSTALL_DATA) $(ERL_FILES) $(COVERFILE) $(RELSYSDIR)
-	$(INSTALL_DATA) common_test.spec $(RELSYSDIR)
-	chmod -R u+w $(RELSYSDIR)
-	@tar cf - *_SUITE_data | (cd $(RELSYSDIR); tar xf -)
+	$(INSTALL_DIR) "$(RELSYSDIR)"
+	$(INSTALL_DATA) $(ERL_FILES) $(COVERFILE) "$(RELSYSDIR)"
+	$(INSTALL_DATA) common_test.spec common_test.cover "$(RELSYSDIR)"
+	chmod -R u+w "$(RELSYSDIR)"
+	@tar cf - *_SUITE_data | (cd "$(RELSYSDIR)"; tar xf -)
 
 release_docs_spec:

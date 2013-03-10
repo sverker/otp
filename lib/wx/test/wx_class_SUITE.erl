@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -82,13 +82,14 @@ calendarCtrl(Config) ->
 	true ->
 	    ?log("DateAttr is null~n",[]);
 	false ->
-	    ?log("DateAttr is useable~n",[])
+	    ?log("DateAttr is useable~n",[]),
+	    DateAttr = ?mt(wxCalendarDateAttr, wxCalendarDateAttr:new()),
+	    wxCalendarDateAttr:setBackgroundColour(DateAttr, {0,243,0}),
+	    wxCalendarCtrl:setAttr(Cal, Day, DateAttr),
+	    DateAttr1 = ?mt(wxCalendarDateAttr, wxCalendarCtrl:getAttr(Cal,Day)),
+	    io:format("DateAttr ~p~n",[DateAttr1]),
+	    ?m({0,243,0,255}, wxCalendarDateAttr:getBackgroundColour(DateAttr1))
     end,
-    DateAttr = ?mt(wxCalendarDateAttr, wxCalendarDateAttr:new()),
-    wxCalendarDateAttr:setBackgroundColour(DateAttr, {0,243,0}),
-    wxCalendarCtrl:setAttr(Cal, Day, DateAttr),
-    DateAttr1 = ?mt(wxCalendarDateAttr, wxCalendarCtrl:getAttr(Cal,Day)),
-    ?m({0,243,0,255}, wxCalendarDateAttr:getBackgroundColour(DateAttr1)),
 
     ?m({YMD, _},wxCalendarCtrl:getDate(Cal)),
 
@@ -129,10 +130,18 @@ treeCtrl(Config) ->
     wxWindow:setSizerAndFit(Panel, Sizer),
     wxFrame:show(Frame),
 
+    ok = wxTreeCtrl:expand(Tree, Root),
     ?m([], wxTreeCtrl:getItemData(Tree, Root)),
     ?m({data,item1}, wxTreeCtrl:getItemData(Tree, Item1)),
     ?m({data,item2}, wxTreeCtrl:getItemData(Tree, Item2)),
     ?m({data,item3}, wxTreeCtrl:getItemData(Tree, Item3)),
+
+    {true, {X0,Y0,W0,H0}} = ?m({_,_},wxTreeCtrl:getBoundingRect(Tree, Item1, [{textOnly, true}])),
+    ?m({true, {_,Y1,_,_}} when Y1 > Y0, wxTreeCtrl:getBoundingRect(Tree, Item2)),
+    ?m({Item1, _}, wxTreeCtrl:hitTest(Tree, {X0+W0 div 2, Y0+H0 div 2})),
+    ?m(true, wxTreeCtrl:isTreeItemIdOk(Item1)),
+    ?m({0, _}, wxTreeCtrl:hitTest(Tree, {X0+W0 div 2, Y0+H0+H0})),
+    ?m(false, wxTreeCtrl:isTreeItemIdOk(0)),
 
     wxFrame:connect(Tree, command_tree_item_expanded),
     wxFrame:connect(Tree, command_tree_item_collapsed),
@@ -476,7 +485,9 @@ taskBarIcon(Config) ->
     Wx = wx:new(),
     Frame = wxFrame:new(Wx, ?wxID_ANY, "Frame"),
     TBI = wxTaskBarIcon:new(),
-    Icon = wxIcon:new(filename:join(code:priv_dir(debugger), "erlang_bug.png")),
+    Image = wxImage:new(filename:join(code:priv_dir(debugger), "erlang_bug.png")),
+    io:format("Image ~p~n",[wxImage:ok(Image)]),
+    Icon = wxIcon:new(filename:join(code:priv_dir(debugger), "erlang_bug.png"), [{type, ?wxBITMAP_TYPE_PNG}]),
     wxTaskBarIcon:setIcon(TBI, Icon, [{tooltip, "Testing wxTaskBarIcon"}]),
     wxWindow:show(Frame),
     wxTaskBarIcon:connect(TBI, taskbar_left_down, [{callback, fun(Ev,_) -> io:format("Left clicked: ~p~n",[Ev]) end}]),

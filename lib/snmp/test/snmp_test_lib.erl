@@ -324,7 +324,7 @@ fail(Reason, Mod, Line) ->
 skip(Reason, Module, Line) ->
     String = lists:flatten(io_lib:format("Skipping ~p(~p): ~p~n", 
 					 [Module, Line, Reason])),
-    exit({skipped, String}).
+    exit({skip, String}).
     
 
 %% ----------------------------------------------------------------
@@ -516,8 +516,6 @@ warning_msg(F, A) ->
 timeout(T) ->
     trunc(timeout(T, os:type())).
 
-timeout(T, vxworks) ->
-    5 * T * timetrap_scale_factor();
 timeout(T, _) ->
     T * timetrap_scale_factor().
             

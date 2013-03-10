@@ -90,7 +90,7 @@ typedef struct {
     ErlMessage* first;
     ErlMessage** last;  /* point to the last next pointer */
     ErlMessage** save;
-    int len;            /* queue length */
+    Sint len;            /* queue length */
 
     /*
      * The following two fields are used by the recv_mark/1 and
@@ -105,7 +105,7 @@ typedef struct {
 typedef struct {
     ErlMessage* first;
     ErlMessage** last;  /* point to the last next pointer */
-    int len;            /* queue length */
+    Sint len;            /* queue length */
 } ErlMessageInQueue;
 
 #endif
@@ -125,16 +125,16 @@ typedef struct {
 #ifdef ERTS_SMP
 
 /* Move in message queue to end of private message queue */
-#define ERTS_SMP_MSGQ_MV_INQ2PRIVQ(P)			\
-do {							\
-    if ((P)->msg_inq.first) {				\
-	*(P)->msg.last = (P)->msg_inq.first;		\
-	(P)->msg.last = (P)->msg_inq.last;		\
-	(P)->msg.len += (P)->msg_inq.len;		\
-	(P)->msg_inq.first = NULL;			\
-	(P)->msg_inq.last = &(P)->msg_inq.first;	\
-	(P)->msg_inq.len = 0;				\
-    }							\
+#define ERTS_SMP_MSGQ_MV_INQ2PRIVQ(P)					\
+do {									\
+    if ((P)->msg_inq.first) {						\
+	*(P)->msg.last = (P)->msg_inq.first;				\
+	(P)->msg.last = (P)->msg_inq.last;				\
+	(P)->msg.len += (P)->msg_inq.len;				\
+	(P)->msg_inq.first = NULL;					\
+	(P)->msg_inq.last = &(P)->msg_inq.first;			\
+	(P)->msg_inq.len = 0;						\
+    }									\
 } while (0)
 
 /* Add message last in message queue */
@@ -234,7 +234,7 @@ void erts_queue_message(Process*, ErtsProcLocks*, ErlHeapFragment*, Eterm, Eterm
 #endif
 );
 void erts_deliver_exit_message(Eterm, Process*, ErtsProcLocks *, Eterm, Eterm);
-void erts_send_message(Process*, Process*, ErtsProcLocks*, Eterm, unsigned);
+Sint erts_send_message(Process*, Process*, ErtsProcLocks*, Eterm, unsigned);
 void erts_link_mbuf_to_proc(Process *proc, ErlHeapFragment *bp);
 
 void erts_move_msg_mbuf_to_heap(Eterm**, ErlOffHeap*, ErlMessage *);
@@ -244,6 +244,9 @@ void erts_move_msg_attached_data_to_heap(Eterm **, ErlOffHeap *, ErlMessage *);
 
 Eterm erts_msg_distext2heap(Process *, ErtsProcLocks *, ErlHeapFragment **,
 			    Eterm *, ErtsDistExternal *);
+
+void erts_cleanup_offheap(ErlOffHeap *offheap);
+
 
 ERTS_GLB_INLINE Uint erts_msg_used_frag_sz(const ErlMessage *msg);
 ERTS_GLB_INLINE Uint erts_msg_attached_data_size(ErlMessage *msg);

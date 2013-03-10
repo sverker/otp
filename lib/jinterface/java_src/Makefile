@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 2000-2011. All Rights Reserved.
+# Copyright Ericsson AB 2000-2013. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -47,7 +47,7 @@ POM_SRC= $(POM_FILE).src
 # ----------------------------------------------------
 
 $(POM_TARGET): $(POM_SRC) ../vsn.mk
-	sed -e 's;%VSN%;$(VSN);' $< > $@
+	$(vsn_verbose)sed -e 's;%VSN%;$(VSN);' $< > $@
 
 
 include $(ERL_TOP)/make/otp_subdir.mk

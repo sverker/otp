@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2000-2012. All Rights Reserved.
+ * Copyright Ericsson AB 2000-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -122,6 +122,8 @@ typedef struct {
 #endif
 } ErtsAsyncData;
 
+#if defined(USE_THREADS) && defined(USE_VM_PROBES)
+
 /*
  * Some compilers, e.g. GCC 4.2.1 and -O3, will optimize away DTrace
  * calls if they're the last thing in the function.  :-(
@@ -129,6 +131,7 @@ typedef struct {
  * https://github.com/memcached/memcached/commit/6298b3978687530bc9d219b6ac707a1b681b2a46
  */
 static unsigned gcc_optimizer_hack = 0;
+#endif
 
 int erts_async_max_threads; /* Initialized by erl_init.c */
 int erts_async_thread_suggested_stack_size; /* Initialized by erl_init.c */
@@ -281,8 +284,8 @@ static ERTS_INLINE void async_add(ErtsAsync *a, ErtsAsyncQ* q)
         len = -1;
         DTRACE2(aio_pool_add, port_str, len);
     }
-#endif
     gcc_optimizer_hack++;
+#endif
 }
 
 static ERTS_INLINE ErtsAsync *async_get(ErtsThrQ_t *q,
@@ -379,10 +382,15 @@ static ERTS_INLINE ErtsAsync *async_get(ErtsThrQ_t *q,
 
 static ERTS_INLINE void call_async_ready(ErtsAsync *a)
 {
+#if ERTS_USE_ASYNC_READY_Q
     Port *p = erts_id2port_sflgs(a->port,
 				 NULL,
 				 0,
 				 ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP);
+#else
+    Port *p = erts_thr_id2port_sflgs(a->port,
+				     ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP);
+#endif
     if (!p) {
 	if (a->async_free)
 	    a->async_free(a->async_data);
@@ -392,8 +400,14 @@ static ERTS_INLINE void call_async_ready(ErtsAsync *a)
 	    if (a->async_free)
 		a->async_free(a->async_data);
 	}
+#if ERTS_USE_ASYNC_READY_Q
 	erts_port_release(p);
+#else
+	erts_thr_port_release(p);
+#endif
     }
+    if (a->pdl)
+	driver_pdl_dec_refc(a->pdl);
     if (a->hndl)
 	erts_ddll_dereference_driver(a->hndl);
 }
@@ -402,9 +416,6 @@ static ERTS_INLINE void async_reply(ErtsAsync *a, ErtsThrQPrepEnQ_t *prep_enq)
 {
 #if ERTS_USE_ASYNC_READY_Q
     ErtsAsyncReadyQ *arq;
-
-    if (a->pdl)
-	driver_pdl_dec_refc(a->pdl);
 
 #if ERTS_ASYNC_PRINT_JOB
     erts_fprintf(stderr, "=>> %ld\n", a->async_id);
@@ -425,8 +436,6 @@ static ERTS_INLINE void async_reply(ErtsAsync *a, ErtsThrQPrepEnQ_t *prep_enq)
 #else /* ERTS_USE_ASYNC_READY_Q */
 
 	call_async_ready(a);
-	if (a->pdl)
-	    driver_pdl_dec_refc(a->pdl);
 	erts_free(ERTS_ALC_T_ASYNC, (void *) a);
 
 #endif /* ERTS_USE_ASYNC_READY_Q */
@@ -604,7 +613,7 @@ long driver_async(ErlDrvPort ix, unsigned int* key,
 #endif
 
     prt = erts_drvport2port(ix);
-    if (!prt)
+    if (prt == ERTS_INVALID_ERL_DRV_PORT)
 	return -1;
 
     ERTS_SMP_LC_ASSERT(erts_lc_is_port_locked(prt));
@@ -615,7 +624,7 @@ long driver_async(ErlDrvPort ix, unsigned int* key,
     a->sched_id = sched_id;
 #endif
     a->hndl = (DE_Handle*)prt->drv_ptr->handle;
-    a->port = prt->id;
+    a->port = prt->common.id;
     a->pdl = NULL;
     a->async_data = async_data;
     a->async_invoke = async_invoke;

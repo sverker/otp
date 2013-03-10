@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2005-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2005-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -276,8 +276,6 @@ secure_cookie(Config) when is_list(Config) ->
     tsp("secure_cookie -> entry with"
 	"~n   Config: ~p", [Config]),
     
-    inets:enable_trace(max, io, httpc),
-
     %% httpc:reset_cookies(), 
 
     tsp("secure_cookie -> Cookies 1: ~p", [httpc:which_cookies()]),
@@ -309,7 +307,6 @@ secure_cookie(Config) when is_list(Config) ->
 
     tsp("secure_cookie -> Cookies 4: ~p", [httpc:which_cookies()]),
 
-    inets:disable_trace(),
     tsp("secure_cookie -> done"),
     ok.
     

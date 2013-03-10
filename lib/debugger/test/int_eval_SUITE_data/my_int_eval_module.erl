@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -76,12 +76,6 @@ apply_test(Fun) ->
     [a,b,d] = ?MODULE:Func(same([a,b,c,d]), same([c])),
     [d,e] = apply(Mod, Func, [same([d,e,f]), same([f])]),
     [3] = apply(?MODULE, Func, [same([3,4]),same([4])]),
-
-    %% This is obsolete, but it should work anyway.
-    HomeMadeFun = {?MODULE,my_subtract},
-    [a] = HomeMadeFun(same([a,x,c]), same([x,c])),
-    [x] = apply(HomeMadeFun, [[x,y],[y,z]]),
-
     ok.
 
 number(X) -> {number,X}.

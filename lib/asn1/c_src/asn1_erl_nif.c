@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2002-2012. All Rights Reserved.
+ * Copyright Ericsson AB 2002-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -27,7 +27,6 @@
 #define ASN1_OK 0
 #define ASN1_ERROR -1
 #define ASN1_COMPL_ERROR 1
-#define ASN1_MEMORY_ERROR 0
 #define ASN1_DECODE_ERROR 2
 #define ASN1_TAG_ERROR -3
 #define ASN1_LEN_ERROR -4
@@ -851,11 +850,8 @@ int ber_decode_begin(ErlNifEnv* env, ERL_NIF_TERM *term, unsigned char *in_buf,
     };
 
     // The remaining binary after one ASN1 segment has been decoded
-    if ((rest_data = enif_make_new_binary(env, in_buf_len - ib_index, &rest))
-	    == NULL) {
-	*term = enif_make_atom(env, "could_not_alloc_binary");
-	return ASN1_ERROR;
-    }
+    rest_data = enif_make_new_binary(env, in_buf_len - ib_index, &rest);
+    memcpy(rest_data, in_buf+ib_index, in_buf_len - ib_index);
 
     *term = enif_make_tuple2(env, decoded_term, rest);
     return ASN1_OK;
@@ -1134,8 +1130,8 @@ int ber_encode_length(size_t size, mem_chunk_t **curr, unsigned int *count) {
 	(*curr)->curr -= 1;
 	(*count)++;
     } else {
-	int chunks = size / 256 + 1;
-	if (ber_check_memory(curr, chunks + 1))
+	int chunks = 0;
+	if (ber_check_memory(curr, 8))
 	    return ASN1_ERROR;
 
 	while (size > 0)
@@ -1144,6 +1140,7 @@ int ber_encode_length(size_t size, mem_chunk_t **curr, unsigned int *count) {
 	    size >>= 8;
 	    (*curr)->curr -= 1;
 	    (*count)++;
+	    chunks++;
 	}
 
 	*(*curr)->curr = chunks | 0x80;
@@ -1221,7 +1218,33 @@ static ERL_NIF_TERM encode_per_complete(ErlNifEnv* env, int argc,
     return enif_make_binary(env, &out_binary);
 }
 
-static ERL_NIF_TERM decode_ber_tlv(ErlNifEnv* env, int argc,
+static ERL_NIF_TERM
+make_ber_error_term(ErlNifEnv* env, unsigned int return_code,
+		    unsigned int err_pos)
+{
+    ERL_NIF_TERM reason;
+    ERL_NIF_TERM t;
+
+    switch (return_code) {
+    case ASN1_TAG_ERROR:
+	reason = enif_make_atom(env, "invalid_tag");
+	break;
+    case ASN1_LEN_ERROR:
+    case ASN1_INDEF_LEN_ERROR:
+	reason = enif_make_atom(env, "invalid_length");
+	break;
+    case ASN1_VALUE_ERROR:
+	reason = enif_make_atom(env, "invalid_value");
+	break;
+    default:
+	reason = enif_make_atom(env, "unknown");
+	break;
+    }
+    t = enif_make_tuple2(env, reason, enif_make_int(env, err_pos));
+    return enif_make_tuple2(env, enif_make_atom(env, "error"), t);
+}
+
+static ERL_NIF_TERM decode_ber_tlv_raw(ErlNifEnv* env, int argc,
 	const ERL_NIF_TERM argv[]) {
     ErlNifBinary in_binary;
     ERL_NIF_TERM return_term;
@@ -1230,11 +1253,11 @@ static ERL_NIF_TERM decode_ber_tlv(ErlNifEnv* env, int argc,
     if (!enif_inspect_iolist_as_binary(env, argv[0], &in_binary))
 	return enif_make_badarg(env);
 
-    if ((return_code = ber_decode_begin(env, &return_term, in_binary.data,
-	    in_binary.size, &err_pos)) != ASN1_OK
-    )
-	return enif_make_tuple2(env, enif_make_atom(env,"error"), enif_make_tuple2(env,
-			enif_make_int(env, return_code),enif_make_int(env, err_pos)));
+    return_code = ber_decode_begin(env, &return_term, in_binary.data,
+				   in_binary.size, &err_pos);
+    if (return_code != ASN1_OK) {
+	return make_ber_error_term(env, return_code, err_pos);
+    }
     return return_term;
 }
 
@@ -1297,8 +1320,10 @@ static void unload(ErlNifEnv* env, void* priv_data) {
 
 }
 
-static ErlNifFunc nif_funcs[] = { { "encode_per_complete", 1,
-	encode_per_complete }, { "decode_ber_tlv", 1, decode_ber_tlv }, {
-	"encode_ber_tlv", 1, encode_ber_tlv } };
+static ErlNifFunc nif_funcs[] =  {
+    { "encode_per_complete", 1, encode_per_complete },
+    { "decode_ber_tlv_raw", 1, decode_ber_tlv_raw },
+    { "encode_ber_tlv", 1, encode_ber_tlv },
+};
 
 ERL_NIF_INIT(asn1rt_nif, nif_funcs, load, NULL, upgrade, unload)

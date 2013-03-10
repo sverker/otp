@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2000-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -136,6 +136,8 @@ handle_call({del_dir, Name}, _From, Handle) ->
 
 handle_call({list_dir, Name}, _From, Handle) ->
     {reply, ?PRIM_FILE:list_dir(Handle, Name), Handle};
+handle_call({list_dir_all, Name}, _From, Handle) ->
+    {reply, ?PRIM_FILE:list_dir_all(Handle, Name), Handle};
 
 handle_call(get_cwd, _From, Handle) ->
     {reply, ?PRIM_FILE:get_cwd(Handle), Handle};
@@ -167,6 +169,8 @@ handle_call({read_link_info, Name, Opts}, _From, Handle) ->
 
 handle_call({read_link, Name}, _From, Handle) ->
     {reply, ?PRIM_FILE:read_link(Handle, Name), Handle};
+handle_call({read_link_all, Name}, _From, Handle) ->
+    {reply, ?PRIM_FILE:read_link_all(Handle, Name), Handle};
 
 handle_call({make_link, Old, New}, _From, Handle) ->
     {reply, ?PRIM_FILE:make_link(Handle, Old, New), Handle};

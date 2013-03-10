@@ -578,8 +578,22 @@
     <xsl:param name="curModule"/>
     <html>
       <head>
-        <link rel="stylesheet" href="{$topdocdir}/otp_doc.css" type="text/css"/>
-        <title>Erlang -- <xsl:value-of select="header/title"/></title>
+        <xsl:choose>
+          <xsl:when test="string-length($stylesheet) > 0">
+            <link rel="stylesheet" href="{$topdocdir}/{$stylesheet}" type="text/css"/>
+          </xsl:when>
+          <xsl:otherwise>
+            <link rel="stylesheet" href="{$topdocdir}/otp_doc.css" type="text/css"/>
+          </xsl:otherwise>
+        </xsl:choose>
+        <xsl:choose>
+          <xsl:when test="string-length($winprefix) > 0">
+            <title><xsl:value-of select="$winprefix"/> -- <xsl:value-of select="header/title"/></title>
+          </xsl:when>
+          <xsl:otherwise>
+            <title>Erlang -- <xsl:value-of select="header/title"/></title>
+          </xsl:otherwise>
+        </xsl:choose>
       </head>
       <body bgcolor="white" text="#000000" link="#0000ff" vlink="#ff00ff" alink="#ff0000">
 
@@ -719,7 +733,14 @@
 
 
   <xsl:template name="menu_top">
-    <img alt="Erlang logo" src="{$topdocdir}/erlang-logo.png"/>
+    <xsl:choose>
+      <xsl:when test="string-length($logo) > 0">
+        <img alt="Erlang logo" src="{$topdocdir}/{$logo}"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <img alt="Erlang logo" src="{$topdocdir}/erlang-logo.png"/>
+      </xsl:otherwise>
+    </xsl:choose>
     <br/>
     <small>
       <xsl:if test="boolean(/book/parts/part)">
@@ -731,7 +752,14 @@
       <xsl:if test="boolean(/book/releasenotes)">
         <a href="release_notes.html">Release Notes</a><br/>
       </xsl:if>
-      <a href="{$pdfdir}/{$appname}-{$appver}.pdf">PDF</a><br/>
+      <xsl:choose>
+	<xsl:when test="string-length($pdfname) > 0">
+	  <a href="{$pdfdir}/{$pdfname}.pdf">PDF</a><br/>
+	</xsl:when>
+	<xsl:otherwise>
+	  <a href="{$pdfdir}/{$appname}-{$appver}.pdf">PDF</a><br/>
+	</xsl:otherwise>
+      </xsl:choose>
       <a href="{$topdocdir}/index.html">Top</a>
     </small>
   </xsl:template>
@@ -1817,7 +1845,14 @@
 
     <xsl:choose>
       <xsl:when test="ancestor::cref">
-        <a name="{substring-before(nametext, '(')}"><span class="bold_code"><xsl:value-of select="ret"/><xsl:text> </xsl:text><xsl:value-of select="nametext"/></span></a><br/>
+        <a name="{substring-before(nametext, '(')}">
+          <span class="bold_code">
+            <xsl:value-of select="ret"/>
+            <xsl:call-template name="maybe-space-after-ret">
+              <xsl:with-param name="s" select="ret"/>
+            </xsl:call-template>
+            <xsl:value-of select="nametext"/>
+          </span></a><br/>
       </xsl:when>
       <xsl:when test="ancestor::erlref">
         <xsl:variable name="fname">
@@ -1844,6 +1879,18 @@
     </xsl:choose>
 
   </xsl:template>
+
+  <xsl:template name="maybe-space-after-ret">
+    <xsl:param name="s"/>
+    <xsl:variable name="last_char"
+	          select="substring($s, string-length($s), 1)"/>
+    <xsl:choose>
+      <xsl:when test="$last_char != '*'">
+        <xsl:text> </xsl:text>
+      </xsl:when>
+    </xsl:choose>
+  </xsl:template>
+
 
   <!-- Type -->
   <xsl:template match="type">

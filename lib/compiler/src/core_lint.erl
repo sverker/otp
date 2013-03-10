@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1999-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -247,7 +247,8 @@ gbody(E, Def, Rt, St0) ->
 	false -> St1
     end.
 
-gexpr(#c_var{name=N}, Def, _Rt, St) -> expr_var(N, Def, St);
+gexpr(#c_var{name=N}, Def, _Rt, St) when is_atom(N); is_integer(N) ->
+    expr_var(N, Def, St);
 gexpr(#c_literal{}, _Def, _Rt, St) -> St;
 gexpr(#c_cons{hd=H,tl=T}, Def, _Rt, St) ->
     gexpr_list([H,T], Def, St);
@@ -308,7 +309,7 @@ expr(#c_fun{vars=Vs,body=B}, Def, Rt, St0) ->
     {Vvs,St1} = variable_list(Vs, St0),
     return_match(Rt, 1, body(B, union(Vvs, Def), any, St1));
 expr(#c_seq{arg=Arg,body=B}, Def, Rt, St0) ->
-    St1 = expr(Arg, Def, any, St0),		%Ignore values
+    St1 = expr(Arg, Def, 1, St0),
     body(B, Def, Rt, St1);
 expr(#c_let{vars=Vs,arg=Arg,body=B}, Def, Rt, St0) ->
     St1 = body(Arg, Def, let_varcount(Vs), St0), %This is a body

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1999-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -159,6 +159,15 @@ struct m {
 };
 
 static Eterm staging_epilogue(Process* c_p, int, Eterm res, int, struct m*, int, int);
+#ifdef ERTS_SMP
+static void smp_code_ix_commiter(void*);
+
+static struct /* Protected by code_write_permission */
+{
+    Process* stager;
+    ErtsThrPrgrLaterOp lop;
+}commiter_state;
+#endif
 
 static Eterm
 exception_list(Process* p, Eterm tag, struct m* mp, Sint exceptions)
@@ -363,7 +372,6 @@ staging_epilogue(Process* c_p, int commit, Eterm res, int is_blocking,
     }
 #ifdef ERTS_SMP
     else {
-	ErtsThrPrgrVal later;
 	ASSERT(is_value(res));
 
 	if (free_mods) {
@@ -372,23 +380,45 @@ staging_epilogue(Process* c_p, int commit, Eterm res, int is_blocking,
 	erts_end_staging_code_ix();
 	/*
 	 * Now we must wait for all schedulers to do a memory barrier before
-	 * we can activate and let them access the new staged code. This allows
+	 * we can commit and let them access the new staged code. This allows
 	 * schedulers to read active code_ix in a safe way while executing
 	 * without any memory barriers at all. 
 	 */
-    
-	later = erts_thr_progress_later(); 
-	erts_thr_progress_wakeup(c_p->scheduler_data, later);
-	erts_notify_code_ix_activation(c_p, later);
+	ASSERT(commiter_state.stager == NULL);
+	commiter_state.stager = c_p;
+	erts_schedule_thr_prgr_later_op(smp_code_ix_commiter, NULL, &commiter_state.lop);
+	erts_smp_proc_inc_refc(c_p);
 	erts_suspend(c_p, ERTS_PROC_LOCK_MAIN, NULL);
 	/*
-	 * handle_code_ix_activation() will do the rest "later"
+	 * smp_code_ix_commiter() will do the rest "later"
 	 * and resume this process to return 'res'.  
 	 */
 	ERTS_BIF_YIELD_RETURN(c_p, res);
     }
 #endif
 }
+
+
+#ifdef ERTS_SMP
+static void smp_code_ix_commiter(void* null)
+{
+    Process* p = commiter_state.stager;
+
+    erts_commit_staging_code_ix();
+#ifdef DEBUG
+    commiter_state.stager = NULL;
+#endif
+    erts_release_code_write_permission();
+    erts_smp_proc_lock(p, ERTS_PROC_LOCK_STATUS);
+    if (!ERTS_PROC_IS_EXITING(p)) {
+	erts_resume(p, ERTS_PROC_LOCK_STATUS);
+    }
+    erts_smp_proc_unlock(p, ERTS_PROC_LOCK_STATUS);
+    erts_smp_proc_dec_refc(p);
+}
+#endif /* ERTS_SMP */
+
+
 
 BIF_RETTYPE
 check_old_code_1(BIF_ALIST_1)
@@ -424,8 +454,7 @@ check_process_code_2(BIF_ALIST_2)
     if (is_internal_pid(BIF_ARG_1)) {
 	Eterm res;
 	ErtsCodeIndex code_ix;
-	if (internal_pid_index(BIF_ARG_1) >= erts_max_processes)
-	    goto error;
+
 	code_ix = erts_active_code_ix();
 	modp = erts_get_module(BIF_ARG_2, code_ix);
 	if (modp == NULL) {		/* Doesn't exist. */
@@ -706,11 +735,11 @@ set_default_trace_pattern(Eterm module)
     if (trace_pattern_is_on) {
 	Eterm mfa[1];
 	mfa[0] = module;
-	(void) erts_set_trace_pattern(mfa, 1,
+	(void) erts_set_trace_pattern(0, mfa, 1,
 				      match_spec,
 				      meta_match_spec,
 				      1, trace_pattern_flags,
-				      meta_tracer_pid);
+				      meta_tracer_pid, 1);
     }
 }
 
@@ -722,10 +751,8 @@ check_process_code(Process* rp, Module* modp)
     Uint mod_size;
     BeamInstr* end;
     Eterm* sp;
-#ifndef HYBRID /* FIND ME! */
     struct erl_off_heap_header* oh;
     int done_gc = 0;
-#endif
 
 #define INSIDE(a) (start <= (a) && (a) < end)
 
@@ -784,7 +811,6 @@ check_process_code(Process* rp, Module* modp)
      * See if there are funs that refer to the old version of the module.
      */
 
-#ifndef HYBRID /* FIND ME! */
  rescan:
     for (oh = MSO(rp).first; oh; oh = oh->next) {
 	if (thing_subtag(oh->thing_word) == FUN_SUBTAG) {
@@ -810,7 +836,6 @@ check_process_code(Process* rp, Module* modp)
 	    }
 	}
     }
-#endif
 
     /*
      * See if there are constants inside the module referenced by the process.
@@ -1053,14 +1078,13 @@ delete_code(Module* modp)
 		if (ep->code[3] == (BeamInstr) em_apply_bif) {
 		    continue;
 		}
-		else if (ep->code[3] == (BeamInstr) em_call_traced_function) {
+		else if (ep->code[3] ==
+			 (BeamInstr) BeamOp(op_i_generic_breakpoint)) {
 		    ERTS_SMP_LC_ASSERT(erts_smp_thr_progress_is_blocking());
 		    ASSERT(modp->curr.num_traced_exports > 0);
-		    --modp->curr.num_traced_exports;
-		    MatchSetUnref(ep->match_prog_set);
-		    ep->match_prog_set = NULL;
 		    DBG_TRACE_MFA(ep->code[0],ep->code[1],ep->code[2],
 				  "export trace cleared, code_ix=%d", code_ix);
+		    erts_clear_export_break(modp, ep->code+3);
 		}
 		else ASSERT(ep->code[3] == (BeamInstr) em_call_error_handler
 			    || !erts_initialized);
@@ -1068,7 +1092,6 @@ delete_code(Module* modp)
 	    ep->addressv[code_ix] = ep->code+3;
 	    ep->code[3] = (BeamInstr) em_call_error_handler;
 	    ep->code[4] = 0;
-	    ASSERT(ep->match_prog_set == NULL);
 	    DBG_TRACE_MFA(ep->code[0],ep->code[1],ep->code[2],
 			  "export invalidation, code_ix=%d", code_ix);
 	}
@@ -1111,7 +1134,21 @@ beam_make_current_old(Process *c_p, ErtsProcLocks c_p_locks, Eterm module)
 static int
 is_native(BeamInstr* code)
 {
-    return ((Eterm *)code[MI_FUNCTIONS])[1] != 0;
+    Uint i, num_functions = code[MI_NUM_FUNCTIONS];
+
+    /* Check NativeAdress of first real function in module
+     */
+    for (i=0; i<num_functions; i++) {
+	BeamInstr* func_info = (BeamInstr *) code[MI_FUNCTIONS+i];
+	Eterm name = (Eterm) func_info[3];
+
+	if (is_atom(name)) {
+	    return func_info[1] != 0;    
+	}
+	else ASSERT(is_nil(name)); /* ignore BIF stubs */
+    }
+    /* Not a single non-BIF function? */
+    return 0;
 }
 
 

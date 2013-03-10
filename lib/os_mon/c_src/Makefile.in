@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 # 
-# Copyright Ericsson AB 1997-2011. All Rights Reserved.
+# Copyright Ericsson AB 1997-2012. All Rights Reserved.
 # 
 # The contents of this file are subject to the Erlang Public License,
 # Version 1.1, (the "License"); you may not use this file except in
@@ -63,13 +63,9 @@ ENTRY_OBJ=$(ERL_TOP)/erts/obj/$(TARGET)/port_entry.o
 PORT_ENTRY_POINT=erl_port_entry
 ENTRY_LDFLAGS=-entry:$(PORT_ENTRY_POINT)
 else
-ifeq ($(findstring vxworks_simso,$(TARGET)),vxworks_simso)
-PROGRAMS =
-else
 PROGRAMS = \
 	memsup @os_mon_programs@
 C_FILES= $(PROGRAMS:%=%.c)
-endif
 endif
 
 TARGET_FILES= $(PROGRAMS:%=$(BINDIR)/%)
@@ -97,28 +93,28 @@ docs:
 # ----------------------------------------------------
 
 $(BINDIR)/win32sysinfo.exe: $(OBJDIR)/win32sysinfo.o $(ENTRY_OBJ)
-	$(LD) $(LDFLAGS) $(ENTRY_LDFLAGS) -o $@ $(OBJDIR)/win32sysinfo.o $(ENTRY_OBJ)
+	$(V_LD) $(LDFLAGS) $(ENTRY_LDFLAGS) -o $@ $(OBJDIR)/win32sysinfo.o $(ENTRY_OBJ)
 
 $(BINDIR)/nteventlog.exe: $(EVLOG_OBJECTS)
-	$(LD) $(LDFLAGS) $(ENTRY_LDFLAGS) -o $@ $(EVLOG_OBJECTS) $(ENTRY_OBJ)
+	$(V_LD) $(LDFLAGS) $(ENTRY_LDFLAGS) -o $@ $(EVLOG_OBJECTS) $(ENTRY_OBJ)
 
 $(BINDIR)/ferrule: $(OBJDIR)/ferrule.o
-	$(LD) $(LDFLAGS) -o $@ $<
+	$(V_LD) $(LDFLAGS) -o $@ $<
 
 $(BINDIR)/mod_syslog: $(OBJDIR)/mod_syslog.o
-	$(LD) $(LDFLAGS) -o $@ $<
+	$(V_LD) $(LDFLAGS) -o $@ $<
 
 $(BINDIR)/memsup: $(OBJDIR)/memsup.o
-	$(LD) $(LDFLAGS) -o $@ $<
+	$(V_LD) $(LDFLAGS) -o $@ $<
 
 $(BINDIR)/cpu_sup: $(OBJDIR)/cpu_sup.o
-	$(LD) $(LDFLAGS) -o $@ $< $(CPU_SUP_LIBS) 
+	$(V_LD) $(LDFLAGS) -o $@ $< $(CPU_SUP_LIBS)
 
 $(OBJDIR)/%.o: %.c
-	$(CC) -c -o $@ $(ALL_CFLAGS) $<
+	$(V_CC) -c -o $@ $(ALL_CFLAGS) $<
 
 $(OBJDIR)/%.o: nteventlog/%.c
-	$(CC) -c -o $@ $(ALL_CFLAGS) $<
+	$(V_CC) -c -o $@ $(ALL_CFLAGS) $<
 
 $(OBJDIR)/memsup.o: memsup.h
 
@@ -127,14 +123,10 @@ $(OBJDIR)/memsup.o: memsup.h
 # ---------------------------------------------------- 
 include $(ERL_TOP)/make/otp_release_targets.mk
 
-ifeq ($(findstring vxworks_simso,$(TARGET)),vxworks_simso)
-release_spec:
-else
 release_spec: opt
-	$(INSTALL_DIR) $(RELSYSDIR)/src
-	$(INSTALL_DATA) $(C_FILES) $(RELSYSDIR)/src
-	$(INSTALL_DIR) $(RELSYSDIR)/priv/bin
-	$(INSTALL_PROGRAM) $(TARGET_FILES) $(RELSYSDIR)/priv/bin
-endif
+	$(INSTALL_DIR) "$(RELSYSDIR)/src"
+	$(INSTALL_DATA) $(C_FILES) "$(RELSYSDIR)/src"
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv/bin"
+	$(INSTALL_PROGRAM) $(TARGET_FILES) "$(RELSYSDIR)/priv/bin"
 
 release_docs_spec:

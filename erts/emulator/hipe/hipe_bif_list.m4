@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2004-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2004-2012. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -145,6 +145,7 @@
  * Zero-arity BIFs that can fail.
  */
 standard_bif_interface_0(nbif_processes_0, processes_0)
+standard_bif_interface_0(nbif_ports_0, ports_0)
 
 /*
  * BIFs and primops that may do a GC (change heap limit and walk the native stack).
@@ -246,7 +247,7 @@ noproc_primop_interface_5(nbif_bs_put_big_integer, hipe_bs_put_big_integer)
 
 gc_bif_interface_0(nbif_check_get_msg, hipe_check_get_msg)
 
-#ifdef NO_FPE_SIGNALS
+#`ifdef' NO_FPE_SIGNALS
 nocons_nofail_primop_interface_0(nbif_emulate_fpe, hipe_emulate_fpe)
 #endif
 

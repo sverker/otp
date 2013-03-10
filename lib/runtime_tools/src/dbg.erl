@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -431,10 +431,8 @@ trace_port1(file, Filename, Options) ->
     fun() ->
 	    Name = filename:absname(Filename), 
 	    %% Absname is needed since the driver uses 
-	    %% the supplied name without further investigations, 
-	    %% and if the name is relative the resulting path 
-	    %% might be too long which can cause a bus error
-	    %% on vxworks instead of a nice error code return.
+	    %% the supplied name without further investigations.
+
 	    %% Also, the absname must be found inside the fun,
 	    %% in case the actual node where the port shall be
 	    %% started is on another node (or even another host)

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -39,7 +39,8 @@ init_per_suite(Config) ->
 end_per_suite(_) ->
     ok.
 
-all() -> [first_testcase, second_testcase, third_testcase].
+all() -> [first_testcase, second_testcase, third_testcase,
+	  env_vars].
 
 init_per_testcase(_, Config) ->
     Config.
@@ -56,3 +57,9 @@ second_testcase(_)->
 third_testcase(_)->
     A = 4,
     A = 2*2.
+
+env_vars(_) ->
+    io:format("~p\n", [os:getenv()]),
+    "yes" = os:getenv("THIS_MUST_BE_SET"),
+    "value" = os:getenv("SO_MUST_THIS"),
+    ok.

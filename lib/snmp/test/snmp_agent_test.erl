@@ -1,3 +1,4 @@
+%% -*- coding: utf-8 -*-
 %% 
 %% %CopyrightBegin%
 %%
@@ -346,47 +347,72 @@ end_per_group(_GroupName, Config) ->
 
 
 
-init_per_testcase(otp8395 = Case, Config) when is_list(Config) ->
+%% ---- Init Per TestCase ---- 
+
+init_per_testcase(Case, Config) when is_list(Config) ->
     ?DBG("init_per_testcase -> entry with"
+	 "~n   Config: ~p", [Config]),
+
+    p("Agent Info: "
+      "~n   ~p", [snmpa:info()]),
+
+    init_per_testcase1(Case, Config).
+
+init_per_testcase1(otp8395 = Case, Config) when is_list(Config) ->
+    ?DBG("init_per_testcase1 -> entry with"
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [Case, Config]),
     otp8395({init, init_per_testcase2(Case, Config)});
-init_per_testcase(otp9884 = Case, Config) when is_list(Config) ->
-    ?DBG("init_per_testcase -> entry with"
+init_per_testcase1(otp9884 = Case, Config) when is_list(Config) ->
+    ?DBG("init_per_testcase1 -> entry with"
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [Case, Config]),
     otp9884({init, init_per_testcase2(Case, Config)});
-init_per_testcase(otp_7157_test = _Case, Config) when is_list(Config) ->
-    ?DBG("init_per_testcase -> entry with"
+init_per_testcase1(otp_7157_test = _Case, Config) when is_list(Config) ->
+    ?DBG("init_per_testcase1 -> entry with"
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [_Case, Config]),
     Dog = ?WD_START(?MINS(1)),
     [{watchdog, Dog} | Config ];
-init_per_testcase(v2_inform_i = _Case, Config) when is_list(Config) ->
-    ?DBG("init_per_testcase -> entry with"
+init_per_testcase1(v2_inform_i = _Case, Config) when is_list(Config) ->
+    ?DBG("init_per_testcase1 -> entry with"
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [_Case, Config]),
     Dog = ?WD_START(?MINS(10)),
     [{watchdog, Dog} | Config ];
-init_per_testcase(v3_inform_i = _Case, Config) when is_list(Config) ->
-    ?DBG("init_per_testcase -> entry with"
+init_per_testcase1(v3_inform_i = _Case, Config) when is_list(Config) ->
+    ?DBG("init_per_testcase1 -> entry with"
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [_Case, Config]),
     Dog = ?WD_START(?MINS(10)),
     [{watchdog, Dog} | Config ];
-init_per_testcase(_Case, Config) when is_list(Config) ->
+init_per_testcase1(_Case, Config) when is_list(Config) ->
     ?DBG("init_per_testcase -> entry with"
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [_Case, Config]),
     Dog = ?WD_START(?MINS(6)),
     [{watchdog, Dog}| Config ].
 
-end_per_testcase(otp8395, Config) when is_list(Config) ->
-    otp8395({fin, Config});
-end_per_testcase(otp9884, Config) when is_list(Config) ->
-    otp9884({fin, Config});
-end_per_testcase(_Case, Config) when is_list(Config) ->
+
+%% ---- End Per TestCase ---- 
+
+end_per_testcase(Case, Config) when is_list(Config) ->
     ?DBG("end_per_testcase -> entry with"
+	 "~n   Config: ~p", [Config]),
+
+    p("Agent Info: "
+      "~n   ~p", [snmpa:info()]),
+
+    display_log(Config),
+    
+    end_per_testcase1(Case, Config).
+
+end_per_testcase1(otp8395, Config) when is_list(Config) ->
+    otp8395({fin, Config});
+end_per_testcase1(otp9884, Config) when is_list(Config) ->
+    otp9884({fin, Config});
+end_per_testcase1(_Case, Config) when is_list(Config) ->
+    ?DBG("end_per_testcase1 -> entry with"
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [_Case, Config]),
     Dog = ?config(watchdog, Config),
@@ -433,29 +459,16 @@ end_per_testcase2(_Case, Config) ->
 
 
 cases() -> 
-    case ?OSTYPE() of
-	vxworks ->
-	    [
-	     {group, misc}, 
-	     {group, test_v1}, 
-	     {group, test_v2},
-	     {group, test_v1_v2}, 
-	     {group, test_multi_threaded},
-	     {group, mib_storage}, 
-	     {group, tickets1}
-	    ];
-	_Else ->
-	    [
-	     {group, misc}, 
-	     {group, test_v1}, 
-	     {group, test_v2},
-	     {group, test_v1_v2}, 
-	     {group, test_v3},
-	     {group, test_multi_threaded}, 
-	     {group, mib_storage},
-	     {group, tickets1}
-	    ]
-    end.
+    [
+	{group, misc}, 
+	{group, test_v1}, 
+	{group, test_v2},
+	{group, test_v1_v2}, 
+	{group, test_v3},
+	{group, test_multi_threaded}, 
+	{group, mib_storage},
+	{group, tickets1}
+    ].
 
 
 %%%-----------------------------------------------------------------
@@ -1280,21 +1293,16 @@ init_v3(Config) when is_list(Config) ->
     %% and we will be stuck with a bunch of mnesia tables for
     %% the rest of this suite...
     ?DBG("start_agent -> start crypto app",[]),
-    case os:type() of
-	vxworks ->
-	    no_crypto;
-	_ ->
-	    case ?CRYPTO_START() of
-		ok ->
-		    case ?CRYPTO_SUPPORT() of
-			{no, Reason} ->
-			    ?SKIP({unsupported_encryption, Reason});
-			yes ->
-			    ok
-		    end;
-		{error, Reason} ->
-		    ?SKIP({failed_starting_crypto, Reason})
-	    end
+    case ?CRYPTO_START() of
+	ok ->
+	    case ?CRYPTO_SUPPORT() of
+		{no, Reason} ->
+		    ?SKIP({unsupported_encryption, Reason});
+		yes ->
+		    ok
+	    end;
+	{error, Reason} ->
+	    ?SKIP({failed_starting_crypto, Reason})
     end,
     SaNode = ?config(snmp_sa, Config),
     create_tables(SaNode),
@@ -1406,9 +1414,6 @@ simple(Config) when is_list(Config) ->
     
     try_test(simple_standard_test),
 
-    p("Display log"),
-    display_log(Config),
-    
     p("done"),
     ok.
 
@@ -5748,14 +5753,14 @@ otp_4394_config(AgentConfDir, MgrDir, Ip0) ->
     ?line write_community_conf(AgentConfDir, [C1, C2]),
     ?line update_vacm(Vsn, AgentConfDir),
     Ta1 = {"shelob v1", 
-	   [134,138,177,177], 5000, 1500, 3, %% Använd Ip och modda
+	   [134,138,177,177], 5000, 1500, 3, %% Use Ip and modify
 	   "pc1", 
 	   "target_v1", "", 
 	   %% [255,255,255,255,0,0], 
 	   [],
 	   2048},
     Ta2 = {"bifur v1", 
-	   [134,138,177,75], 5000, 1500, 3, %% Använd Ip
+	   [134,138,177,75], 5000, 1500, 3, %% Use Ip
 	   "pc2", 
 	   "target_v1", "", 
 	   %% [255,255,255,255,0,0],

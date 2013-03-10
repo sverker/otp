@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -249,7 +249,7 @@ meta_loop(Debugged, Bs, #ieval{level=Le} = Ieval) ->
 	{sys, Debugged, {value,Val}} ->
 	    {value, Val, Bs};
 	{sys, Debugged, {value,Val,Bs2}} ->
-	    {value, Val, Bs2};
+	    {value, Val, merge_bindings(Bs2, Bs, Ieval)};
 	{sys, Debugged, {exception,{Class,Reason,Stk}}} ->
 	    case get(exit_info) of
 
@@ -345,15 +345,15 @@ trace(What, Args, true) ->
 		  {Called, {Le,Li,M,F,As}} = Args,
 		  case Called of
 		      extern ->
-			  io_lib:format("++ (~w) <~w> ~w:~w~s~n",
+			  io_lib:format("++ (~w) <~w> ~w:~w~ts~n",
 					[Le,Li,M,F,format_args(As)]);
 		      local ->
-			  io_lib:format("++ (~w) <~w> ~w~s~n",
+			  io_lib:format("++ (~w) <~w> ~w~ts~n",
 					[Le,Li,F,format_args(As)])
 		  end;
 	      call_fun ->
 		  {Le,Li,F,As} = Args,
-		  io_lib:format("++ (~w) <~w> ~w~s~n",
+		  io_lib:format("++ (~w) <~w> ~w~ts~n",
 				[Le, Li, F, format_args(As)]);
 	      return ->
 		  {Le,Val} = Args,
@@ -362,7 +362,7 @@ trace(What, Args, true) ->
 		      
 	      bif ->
 		  {Le,Li,M,F,As} = Args,
-		  io_lib:format("++ (~w) <~w> ~w:~w~s~n",
+		  io_lib:format("++ (~w) <~w> ~w:~w~ts~n",
 				[Le, Li, M, F, format_args(As)])
 	  end,
     dbg_icmd:tell_attached({trace_output, Str});
@@ -1248,7 +1248,7 @@ if_clauses([], Bs, Ieval) ->
     exception(error, if_clause, Bs, Ieval).
 
 %% case_clauses(Value, Clauses, Bindings, Error, Ieval)
-%%   Error = try_clause ¦ case_clause
+%%   Error = try_clause | case_clause
 case_clauses(Val, [{clause,_,[P],G,B}|Cs], Bs0, Error, Ieval) ->
     case match(P, Val, Bs0) of
 	{match,Bs} ->

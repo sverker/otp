@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2000-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2000-2013. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -1070,7 +1070,7 @@ int ei_rpc(ei_cnode* ec, int fd, char *mod, char *fun,
     int i, index;
     ei_term t;
     erlang_msg msg;
-    char rex[MAXATOMLEN+1];
+    char rex[MAXATOMLEN];
 
     if (ei_rpc_to(ec, fd, mod, fun, inbuf, inbuflen) < 0) {
 	return -1;
@@ -1332,7 +1332,9 @@ static int send_name_or_challenge(int fd, char *nodename,
 		| DFLAG_EXTENDED_PIDS_PORTS
 		| DFLAG_FUN_TAGS
 		| DFLAG_NEW_FUN_TAGS
-                | DFLAG_NEW_FLOATS));
+                | DFLAG_NEW_FLOATS
+		| DFLAG_SMALL_ATOM_TAGS
+		| DFLAG_UTF8_ATOMS));
     if (f_chall)
 	put32be(s, challenge);
     memcpy(s, nodename, strlen(nodename));

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2006-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2006-2012. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -57,11 +57,12 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 -spec all() -> misc_SUITE_test_cases().
 all() -> 
     test_lib:recompile(?MODULE),
-    [tobias, empty_string, md5, silly_coverage,
-     confused_literals, integer_encoding, override_bif].
+    [{group,p}].
 
 groups() -> 
-    [].
+    [{p,[],%%test_lib:parallel(),
+      [tobias,empty_string,md5,silly_coverage,
+       confused_literals,integer_encoding,override_bif]}].
 
 init_per_suite(Config) ->
     Config.
@@ -182,6 +183,14 @@ silly_coverage(Config) when is_list(Config) ->
     CodegenInput = {?MODULE,[{foo,0}],[],[{function,foo,0,[a|b],a,b,[]}]},
     ?line expect_error(fun() -> v3_codegen:module(CodegenInput, []) end),
 
+    %% beam_a
+    BeamAInput = {?MODULE,[{foo,0}],[],
+		  [{function,foo,0,2,
+		    [{label,1},
+		     {func_info,{atom,?MODULE},{atom,foo},0},
+		     {label,2}|non_proper_list]}],99},
+    expect_error(fun() -> beam_a:module(BeamAInput, []) end),
+
     %% beam_block
     BlockInput = {?MODULE,[{foo,0}],[],
 		  [{function,foo,0,2,
@@ -189,6 +198,15 @@ silly_coverage(Config) when is_list(Config) ->
 		     {func_info,{atom,?MODULE},{atom,foo},0},
 		     {label,2}|non_proper_list]}],99},
     ?line expect_error(fun() -> beam_block:module(BlockInput, []) end),
+
+    %% beam_type
+    TypeInput = {?MODULE,[{foo,0}],[],
+		   [{function,foo,0,2,
+		     [{label,1},
+		      {line,loc},
+		      {func_info,{atom,?MODULE},{atom,foo},0},
+		      {label,2}|non_proper_list]}],99},
+    expect_error(fun() -> beam_type:module(TypeInput, []) end),
 
     %% beam_except
     ExceptInput = {?MODULE,[{foo,0}],[],
@@ -253,6 +271,13 @@ silly_coverage(Config) when is_list(Config) ->
 		       {call_ext,0,{extfunc,erlang,make_ref,0}},
 		       {block,[a|b]}]}],0},
     ?line expect_error(fun() -> beam_receive:module(ReceiveInput, []) end),
+
+    BeamZInput = {?MODULE,[{foo,0}],[],
+		  [{function,foo,0,2,
+		    [{label,1},
+		     {func_info,{atom,?MODULE},{atom,foo},0},
+		     {label,2}|non_proper_list]}],99},
+    expect_error(fun() -> beam_z:module(BeamZInput, []) end),
 
     ok.
 

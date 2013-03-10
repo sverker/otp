@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2005-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2005-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -142,8 +142,7 @@ audit_req() ->
 	   protocolIEs = 
 	   [#'ProtocolIE-Field'{id=114,
 				criticality=ignore, 
-				value={'Start-Of-Audit-Sequence-Indicator',
-				       'start-of-audit-sequence' } 
+				value='start-of-audit-sequence'
 			       }
 	   ]  
 	  }.

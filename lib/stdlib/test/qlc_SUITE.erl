@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -2969,13 +2969,6 @@ lookup1(Config) when is_list(Config) ->
                 [3] = lookup_keys(Q)
         end, [{1,a},{3,3}])">>,
 
-       <<"A = 3,
-          etsc(fun(E) ->
-                Q = qlc:q([X || X <- ets:table(E), A =:= {erlang,element}(1, X)]),
-                [{3,3}] = qlc:e(Q),
-                [3] = lookup_keys(Q)
-        end, [{1,a},{3,3}])">>,
-
        <<"etsc(fun(E) ->
                 A = 3,
                 Q = qlc:q([X || X <- ets:table(E), 
@@ -3439,12 +3432,6 @@ lookup2(Config) when is_list(Config) ->
                  [r] = qlc:e(Q),
                  [r] = lookup_keys(Q)
          end, [{keypos,1}], [#r{}])">>,
-       <<"etsc(fun(E) ->
-                Q = qlc:q([element(1, X) || X <- ets:table(E), 
-                                            {erlang,is_record}(X, r, 2)]),
-                 [r] = qlc:e(Q),
-                 [r] = lookup_keys(Q)
-         end, [{keypos,1}], [#r{}])">>,
        {cres,
         <<"etsc(fun(E) ->
                 Q = qlc:q([element(1, X) || X <- ets:table(E), 
@@ -3462,12 +3449,6 @@ lookup2(Config) when is_list(Config) ->
        <<"etsc(fun(E) ->
                 Q = qlc:q([element(1, X) || X <- ets:table(E), 
                                             is_record(X, r)]),
-                 [r] = qlc:e(Q),
-                 [r] = lookup_keys(Q)
-         end, [{keypos,1}], [#r{}])">>,
-       <<"etsc(fun(E) ->
-                Q = qlc:q([element(1, X) || X <- ets:table(E), 
-                                            {erlang,is_record}(X, r)]),
                  [r] = qlc:e(Q),
                  [r] = lookup_keys(Q)
          end, [{keypos,1}], [#r{}])">>
@@ -6081,21 +6062,6 @@ otp_6673(Config) when is_list(Config) ->
     ],
     ?line run(Config, Ts_RT),
 
-    %% Ulf Wiger provided a patch that makes QLC work with packages:
-    Dir = filename:join(?privdir, "p"),
-    ?line ok = filelib:ensure_dir(filename:join(Dir, ".")),
-    File = filename:join(Dir, "p.erl"),
-    ?line ok = file:write_file(File, 
-        <<"-module(p.p).\n"
-          "-export([q/0]).\n"
-          "-include_lib(\"stdlib/include/qlc.hrl\").\n"
-          "q() ->\n"
-          "    .qlc:q([X || X <- [1,2]]).">>),
-    ?line {ok, 'p.p'} = compile:file(File, [{outdir,Dir}]),
-    ?line code:purge('p.p'),
-    ?line {module, 'p.p'} = code:load_abs(filename:rootname(File), 'p.p'),
-    ?line [1,2] = qlc:e(p.p:q()),
-
     ok.
 
 otp_6964(doc) ->
@@ -6697,7 +6663,7 @@ otp_7714(Config) when is_list(Config) ->
                            {A,I1} <- ets:table(E1),
                            {B,I2} <- ets:table(E2),
                            I1 =:= I2],{join,merge}),
-             [{a,1},{a,2},{a,3}] = qlc:e(Q),
+             [{a,1},{a,2},{a,3}] = lists:sort(qlc:e(Q)),
              ets:delete(E1),
              ets:delete(E2)">>],
     ?line run(Config, Ts).
@@ -6762,7 +6728,7 @@ otp_6674(Config) when is_list(Config) ->
                      [{join,lookup}]}}],
             []} = qlc:info(Q, {format,debug}),
           {0,1,0,0} = join_info(Q),
-          [{1.0,1},{2,2}] = qlc:e(Q),
+          [{1.0,1},{2,2}] = lists:sort(qlc:e(Q)),
           ets:delete(E1), 
           ets:delete(E2)">>,
        <<"E1 = ets:new(join, [ordered_set]),

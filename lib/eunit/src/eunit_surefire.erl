@@ -1,3 +1,4 @@
+%% -*- coding: utf-8 -*-
 %% This library is free software; you can redistribute it and/or modify
 %% it under the terms of the GNU Lesser General Public License as
 %% published by the Free Software Foundation; either version 2 of the
@@ -13,8 +14,8 @@
 %% Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %% USA
 %%
-%% @author Mickaël Rémond <mickael.remond@process-one.net>
-%% @copyright 2009 Mickaël Rémond, Paul Guyot
+%% @author MickaÃ«l RÃ©mond <mickael.remond@process-one.net>
+%% @copyright 2009 MickaÃ«l RÃ©mond, Paul Guyot
 %% @see eunit
 %% @doc Surefire reports for EUnit (Format used by Maven and Atlassian
 %% Bamboo for example to integrate test results). Based on initial code
@@ -156,9 +157,33 @@ handle_end(test, Data, St) ->
     St#state{testsuites=store_suite(NewTestSuite, TestSuites)}.
 
 %% Cancel group does not give information on the individual cancelled test case
-%% We ignore this event
-handle_cancel(group, _Data, St) ->
-    St;
+%% We ignore this event...
+handle_cancel(group, Data, St) ->
+    %% ...except when it tells us that a fixture setup or cleanup failed.
+    case proplists:get_value(reason, Data) of
+        {abort, {SomethingFailed, Exception}}
+          when SomethingFailed =:= setup_failed;
+               SomethingFailed =:= cleanup_failed ->
+            [GroupId|_] = proplists:get_value(id, Data),
+            TestSuites = St#state.testsuites,
+            TestSuite = lookup_suite_by_group_id(GroupId, TestSuites),
+
+            %% We don't have any proper name.  Let's give all the
+            %% clues that we have.
+            Name = case SomethingFailed of
+                       setup_failed -> "fixture setup ";
+                       cleanup_failed -> "fixture cleanup "
+                   end
+                ++ io_lib:format("~p", [proplists:get_value(id, Data)]),
+            Desc = format_desc(proplists:get_value(desc, Data)),
+            TestCase = #testcase{
+              name = Name, description = Desc,
+              time = 0, output = <<>>},
+            NewTestSuite = add_testcase_to_testsuite({error, Exception}, TestCase, TestSuite),
+            St#state{testsuites=store_suite(NewTestSuite, TestSuites)};
+        _ ->
+            St
+    end;
 handle_cancel(test, Data, St) ->
     %% Retrieve existing test suite:
     [GroupId|_] = proplists:get_value(id, Data),
@@ -232,7 +257,7 @@ write_reports(TestSuites, XmlDir) ->
 
 write_report(#testsuite{name = Name} = TestSuite, XmlDir) ->
     Filename = filename:join(XmlDir, lists:flatten(["TEST-", escape_suitename(Name)], ".xml")),
-    case file:open(Filename, [write, raw]) of
+    case file:open(Filename, [write,{encoding,utf8}]) of
         {ok, FileDescriptor} ->
             try
                 write_report_to(TestSuite, FileDescriptor)

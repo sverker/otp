@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -153,7 +153,7 @@ handle_system_event({mnesia_down, Node}, State) ->
     end;
 
 handle_system_event({mnesia_overload, Details}, State) ->
-    report_warning("Mnesia is overloaded: ~p~n", [Details]),
+    report_warning("Mnesia is overloaded: ~w~n", [Details]),
     {ok, State}; 
 
 handle_system_event({mnesia_info, Format, Args}, State) ->

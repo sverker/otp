@@ -1,7 +1,8 @@
+%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2012. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -20,7 +21,6 @@
 -module(base64_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include("test_server_line.hrl").
 
 %% Test server specific exports
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
@@ -33,7 +33,7 @@
 	 mime_decode_to_string/1, roundtrip/1]).
 
 init_per_testcase(_, Config) ->
-    Dog = test_server:timetrap(?t:minutes(2)),
+    Dog = test_server:timetrap(?t:minutes(4)),
     NewConfig = lists:keydelete(watchdog, 1, Config),
     [{watchdog, Dog} | NewConfig].
 
@@ -180,7 +180,7 @@ mime_decode(Config) when is_list(Config) ->
     <<"o">>   = base64:mime_decode(<<"b=w=====">>),
     %% Test misc white space and illegals with embedded padding
     <<"one">> = base64:mime_decode(<<" b~2=\r\n5()l===">>),
-    <<"on">>  = base64:mime_decode(<<"\tb =2\"¤4=¤=   ==">>),
+    <<"on">>  = base64:mime_decode(<<"\tb =2\"Â¤4=Â¤=   ==">>),
     <<"o">>   = base64:mime_decode(<<"\nb=w=====">>),
     %% Two pads
     <<"Aladdin:open sesame">> =
@@ -189,7 +189,7 @@ mime_decode(Config) when is_list(Config) ->
     <<"Hello World!!">> = base64:mime_decode(<<"SGVsb)(G8gV29ybGQ=h IQ= =">>),
     %% No pad
     <<"Aladdin:open sesam">> =
-	base64:mime_decode("QWxhZGRpbjpvcG¤\")(VuIHNlc2Ft"),
+	base64:mime_decode("QWxhZGRpbjpvcGÂ¤\")(VuIHNlc2Ft"),
     %% Encoded base 64 strings may be divided by non base 64 chars.
     %% In this cases whitespaces.
     <<"0123456789!@#0^&*();:<>,. []{}">> =
@@ -223,7 +223,7 @@ mime_decode_to_string(Config) when is_list(Config) ->
     "o"   = base64:mime_decode_to_string(<<"b=w=====">>),
     %% Test misc white space and illegals with embedded padding
     "one" = base64:mime_decode_to_string(<<" b~2=\r\n5()l===">>),
-    "on"  = base64:mime_decode_to_string(<<"\tb =2\"¤4=¤=   ==">>),
+    "on"  = base64:mime_decode_to_string(<<"\tb =2\"Â¤4=Â¤=   ==">>),
     "o"   = base64:mime_decode_to_string(<<"\nb=w=====">>),
     %% Two pads
     "Aladdin:open sesame" =
@@ -232,7 +232,7 @@ mime_decode_to_string(Config) when is_list(Config) ->
     "Hello World!!" = base64:mime_decode_to_string(<<"SGVsb)(G8gV29ybGQ=h IQ= =">>),
     %% No pad
     "Aladdin:open sesam" = 
-	base64:mime_decode_to_string("QWxhZGRpbjpvcG¤\")(VuIHNlc2Ft"),
+	base64:mime_decode_to_string("QWxhZGRpbjpvcGÂ¤\")(VuIHNlc2Ft"),
     %% Encoded base 64 strings may be divided by non base 64 chars.
     %% In this cases whitespaces.
     "0123456789!@#0^&*();:<>,. []{}" =
