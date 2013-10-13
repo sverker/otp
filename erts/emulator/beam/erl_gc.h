@@ -64,6 +64,13 @@ do {									\
 #define in_area(ptr,start,nbytes) \
  ((UWord)((char*)(ptr) - (char*)(start)) < (nbytes))
 
+#define in_mature_heap(ptr,p) ((ptr) >= HEAP_START(p) && (ptr) < HIGH_WATER(p))
+#define in_young_heap(ptr,p) ((ptr) >= HIGH_WATER(p) && (ptr) < HEAP_TOP(p))
+#define in_new_heap(ptr,p) ((ptr) >= HEAP_START(p) && (ptr) < HEAP_TOP(p))
+#define in_old_heap(ptr,p) ((ptr) >= OLD_HEAP(p) && (ptr) < OLD_HTOP(p))
+#define in_my_heaps(ptr, p) (in_new_heap(ptr,p) || in_old_heap(ptr,p))
+
+
 extern Uint erts_test_long_gc_sleep;
 
 #if defined(DEBUG) || defined(ERTS_OFFHEAP_DEBUG)
