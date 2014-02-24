@@ -4484,7 +4484,7 @@ BIF_RETTYPE hipe_wrapper_erts_internal_binary_to_term_2(BIF_ALIST_2);
 BIF_RETTYPE hipe_wrapper_term_to_binary_1(BIF_ALIST_1)
 {
     Eterm res;
-    hipe_reserve_beam_trap_frame(BIF_P, ERTS_PROC_GET_SCHDATA(BIF_P)->x_reg_array, 1);
+    hipe_reserve_beam_trap_frame(BIF_P, BIF__ARGS, 1);
     res = term_to_binary_1(BIF_P, BIF__ARGS);
     if (is_value(res) || BIF_P->freason != TRAP) {
 	hipe_unreserve_beam_trap_frame(BIF_P);
@@ -4494,7 +4494,7 @@ BIF_RETTYPE hipe_wrapper_term_to_binary_1(BIF_ALIST_1)
 BIF_RETTYPE hipe_wrapper_term_to_binary_2(BIF_ALIST_2)
 {
     Eterm res;
-    hipe_reserve_beam_trap_frame(BIF_P, ERTS_PROC_GET_SCHDATA(BIF_P)->x_reg_array, 2);
+    hipe_reserve_beam_trap_frame(BIF_P, BIF__ARGS, 2);
     res = term_to_binary_2(BIF_P, BIF__ARGS);
     if (is_value(res) || BIF_P->freason != TRAP) {
 	hipe_unreserve_beam_trap_frame(BIF_P);
@@ -4504,7 +4504,7 @@ BIF_RETTYPE hipe_wrapper_term_to_binary_2(BIF_ALIST_2)
 BIF_RETTYPE hipe_wrapper_erts_internal_binary_to_term_1(BIF_ALIST_1)
 {
     Eterm res;
-    hipe_reserve_beam_trap_frame(BIF_P, ERTS_PROC_GET_SCHDATA(BIF_P)->x_reg_array, 1);
+    hipe_reserve_beam_trap_frame(BIF_P, BIF__ARGS, 1);
     res = erts_internal_binary_to_term_1(BIF_P, BIF__ARGS);
     if (is_value(res) || BIF_P->freason != TRAP) {
 	hipe_unreserve_beam_trap_frame(BIF_P);
@@ -4514,7 +4514,7 @@ BIF_RETTYPE hipe_wrapper_erts_internal_binary_to_term_1(BIF_ALIST_1)
 BIF_RETTYPE hipe_wrapper_erts_internal_binary_to_term_2(BIF_ALIST_2)
 {
     Eterm res;
-    hipe_reserve_beam_trap_frame(BIF_P, ERTS_PROC_GET_SCHDATA(BIF_P)->x_reg_array, 2);
+    hipe_reserve_beam_trap_frame(BIF_P, BIF__ARGS, 2);
     res = erts_internal_binary_to_term_2(BIF_P, BIF__ARGS);
     if (is_value(res) || BIF_P->freason != TRAP) {
 	hipe_unreserve_beam_trap_frame(BIF_P);
