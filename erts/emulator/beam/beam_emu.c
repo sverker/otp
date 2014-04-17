@@ -321,6 +321,8 @@ extern int count_instructions;
            SWAPIN; \
      } \
      E -= needed; \
+     VALGRIND_CLEAR_PROTECTION(E, needed*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD); \
+     VALGRIND_CLEAR_PROTECTION(HTOP, HeapNeed*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD); \
      SAVE_CP(E); \
   } while (0)
 
@@ -374,6 +376,7 @@ extern int count_instructions;
        r(0) = reg[0];                                           		\
        SWAPIN;                                                  		\
     }                                                           		\
+    VALGRIND_CLEAR_PROTECTION(HTOP, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD); \
     HEAP_SPACE_VERIFIED(need);                                                  \
   } while (0)
 
@@ -397,6 +400,7 @@ extern int count_instructions;
        r(0) = reg[0];                                           \
        SWAPIN;                                                  \
     }                                                           \
+    VALGRIND_CLEAR_PROTECTION(HTOP, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD); \
     HEAP_SPACE_VERIFIED(need);                             \
   } while (0)
 
@@ -423,6 +427,7 @@ extern int count_instructions;
        Extra = reg[Live];						\
        SWAPIN;								\
     }									\
+    VALGRIND_CLEAR_PROTECTION(HTOP, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD); \
     HEAP_SPACE_VERIFIED(need);                                      \
   } while (0)
 
@@ -1748,6 +1753,7 @@ void process_main(void)
 		 PROCESS_MAIN_CHK_LOCKS(c_p);
 		 SWAPIN;
 	     }
+	     VALGRIND_CLEAR_PROTECTION(HTOP, 3*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	     r(0) = TUPLE2(HTOP, am_EXIT, x(2));
 	     HTOP += 3;
 	 }
@@ -5906,6 +5912,7 @@ call_error_handler(Process* p, BeamInstr* fi, Eterm* reg, Eterm func)
     if (HeapWordsLeft(p) < sz) {
 	erts_garbage_collect(p, sz, reg, arity);
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, sz*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     hp = HEAP_TOP(p);
     HEAP_TOP(p) += sz;
     args = NIL;
@@ -5953,6 +5960,7 @@ apply_setup_error_handler(Process* p, Eterm module, Eterm function, Uint arity, 
 	if (HeapWordsLeft(p) < sz) {
 	    erts_garbage_collect(p, sz, reg, arity);
 	}
+	VALGRIND_CLEAR_PROTECTION(HEAP_TOP(p), sz*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	hp = HEAP_TOP(p);
 	HEAP_TOP(p) += sz;
 	for (i = arity-1; i >= 0; i--) {
@@ -6173,6 +6181,7 @@ erts_hibernate(Process* c_p, Eterm module, Eterm function, Eterm args, Eterm* re
     c_p->arg_reg[0] = module;
     c_p->arg_reg[1] = function;
     c_p->arg_reg[2] = args;
+    VALGRIND_SET_PROTECTION(c_p->stop, (c_p->hend-c_p->stop)*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
     c_p->stop = STACK_START(c_p);
     c_p->catches = 0;
     c_p->i = beam_apply;
@@ -6264,6 +6273,7 @@ call_fun(Process* p,		/* Current process. */
 		    erts_garbage_collect(p, sz, reg, arity+1);
 		    fun = reg[arity];
 		}
+		VALGRIND_CLEAR_PROTECTION(HEAP_TOP(p), sz*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		hp = HEAP_TOP(p);
 		HEAP_TOP(p) += sz;
 		for (i = arity-1; i >= 0; i--) {
@@ -6409,6 +6419,7 @@ new_fun(Process* p, Eterm* reg, ErlFunEntry* fe, int num_free)
     }
     hp = p->htop;
     p->htop = hp + needed;
+    VALGRIND_CLEAR_PROTECTION(hp, needed*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     funp = (ErlFunThing *) hp;
     hp = funp->env;
     erts_refc_inc(&fe->refc, 2);
@@ -6516,6 +6527,7 @@ new_map(Process* p, Eterm* reg, BeamInstr* I)
     if (HeapWordsLeft(p) < need) {
 	erts_garbage_collect(p, need, reg, Arg(2));
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 
     thp    = p->htop;
     mhp    = thp + 1 + n/2;
@@ -6583,6 +6595,7 @@ update_map_assoc(Process* p, Eterm* reg, Eterm map, BeamInstr* I)
 	map      = reg[live];
 	old_mp   = (map_t *)map_val(map);
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 
     /*
      * Build the skeleton for the map, ready to be filled in.
@@ -6759,6 +6772,7 @@ update_map_exact(Process* p, Eterm* reg, Eterm map, BeamInstr* I)
 	map      = reg[live];
 	old_mp   = (map_t *)map_val(map);
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 
     /*
      * Update map, keeping the old key tuple.

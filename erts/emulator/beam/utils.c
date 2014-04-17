@@ -154,6 +154,7 @@ erts_heap_alloc(Process* p, Uint need, Uint xtra)
      */
     htop = HEAP_TOP(p);
     if (htop < HEAP_LIMIT(p)) {
+	VALGRIND_CLEAR_PROTECTION(htop, (HEAP_LIMIT(p)-htop)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	*htop = make_pos_bignum_header(HEAP_LIMIT(p)-htop-1);
 	HEAP_TOP(p) = HEAP_LIMIT(p);
     }
@@ -1813,6 +1814,7 @@ static int do_send_to_logger(Eterm tag, Eterm gleader, char *buf, int len)
 	ohp = &MSO(p);
 	hp = HEAP_TOP(p);
 	HEAP_TOP(p) += sz;
+	VALGRIND_CLEAR_PROTECTION(hp, sz*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     } else {
 #endif
 	bp = new_message_buffer(sz);

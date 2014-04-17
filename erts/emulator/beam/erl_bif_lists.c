@@ -241,6 +241,7 @@ BIF_RETTYPE lists_reverse_2(BIF_ALIST_2)
     result = BIF_ARG_2;
     hp = HEAP_TOP(BIF_P);
     n = HeapWordsLeft(BIF_P) / 2;
+    VALGRIND_CLEAR_PROTECTION(hp, n*2*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     while (n != 0 && is_list(list)) {
 	Eterm* pair = list_val(list);
 	result = CONS(hp, CAR(pair), result);
@@ -250,6 +251,7 @@ BIF_RETTYPE lists_reverse_2(BIF_ALIST_2)
     }
     HEAP_TOP(BIF_P) = hp;
     if (is_nil(list)) {
+	VALGRIND_SET_PROTECTION(hp, n*2*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	BIF_RET(result);
     }
 

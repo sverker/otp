@@ -384,6 +384,7 @@ Eterm erts_gc_size_1(Process* p, Eterm* reg, Uint live)
 	    if (ERTS_NEED_GC(p, BIG_UINT_HEAP_SIZE)) {
 		erts_garbage_collect(p, BIG_UINT_HEAP_SIZE, reg, live);
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, BIG_UINT_HEAP_SIZE*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += BIG_UINT_HEAP_SIZE;
 	    return uint_to_big(sz, hp);
@@ -410,6 +411,7 @@ Eterm erts_gc_bit_size_1(Process* p, Eterm* reg, Uint live)
 		if (ERTS_NEED_GC(p, BIG_UINT_HEAP_SIZE)) {
 		    erts_garbage_collect(p, BIG_UINT_HEAP_SIZE, reg, live);
 		}
+		VALGRIND_CLEAR_PROTECTION(p->htop, BIG_UINT_HEAP_SIZE*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		hp = p->htop;
 		p->htop += BIG_UINT_HEAP_SIZE;
 		return uint_to_big(low_bits, hp);
@@ -420,6 +422,7 @@ Eterm erts_gc_bit_size_1(Process* p, Eterm* reg, Uint live)
 	    if (ERTS_NEED_GC(p, sz)) {
 		erts_garbage_collect(p, sz, reg, live);
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, sz*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += sz;
 	    hp[0] = make_pos_bignum_header(sz-1);
@@ -447,6 +450,7 @@ Eterm erts_gc_byte_size_1(Process* p, Eterm* reg, Uint live)
 	    if (ERTS_NEED_GC(p, BIG_UINT_HEAP_SIZE)) {
 		erts_garbage_collect(p, BIG_UINT_HEAP_SIZE, reg, live);
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, BIG_UINT_HEAP_SIZE*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += BIG_UINT_HEAP_SIZE;
 	    return uint_to_big(bytesize, hp);
@@ -469,6 +473,7 @@ Eterm erts_gc_map_size_1(Process* p, Eterm* reg, Uint live)
 	    if (ERTS_NEED_GC(p, BIG_UINT_HEAP_SIZE)) {
 		erts_garbage_collect(p, BIG_UINT_HEAP_SIZE, reg, live);
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, BIG_UINT_HEAP_SIZE*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += BIG_UINT_HEAP_SIZE;
 	    return uint_to_big(size, hp);
@@ -496,6 +501,7 @@ Eterm erts_gc_abs_1(Process* p, Eterm* reg, Uint live)
 		erts_garbage_collect(p, BIG_UINT_HEAP_SIZE, reg, live+1);
 		arg = reg[live];
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, BIG_UINT_HEAP_SIZE*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += BIG_UINT_HEAP_SIZE;
 	    return uint_to_big(i, hp);
@@ -513,6 +519,7 @@ Eterm erts_gc_abs_1(Process* p, Eterm* reg, Uint live)
 		erts_garbage_collect(p, sz, reg, live+1);
 		arg = reg[live];
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, sz*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += sz;
 	    sz--;
@@ -533,6 +540,7 @@ Eterm erts_gc_abs_1(Process* p, Eterm* reg, Uint live)
 		erts_garbage_collect(p, FLOAT_SIZE_OBJECT, reg, live+1);
 		arg = reg[live];
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, FLOAT_SIZE_OBJECT*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += FLOAT_SIZE_OBJECT;
 	    f.fd = fabs(f.fd);
@@ -573,6 +581,7 @@ Eterm erts_gc_float_1(Process* p, Eterm* reg, Uint live)
 	erts_garbage_collect(p, FLOAT_SIZE_OBJECT, reg, live+1);
 	arg = reg[live];
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, FLOAT_SIZE_OBJECT*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     hp = p->htop;
     p->htop += FLOAT_SIZE_OBJECT;
     res = make_float(hp);
@@ -653,6 +662,7 @@ gc_double_to_integer(Process* p, double x, Eterm* reg, Uint live)
     if (ERTS_NEED_GC(p, sz)) {
 	erts_garbage_collect(p, sz, reg, live);
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, sz*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     hp = p->htop;
     p->htop += sz;
     res = make_big(hp);

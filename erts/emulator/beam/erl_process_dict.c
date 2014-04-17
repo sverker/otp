@@ -535,6 +535,8 @@ static Eterm pd_hash_put(Process *p, Eterm id, Eterm value)
 	value = root[1];
 	old = root[2];
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, needed*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
+
 #ifdef DEBUG
     hp_limit = p->htop + needed;
 #endif
@@ -666,6 +668,7 @@ static void shrink(Process *p, Eterm* ret)
 		    hi = pd->data[(pd->splitPosition + pd->homeSize)];
 		    lo = pd->data[pd->splitPosition];
 		}
+		VALGRIND_CLEAR_PROTECTION(p->htop, needed*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 #ifdef DEBUG
 		hp_limit = p->htop + needed;
 #endif
@@ -760,6 +763,7 @@ static void grow(Process *p)
     if (HeapWordsLeft(p) < needed) {
 	BUMP_REDS(p, erts_garbage_collect(p, needed, 0, 0));
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, needed*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 #ifdef DEBUG
     hp_limit = p->htop + needed;
 #endif

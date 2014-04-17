@@ -581,6 +581,7 @@ erts_link_mbuf_to_proc(struct process *proc, ErlHeapFragment *bp)
 
     link_mbuf_to_proc(proc, bp);
     if (htop < HEAP_LIMIT(proc)) {
+	VALGRIND_CLEAR_PROTECTION(proc->htop, (proc->stop - proc->htop)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	*htop = make_pos_bignum_header(HEAP_LIMIT(proc)-htop-1);
 	HEAP_TOP(proc) = HEAP_LIMIT(proc);
     }
@@ -1076,6 +1077,7 @@ erts_send_message(Process* sender,
 	    erts_garbage_collect(receiver, msize, receiver->arg_reg, receiver->arity);
             BM_SWAP_TIMER(system,send);
 	}
+	VALGRIND_CLEAR_PROTECTION(receiver->htop, msize*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	hp = receiver->htop;
 	receiver->htop = hp + msize;
         BM_SWAP_TIMER(send,copy);

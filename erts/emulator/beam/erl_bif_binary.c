@@ -1669,6 +1669,7 @@ BIF_RETTYPE erts_gc_binary_part(Process *p, Eterm *reg, Eterm live, int range_is
 									      or indices any more */
 	binary = reg[live-extra_args];
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, ERL_SUB_BIN_SIZE*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 
     hp = p->htop;
     p->htop += ERL_SUB_BIN_SIZE;

@@ -1313,6 +1313,7 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
     if (c_p->stop - c_p->htop < heap_need) {
 	(void) erts_garbage_collect(c_p, heap_need, reg, live+1);
     }
+    VALGRIND_CLEAR_PROTECTION(c_p->htop, heap_need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     sb = (ErlSubBin *) c_p->htop;
     c_p->htop += ERL_SUB_BIN_SIZE;
     sb->thing_word = HEADER_SUB_BIN;
@@ -1348,6 +1349,8 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
 	    bin = reg[live];
 	}
 	hp = c_p->htop;
+	VALGRIND_CLEAR_PROTECTION(hp, (heap_need)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
+
 
 	/*
 	 * Calculate sizes. The size of the new binary, is the sum of the
@@ -1531,8 +1534,9 @@ erts_bs_init_writable(Process* p, Eterm sz)
     if (p->stop - p->htop < heap_need) {
 	(void) erts_garbage_collect(p, heap_need, NULL, 0);
     }
+    VALGRIND_CLEAR_PROTECTION(p->htop, heap_need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     hp = p->htop;
-    
+
     /*
      * Allocate the binary data struct itself.
      */

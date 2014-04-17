@@ -655,10 +655,12 @@ erts_generic_breakpoint(Process* c_p, BeamInstr* I, Eterm* reg)
 		(void) erts_garbage_collect(c_p, 2, reg, I[-1]);
 		ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	    }
+	    VALGRIND_CLEAR_PROTECTION(E-2, 2*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    E = c_p->stop;
 
 	    ASSERT(c_p->htop <= E && E <= c_p->hend);
 
+	    VALGRIND_CLEAR_PROTECTION(E, 2*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    E -= 2;
 	    E[0] = make_cp(I);
 	    E[1] = make_cp(c_p->cp);     /* original return address */
@@ -916,10 +918,12 @@ do_call_trace(Process* c_p, BeamInstr* I, Eterm* reg,
 	    ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	    E = c_p->stop;
 	}
+	VALGRIND_CLEAR_PROTECTION(E-need, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     }
     if (flags & MATCH_SET_RETURN_TO_TRACE && !return_to_trace) {
 	E -= 1;
 	ASSERT(c_p->htop <= E && E <= c_p->hend);
+	VALGRIND_CLEAR_PROTECTION(E, 1*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	E[0] = make_cp(c_p->cp);
 	c_p->cp = beam_return_to_trace;
     }
@@ -929,6 +933,7 @@ do_call_trace(Process* c_p, BeamInstr* I, Eterm* reg,
 	ASSERT(is_CP((Eterm) (UWord) (I - 3)));
 	ASSERT(am_true == tracer_pid ||
 	       is_internal_pid(tracer_pid) || is_internal_port(tracer_pid));
+	VALGRIND_CLEAR_PROTECTION(E, 3*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	E[2] = make_cp(c_p->cp);
 	E[1] = tracer_pid;
 	E[0] = make_cp(I - 3); /* We ARE at the beginning of an

@@ -194,6 +194,7 @@ void hipe_reserve_beam_trap_frame(Process *p, Eterm reg[], unsigned arity)
 	ASSERT(!((p->stop - 2) < p->htop));
     }
     p->stop -= 2;
+    VALGRIND_CLEAR_PROTECTION(p->stop, 2*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     p->stop[0] = NIL;
     p->stop[1] = NIL;
 }
@@ -212,6 +213,7 @@ hipe_push_beam_trap_frame(Process *p, Eterm reg[], unsigned arity)
 	    ASSERT(!((p->stop - 2) < p->htop));
 	}
 	p->stop -= 2;
+	VALGRIND_CLEAR_PROTECTION(p->stop, 2*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     }
     p->stop[1] = hipe_beam_catch_throw;
     p->stop[0] = make_cp(p->cp);
@@ -222,6 +224,7 @@ hipe_push_beam_trap_frame(Process *p, Eterm reg[], unsigned arity)
 void hipe_unreserve_beam_trap_frame(Process *p)
 {
     ASSERT(p->stop[0] == NIL && p->stop[1] == NIL);
+    VALGRIND_SET_PROTECTION(p->stop, 2*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
     p->stop += 2;
 }
 
@@ -229,6 +232,7 @@ static __inline__ void hipe_pop_beam_trap_frame(Process *p)
 {
     p->cp = cp_val(p->stop[0]);
     --p->catches;
+    VALGRIND_SET_PROTECTION(p->stop, 2*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
     p->stop += 2;
 }
 

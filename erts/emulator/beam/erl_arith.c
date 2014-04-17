@@ -1190,6 +1190,7 @@ erts_gc_mixed_plus(Process* p, Eterm* reg, Uint live)
 			if (ERTS_NEED_GC(p, 2)) {
 			    erts_garbage_collect(p, 2, reg, live);
 			}
+			VALGRIND_CLEAR_PROTECTION(p->htop, 2*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 			hp = p->htop;
 			p->htop += 2;
 			res = small_to_big(ires, hp);
@@ -1257,6 +1258,7 @@ erts_gc_mixed_plus(Process* p, Eterm* reg, Uint live)
 			    arg2 = reg[live+1];
 			}
 		    }
+		    VALGRIND_CLEAR_PROTECTION(p->htop, need_heap*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		    hp = p->htop;
 		    p->htop += need_heap;
 		    res = big_plus(arg1, arg2, hp);
@@ -1307,6 +1309,7 @@ erts_gc_mixed_plus(Process* p, Eterm* reg, Uint live)
 		    if (ERTS_NEED_GC(p, FLOAT_SIZE_OBJECT)) {
 			erts_garbage_collect(p, FLOAT_SIZE_OBJECT, reg, live);
 		    }
+		    VALGRIND_CLEAR_PROTECTION(p->htop, FLOAT_SIZE_OBJECT*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		    hp = p->htop;
 		    p->htop += FLOAT_SIZE_OBJECT;
 		    res = make_float(hp);
@@ -1358,6 +1361,7 @@ erts_gc_mixed_minus(Process* p, Eterm* reg, Uint live)
 			if (ERTS_NEED_GC(p, 2)) {
 			    erts_garbage_collect(p, 2, reg, live);
 			}
+			VALGRIND_CLEAR_PROTECTION(p->htop, 2*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 			hp = p->htop;
 			p->htop += 2;
 			res = small_to_big(ires, hp);
@@ -1414,6 +1418,7 @@ erts_gc_mixed_minus(Process* p, Eterm* reg, Uint live)
 			    arg2 = reg[live+1];
 			}
 		    }
+		    VALGRIND_CLEAR_PROTECTION(p->htop, need_heap*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		    hp = p->htop;
 		    p->htop += need_heap;
 		    res = big_minus(arg1, arg2, hp);
@@ -1473,6 +1478,7 @@ erts_gc_mixed_minus(Process* p, Eterm* reg, Uint live)
 		    if (ERTS_NEED_GC(p, FLOAT_SIZE_OBJECT)) {
 			erts_garbage_collect(p, FLOAT_SIZE_OBJECT, reg, live);
 		    }
+		    VALGRIND_CLEAR_PROTECTION(p->htop, FLOAT_SIZE_OBJECT*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		    hp = p->htop;
 		    p->htop += FLOAT_SIZE_OBJECT;
 		    res = make_float(hp);
@@ -1553,6 +1559,7 @@ erts_gc_mixed_times(Process* p, Eterm* reg, Uint live)
 			    if (ERTS_NEED_GC(p, need)) {
 				erts_garbage_collect(p, need, reg, live);
 			    }
+			    VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 			    hp = p->htop;
 			    p->htop += need;
 			    res = make_big(hp);
@@ -1632,6 +1639,7 @@ erts_gc_mixed_times(Process* p, Eterm* reg, Uint live)
 			    arg2 = reg[live+1];
 			}
 		    }
+		    VALGRIND_CLEAR_PROTECTION(p->htop, need_heap*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		    hp = p->htop;
 		    p->htop += need_heap;
 		    res = big_times(arg1, arg2, hp);
@@ -1689,6 +1697,7 @@ erts_gc_mixed_times(Process* p, Eterm* reg, Uint live)
 		    if (ERTS_NEED_GC(p, FLOAT_SIZE_OBJECT)) {
 			erts_garbage_collect(p, FLOAT_SIZE_OBJECT, reg, live);
 		    }
+		    VALGRIND_CLEAR_PROTECTION(p->htop, FLOAT_SIZE_OBJECT*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		    hp = p->htop;
 		    p->htop += FLOAT_SIZE_OBJECT;
 		    res = make_float(hp);
@@ -1823,6 +1832,7 @@ erts_gc_mixed_div(Process* p, Eterm* reg, Uint live)
 		    if (ERTS_NEED_GC(p, FLOAT_SIZE_OBJECT)) {
 			erts_garbage_collect(p, FLOAT_SIZE_OBJECT, reg, live);
 		    }
+		    VALGRIND_CLEAR_PROTECTION(p->htop, FLOAT_SIZE_OBJECT*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 		    hp = p->htop;
 		    p->htop += FLOAT_SIZE_OBJECT;
 		    PUT_DOUBLE(f1, hp);
@@ -1889,6 +1899,7 @@ erts_gc_int_div(Process* p, Eterm* reg, Uint live)
 		    arg2 = reg[live+1];
 		}
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += need;
 	    arg1 = big_div(arg1, arg2, hp);
@@ -1952,6 +1963,7 @@ erts_gc_int_rem(Process* p, Eterm* reg, Uint live)
 		    arg2 = reg[live+1];
 		}
 	    }
+	    VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	    hp = p->htop;
 	    p->htop += need;
 	    arg1 = big_rem(arg1, arg2, hp);
@@ -1988,6 +2000,7 @@ Eterm erts_gc_##func(Process* p, Eterm* reg, Uint live)				\
 	    erts_garbage_collect(p, need, reg, live+2);				\
 	    arg2 = reg[live+1];							\
 	}									\
+	VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);\
 	break;									\
     case BIG_SMALL:								\
 	arg2 = small_to_big(signed_val(arg2), tmp_big2);			\
@@ -1996,6 +2009,7 @@ Eterm erts_gc_##func(Process* p, Eterm* reg, Uint live)				\
 	    erts_garbage_collect(p, need, reg, live+2);				\
 	    arg1 = reg[live];							\
 	}									\
+	VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);\
 	break;									\
     case BIG_BIG:								\
 	need = BIG_NEED_SIZE(MAX(big_size(arg1), big_size(arg2)) + 1);		\
@@ -2004,6 +2018,7 @@ Eterm erts_gc_##func(Process* p, Eterm* reg, Uint live)				\
 	    arg1 = reg[live];							\
 	    arg2 = reg[live+1];							\
 	}									\
+	VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);\
 	break;									\
     default:									\
 	p->freason = BADARITH;							\
@@ -2037,6 +2052,7 @@ Eterm erts_gc_bnot(Process* p, Eterm* reg, Uint live)
 	    erts_garbage_collect(p, need, reg, live+1);
 	    arg = reg[live];
 	}
+	VALGRIND_CLEAR_PROTECTION(p->htop, need*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	bigp = p->htop;
 	p->htop += need;
 	result = big_bnot(arg, bigp);

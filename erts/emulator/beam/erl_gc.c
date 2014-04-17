@@ -589,6 +589,7 @@ erts_garbage_collect_hibernate(Process* p)
     /*
      *  Update all pointers.
      */
+    VALGRIND_CLEAR_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     ERTS_HEAP_FREE(ERTS_ALC_T_HEAP,
 		   (void*)HEAP_START(p),
 		   HEAP_SIZE(p) * sizeof(Eterm));
@@ -643,6 +644,7 @@ erts_garbage_collect_hibernate(Process* p)
     p->heap = heap;
     p->heap_sz = heap_size;
 
+    VALGRIND_SET_PROTECTION(p->htop, (p->hend-p->htop)*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
 
 #ifdef CHECK_FOR_HOLES
     p->last_htop = p->htop;
@@ -879,12 +881,14 @@ minor_collection(Process* p, int need, Eterm* objv, int nobj, Uint *recl)
 	 * Copy newly received message onto the end of the new heap.
 	 */
 	ErtsGcQuickSanityCheck(p);
+	VALGRIND_CLEAR_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	for (msgp = p->msg.first; msgp; msgp = msgp->next) {
 	    if (msgp->data.attached) {
 		erts_move_msg_attached_data_to_heap(&p->htop, &p->off_heap, msgp);
 		ErtsGcQuickSanityCheck(p);
 	    }
 	}
+	VALGRIND_SET_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	ErtsGcQuickSanityCheck(p);
 
         GEN_GCS(p)++;
@@ -1175,6 +1179,8 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
     disallow_heap_frag_ref_in_old_heap(p);
 #endif
 
+    VALGRIND_CLEAR_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
+
     /* Copy stack to end of new heap */
     n = p->hend - p->stop;
     sys_memcpy(n_heap + new_sz - n, p->stop, n * sizeof(Eterm));
@@ -1196,6 +1202,8 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
     HEAP_TOP(p) = n_htop;
     HEAP_SIZE(p) = new_sz;
     HEAP_END(p) = n_heap + new_sz;
+
+    VALGRIND_SET_PROTECTION(p->htop, (p->stop-p->htop)*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
 
 #ifdef HARDDEBUG
     disallow_heap_frag_ref_in_heap(p);
@@ -1405,6 +1413,8 @@ major_collection(Process* p, int need, Eterm* objv, int nobj, Uint *recl)
 	OLD_HEAP(p) = OLD_HTOP(p) = OLD_HEND(p) = NULL;
     }
 
+    VALGRIND_CLEAR_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
+
     /* Move the stack to the end of the heap */
     n = HEAP_END(p) - p->stop;
     sys_memcpy(n_heap + new_sz - n, p->stop, n * sizeof(Eterm));
@@ -1443,6 +1453,8 @@ major_collection(Process* p, int need, Eterm* objv, int nobj, Uint *recl)
     }
 
     *recl += adjust_after_fullsweep(p, size_before, need, objv, nobj);
+
+    VALGRIND_SET_PROTECTION(p->htop, (p->stop-p->htop)*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
 
 #ifdef HARDDEBUG
     disallow_heap_frag_ref_in_heap(p);
@@ -2116,6 +2128,7 @@ shrink_new_heap(Process *p, Uint new_sz, Eterm *objv, int nobj)
     Uint stack_size = p->hend - p->stop;
 
     ASSERT(new_sz < p->heap_sz);
+    VALGRIND_CLEAR_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     sys_memmove(p->heap + new_sz - stack_size, p->stop, stack_size *
                                                         sizeof(Eterm));
     new_heap = (Eterm *) ERTS_HEAP_REALLOC(ERTS_ALC_T_HEAP,
@@ -2141,6 +2154,7 @@ shrink_new_heap(Process *p, Uint new_sz, Eterm *objv, int nobj)
         HEAP_TOP(p) = new_heap + heap_size;
         HEAP_START(p) = new_heap;
     }
+    VALGRIND_SET_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
 
 #ifdef USE_VM_PROBES
     if (DTRACE_ENABLED(process_heap_shrink)) {

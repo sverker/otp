@@ -199,9 +199,11 @@ do {									\
 	Uint need__ = erts_msg_attached_data_size((M));			\
  	if ((ST) - (HT) >= need__) {					\
 	    Uint *htop__ = (HT);					\
+            VALGRIND_CLEAR_PROTECTION((HT), need__*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);\
 	    erts_move_msg_attached_data_to_heap(&htop__, &MSO((P)), (M));\
 	    ASSERT(htop__ - (HT) <= need__);				\
 	    (HT) = htop__;						\
+	    VALGRIND_SET_PROTECTION((HT), ((ST)-(HT))*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);\
 	}								\
 	else {								\
 	    { SWPO ; }							\

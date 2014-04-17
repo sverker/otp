@@ -20,6 +20,8 @@
 #ifndef __ERL_VM_H__
 #define __ERL_VM_H__
 
+#include <valgrind/memhist.h>
+
 /* #define ERTS_OPCODE_COUNTER_SUPPORT */
 
 /* FORCE_HEAP_FRAGS:
@@ -101,7 +103,8 @@
      ErtsHAllocLockCheck(p),					      \
      (IS_FORCE_HEAP_FRAGS || (((HEAP_LIMIT(p) - HEAP_TOP(p)) < (sz))) \
       ? erts_heap_alloc((p),(sz),(xtra))                              \
-      : (INIT_HEAP_MEM(p,sz),		                              \
+      : (VALGRIND_CLEAR_PROTECTION(HEAP_TOP(p), (sz)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD), \
+	 INIT_HEAP_MEM(p,sz),		                              \
          HEAP_TOP(p) = HEAP_TOP(p) + (sz), HEAP_TOP(p) - (sz))))
 
 #define HAlloc(P, SZ) HAllocX(P,SZ,0)
@@ -111,6 +114,7 @@
      ;								\
   } else if (HEAP_START(p) <= (ptr) && (ptr) < HEAP_TOP(p)) {	\
      HEAP_TOP(p) = (ptr);					\
+     VALGRIND_SET_PROTECTION((p)->htop, ((p)->stop - (p)->htop)*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD); \
   } else {							\
      erts_heap_frag_shrink(p, ptr);					\
   }

@@ -10594,6 +10594,8 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 	    : STORE_NC(&p->htop, &p->off_heap, parent->group_leader);
     }
 
+    VALGRIND_SET_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), "eheap", VG_MEM_NOWRITE|VG_MEM_NOREAD);
+
     erts_get_default_tracing(&ERTS_TRACE_FLAGS(p), &ERTS_TRACER_PROC(p));
 
     p->msg.first = NULL;
@@ -10970,6 +10972,7 @@ delete_process(Process* p)
     hipe_delete_process(&p->hipe);
 #endif
 
+    VALGRIND_CLEAR_PROTECTION(p->htop, (p->stop - p->htop)*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
     ERTS_HEAP_FREE(ERTS_ALC_T_HEAP, (void*) p->heap, p->heap_sz*sizeof(Eterm));
     if (p->old_heap != NULL) {
 

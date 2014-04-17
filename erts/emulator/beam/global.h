@@ -1145,6 +1145,7 @@ erts_alloc_message_heap_state(Uint size,
 	}
 	hp = HEAP_TOP(receiver);
 	HEAP_TOP(receiver) = hp + size;
+	VALGRIND_CLEAR_PROTECTION(hp, size*sizeof(Eterm), VG_MEM_NOWRITE|VG_MEM_NOREAD);
 	*bpp = NULL;
 	*ohpp = &MSO(receiver);
     }

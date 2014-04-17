@@ -84,6 +84,9 @@ static ERTS_INLINE Eterm* alloc_heap(ErlNifEnv* env, unsigned need)
     Eterm* hp = env->hp;
     env->hp += need;
     if (env->hp <= env->hp_end) {
+	if (!env->heap_frag) {
+	    VALGRIND_CLEAR_PROTECTION(hp, (env->hp - hp) * sizeof(Eterm), VG_MEM_NOWRITE | VG_MEM_NOREAD);
+	}
 	return hp;
     }
     return alloc_heap_heavy(env, need, hp);
