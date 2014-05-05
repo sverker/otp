@@ -111,16 +111,16 @@ release_spec: opt
 release_docs_spec:
 
 
-ifeq ($(TYPE),debug)
-TYPE_STR=.debug
-else
+ifeq ($(TYPE),)
 TYPE_STR=
+else
+TYPE_STR=.$(TYPE)
 endif
 
-ifeq ($(FLAVOR),smp)
-FLAVOR_STR=.smp
-else
+ifeq ($(FLAVOR),)
 FLAVOR_STR=
+else
+FLAVOR_STR=.$(FLAVOR)
 endif
 
 ifeq ($(XCOMP),yes)
