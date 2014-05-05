@@ -28,6 +28,9 @@ struct hipe_process_state {
     Eterm *nsp;			/* Native stack pointer. */
     Eterm *nstack;		/* Native stack block start. */
     Eterm *nstend;		/* Native stack block end (start+size). */
+#ifdef VALGRIND
+    unsigned int nstack_id;
+#endif
     /* XXX: ncallee and closure could share space in a union */
     void (*ncallee)(void);	/* Native code callee (label) to invoke. */
     Eterm closure;		/* Used to pass a closure from native code. */

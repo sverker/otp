@@ -35,6 +35,10 @@
 #include "hipe_stack.h"
 #include "hipe_bif0.h"	/* hipe_mfa_info_table_init() */
 
+#ifdef VALGRIND
+#  include <valgrind/valgrind.h>
+#endif
+
 #if defined(ERTS_ENABLE_LOCK_CHECK) && defined(ERTS_SMP)
 #    define ERTS_SMP_REQ_PROC_MAIN_LOCK(P) \
         if ((P)) erts_proc_lc_require_lock((P), ERTS_PROC_LOCK_MAIN,	\
@@ -636,17 +640,27 @@ void hipe_inc_nstack(Process *p)
 	p->hipe.nstgraylim = new_nstack + new_size - (p->hipe.nstend - p->hipe.nstgraylim);
     if (p->hipe.nstblacklim)
 	p->hipe.nstblacklim = new_nstack + new_size - (p->hipe.nstend - p->hipe.nstblacklim);
-    if (p->hipe.nstack)
+    if (p->hipe.nstack) {
+    #ifdef VALGRIND
+	VALGRIND_STACK_DEREGISTER(p->hipe.nstack_id);
+    #endif
 	erts_free(ERTS_ALC_T_HIPE, p->hipe.nstack);
+    }
     p->hipe.nstack = new_nstack;
     p->hipe.nstend = new_nstack + new_size;
     p->hipe.nsp = new_nstack + new_size - used_size;
+#ifdef VALGRIND
+    p->hipe.nstack_id = VALGRIND_STACK_REGISTER(p->hipe.nstack, p->hipe.nstend);
+#endif
 }
 #endif
 
 void hipe_empty_nstack(Process *p)
 {
     if (p->hipe.nstack) {
+    #ifdef VALGRIND
+	VALGRIND_STACK_DEREGISTER(p->hipe.nstack_id);
+    #endif
 	erts_free(ERTS_ALC_T_HIPE, p->hipe.nstack);
     }
     p->hipe.nstgraylim = NULL;
