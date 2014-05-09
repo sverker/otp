@@ -116,6 +116,7 @@ static void offset_rootset(Process *p, Sint offs, char* area, Uint area_size,
 			   Eterm* objv, int nobj);
 static void offset_off_heap(Process* p, Sint offs, char* area, Uint area_size);
 static void offset_mqueue(Process *p, Sint offs, char* area, Uint area_size);
+static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj);
 
 static void init_gc_info(ErtsGCInfo *gcip);
 
@@ -440,6 +441,7 @@ erts_garbage_collect(Process* p, int need, Eterm* objv, int nobj)
     /*
      * Test which type of GC to do.
      */
+#if 0
     while (!done) {
 	if ((FLAGS(p) & F_NEED_FULLSWEEP) != 0) {
 	    DTRACE2(gc_major_start, pidbuf, need);
@@ -451,13 +453,17 @@ erts_garbage_collect(Process* p, int need, Eterm* objv, int nobj)
 	    DTRACE2(gc_minor_end, pidbuf, reclaimed_now);
 	}
     }
+#endif
+    mark_and_sweep(p, need, objv, nobj);
     reset_active_writer(p);
 
     /*
      * Finish.
      */
 
+    /* ToDo: Uncomment when off-heap list is fixed
     ERTS_CHK_OFFHEAP(p);
+    */
 
     ErtsGcQuickSanityCheck(p);
 
@@ -2728,6 +2734,445 @@ within(Eterm *ptr, Process *p)
 }
 
 #endif
+
+
+typedef struct move_record__ move_record_t;
+
+struct move_record__ {
+    move_record_t *next;
+    Eterm *from;
+    Eterm *to;
+    Uint sz;
+};
+
+typedef struct {
+    UWord *marks;
+    Uint sz;
+    Eterm *base;
+    move_record_t *moves;
+    Process *p;
+} mmx_t;
+
+static mmx_t *alloc_mmx(Process *p) {
+    mmx_t *mmx = malloc(sizeof(mmx_t));
+    int sz = p->heap_sz / 8 + 1;
+    mmx->marks = malloc((sz / sizeof(UWord) + 1) * (sizeof(UWord)));
+    mmx->sz = (sz / sizeof(UWord) + 1);
+    memset(mmx->marks,0,(sz / sizeof(UWord) + 1) * (sizeof(UWord)));
+    mmx->base = p->heap;
+    mmx->moves = NULL;
+    mmx->p = p;
+    return mmx;
+}
+
+static void mark(mmx_t *mmx, Eterm *ptr, Uint sz) {
+    Uint offset = ptr - mmx->base;
+    Uint i;
+    erts_printf("marking from %d %d words\n",offset,sz);
+    for (i = 0; i < sz; i++) {
+	Uint element = (offset+i) / (sizeof(UWord)*8);
+	Uint subelement = (offset+i) % (sizeof(UWord)*8);
+	mmx->marks[element] |= ((UWord)1) << subelement;
+    }
+}
+
+static Eterm *next_unmarked(mmx_t *mmx,Eterm *heap) {
+    Uint offset = heap - mmx->base;
+    int i = offset / (sizeof(UWord)*8),
+	j = offset % (sizeof(UWord)*8);
+
+    while (1) {
+	if (!(mmx->marks[i] & ((UWord)1<<j)))
+	    break;
+	if (j == ((sizeof(UWord)*8)-1)) {
+	    i++;
+	    j=0;
+	    if (i == mmx->sz) return NULL;
+	} else {
+	    j++;
+	}
+    }
+
+    return mmx->base + i * (sizeof(UWord)*8) + j;
+}
+
+static Eterm *next_marked(mmx_t *mmx,Eterm *htop) {
+    Uint offset = htop - mmx->base;
+    int i = offset / (sizeof(UWord)*8),
+	j = offset % (sizeof(UWord)*8);
+
+    while(1) {
+	if (mmx->marks[i] & ((UWord)1<<j))
+	    break;
+	if (j == ((sizeof(UWord)*8)-1)) {
+	    i++;
+	    j=0;
+	    if (i == mmx->sz) return NULL;
+	} else {
+	    j++;
+	}
+    }
+    return mmx->base + i * (sizeof(UWord)*8) + j;
+}
+
+static void add_move_record(mmx_t *mmx, Eterm *from, Eterm *to, Uint sz) {
+    move_record_t *rec = malloc(sizeof(move_record_t));
+
+    ASSERT(!mmx->moves || to == mmx->moves->to + mmx->moves->sz);
+    ASSERT(!mmx->moves || from > mmx->moves->from);
+    rec->from = from;
+    rec->to = to;
+    rec->sz = sz;
+    rec->next = mmx->moves;
+    mmx->moves = rec;
+}
+
+static Uint compact(mmx_t *mmx, Eterm *dst, Eterm *src_start) {
+    Eterm *src_end = next_unmarked(mmx,src_start);
+    Uint sz = src_end - src_start;
+    sys_memmove(dst,src_start,sz);
+    add_move_record(mmx,src_start,dst,sz);
+    return sz;
+}
+
+static void update_term(mmx_t *mmx, Eterm* term, Eterm *stop) {
+    UWord ptr = (UWord)*term;
+    move_record_t *curr = mmx->moves;
+
+    if (is_immed(*term))
+	return;
+
+    if (!in_area(ptr, mmx->p->heap, mmx->p->heap_sz * sizeof(UWord)))
+	return;
+
+    while (curr != NULL) {
+	if (in_area(ptr,curr->from, curr->sz*sizeof(Eterm))) {
+	    *term -= (curr->from - curr->to) * sizeof(Eterm);
+	    break;
+	}
+	curr = curr->next;
+    }
+    ASSERT(mmx->p->heap <= (Eterm*)term[0] && (Eterm*)term[0] < stop);
+
+}
+
+static void fix_me_up(mmx_t *mmx, Eterm *start, Eterm *stop) {
+    Eterm *ptr = start;
+    Eterm *last = ptr;
+    Eterm *prev = NULL;
+    ASSERT(stop > start);
+    while (ptr != stop) {
+	ASSERT(ptr < stop);
+	prev = last;
+	last = ptr;
+	if (is_header(*ptr)) {
+	    Eterm val = *ptr;
+	    Uint n;
+	    if (!header_is_thing(val)) {
+		n = header_arity(val);
+	    } else {
+		Sint nelts;
+		if (header_is_bin_matchstate(val)) {
+		    ErlBinMatchState *ms = (ErlBinMatchState*) ptr;
+		    ErlBinMatchBuffer *mb = &(ms->mb);
+		    update_term(mmx,&mb->orig,stop);
+		    mb->base = binary_bytes(mb->orig);
+		}
+		n = nelts = header_arity(val);
+		switch (val & _HEADER_SUBTAG_MASK) {
+		case SUB_BINARY_SUBTAG: n++; break;
+		case MAP_SUBTAG: n += map_get_size(ptr) + 1; break;
+		case FUN_SUBTAG:
+		    n += ((ErlFunThing*)(ptr))->num_free+1;
+		    /*fall through*/
+		case REFC_BINARY_SUBTAG:
+		case EXTERNAL_PID_SUBTAG:
+		case EXTERNAL_PORT_SUBTAG:
+		case EXTERNAL_REF_SUBTAG: {
+		    struct erl_off_heap_header* ohp = (struct erl_off_heap_header*)ptr;
+		    update_term(mmx, (Eterm*)&ohp->next,stop); /* BUGBUG: HALFWORD */
+		    break;
+		}
+		}
+		ptr += nelts;
+		ASSERT(ptr <= stop);
+		n -= nelts;
+	    }
+	    ASSERT(ptr + n <= stop);
+
+	    while (n) {
+		update_term(mmx,ptr++,stop);
+		n--;
+	    }
+	} else {
+	    ASSERT(ptr+1 < stop);
+	    update_term(mmx,ptr++,stop);
+	    update_term(mmx,ptr++,stop);
+	}
+    }
+}
+
+static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
+    Rootset rootset;            /* Rootset for GC (stack, dictionary, etc). */
+    Roots* roots;
+    mmx_t* mmx = alloc_mmx(p);
+    DECLARE_ESTACK(mstack);
+    Uint n, orig_n;
+
+    orig_n = n = setup_rootset(p, objv, nobj, &rootset);
+    roots = rootset.roots;
+
+    /*
+     * Push rootset
+     */
+    while (n--) {
+        Eterm* g_ptr = roots->v;
+        Uint g_sz = roots->sz;
+
+	roots++;
+        while (g_sz--) {
+            Eterm gval = *g_ptr;
+	    erts_printf("%T\n",gval);
+
+            switch (primary_tag(gval)) {
+
+	      case TAG_PRIMARY_BOXED:
+	      case TAG_PRIMARY_LIST:
+		ESTACK_PUSH(mstack, gval);
+		break;
+	    }
+	    g_ptr++;
+        }
+    }
+
+    /* ToDo: Push all terms pointing to heap from heap frags */
+
+    /*
+     * Mark
+     */
+    while (!ESTACK_ISEMPTY(mstack)) {
+	Eterm term = ESTACK_POP(mstack);
+	Eterm *ptr;
+	Eterm val;
+	switch (primary_tag(term)) {
+	case TAG_PRIMARY_BOXED: {
+	    ptr = boxed_val(term);
+	    val = *ptr;
+	    ASSERT(is_header(val));
+	    if (in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm))) {
+		if (!header_is_thing(val)) {
+		    n = header_arity(val);
+		    erts_printf("tuple ");
+		    mark(mmx, ptr, n + 1);
+		}
+		else {
+		    Sint nelts;
+		    if (header_is_bin_matchstate(val)) {
+			ErlBinMatchState *ms = (ErlBinMatchState*) ptr;
+			ErlBinMatchBuffer *mb = &(ms->mb);
+
+			ESTACK_PUSH(mstack, mb->orig);
+		    }
+		    n = nelts = header_arity(val);
+		    switch (val & _HEADER_SUBTAG_MASK) {
+		    case SUB_BINARY_SUBTAG: n++; break;
+		    case MAP_SUBTAG: n += map_get_size(ptr) + 1; break;
+		    case FUN_SUBTAG: n += ((ErlFunThing*)(ptr))->num_free+1; break;
+		    }
+		    erts_printf("thingy ");
+		    mark(mmx, ptr, n + 1);
+		    ptr += nelts;
+		    n -= nelts;
+		}
+
+		while (n) {
+		    if (is_not_immed(ptr[n]))
+			ESTACK_PUSH(mstack, ptr[n]);
+		    --n;
+		}
+	    }
+	    break;
+	}
+
+	case TAG_PRIMARY_LIST: {
+	    ptr = list_val(term);
+	    val = *ptr;
+	    if (in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm))) {
+		if (is_not_immed(CAR(ptr))) {
+		    ESTACK_PUSH(mstack, CAR(ptr));
+		}
+		if (is_not_immed(CDR(ptr))) {
+		    ESTACK_PUSH(mstack, CDR(ptr));
+		}
+		erts_printf("cons ");
+		mark(mmx, ptr, 2);
+	    }
+	    break;
+	}
+
+	default:
+	    abort();
+	}
+    }
+
+    /* ToDo: Remove garbage from offheap list. */
+
+    /*
+     * Sweep:
+     * We could setup offset table before doing sweep so that we can update ptrs
+     * when we compact.
+     */
+
+    {
+	Eterm *htop = next_unmarked(mmx,p->heap);
+	Eterm *next_markedp = htop;
+
+	while((next_markedp = next_marked(mmx,next_markedp))) {
+	    Uint sz;
+	    ASSERT(htop >= p->heap && htop < p->htop);
+	    ASSERT(next_markedp > htop && next_markedp < p->htop);
+	    sz = compact(mmx, htop, next_markedp);
+	    htop += sz;
+	    next_markedp += sz;
+	}
+
+	fix_me_up(mmx,p->heap, htop);
+
+	n = orig_n;
+	roots = rootset.roots;
+
+	/*
+	 * Polish rootset
+	 */
+	while (n--) {
+	    Eterm* g_ptr = roots->v;
+	    Uint g_sz = roots->sz;
+
+	    roots++;
+	    while (g_sz--) {
+
+		Eterm gval = *g_ptr;
+
+		switch (primary_tag(gval)) {
+
+		case TAG_PRIMARY_BOXED:
+		case TAG_PRIMARY_LIST:
+		    update_term(mmx,g_ptr,htop);
+		break;
+		}
+		g_ptr++;
+	    }
+	}
+	update_term(mmx, (Eterm*)&p->off_heap.first, htop);
+	p->htop = htop;
+    }
+
+    /* ToDo: Copy heap frags into heap and fix pointers to heap */
+
+
+
+#ifdef DEBUG
+    /*
+     * Do marking again and verify that no garbage exist.
+     */
+
+    {
+	n = orig_n;
+	roots = rootset.roots;
+	mmx = alloc_mmx(p);
+
+	/*
+	 * Push rootset
+	 */
+	while (n--) {
+	    Eterm* g_ptr = roots->v;
+	    Uint g_sz = roots->sz;
+
+	    roots++;
+	    while (g_sz--) {
+		Eterm gval = *g_ptr;
+		erts_printf("%T\n",gval);
+
+		switch (primary_tag(gval)) {
+
+		case TAG_PRIMARY_BOXED:
+		case TAG_PRIMARY_LIST:
+		    ESTACK_PUSH(mstack, gval);
+		    break;
+		}
+		g_ptr++;
+	    }
+	}
+
+
+	/* Mark
+	 */
+	while (!ESTACK_ISEMPTY(mstack)) {
+	    Eterm term = ESTACK_POP(mstack);
+	    Eterm *ptr;
+	    Eterm val;
+	    switch (primary_tag(term)) {
+	    case TAG_PRIMARY_BOXED: {
+		ptr = boxed_val(term);
+		val = *ptr;
+		ASSERT(is_header(val));
+		if (in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm))) {
+		    if (!header_is_thing(val)) {
+			n = header_arity(val);
+			mark(mmx, ptr, n + 1);
+		    }
+		    else {
+			Sint nelts;
+			if (header_is_bin_matchstate(val)) {
+			    ErlBinMatchState *ms = (ErlBinMatchState*) ptr;
+			    ErlBinMatchBuffer *mb = &(ms->mb);
+
+			    ESTACK_PUSH(mstack, mb->orig);
+			}
+			n = nelts = header_arity(val);
+			switch (val & _HEADER_SUBTAG_MASK) {
+			case SUB_BINARY_SUBTAG: n++; break;
+			case MAP_SUBTAG: n += map_get_size(ptr) + 1; break;
+			case FUN_SUBTAG: n += ((ErlFunThing*)(ptr))->num_free+1; break;
+			}
+			mark(mmx, ptr, n + 1);
+			ptr += nelts;
+			n -= nelts;
+		    }
+
+		    while (n) {
+			if (is_not_immed(ptr[n]))
+			    ESTACK_PUSH(mstack, ptr[n]);
+			--n;
+		    }
+		}
+		break;
+	    }
+
+	    case TAG_PRIMARY_LIST: {
+		ptr = list_val(term);
+		val = *ptr;
+		if (in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm))) {
+		    if (is_not_immed(CAR(ptr))) {
+			ESTACK_PUSH(mstack, CAR(ptr));
+		    }
+		    if (is_not_immed(CDR(ptr))) {
+			ESTACK_PUSH(mstack, CDR(ptr));
+		    }
+		    mark(mmx, ptr, 2);
+		}
+		break;
+	    }
+
+	    default:
+		abort();
+	    }
+	}
+
+	ASSERT(p->htop == next_unmarked(mmx,p->heap));
+    }
+#endif /* DEBUG */
+}
 
 #ifdef ERTS_OFFHEAP_DEBUG
 
