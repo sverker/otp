@@ -103,8 +103,7 @@ static Eterm* sweep_rootset(Rootset *rootset, Eterm* htop, char* src, Uint src_s
 static Eterm* sweep_one_area(Eterm* n_hp, Eterm* n_htop, char* src, Uint src_size);
 static Eterm* sweep_one_heap(Eterm* heap_ptr, Eterm* heap_end, Eterm* htop,
 			     char* src, Uint src_size);
-static Eterm* collect_heap_frags(Process* p, Eterm* heap,
-				 Eterm* htop, Eterm* objv, int nobj);
+static Eterm* collect_heap_frags(Process* p, Eterm* htop);
 static Uint adjust_after_fullsweep(Process *p, Uint size_before,
 				   int need, Eterm *objv, int nobj);
 static void shrink_new_heap(Process *p, Uint new_sz, Eterm *objv, int nobj);
@@ -1020,7 +1019,7 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
 					       sizeof(Eterm)*new_sz);
 
     if (MBUF(p) != NULL) {
-	n_htop = collect_heap_frags(p, n_heap, n_htop, objv, nobj);
+	n_htop = collect_heap_frags(p, n_htop);
     }
 
     n = setup_rootset(p, objv, nobj, &rootset);
@@ -1264,7 +1263,7 @@ major_collection(Process* p, int need, Eterm* objv, int nobj, Uint *recl)
      */
 
     if (MBUF(p) != NULL) {
-	n_htop = collect_heap_frags(p, n_heap, n_htop, objv, nobj);
+	n_htop = collect_heap_frags(p, n_htop);
     }
 
     /*
@@ -1921,8 +1920,7 @@ move_one_area(Eterm* n_htop, char* src, Uint src_size)
  */
 
 static Eterm*
-collect_heap_frags(Process* p, Eterm* n_hstart, Eterm* n_htop,
-		   Eterm* objv, int nobj)
+collect_heap_frags(Process* p, Eterm* n_htop)
 {
     ErlHeapFragment* qb;
     char* frag_begin;
