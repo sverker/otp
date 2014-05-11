@@ -2419,6 +2419,7 @@ sweep_off_heap(Process *p, int fullsweep)
     *prev = shrink.old_candidates;
 }
 
+
 /*
  * Offset pointers into the heap (not stack).
  */
@@ -2753,6 +2754,8 @@ typedef struct {
     Process *p;
 } mmx_t;
 
+static void sweep_off_heap_mas(Process *p, mmx_t* mmx);
+
 static mmx_t *alloc_mmx(Process *p) {
     mmx_t *mmx = malloc(sizeof(mmx_t));
     int sz = p->heap_sz / 8 + 1;
@@ -2774,6 +2777,13 @@ static void mark(mmx_t *mmx, Eterm *ptr, Uint sz) {
 	Uint subelement = (offset+i) % (sizeof(UWord)*8);
 	mmx->marks[element] |= ((UWord)1) << subelement;
     }
+}
+
+static int is_marked(mmx_t* mmx, Eterm *ptr) {
+    Uint offset = ptr - mmx->base;
+    Uint element = offset / (sizeof(UWord)*8);
+    Uint subelement = offset % (sizeof(UWord)*8);
+    return !!(mmx->marks[element] & (((UWord)1) << subelement));
 }
 
 static Eterm *next_unmarked(mmx_t *mmx,Eterm *heap) {
@@ -2825,13 +2835,17 @@ static void add_move_record(mmx_t *mmx, Eterm *from, Eterm *to, Uint sz) {
     rec->sz = sz;
     rec->next = mmx->moves;
     mmx->moves = rec;
+
+    erts_printf("move [%u -> %u] to [%u -> %u]\n",
+		from - mmx->base, (from+sz)- mmx->base,
+		to - mmx->base, (to+sz) - mmx->base);
 }
 
 static Uint compact(mmx_t *mmx, Eterm *dst, Eterm *src_start) {
     Eterm *src_end = next_unmarked(mmx,src_start);
     Uint sz = src_end - src_start;
-    sys_memmove(dst,src_start,sz);
-    add_move_record(mmx,src_start,dst,sz);
+    sys_memmove(dst, src_start, sz*sizeof(Eterm));
+    add_move_record(mmx, src_start, dst, sz);
     return sz;
 }
 
@@ -2866,48 +2880,49 @@ static void fix_me_up(mmx_t *mmx, Eterm *start, Eterm *stop) {
 	prev = last;
 	last = ptr;
 	if (is_header(*ptr)) {
-	    Eterm val = *ptr;
+	    Eterm hdr = *ptr;
 	    Uint n;
-	    if (!header_is_thing(val)) {
-		n = header_arity(val);
+	    if (!header_is_thing(hdr)) {
+		n = header_arity(hdr);
+		ptr++;
 	    } else {
-		Sint nelts;
-		if (header_is_bin_matchstate(val)) {
+		Sint untagged;
+		if (header_is_bin_matchstate(hdr)) {
 		    ErlBinMatchState *ms = (ErlBinMatchState*) ptr;
 		    ErlBinMatchBuffer *mb = &(ms->mb);
 		    update_term(mmx,&mb->orig,stop);
 		    mb->base = binary_bytes(mb->orig);
 		}
-		n = nelts = header_arity(val);
-		switch (val & _HEADER_SUBTAG_MASK) {
-		case SUB_BINARY_SUBTAG: n++; break;
-		case MAP_SUBTAG: n += map_get_size(ptr) + 1; break;
+		untagged = header_arity(hdr) + 1;
+		n = 0;
+		switch (hdr & _HEADER_SUBTAG_MASK) {
+		case SUB_BINARY_SUBTAG: n = 1; break;
+		case MAP_SUBTAG: n = map_get_size(ptr) + 1; break;
 		case FUN_SUBTAG:
-		    n += ((ErlFunThing*)(ptr))->num_free+1;
+		    n = ((ErlFunThing*)(ptr))->num_free + 1;
 		    /*fall through*/
 		case REFC_BINARY_SUBTAG:
 		case EXTERNAL_PID_SUBTAG:
 		case EXTERNAL_PORT_SUBTAG:
 		case EXTERNAL_REF_SUBTAG: {
 		    struct erl_off_heap_header* ohp = (struct erl_off_heap_header*)ptr;
-		    update_term(mmx, (Eterm*)&ohp->next,stop); /* BUGBUG: HALFWORD */
+		    update_term(mmx, (Eterm*)&ohp->next, stop); /* BUGBUG: HALFWORD */
 		    break;
 		}
 		}
-		ptr += nelts;
-		ASSERT(ptr <= stop);
-		n -= nelts;
+		ptr += untagged;
 	    }
 	    ASSERT(ptr + n <= stop);
 
 	    while (n) {
-		update_term(mmx,ptr++,stop);
+		update_term(mmx, ptr++, stop);
 		n--;
 	    }
 	} else {
-	    ASSERT(ptr+1 < stop);
-	    update_term(mmx,ptr++,stop);
-	    update_term(mmx,ptr++,stop);
+	    update_term(mmx, ptr++, stop);
+	    ASSERT(ptr < stop);
+	    ASSERT(!is_header(*ptr));
+	    update_term(mmx, ptr++, stop);
 	}
     }
 }
@@ -2918,6 +2933,7 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
     mmx_t* mmx = alloc_mmx(p);
     DECLARE_ESTACK(mstack);
     Uint n, orig_n;
+    const Uint heap_size = (p->htop - p->heap) * sizeof(Eterm);
 
     orig_n = n = setup_rootset(p, objv, nobj, &rootset);
     roots = rootset.roots;
@@ -2945,7 +2961,56 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
         }
     }
 
-    /* ToDo: Push all terms pointing to heap from heap frags */
+    /*
+     * Push all terms pointing to heap from heap frags
+     */
+    {
+	ErlHeapFragment* frag;
+	for (frag = p->mbuf; frag; frag = frag->next) {
+	    Eterm *start = frag->mem;
+	    Eterm *stop = frag->mem + frag->used_size;
+	    Eterm *ptr = start;
+	    ASSERT(stop > start);
+	    while (ptr != stop) {
+		ASSERT(ptr < stop);
+		if (is_header(*ptr)) {
+		    Eterm hdr = *ptr;
+		    Uint n;
+		    if (!header_is_thing(hdr)) {
+			n = header_arity(hdr);
+			ptr++;
+		    } else {
+			Sint untagged = header_arity(hdr) + 1;
+			switch (hdr & _HEADER_SUBTAG_MASK) {
+			case SUB_BINARY_SUBTAG: n = 1; break;
+			case MAP_SUBTAG: n = map_get_size(ptr) + 1; break;
+			case FUN_SUBTAG:
+			    n = ((ErlFunThing*)(ptr))->num_free+1;
+			    break;
+			default:
+			    n = 0;
+			}
+			ptr += untagged;
+		    }
+		    ASSERT(ptr + n <= stop);
+
+		    while (n) {
+			if (is_not_immed(*ptr)
+			    && in_area(ptr, p->heap, heap_size)) {
+			    ESTACK_PUSH(mstack, *ptr);
+			}
+			ptr++;
+			n--;
+		    }
+		} else {
+		    update_term(mmx, ptr++, stop);
+		    ASSERT(ptr < stop);
+		    ASSERT(!is_header(*ptr));
+		    update_term(mmx, ptr++, stop);
+		}
+	    }
+	}
+    }
 
     /*
      * Mark
@@ -2953,42 +3018,43 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
     while (!ESTACK_ISEMPTY(mstack)) {
 	Eterm term = ESTACK_POP(mstack);
 	Eterm *ptr;
-	Eterm val;
 	switch (primary_tag(term)) {
 	case TAG_PRIMARY_BOXED: {
+	    Eterm hdr;
 	    ptr = boxed_val(term);
-	    val = *ptr;
-	    ASSERT(is_header(val));
-	    if (in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm))) {
-		if (!header_is_thing(val)) {
-		    n = header_arity(val);
+	    hdr = *ptr;
+	    ASSERT(is_header(hdr));
+	    if (in_area(ptr, p->heap, heap_size)
+		&& !is_marked(mmx, ptr)) {
+		if (!header_is_thing(hdr)) {
+		    n = header_arity(hdr);
 		    erts_printf("tuple ");
 		    mark(mmx, ptr, n + 1);
+		    ptr++;
 		}
 		else {
-		    Sint nelts;
-		    if (header_is_bin_matchstate(val)) {
+		    Sint untagged;
+		    if (header_is_bin_matchstate(hdr)) {
 			ErlBinMatchState *ms = (ErlBinMatchState*) ptr;
 			ErlBinMatchBuffer *mb = &(ms->mb);
 
 			ESTACK_PUSH(mstack, mb->orig);
 		    }
-		    n = nelts = header_arity(val);
-		    switch (val & _HEADER_SUBTAG_MASK) {
-		    case SUB_BINARY_SUBTAG: n++; break;
-		    case MAP_SUBTAG: n += map_get_size(ptr) + 1; break;
-		    case FUN_SUBTAG: n += ((ErlFunThing*)(ptr))->num_free+1; break;
+		    untagged = header_arity(hdr) + 1;
+		    switch (hdr & _HEADER_SUBTAG_MASK) {
+		    case SUB_BINARY_SUBTAG: n = 1; break;
+		    case MAP_SUBTAG: n = map_get_size(ptr) + 1; break;
+		    case FUN_SUBTAG: n = ((ErlFunThing*)(ptr))->num_free+1; break;
+		    default: n = 0;
 		    }
 		    erts_printf("thingy ");
-		    mark(mmx, ptr, n + 1);
-		    ptr += nelts;
-		    n -= nelts;
+		    mark(mmx, ptr, untagged + n);
+		    ptr += untagged;
 		}
 
-		while (n) {
+		while (n--) {
 		    if (is_not_immed(ptr[n]))
 			ESTACK_PUSH(mstack, ptr[n]);
-		    --n;
 		}
 	    }
 	    break;
@@ -2996,8 +3062,7 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
 
 	case TAG_PRIMARY_LIST: {
 	    ptr = list_val(term);
-	    val = *ptr;
-	    if (in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm))) {
+	    if (in_area(ptr, p->heap, heap_size) && !is_marked(mmx, ptr)) {
 		if (is_not_immed(CAR(ptr))) {
 		    ESTACK_PUSH(mstack, CAR(ptr));
 		}
@@ -3015,7 +3080,8 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
 	}
     }
 
-    /* ToDo: Remove garbage from offheap list. */
+    /* Remove garbage from offheap list. */
+    sweep_off_heap_mas(p, mmx);
 
     /*
      * Sweep:
@@ -3057,7 +3123,7 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
 
 		case TAG_PRIMARY_BOXED:
 		case TAG_PRIMARY_LIST:
-		    update_term(mmx,g_ptr,htop);
+		    update_term(mmx, g_ptr, htop);
 		break;
 		}
 		g_ptr++;
@@ -3110,34 +3176,34 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
 	while (!ESTACK_ISEMPTY(mstack)) {
 	    Eterm term = ESTACK_POP(mstack);
 	    Eterm *ptr;
-	    Eterm val;
+	    Eterm hdr;
 	    switch (primary_tag(term)) {
 	    case TAG_PRIMARY_BOXED: {
 		ptr = boxed_val(term);
-		val = *ptr;
-		ASSERT(is_header(val));
-		if (in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm))) {
-		    if (!header_is_thing(val)) {
-			n = header_arity(val);
+		hdr = *ptr;
+		ASSERT(is_header(hdr));
+		if (in_area(ptr, p->heap, heap_size) && !is_marked(mmx, ptr)) {
+		    if (!header_is_thing(hdr)) {
+			n = header_arity(hdr);
 			mark(mmx, ptr, n + 1);
 		    }
 		    else {
-			Sint nelts;
-			if (header_is_bin_matchstate(val)) {
+			Sint untagged;
+			if (header_is_bin_matchstate(hdr)) {
 			    ErlBinMatchState *ms = (ErlBinMatchState*) ptr;
 			    ErlBinMatchBuffer *mb = &(ms->mb);
 
 			    ESTACK_PUSH(mstack, mb->orig);
 			}
-			n = nelts = header_arity(val);
-			switch (val & _HEADER_SUBTAG_MASK) {
-			case SUB_BINARY_SUBTAG: n++; break;
-			case MAP_SUBTAG: n += map_get_size(ptr) + 1; break;
-			case FUN_SUBTAG: n += ((ErlFunThing*)(ptr))->num_free+1; break;
+			untagged = header_arity(hdr);
+			switch (hdr & _HEADER_SUBTAG_MASK) {
+			case SUB_BINARY_SUBTAG: n = 1; break;
+			case MAP_SUBTAG: n = map_get_size(ptr) + 1; break;
+			case FUN_SUBTAG: n = ((ErlFunThing*)(ptr))->num_free+1; break;
+			default: n = 0;
 			}
-			mark(mmx, ptr, n + 1);
-			ptr += nelts;
-			n -= nelts;
+			mark(mmx, ptr, 1 + untagged + n);
+			ptr += untagged;
 		    }
 
 		    while (n) {
@@ -3151,8 +3217,8 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
 
 	    case TAG_PRIMARY_LIST: {
 		ptr = list_val(term);
-		val = *ptr;
-		if (in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm))) {
+		if (in_area(ptr, p->heap, heap_size)
+		    && !is_marked(mmx, ptr)) {
 		    if (is_not_immed(CAR(ptr))) {
 			ESTACK_PUSH(mstack, CAR(ptr));
 		    }
@@ -3173,6 +3239,167 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
     }
 #endif /* DEBUG */
 }
+
+
+static void
+sweep_off_heap_mas(Process *p, mmx_t* mmx)
+{
+    int fullsweep = 1;
+    struct shrink_cand_data shrink = {0};
+    struct erl_off_heap_header* ptr;
+    struct erl_off_heap_header** prev;
+    char* oheap = NULL;
+    Uint oheap_sz = 0;
+    Uint64 bin_vheap = 0;
+#ifdef DEBUG
+    int seen_mature = 0;
+#endif
+
+    if (fullsweep == 0) {
+	oheap = (char *) OLD_HEAP(p);
+	oheap_sz = (char *) OLD_HEND(p) - oheap;
+    }
+
+    BIN_OLD_VHEAP(p) = 0;
+
+    prev = &MSO(p).first;
+    ptr = MSO(p).first;
+
+    /* Firts part of the list will reside on the (old) new-heap.
+     * Keep if moved, otherwise deref.
+     */
+    while (ptr) {
+	ASSERT(in_area(ptr, p->heap, p->heap_sz*sizeof(Eterm)));
+	if (is_marked(mmx, (Eterm*)ptr)) {
+	    if (ptr->thing_word == HEADER_PROC_BIN) {
+		int to_new_heap = !in_area(ptr, oheap, oheap_sz);
+		ASSERT(to_new_heap == !seen_mature || (!to_new_heap && (seen_mature=1)));
+		if (to_new_heap) {
+		    bin_vheap += ptr->size / sizeof(Eterm);
+		} else {
+		    BIN_OLD_VHEAP(p) += ptr->size / sizeof(Eterm); /* for binary gc (words)*/
+		}
+		link_live_proc_bin(&shrink, &prev, &ptr, to_new_heap);
+	    }
+	    else {
+		prev = &ptr->next;
+		ptr = ptr->next;
+	    }
+	}
+	else {
+	    /* garbage */
+	    switch (thing_subtag(ptr->thing_word)) {
+	    case REFC_BINARY_SUBTAG:
+		{
+		    Binary* bptr = ((ProcBin*)ptr)->val;
+		    if (erts_refc_dectest(&bptr->refc, 0) == 0) {
+			erts_bin_free(bptr);
+		    }
+		    break;
+		}
+	    case FUN_SUBTAG:
+		{
+		    ErlFunEntry* fe = ((ErlFunThing*)ptr)->fe;
+		    if (erts_refc_dectest(&fe->refc, 0) == 0) {
+			erts_erase_fun_entry(fe);
+		    }
+		    break;
+		}
+	    default:
+		ASSERT(is_external_header(ptr->thing_word));
+		erts_deref_node_entry(((ExternalThing*)ptr)->node);
+	    }
+	    *prev = ptr = ptr->next;
+	}
+	//else break; /* and let old-heap loop continue */
+    }
+
+#if 0
+    /* The rest of the list resides on old-heap, and we just did a
+     * generational collection - keep objects in list.
+     */
+    while (ptr) {
+	ASSERT(in_area(ptr, oheap, oheap_sz));
+	ASSERT(!IS_MOVED_BOXED(ptr->thing_word));
+	if (ptr->thing_word == HEADER_PROC_BIN) {
+	    BIN_OLD_VHEAP(p) += ptr->size / sizeof(Eterm); /* for binary gc (words)*/
+	    link_live_proc_bin(&shrink, &prev, &ptr, 0);
+	}
+	else {
+	    ASSERT(is_fun_header(ptr->thing_word) ||
+		   is_external_header(ptr->thing_word));
+	    prev = &ptr->next;
+	    ptr = ptr->next;
+	}
+    }
+#endif
+
+    if (fullsweep) {
+	BIN_OLD_VHEAP_SZ(p) = next_vheap_size(p, BIN_OLD_VHEAP(p) + MSO(p).overhead, BIN_OLD_VHEAP_SZ(p));
+    }
+    BIN_VHEAP_SZ(p)     = next_vheap_size(p, bin_vheap, BIN_VHEAP_SZ(p));
+    MSO(p).overhead     = bin_vheap;
+    BIN_VHEAP_MATURE(p) = bin_vheap;
+
+    /*
+     * If we got any shrink candidates, check them out.
+     */
+
+    if (shrink.no_of_candidates) {
+	ProcBin *candlist[] = { (ProcBin*)shrink.new_candidates,
+	                        (ProcBin*)shrink.old_candidates };
+	Uint leave_unused = 0;
+	int i;
+
+	if (shrink.no_of_active == 0) {
+	    if (shrink.no_of_candidates <= ERTS_INACT_WR_PB_LEAVE_MUCH_LIMIT)
+		leave_unused = ERTS_INACT_WR_PB_LEAVE_MUCH_PERCENTAGE;
+	    else if (shrink.no_of_candidates <= ERTS_INACT_WR_PB_LEAVE_LIMIT)
+		leave_unused = ERTS_INACT_WR_PB_LEAVE_PERCENTAGE;
+	}
+
+	for (i = 0; i < sizeof(candlist)/sizeof(candlist[0]); i++) {
+	    ProcBin* pb;
+	    for (pb = candlist[i]; pb; pb = (ProcBin*)pb->next) {
+		Uint new_size = pb->size;
+
+		if (leave_unused) {
+		    new_size += (new_size * 100) / leave_unused;
+		    /* Our allocators are 8 byte aligned, i.e., shrinking with
+		       less than 8 bytes will have no real effect */
+		    if (new_size + 8 >= pb->val->orig_size)
+			continue;
+		}
+
+		pb->val = erts_bin_realloc(pb->val, new_size);
+		pb->val->orig_size = new_size;
+		pb->bytes = (byte *) pb->val->orig_bytes;
+	    }
+	}
+
+
+	/*
+	 * We now potentially have the mso list divided into three lists:
+	 * - shrink candidates on new heap (inactive writable with unused data)
+	 * - shrink candidates on old heap (inactive writable with unused data)
+	 * - other binaries (read only + active writable ...) + funs and externals
+	 *
+	 * Put them back together: new candidates -> other -> old candidates
+	 * This order will ensure that the list only refers from new
+	 * generation to old and never from old to new *which is important*.
+	 */
+	if (shrink.new_candidates) {
+	    if (prev == &MSO(p).first) /* empty other binaries list */
+		prev = &shrink.new_candidates_end->next;
+	    else
+		shrink.new_candidates_end->next = MSO(p).first;
+	    MSO(p).first = shrink.new_candidates;
+	}
+    }
+    *prev = shrink.old_candidates;
+}
+
+
 
 #ifdef ERTS_OFFHEAP_DEBUG
 
