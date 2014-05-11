@@ -460,9 +460,7 @@ erts_garbage_collect(Process* p, int need, Eterm* objv, int nobj)
      * Finish.
      */
 
-    /* ToDo: Uncomment when off-heap list is fixed
     ERTS_CHK_OFFHEAP(p);
-    */
 
     ErtsGcQuickSanityCheck(p);
 
@@ -2753,6 +2751,9 @@ typedef struct {
 } mmx_t;
 
 static void sweep_off_heap_mas(Process *p, mmx_t* mmx);
+#ifdef DEBUG
+static void dbg_verify_mark_and_sweep(Process* p, Rootset* rootset);
+#endif
 
 static mmx_t *alloc_mmx(Process *p) {
     mmx_t *mmx = malloc(sizeof(mmx_t));
@@ -2930,10 +2931,11 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
     Roots* roots;
     mmx_t* mmx = alloc_mmx(p);
     DECLARE_ESTACK(mstack);
-    Uint n, orig_n;
+    Uint n;
     const Uint heap_size = (p->htop - p->heap) * sizeof(Eterm);
+    Eterm* n_htop;
 
-    orig_n = n = setup_rootset(p, objv, nobj, &rootset);
+    n = setup_rootset(p, objv, nobj, &rootset);
     roots = rootset.roots;
 
     /*
@@ -3088,21 +3090,22 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
      */
 
     {
-	Eterm *htop = next_unmarked(mmx,p->heap);
-	Eterm *next_markedp = htop;
+	Eterm *livep;
+	n_htop = next_unmarked(mmx, p->heap);
+	livep = n_htop;
 
-	while((next_markedp = next_marked(mmx,next_markedp))) {
+	while((livep = next_marked(mmx, livep))) {
 	    Uint sz;
-	    ASSERT(htop >= p->heap && htop < p->htop);
-	    ASSERT(next_markedp > htop && next_markedp < p->htop);
-	    sz = compact(mmx, htop, next_markedp);
-	    htop += sz;
-	    next_markedp += sz;
+	    ASSERT(n_htop >= p->heap && n_htop < p->htop);
+	    ASSERT(livep > n_htop && livep < p->htop);
+	    sz = compact(mmx, n_htop, livep);
+	    n_htop += sz;
+	    livep += sz;
 	}
 
-	fix_me_up(mmx,p->heap, htop);
+	fix_me_up(mmx,p->heap, n_htop);
 
-	n = orig_n;
+	n = rootset.num_roots;
 	roots = rootset.roots;
 
 	/*
@@ -3121,123 +3124,140 @@ static void mark_and_sweep(Process* p, Uint need, Eterm* objv, Uint nobj) {
 
 		case TAG_PRIMARY_BOXED:
 		case TAG_PRIMARY_LIST:
-		    update_term(mmx, g_ptr, htop);
+		    update_term(mmx, g_ptr, n_htop);
 		break;
 		}
 		g_ptr++;
 	    }
 	}
-	update_term(mmx, (Eterm*)&p->off_heap.first, htop);
-	p->htop = htop;
+	update_term(mmx, (Eterm*)&p->off_heap.first, n_htop);
+	p->htop = n_htop;
     }
 
-    /* ToDo: Copy heap frags into heap and fix pointers to heap */
+#ifdef DEBUG
+    dbg_verify_mark_and_sweep(p, &rootset);
+#endif
 
+    /*
+     * Copy heap frags into heap and fix pointers within/between heap frags
+     */
+    ASSERT(MBUF_SIZE(p) <= HEAP_LIMIT(p) - HEAP_TOP(p));
+    n_htop = collect_heap_frags(p, p->htop);
+    sweep_one_area(p->htop, n_htop, NULL, 0);
+    p->htop = n_htop;
 
+    remove_message_buffers(p);
+
+    DESTROY_ESTACK(mstack);
+}
 
 #ifdef DEBUG
+
+static void dbg_verify_mark_and_sweep(Process* p, Rootset* rootset)
+{
+    const Uint heap_size = (p->htop - p->heap) * sizeof(Eterm);
+    Uint n = rootset->num_roots;
+    Roots* roots = rootset->roots;
+    mmx_t* mmx = alloc_mmx(p);
+    DECLARE_ESTACK(mstack);
+
     /*
      * Do marking again and verify that no garbage exist.
      */
 
-    {
-	n = orig_n;
-	roots = rootset.roots;
-	mmx = alloc_mmx(p);
+    /*
+     * Push rootset
+     */
+    while (n--) {
+	Eterm* g_ptr = roots->v;
+	Uint g_sz = roots->sz;
 
-	/*
-	 * Push rootset
-	 */
-	while (n--) {
-	    Eterm* g_ptr = roots->v;
-	    Uint g_sz = roots->sz;
+	roots++;
+	while (g_sz--) {
+	    Eterm gval = *g_ptr;
+	    erts_printf("%T\n",gval);
 
-	    roots++;
-	    while (g_sz--) {
-		Eterm gval = *g_ptr;
-		erts_printf("%T\n",gval);
+	    switch (primary_tag(gval)) {
 
-		switch (primary_tag(gval)) {
-
-		case TAG_PRIMARY_BOXED:
-		case TAG_PRIMARY_LIST:
-		    ESTACK_PUSH(mstack, gval);
-		    break;
-		}
-		g_ptr++;
-	    }
-	}
-
-
-	/* Mark
-	 */
-	while (!ESTACK_ISEMPTY(mstack)) {
-	    Eterm term = ESTACK_POP(mstack);
-	    Eterm *ptr;
-	    Eterm hdr;
-	    switch (primary_tag(term)) {
-	    case TAG_PRIMARY_BOXED: {
-		ptr = boxed_val(term);
-		hdr = *ptr;
-		ASSERT(is_header(hdr));
-		if (in_area(ptr, p->heap, heap_size) && !is_marked(mmx, ptr)) {
-		    if (!header_is_thing(hdr)) {
-			n = header_arity(hdr);
-			mark(mmx, ptr, n + 1);
-		    }
-		    else {
-			Sint untagged;
-			if (header_is_bin_matchstate(hdr)) {
-			    ErlBinMatchState *ms = (ErlBinMatchState*) ptr;
-			    ErlBinMatchBuffer *mb = &(ms->mb);
-
-			    ESTACK_PUSH(mstack, mb->orig);
-			}
-			untagged = header_arity(hdr);
-			switch (hdr & _HEADER_SUBTAG_MASK) {
-			case SUB_BINARY_SUBTAG: n = 1; break;
-			case MAP_SUBTAG: n = map_get_size(ptr) + 1; break;
-			case FUN_SUBTAG: n = ((ErlFunThing*)(ptr))->num_free+1; break;
-			default: n = 0;
-			}
-			mark(mmx, ptr, 1 + untagged + n);
-			ptr += untagged;
-		    }
-
-		    while (n) {
-			if (is_not_immed(ptr[n]))
-			    ESTACK_PUSH(mstack, ptr[n]);
-			--n;
-		    }
-		}
+	    case TAG_PRIMARY_BOXED:
+	    case TAG_PRIMARY_LIST:
+		ESTACK_PUSH(mstack, gval);
 		break;
 	    }
-
-	    case TAG_PRIMARY_LIST: {
-		ptr = list_val(term);
-		if (in_area(ptr, p->heap, heap_size)
-		    && !is_marked(mmx, ptr)) {
-		    if (is_not_immed(CAR(ptr))) {
-			ESTACK_PUSH(mstack, CAR(ptr));
-		    }
-		    if (is_not_immed(CDR(ptr))) {
-			ESTACK_PUSH(mstack, CDR(ptr));
-		    }
-		    mark(mmx, ptr, 2);
-		}
-		break;
-	    }
-
-	    default:
-		abort();
-	    }
+	    g_ptr++;
 	}
-
-	ASSERT(p->htop == next_unmarked(mmx,p->heap));
     }
-#endif /* DEBUG */
+
+
+    /* Mark
+     */
+    while (!ESTACK_ISEMPTY(mstack)) {
+	Eterm term = ESTACK_POP(mstack);
+	Eterm *ptr;
+	Eterm hdr;
+	switch (primary_tag(term)) {
+	case TAG_PRIMARY_BOXED: {
+	    ptr = boxed_val(term);
+	    hdr = *ptr;
+	    ASSERT(is_header(hdr));
+	    if (in_area(ptr, p->heap, heap_size) && !is_marked(mmx, ptr)) {
+		if (!header_is_thing(hdr)) {
+		    n = header_arity(hdr);
+		    mark(mmx, ptr, n + 1);
+		}
+		else {
+		    Sint untagged;
+		    if (header_is_bin_matchstate(hdr)) {
+			ErlBinMatchState *ms = (ErlBinMatchState*) ptr;
+			ErlBinMatchBuffer *mb = &(ms->mb);
+
+			ESTACK_PUSH(mstack, mb->orig);
+		    }
+		    untagged = header_arity(hdr);
+		    switch (hdr & _HEADER_SUBTAG_MASK) {
+		    case SUB_BINARY_SUBTAG: n = 1; break;
+		    case MAP_SUBTAG: n = map_get_size(ptr) + 1; break;
+		    case FUN_SUBTAG: n = ((ErlFunThing*)(ptr))->num_free+1; break;
+		    default: n = 0;
+		    }
+		    mark(mmx, ptr, 1 + untagged + n);
+		    ptr += untagged;
+		}
+
+		while (n) {
+		    if (is_not_immed(ptr[n]))
+			ESTACK_PUSH(mstack, ptr[n]);
+		    --n;
+		}
+	    }
+	    break;
+	}
+
+	case TAG_PRIMARY_LIST: {
+	    ptr = list_val(term);
+	    if (in_area(ptr, p->heap, heap_size)
+		&& !is_marked(mmx, ptr)) {
+		if (is_not_immed(CAR(ptr))) {
+		    ESTACK_PUSH(mstack, CAR(ptr));
+		}
+		if (is_not_immed(CDR(ptr))) {
+		    ESTACK_PUSH(mstack, CDR(ptr));
+		}
+		mark(mmx, ptr, 2);
+	    }
+	    break;
+	}
+
+	default:
+	    abort();
+	}
+    }
+
+    ASSERT(p->htop == next_unmarked(mmx,p->heap));
+    DESTROY_ESTACK(mstack);
 }
 
+#endif /* DEBUG */
 
 static void
 sweep_off_heap_mas(Process *p, mmx_t* mmx)
