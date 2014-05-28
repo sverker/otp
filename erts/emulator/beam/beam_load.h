@@ -59,34 +59,77 @@ extern BeamInstr* em_call_nif;
 
 /* Total code size in bytes */
 extern Uint erts_total_code_size;
+
 /*
  * Index into start of code chunks which contains additional information
  * about the loaded module.
  *
  * First number of functions.
  */
-
-#define MI_NUM_FUNCTIONS     0
+typedef struct beam_code_header {
+    UWord num_functions;
 
 /*
  * The attributes retrieved by Mod:module_info(attributes).
  */
+    UWord attr_ptr;
+    UWord attr_size;
+    UWord attr_size_on_heap;
+
+/*
+ * The compilation information retrieved by Mod:module_info(compile).
+ */
+    UWord compile_ptr;
+    UWord compile_size;
+    UWord compile_size_on_heap;
+
+/*
+ * Literal area (constant pool).
+ */
+    UWord literals_start;
+    UWord literals_end;
+    struct erl_off_heap_header* literals_off_heap;
+
+/*
+ * Pointer to the on_load function (or NULL if none).
+ */
+    UWord on_load_function_ptr;
+
+/*
+ * Pointer to the line table (or NULL if none).
+ */
+    Eterm* line_table;
+
+/*
+ * Pointer to the module MD5 sum (16 bytes)
+ */
+    UWord md5_ptr;
+
+/*
+ * Start of function pointer table.  This table contains pointers to
+ * all functions in the module plus an additional pointer just beyond
+ * the end of the last function.
+ *
+ * The actual loaded code (for the first function) start just beyond
+ * this table.
+ */
+    BeamInstr* functions[1];
+
+}BeamCodeHeader;
+
+#if 0  /*SVERK REMOVE-REMOVE-REMOVE */
+#define MI_NUM_FUNCTIONS     0
+
 
 #define MI_ATTR_PTR          1
 #define MI_ATTR_SIZE	     2
 #define MI_ATTR_SIZE_ON_HEAP 3
 
-/*
- * The compilation information retrieved by Mod:module_info(compile).
- */
 
 #define MI_COMPILE_PTR          4
 #define MI_COMPILE_SIZE         5
 #define MI_COMPILE_SIZE_ON_HEAP 6
 
-/*
- * Literal area (constant pool).
- */
 #define MI_LITERALS_START	7
 #define MI_LITERALS_END		8
 #define MI_LITERALS_OFF_HEAP	9
@@ -116,6 +159,7 @@ extern Uint erts_total_code_size;
  */
 
 #define MI_FUNCTIONS         13
+#endif /*SVERK REMOVE-REMOVE-REMOVE */
 
 /*
  * Layout of the line table.

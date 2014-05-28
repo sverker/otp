@@ -37,7 +37,7 @@ typedef struct {
 
 static Range* find_range(BeamInstr* pc);
 static void lookup_loc(FunctionInfo* fi, BeamInstr* pc,
-		       BeamInstr* modp, int idx);
+		       BeamCodeHeader*, int idx);
 
 /*
  * The following variables keep a sorted list of address ranges for
@@ -225,6 +225,11 @@ erts_ranges_sz(void)
     return erts_smp_atomic_read_nob(&mem_used) * sizeof(Range);
 }
 
+static ERTS_INLINE BeamCodeHeader* range_to_header(Range* rp)
+{
+    return (BeamCodeHeader*) rp->start;  /*SVERK ???*/
+}
+
 /*
  * Find a function from the given pc and fill information in
  * the FunctionInfo struct. If the full_info is non-zero, fill
@@ -249,8 +254,8 @@ erts_lookup_function_info(FunctionInfo* fi, BeamInstr* pc, int full_info)
 	return;
     }
 
-    low = (BeamInstr **) (rp->start + MI_FUNCTIONS);
-    high = low + rp->start[MI_NUM_FUNCTIONS];
+    low = range_to_header(rp)->functions;
+    high = low + range_to_header(rp)->num_functions;
     while (low < high) {
 	mid = low + (high-low) / 2;
 	if (pc < mid[0]) {
@@ -258,10 +263,9 @@ erts_lookup_function_info(FunctionInfo* fi, BeamInstr* pc, int full_info)
 	} else if (pc < mid[1]) {
 	    fi->current = mid[0]+2;
 	    if (full_info) {
-		BeamInstr** fp = (BeamInstr **) (rp->start +
-						 MI_FUNCTIONS);
+		BeamInstr** fp = range_to_header(rp)->functions;
 		int idx = mid - fp;
-		lookup_loc(fi, pc, rp->start, idx);
+		lookup_loc(fi, pc, range_to_header(rp), idx);
 	    }
 	    return;
 	} else {
@@ -294,9 +298,9 @@ find_range(BeamInstr* pc)
 }
 
 static void
-lookup_loc(FunctionInfo* fi, BeamInstr* orig_pc, BeamInstr* modp, int idx)
+lookup_loc(FunctionInfo* fi, BeamInstr* orig_pc, BeamCodeHeader* code_hdr, int idx)
 {
-    Eterm* line = (Eterm *) modp[MI_LINE_TABLE];
+    Eterm* line = code_hdr->line_table;
     Eterm* low;
     Eterm* high;
     Eterm* mid;

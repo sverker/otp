@@ -1875,17 +1875,17 @@ int enif_map_iterator_get_pair(ErlNifEnv *env,
  ***************************************************************************/
 
 
-static BeamInstr** get_func_pp(BeamInstr* mod_code, Eterm f_atom, unsigned arity)
+static BeamInstr** get_func_pp(BeamCodeHeader* mod_code, Eterm f_atom, unsigned arity)
 {
-    int n = (int) mod_code[MI_NUM_FUNCTIONS];
+    int n = (int) mod_code->num_functions;
     int j;
     for (j = 0; j < n; ++j) {
-	BeamInstr* code_ptr = (BeamInstr*) mod_code[MI_FUNCTIONS+j];
+	BeamInstr* code_ptr = (BeamInstr*) mod_code->functions[j];
 	ASSERT(code_ptr[0] == (BeamInstr) BeamOp(op_i_func_info_IaaI));
 	if (f_atom == ((Eterm) code_ptr[3])
 	    && arity == ((unsigned) code_ptr[4])) {
 
-	    return (BeamInstr**) &mod_code[MI_FUNCTIONS+j];
+	    return (BeamInstr**) &mod_code->functions[j];
 	}
     }
     return NULL;
@@ -2039,8 +2039,8 @@ BIF_RETTYPE load_nif_2(BIF_ALIST_2)
     if (init_func != NULL)
       handle = init_func;
 
-    if (!in_area(caller, mod->curr.code, mod->curr.code_length)) {
-	ASSERT(in_area(caller, mod->old.code, mod->old.code_length));
+    if (!in_area(caller, mod->curr.code_hdr, mod->curr.code_length)) {
+	ASSERT(in_area(caller, mod->old.code_hdr, mod->old.code_length));
 
 	ret = load_nif_error(BIF_P, "old_code", "Calling load_nif from old "
 			     "module '%T' not allowed", mod_atom);
@@ -2091,7 +2091,7 @@ BIF_RETTYPE load_nif_2(BIF_ALIST_2)
 	    BeamInstr** code_pp;
 	    ErlNifFunc* f = &entry->funcs[i];
 	    if (!erts_atom_get(f->name, sys_strlen(f->name), &f_atom, ERTS_ATOM_ENC_LATIN1)
-		|| (code_pp = get_func_pp(mod->curr.code, f_atom, f->arity))==NULL) {
+		|| (code_pp = get_func_pp(mod->curr.code_hdr, f_atom, f->arity))==NULL) {
 		ret = load_nif_error(BIF_P,bad_lib,"Function not found %T:%s/%u",
 				     mod_atom, f->name, f->arity);
 	    }    
@@ -2202,7 +2202,7 @@ BIF_RETTYPE load_nif_2(BIF_ALIST_2)
 	{
 	    BeamInstr* code_ptr;
 	    erts_atom_get(entry->funcs[i].name, sys_strlen(entry->funcs[i].name), &f_atom, ERTS_ATOM_ENC_LATIN1); 
-	    code_ptr = *get_func_pp(mod->curr.code, f_atom, entry->funcs[i].arity);
+	    code_ptr = *get_func_pp(mod->curr.code_hdr, f_atom, entry->funcs[i].arity);
 	    
 	    if (code_ptr[1] == 0) {
 		code_ptr[5+0] = (BeamInstr) BeamOp(op_call_nif);
