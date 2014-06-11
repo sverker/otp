@@ -296,7 +296,7 @@ static BMData *create_bmdata(MyAllocator *my, byte *x, Uint len,
     init_my_allocator(my, datasize, data);
     bmd = my_alloc(my, sizeof(BMData));
     bmd->x = my_alloc(my,len);
-    memcpy(bmd->x,x,len);
+    sys_memcpy(bmd->x,x,len);
     bmd->len = len;
     bmd->goodshift = my_alloc(my,sizeof(Uint) * len);
     *the_bin = mb;
@@ -535,10 +535,10 @@ static void ac_init_find_all(ACFindAllState *state, ACTrie *act, Sint startpos, 
 
 static void ac_restore_find_all(ACFindAllState *state, char *buff)
 {
-    memcpy(state,buff,sizeof(ACFindAllState));
+    sys_memcpy(state,buff,sizeof(ACFindAllState));
     if (state->allocated > 0) {
 	state->out = erts_alloc(ERTS_ALC_T_TMP, sizeof(FindallData) * (state->allocated));
-	memcpy(state->out,buff+sizeof(ACFindAllState),sizeof(FindallData)*state->m);
+	sys_memcpy(state->out,buff+sizeof(ACFindAllState),sizeof(FindallData)*state->m);
     } else {
 	state->out = NULL;
     }
@@ -546,8 +546,8 @@ static void ac_restore_find_all(ACFindAllState *state, char *buff)
 
 static void ac_serialize_find_all(ACFindAllState *state, char *buff)
 {
-    memcpy(buff,state,sizeof(ACFindAllState));
-    memcpy(buff+sizeof(ACFindAllState),state->out,sizeof(FindallData)*state->m);
+    sys_memcpy(buff,state,sizeof(ACFindAllState));
+    sys_memcpy(buff+sizeof(ACFindAllState),state->out,sizeof(FindallData)*state->m);
 }
 
 static void ac_clean_find_all(ACFindAllState *state)
@@ -812,11 +812,11 @@ static void bm_init_find_all(BMFindAllState *state, Sint startpos, Uint len)
 
 static void bm_restore_find_all(BMFindAllState *state, char *buff)
 {
-    memcpy(state,buff,sizeof(BMFindAllState));
+    sys_memcpy(state,buff,sizeof(BMFindAllState));
     if (state->allocated > 0) {
 	state->out = erts_alloc(ERTS_ALC_T_TMP, sizeof(FindallData) *
 				(state->allocated));
-	memcpy(state->out,buff+sizeof(BMFindAllState),
+	sys_memcpy(state->out,buff+sizeof(BMFindAllState),
 	       sizeof(FindallData)*state->m);
     } else {
 	state->out = NULL;
@@ -825,8 +825,8 @@ static void bm_restore_find_all(BMFindAllState *state, char *buff)
 
 static void bm_serialize_find_all(BMFindAllState *state, char *buff)
 {
-    memcpy(buff,state,sizeof(BMFindAllState));
-    memcpy(buff+sizeof(BMFindAllState),state->out,
+    sys_memcpy(buff,state,sizeof(BMFindAllState));
+    sys_memcpy(buff+sizeof(BMFindAllState),state->out,
 	   sizeof(FindallData)*state->m);
 }
 
@@ -1063,7 +1063,7 @@ static int do_binary_match(Process *p, Eterm subject, Uint hsstart, Uint hsend,
 	    bm_init_find_first_match(&state, hsstart, hsend);
 	} else {
 	    Eterm *ptr = big_val(state_term);
-	    memcpy(&state,ptr+2,sizeof(state));
+	    sys_memcpy(&state,ptr+2,sizeof(state));
 	}
 #ifdef HARDDEBUG
 	erts_printf("(bm) state->pos = %ld, state->len = %lu\n",state.pos,
@@ -1081,7 +1081,7 @@ static int do_binary_match(Process *p, Eterm subject, Uint hsstart, Uint hsend,
 	    hp = HAlloc(p,x+2);
 	    hp[0] = make_pos_bignum_header(x+1);
 	    hp[1] = type;
-	    memcpy(hp+2,&state,sizeof(state));
+	    sys_memcpy(hp+2,&state,sizeof(state));
 	    *res_term = make_big(hp);
 	    erts_free_aligned_binary_bytes(temp_alloc);
 	    return DO_BIN_MATCH_RESTART;
@@ -1113,7 +1113,7 @@ static int do_binary_match(Process *p, Eterm subject, Uint hsstart, Uint hsend,
 	    ac_init_find_first_match(&state, act, hsstart, hsend);
 	} else {
 	    Eterm *ptr = big_val(state_term);
-	    memcpy(&state,ptr+2,sizeof(state));
+	    sys_memcpy(&state,ptr+2,sizeof(state));
 	}
 	acr = ac_find_first_match(&state, bytes, &pos, &rlen, &reds);
 	if (acr == AC_NOT_FOUND) {
@@ -1127,7 +1127,7 @@ static int do_binary_match(Process *p, Eterm subject, Uint hsstart, Uint hsend,
 	    hp = HAlloc(p,x+2);
 	    hp[0] = make_pos_bignum_header(x+1);
 	    hp[1] = type;
-	    memcpy(hp+2,&state,sizeof(state));
+	    sys_memcpy(hp+2,&state,sizeof(state));
 	    *res_term = make_big(hp);
 	    erts_free_aligned_binary_bytes(temp_alloc);
 	    return DO_BIN_MATCH_RESTART;
@@ -1939,7 +1939,7 @@ static BIF_RETTYPE do_longest_common(Process *p, Eterm list, int direction)
 	    if (cd[i].type == CL_TYPE_HEAP_NOALLOC) {
 		unsigned char *tmp = cd[i].buff;
 		cd[i].buff = erts_alloc(ERTS_ALC_T_BINARY_BUFFER, cd[i].bufflen);
-		memcpy(cd[i].buff,tmp,cd[i].bufflen);
+		sys_memcpy(cd[i].buff,tmp,cd[i].bufflen);
 		cd[i].type = CL_TYPE_HEAP;
 	    }
 	}
@@ -2423,7 +2423,7 @@ static BIF_RETTYPE do_binary_copy(Process *p, Eterm bin, Eterm en)
 						    0);
 	    if (!(cbs->temp_alloc)) { /* alignment not needed, need to copy */
 		byte *tmp = erts_alloc(ERTS_ALC_T_BINARY_BUFFER,size);
-		memcpy(tmp,cbs->source,size);
+		sys_memcpy(tmp,cbs->source,size);
 		cbs->source = tmp;
 		cbs->source_type = BC_TYPE_HEAP;
 	    } else {
@@ -2439,7 +2439,7 @@ static BIF_RETTYPE do_binary_copy(Process *p, Eterm bin, Eterm en)
 	pos = 0;
 	i = 0;
 	while (pos < reds) {
-	    memcpy(t+pos,cbs->source, size);
+	    sys_memcpy(t+pos,cbs->source, size);
 	    pos += size;
 	    ++i;
 	}
@@ -2464,7 +2464,7 @@ static BIF_RETTYPE do_binary_copy(Process *p, Eterm bin, Eterm en)
 	}
 	pos = 0;
 	while (pos < target_size) {
-	    memcpy(t+pos,source, size);
+	    sys_memcpy(t+pos,source, size);
 	    pos += size;
 	}
 	erts_free_aligned_binary_bytes(temp_alloc);
@@ -2494,7 +2494,7 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
     if ((n-1) * size >= reds) {
 	Uint i = 0;
 	while ((pos - opos) < reds) {
-	    memcpy(t+pos,cbs->source, size);
+	    sys_memcpy(t+pos,cbs->source, size);
 	    pos += size;
 	    ++i;
 	}
@@ -2507,7 +2507,7 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
 	ProcBin* pb;
 	Uint target_size = cbs->result->orig_size;
 	while (pos < target_size) {
-	    memcpy(t+pos,cbs->source, size);
+	    sys_memcpy(t+pos,cbs->source, size);
 	    pos += size;
 	}
 	save =  cbs->result;

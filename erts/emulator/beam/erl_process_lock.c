@@ -1055,6 +1055,7 @@ erts_proc_lock_init(Process *p)
     erts_lcnt_proc_lock(&(p->lock), ERTS_PROC_LOCKS_ALL);
     erts_lcnt_proc_lock_post_x(&(p->lock), ERTS_PROC_LOCKS_ALL, __FILE__, __LINE__);
 #endif
+    (void)i;
 }
 
 void

@@ -304,3 +304,29 @@ sys_double_to_chars_fast(double f, char *buffer, int buffer_size, int decimals,
     *p = '\0';
     return p - buffer;
 }
+
+#ifdef VALGRIND
+
+/* A memcpy that is guaranteed to not read any extra bytes.
+*/
+void* erts_sys_valgrind_memcpy(void *dest, const void *src, size_t n)
+{
+    UWord align = (UWord)dest | (UWord)src | (UWord)n;
+
+    if (!(align & (sizeof(UWord)-1))) {
+	UWord* d = dest;
+	const UWord* s = src;
+	n /= sizeof(UWord);
+	while (n--)
+	    *d++ = *s++;
+    }
+    else {
+	byte* d = dest;
+	const byte* s = src;
+	while (n--)
+	    *d++ = *s++;
+    }
+    return dest;
+}
+
+#endif /* VALGRIND */

@@ -909,7 +909,12 @@ erts_refc_read(erts_refc_t *refcp, erts_aint_t min_val)
 extern int erts_use_kernel_poll;
 #endif
 
-#define sys_memcpy(s1,s2,n)  memcpy(s1,s2,n)
+#ifdef VALGRIND
+void* erts_sys_valgrind_memcpy(void *dest, const void *src, size_t n);
+#  define sys_memcpy(s1,s2,n)  erts_sys_valgrind_memcpy(s1,s2,n)
+#else
+#  define sys_memcpy(s1,s2,n)  memcpy(s1,s2,n)
+#endif
 #define sys_memmove(s1,s2,n) memmove(s1,s2,n)
 #define sys_memcmp(s1,s2,n)  memcmp(s1,s2,n)
 #define sys_memset(s,c,n)    memset(s,c,n)
