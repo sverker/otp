@@ -655,8 +655,8 @@ erts_prepare_loading(Binary* magic, Process *c_p, Eterm group_leader,
 						 code_alloc_size(stp));
 
     stp->code_hdr->num_functions = stp->num_functions;
-    stp->code_ptr = (BeamInstr*) &stp->code_hdr->functions[stp->num_functions + 1];
-    stp->ci = 0;
+    stp->code_ptr = (BeamInstr*) stp->code_hdr;
+    stp->ci = (BeamInstr*)&stp->code_hdr->functions[stp->num_functions + 1] - stp->code_ptr;
 
     stp->code_hdr->attr_ptr = 0;
     stp->code_hdr->attr_size = 0;
