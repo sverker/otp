@@ -1118,16 +1118,11 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
 		    MOVE_CONS(ptr, val, n_htop, n_hp);
 		    if (is_list(n_htop[-1])) {
 			if (!saved_n_hp)
-			    saved_n_hp = n_hp;
+			    saved_n_hp = n_hp + 1;
 			else
 			    ASSERT(n_htop == n_hp+3);
 			n_hp = n_htop - 1;
-		    } else {
-			if (saved_n_hp) {
-			    n_hp = saved_n_hp;
-			    saved_n_hp = NULL;
-			}
-			n_hp++;
+			break;
 		    }
 #if 0
 		    Eterm src_hp = n_np;
@@ -1156,6 +1151,10 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
 #endif
 		} else {
 		    n_hp++;
+		}
+		if (saved_n_hp) {
+		    n_hp = saved_n_hp;
+		    saved_n_hp = NULL;
 		}
 		break;
 	    }
