@@ -1081,6 +1081,7 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
     if (mature_size == 0) {
 	n_htop = sweep_one_area(n_heap, n_htop, heap, heap_size);
     } else {
+	Eterm* saved_n_hp = NULL;
 	Eterm* n_hp = n_heap;
 	Eterm* ptr;
 	Eterm val;
@@ -1091,6 +1092,7 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
 	    gval = *n_hp;
 	    switch (primary_tag(gval)) {
 	    case TAG_PRIMARY_BOXED: {
+		ASSERT(!saved_n_hp);
 		ptr = boxed_val(gval);
 		val = *ptr;
 		if (IS_MOVED_BOXED(val)) {
@@ -1113,13 +1115,52 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
 		} else if (in_area(ptr, heap, mature_size)) {
 		    MOVE_CONS(ptr,val,old_htop,n_hp++);
 		} else if (in_area(ptr, heap, heap_size)) {
-		    MOVE_CONS(ptr,val,n_htop,n_hp++);
+		    MOVE_CONS(ptr, val, n_htop, n_hp);
+		    if (is_list(n_htop[-1])) {
+			if (!saved_n_hp)
+			    saved_n_hp = n_hp;
+			else
+			    ASSERT(n_htop == n_hp+3);
+			n_hp = n_htop - 1;
+		    } else {
+			if (saved_n_hp) {
+			    n_hp = saved_n_hp;
+			    saved_n_hp = NULL;
+			}
+			n_hp++;
+		    }
+#if 0
+		    Eterm src_hp = n_np;
+		    Eterm cdr;
+		    while (1) {
+			cdr = CDR(ptr);
+
+			/*MOVE_CONS(ptr, val, n_htop, src_hp);*/
+			CAR(n_htop) = val;
+			CDR(n_htop) = CDR(ptr);
+			gval = make_list(n_htop);	/* new location */
+			*ORIG = gval;		/* redirect original reference */
+			PTR[0] = THE_NON_VALUE;	/* store forwarding indicator */
+			PTR[1] = gval;		/* store forwarding address */
+			HTOP += 2;			/* update tospace htop */
+
+
+
+
+			if (is_not_list(cdr))
+			    break;
+			src_hp = ptr + 1;
+			ptr = list_val(cdr);
+		    }
+		    n_hp++;
+#endif
 		} else {
 		    n_hp++;
 		}
 		break;
 	    }
 	    case TAG_PRIMARY_HEADER: {
+		ASSERT(!saved_n_hp);
 		if (!header_is_thing(gval))
 		    n_hp++;
 		else {
@@ -1145,6 +1186,7 @@ do_minor(Process *p, Uint new_sz, Eterm* objv, int nobj)
 		break;
 	    }
 	    default:
+		ASSERT(!saved_n_hp);
 		n_hp++;
 		break;
 	    }
