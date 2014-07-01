@@ -150,6 +150,7 @@ typedef struct {
     Uint extsize;
 } ErtsBinary2TermState;
 
+
 /* -------------------------------------------------------------------------- */
 
 void erts_init_atom_cache_map(ErtsAtomCacheMap *);
@@ -161,8 +162,12 @@ Uint erts_encode_ext_dist_header_size(ErtsAtomCacheMap *);
 Uint erts_encode_ext_dist_header_size(ErtsAtomCacheMap *);
 byte *erts_encode_ext_dist_header_setup(byte *, ErtsAtomCacheMap *);
 byte *erts_encode_ext_dist_header_finalize(byte *, ErtsAtomCache *, Uint32);
-Uint erts_encode_dist_ext_size(Eterm, Uint32, ErtsAtomCacheMap *);
-void erts_encode_dist_ext(Eterm, byte **, Uint32, ErtsAtomCacheMap *);
+struct dsig_send_state;
+int erts_encode_dist_ext_size(Eterm, Uint32, ErtsAtomCacheMap*, Uint* szp);
+int erts_encode_dist_ext_size_int(Eterm term, struct dsig_send_state* ctx, Uint* szp);
+struct TTBEncodeContext_;
+int erts_encode_dist_ext(Eterm, byte **, Uint32, ErtsAtomCacheMap *,
+			  struct TTBEncodeContext_ *, Sint* reds);
 
 Uint erts_encode_ext_size(Eterm);
 Uint erts_encode_ext_size_2(Eterm, unsigned);
