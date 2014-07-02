@@ -2207,6 +2207,7 @@ static BIF_RETTYPE dsend_continue_trap_1(BIF_ALIST_1)
 	BIF_RET(ctx->return_term);
 	break;
     case ERTS_DSIG_SEND_YIELD: /*SEND_YIELD_RETURN*/
+	erts_set_gc_state(BIF_P, 1);
 	if (!ctx->suspend)
 	    BIF_RET(am_nosuspend);
 	ERTS_BIF_YIELD_RETURN(BIF_P, ctx->return_term);
