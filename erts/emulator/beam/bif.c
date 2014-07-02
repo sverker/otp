@@ -2082,8 +2082,10 @@ static Eterm dsend_export_trap_context(Process* p, RemoteSendContext* ctx)
     sys_memcpy(&dst->ctx, ctx, sizeof(RemoteSendContext));
     ASSERT(ctx->dss.ctl == make_tuple(ctx->ctl_heap));
     dst->ctx.dss.ctl = make_tuple(dst->ctx.ctl_heap);
-    sys_memcpy(&dst->acm, ctx->dss.acmp, sizeof(ErtsAtomCacheMap));
-    dst->ctx.dss.acmp = &dst->acm;
+    if (ctx->dss.acmp) {
+	sys_memcpy(&dst->acm, ctx->dss.acmp, sizeof(ErtsAtomCacheMap));
+	dst->ctx.dss.acmp = &dst->acm;
+    }
     return erts_mk_magic_binary_term(&hp, &MSO(p), ctx_bin);
 }
 
