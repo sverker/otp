@@ -338,6 +338,7 @@ typedef struct {
 
     Eterm ctl_heap[6];
     ErtsDSigData dsd;
+    DistEntry* dep_to_deref;
     struct dsig_send_state dss;
 
     Eterm return_term;

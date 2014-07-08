@@ -2040,8 +2040,13 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp,
 	}
 
 	ret = remote_send(p, dep, tp[1], to, msg, suspend, ctx);
-	if (ret != SEND_YIELD_CONTINUE && dep)
-	    erts_deref_dist_entry(dep);  /*SVERK FIX FIX FIX */
+	if (ret != SEND_YIELD_CONTINUE) {
+	    if (dep) {
+		erts_deref_dist_entry(dep);
+	    }
+	} else {
+	    ctx->dep_to_deref = dep;
+	}
 	return ret;
     } else {
 	if (IS_TRACED(p)) /* XXX Is this really neccessary ??? */
@@ -2103,6 +2108,7 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
     RemoteSendContext ctx;
     
     ctx.suspend = !0;
+    ctx.dep_to_deref = NULL;
     ctx.return_term = am_ok;
     ctx.dss.reds = (Sint) 2; /*SVERK (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);*/
     ctx.dss.phase = 0;
@@ -2241,6 +2247,8 @@ static void remote_send_context_dtor(Binary* ctx_bin)
 	void free_dist_obuf(ErtsDistOutputBuf *obuf); /*SVERK*/
 	free_dist_obuf(ctx->dss.obuf);
     }
+    if (ctx->dep_to_deref)
+	erts_deref_dist_entry(ctx->dep_to_deref);
 }
 
 Eterm erl_send(Process *p, Eterm to, Eterm msg)
