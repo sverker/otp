@@ -2110,7 +2110,7 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
     ctx.suspend = !0;
     ctx.dep_to_deref = NULL;
     ctx.return_term = am_ok;
-    ctx.dss.reds = (Sint) 2; /*SVERK (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);*/
+    ctx.dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
     ctx.dss.phase = 0;
 
     while (is_list(l)) {
@@ -2200,7 +2200,7 @@ static BIF_RETTYPE dsend_continue_trap_1(BIF_ALIST_1)
 {
     Binary* bin = ((ProcBin*) binary_val(BIF_ARG_1))->val;
     RemoteSendContext* ctx = (RemoteSendContext*) ERTS_MAGIC_BIN_DATA(bin);
-    Sint initial_reds = (Sint) 2; /*SVERK (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);*/
+    Sint initial_reds = (Sint) (ERTS_BIF_REDS_LEFT(BIF_P) * TERM_TO_BINARY_LOOP_FACTOR);
     int result;
 
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(bin) == remote_send_context_dtor);
@@ -2261,8 +2261,9 @@ Eterm erl_send(Process *p, Eterm to, Eterm msg)
     ref = NIL;
 #endif
     ctx.suspend = !0;
+    ctx.dep_to_deref = NULL;
     ctx.return_term = msg;
-    ctx.dss.reds = (Sint) 2; /*SVERK (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);*/
+    ctx.dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
     ctx.dss.phase = 0;
 
     result = do_send(p, to, msg, !0, &ref, &ctx);
