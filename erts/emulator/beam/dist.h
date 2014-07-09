@@ -313,9 +313,16 @@ typedef struct {
     } s;
 } TTBContext;
 
+enum erts_dsig_send_phase {
+    ERTS_DSIG_SEND_PHASE_INIT,
+    ERTS_DSIG_SEND_PHASE_MSG_SIZE,
+    ERTS_DSIG_SEND_PHASE_ALLOC,
+    ERTS_DSIG_SEND_PHASE_MSG_ENCODE,
+    ERTS_DSIG_SEND_PHASE_FIN
+};
 
 struct dsig_send_state {
-    int phase;
+    enum erts_dsig_send_phase phase;
     Sint reds;
 
     Eterm ctl;

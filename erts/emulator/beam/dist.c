@@ -1707,7 +1707,7 @@ static int dsig_send(ErtsDSigData *dsdp, Eterm ctl, Eterm msg, int force_busy)
     ctx.ctl = ctl;
     ctx.msg = msg;
     ctx.force_busy = force_busy;
-    ctx.phase = 0;
+    ctx.phase = ERTS_DSIG_SEND_PHASE_INIT;
     return erts_dsig_send(dsdp, &ctx);
 }
 
@@ -1718,7 +1718,7 @@ erts_dsig_send(ErtsDSigData *dsdp, struct dsig_send_state* ctx)
 
     while (1) {
 	switch (ctx->phase) {
-	case 0:
+	case ERTS_DSIG_SEND_PHASE_INIT:
 	    ctx->flags = dsdp->dep->flags;
 	    ctx->c_p = dsdp->proc;
 
@@ -1755,19 +1755,19 @@ erts_dsig_send(ErtsDSigData *dsdp, struct dsig_send_state* ctx)
 		ctx->u.sc.estack.start = NULL;
 		ctx->u.sc.flags = ctx->flags;
 		ctx->u.sc.level = 0;
-		ctx->phase = 1;
+		ctx->phase = ERTS_DSIG_SEND_PHASE_MSG_SIZE;
 	    } else {
-		ctx->phase = 2;
+		ctx->phase = ERTS_DSIG_SEND_PHASE_ALLOC;
 	    }
 	    break;
 
-	case 1:
+	case ERTS_DSIG_SEND_PHASE_MSG_SIZE:
 	    if (erts_encode_dist_ext_size_int(ctx->msg, ctx, &ctx->data_size)) {
 		return ERTS_DSIG_SEND_CONTINUE;
 	    }
 
-	    ctx->phase =2;
-	case 2:
+	    ctx->phase = ERTS_DSIG_SEND_PHASE_ALLOC;
+	case ERTS_DSIG_SEND_PHASE_ALLOC:
 	    erts_finalize_atom_cache_map(ctx->acmp, ctx->flags);
 
 	    ctx->dhdr_ext_size = erts_encode_ext_dist_header_size(ctx->acmp);
@@ -1784,19 +1784,19 @@ erts_dsig_send(ErtsDSigData *dsdp, struct dsig_send_state* ctx)
 		ctx->u.ec.flags = ctx->flags;
 		ctx->u.ec.level = 0;
 		ctx->u.ec.wstack.wstart = NULL;
-		ctx->phase = 3;
+		ctx->phase = ERTS_DSIG_SEND_PHASE_MSG_ENCODE;
 	    } else {
-		ctx->phase = 4;
+		ctx->phase = ERTS_DSIG_SEND_PHASE_FIN;
 	    }
 	    break;
 
-	case 3: /* Encode message */
+	case ERTS_DSIG_SEND_PHASE_MSG_ENCODE:
 	    if (erts_encode_dist_ext(ctx->msg, &ctx->obuf->ext_endp, ctx->flags, ctx->acmp, &ctx->u.ec, &ctx->reds)) {
 		return ERTS_DSIG_SEND_CONTINUE;
 	    }
 
-	    ctx->phase = 4;
-	case 4: {
+	    ctx->phase = ERTS_DSIG_SEND_PHASE_FIN;
+	case ERTS_DSIG_SEND_PHASE_FIN: {
 	    DistEntry *dep = dsdp->dep;
 	    int suspended = 0;
 	    int resume = 0;
@@ -1928,7 +1928,7 @@ erts_dsig_send(ErtsDSigData *dsdp, struct dsig_send_state* ctx)
 	    return ERTS_DSIG_SEND_OK;
 	}
 	default:
-	    erl_exit(ERTS_ABORT_EXIT, "dsig_send invalid phase (%d)\n", ctx->phase);
+	    erl_exit(ERTS_ABORT_EXIT, "dsig_send invalid phase (%d)\n", (int)ctx->phase);
 	}
     }
 }

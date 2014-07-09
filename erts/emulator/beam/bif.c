@@ -2111,7 +2111,7 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
     ctx.dep_to_deref = NULL;
     ctx.return_term = am_ok;
     ctx.dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
-    ctx.dss.phase = 0;
+    ctx.dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
 
     while (is_list(l)) {
 	if (CAR(list_val(l)) == am_noconnect) {
@@ -2236,14 +2236,15 @@ static void remote_send_context_dtor(Binary* ctx_bin)
 {
     RemoteSendContext* ctx = ERTS_MAGIC_BIN_DATA(ctx_bin);
     switch (ctx->dss.phase) {
-    case 1:
+    case ERTS_DSIG_SEND_PHASE_MSG_SIZE:
 	DESTROY_SAVED_ESTACK(&ctx->dss.u.sc.estack);
 	break;
-    case 3:
+    case ERTS_DSIG_SEND_PHASE_MSG_ENCODE:
 	DESTROY_SAVED_WSTACK(&ctx->dss.u.ec.wstack);
 	break;
+    default:;
     }
-    if (ctx->dss.phase >= 2 && ctx->dss.obuf) {
+    if (ctx->dss.phase >= ERTS_DSIG_SEND_PHASE_ALLOC && ctx->dss.obuf) {
 	void free_dist_obuf(ErtsDistOutputBuf *obuf); /*SVERK*/
 	free_dist_obuf(ctx->dss.obuf);
     }
@@ -2264,7 +2265,7 @@ Eterm erl_send(Process *p, Eterm to, Eterm msg)
     ctx.dep_to_deref = NULL;
     ctx.return_term = msg;
     ctx.dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
-    ctx.dss.phase = 0;
+    ctx.dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
 
     result = do_send(p, to, msg, !0, &ref, &ctx);
     
