@@ -2077,6 +2077,7 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp,
 
 BIF_RETTYPE send_3(BIF_ALIST_3)
 {
+    BIF_RETTYPE return_me;
     Eterm ref;
     Process *p = BIF_P;
     Eterm to = BIF_ARG_1;
@@ -2086,38 +2087,42 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
     int connect = !0;
     Eterm l = opts;
     Sint result;
-    RemoteSendContext ctx;
-    
-    ctx.suspend = !0;
-    ctx.dep_to_deref = NULL;
-    ctx.return_term = am_ok;
-    ctx.dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
-    ctx.dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
+    DeclareTypedTmpHeap(RemoteSendContext, ctx, BIF_P);
+    UseTmpHeap(sizeof(RemoteSendContext)/sizeof(Eterm), BIF_P);
+
+    ctx->suspend = !0;
+    ctx->dep_to_deref = NULL;
+    ctx->return_term = am_ok;
+    ctx->dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
+    ctx->dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
 
     while (is_list(l)) {
 	if (CAR(list_val(l)) == am_noconnect) {
 	    connect = 0;
 	} else if (CAR(list_val(l)) == am_nosuspend) {
-	    ctx.suspend = 0;
+	    ctx->suspend = 0;
 	} else {
-	    BIF_ERROR(p, BADARG);
+	    ERTS_BIF_PREP_ERROR(return_me, p, BADARG);
+	    goto done;
 	}
 	l = CDR(list_val(l));
     }
     if(!is_nil(l)) {
-	BIF_ERROR(p, BADARG);
+	ERTS_BIF_PREP_ERROR(return_me, p, BADARG);
+	goto done;
     }
 
 #ifdef DEBUG
     ref = NIL;
 #endif
 
-    result = do_send(p, to, msg, ctx.suspend, &ref, &ctx);
+    result = do_send(p, to, msg, ctx->suspend, &ref, ctx);
     if (result > 0) {
 	ERTS_VBUMP_REDS(p, result);
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
 	    goto yield_return;
-	BIF_RET(am_ok);
+	ERTS_BIF_PREP_RET(return_me, am_ok);
+	goto done;
     }
 
     switch (result) {
@@ -2125,51 +2130,58 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
 	/* May need to yield even though we do not bump reds here... */
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
 	    goto yield_return;
-	BIF_RET(am_ok); 
+	ERTS_BIF_PREP_RET(return_me, am_ok);
 	break;
     case SEND_TRAP:
 	if (connect) {
-	    BIF_TRAP3(dsend3_trap, p, to, msg, opts); 
+	    ERTS_BIF_PREP_TRAP3(return_me, dsend3_trap, p, to, msg, opts);
 	} else {
-	    BIF_RET(am_noconnect);
+	    ERTS_BIF_PREP_RET(return_me, am_noconnect);
 	}
 	break;
     case SEND_YIELD:
-	if (ctx.suspend) {
-	    ERTS_BIF_YIELD3(bif_export[BIF_send_3], p, to, msg, opts);
+	if (ctx->suspend) {
+	    ERTS_BIF_PREP_YIELD3(return_me,
+				 bif_export[BIF_send_3], p, to, msg, opts);
 	} else {
-	    BIF_RET(am_nosuspend);
+	    ERTS_BIF_PREP_RET(return_me, am_nosuspend);
 	}
 	break;
     case SEND_YIELD_RETURN:
-	if (!ctx.suspend)
-	    BIF_RET(am_nosuspend);
+	if (!ctx->suspend) {
+	    ERTS_BIF_PREP_RET(return_me, am_nosuspend);
+	    break;
+	}
     yield_return:
-	ERTS_BIF_YIELD_RETURN(p, am_ok);
+	ERTS_BIF_PREP_YIELD_RETURN(return_me, p, am_ok);
+        break;
     case SEND_AWAIT_RESULT:
 	ASSERT(is_internal_ref(ref));
-	BIF_TRAP3(await_port_send_result_trap, p, ref, am_nosuspend, am_ok);
+	ERTS_BIF_PREP_TRAP3(return_me, await_port_send_result_trap, p, ref, am_nosuspend, am_ok);
+	break;
     case SEND_BADARG:
-	BIF_ERROR(p, BADARG); 
+	ERTS_BIF_PREP_ERROR(return_me, p, BADARG);
 	break;
     case SEND_USER_ERROR:
-	BIF_ERROR(p, EXC_ERROR); 
+	ERTS_BIF_PREP_ERROR(return_me, p, EXC_ERROR);
 	break;
     case SEND_INTERNAL_ERROR:
-	BIF_ERROR(p, EXC_INTERNAL_ERROR);
+	ERTS_BIF_PREP_ERROR(return_me, p, EXC_INTERNAL_ERROR);
 	break;
     case SEND_YIELD_CONTINUE:
 	BUMP_ALL_REDS(p);
 	erts_set_gc_state(p, 0);
-	BIF_TRAP1(&dsend_continue_trap_export, p,
-		  dsend_export_trap_context(p, &ctx));
+	ERTS_BIF_PREP_TRAP1(return_me, &dsend_continue_trap_export, p,
+			    erts_dsend_export_trap_context(p, ctx));
 	break;
     default:
-	ASSERT(! "Illegal send result"); 
+	ERTS_ASSERT(! "Illegal send result");
 	break;
     }
-    ASSERT(! "Can not arrive here");
-    BIF_ERROR(p, BADARG);
+
+done:
+    UnUseTmpHeap(sizeof(RemoteSendContext)/sizeof(Eterm), BIF_P);
+    return return_me;
 }
 
 BIF_RETTYPE send_2(BIF_ALIST_2)
@@ -2215,26 +2227,29 @@ static BIF_RETTYPE dsend_continue_trap_1(BIF_ALIST_1)
 
 Eterm erl_send(Process *p, Eterm to, Eterm msg)
 {
-    RemoteSendContext ctx;
+    Eterm return_me;
     Eterm ref;
     Sint result;
+    DeclareTypedTmpHeap(RemoteSendContext, ctx, p);
+    UseTmpHeap(sizeof(RemoteSendContext)/sizeof(Eterm), p);
 
 #ifdef DEBUG
     ref = NIL;
 #endif
-    ctx.suspend = !0;
-    ctx.dep_to_deref = NULL;
-    ctx.return_term = msg;
-    ctx.dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
-    ctx.dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
+    ctx->suspend = !0;
+    ctx->dep_to_deref = NULL;
+    ctx->return_term = msg;
+    ctx->dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
+    ctx->dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
 
-    result = do_send(p, to, msg, !0, &ref, &ctx);
+    result = do_send(p, to, msg, !0, &ref, ctx);
     
     if (result > 0) {
 	ERTS_VBUMP_REDS(p, result);
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
 	    goto yield_return;
-	BIF_RET(msg);
+	ERTS_BIF_PREP_RET(return_me, msg);
+	goto done;
     }
 
     switch (result) {
@@ -2242,41 +2257,46 @@ Eterm erl_send(Process *p, Eterm to, Eterm msg)
 	/* May need to yield even though we do not bump reds here... */
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
 	    goto yield_return;
-	BIF_RET(msg); 
+	ERTS_BIF_PREP_RET(return_me, msg);
 	break;
     case SEND_TRAP:
-	BIF_TRAP2(dsend2_trap, p, to, msg); 
+	ERTS_BIF_PREP_TRAP2(return_me, dsend2_trap, p, to, msg);
 	break;
     case SEND_YIELD:
-	ERTS_BIF_YIELD2(bif_export[BIF_send_2], p, to, msg);
+	ERTS_BIF_PREP_YIELD2(return_me, bif_export[BIF_send_2], p, to, msg);
 	break;
     case SEND_YIELD_RETURN:
     yield_return:
-	ERTS_BIF_YIELD_RETURN(p, msg);
+	ERTS_BIF_PREP_YIELD_RETURN(return_me, p, msg);
+        break;
     case SEND_AWAIT_RESULT:
 	ASSERT(is_internal_ref(ref));
-	BIF_TRAP3(await_port_send_result_trap, p, ref, msg, msg);
+	ERTS_BIF_PREP_TRAP3(return_me,
+			    await_port_send_result_trap, p, ref, msg, msg);
+	break;
     case SEND_BADARG:
-	BIF_ERROR(p, BADARG); 
+	ERTS_BIF_PREP_ERROR(return_me, p, BADARG);
 	break;
     case SEND_USER_ERROR:
-	BIF_ERROR(p, EXC_ERROR); 
+	ERTS_BIF_PREP_ERROR(return_me, p, EXC_ERROR);
 	break;
     case SEND_INTERNAL_ERROR:
-	BIF_ERROR(p, EXC_INTERNAL_ERROR);
+	ERTS_BIF_PREP_ERROR(return_me, p, EXC_INTERNAL_ERROR);
 	break;
     case SEND_YIELD_CONTINUE:
 	BUMP_ALL_REDS(p);
 	erts_set_gc_state(p, 0);
-	BIF_TRAP1(&dsend_continue_trap_export, p,
-		  dsend_export_trap_context(p, &ctx));
+	ERTS_BIF_PREP_TRAP1(return_me, &dsend_continue_trap_export, p,
+			    erts_dsend_export_trap_context(p, ctx));
 	break;
     default:
-	ASSERT(! "Illegal send result"); 
+	ERTS_ASSERT(! "Illegal send result");
 	break;
     }
-    ASSERT(! "Can not arrive here");
-    BIF_ERROR(p, BADARG);
+
+done:
+    UnUseTmpHeap(sizeof(RemoteSendContext)/sizeof(Eterm), p);
+    return return_me;
 }
 
 /**********************************************************************/
