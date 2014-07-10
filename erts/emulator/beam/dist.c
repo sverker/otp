@@ -633,7 +633,7 @@ alloc_dist_obuf(Uint size)
     return obuf;
 }
 
-/*SVERK static ERTS_INLINE*/ void
+static ERTS_INLINE void
 free_dist_obuf(ErtsDistOutputBuf *obuf)
 {
     Binary *bin = ErtsDistOutputBuf2Binary(obuf);
@@ -708,6 +708,44 @@ static void clear_dist_entry(DistEntry *dep)
 	erts_smp_mtx_unlock(&dep->qlock);
     }
 }
+
+void erts_dsend_context_dtor(Binary* ctx_bin)
+{
+    RemoteSendContext* ctx = ERTS_MAGIC_BIN_DATA(ctx_bin);
+    switch (ctx->dss.phase) {
+    case ERTS_DSIG_SEND_PHASE_MSG_SIZE:
+	DESTROY_SAVED_ESTACK(&ctx->dss.u.sc.estack);
+	break;
+    case ERTS_DSIG_SEND_PHASE_MSG_ENCODE:
+	DESTROY_SAVED_WSTACK(&ctx->dss.u.ec.wstack);
+	break;
+    default:;
+    }
+    if (ctx->dss.phase >= ERTS_DSIG_SEND_PHASE_ALLOC && ctx->dss.obuf) {
+	void free_dist_obuf(ErtsDistOutputBuf *obuf); /*SVERK*/
+	free_dist_obuf(ctx->dss.obuf);
+    }
+    if (ctx->dep_to_deref)
+	erts_deref_dist_entry(ctx->dep_to_deref);
+}
+
+Eterm erts_dsend_export_trap_context(Process* p, RemoteSendContext* ctx)
+{
+    Binary* ctx_bin = erts_create_magic_binary(sizeof(ExportedRemoteSendContext),
+					       erts_dsend_context_dtor);
+    Eterm* hp = HAlloc(p, PROC_BIN_SIZE);
+    ExportedRemoteSendContext* dst = ERTS_MAGIC_BIN_DATA(ctx_bin);
+
+    sys_memcpy(&dst->ctx, ctx, sizeof(RemoteSendContext));
+    ASSERT(ctx->dss.ctl == make_tuple(ctx->ctl_heap));
+    dst->ctx.dss.ctl = make_tuple(dst->ctx.ctl_heap);
+    if (ctx->dss.acmp) {
+	sys_memcpy(&dst->acm, ctx->dss.acmp, sizeof(ErtsAtomCacheMap));
+	dst->ctx.dss.acmp = &dst->acm;
+    }
+    return erts_mk_magic_binary_term(&hp, &MSO(p), ctx_bin);
+}
+
 
 /*
  * The erts_dsig_send_*() functions implemented below, sends asynchronous
