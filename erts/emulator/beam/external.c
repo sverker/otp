@@ -1759,14 +1759,11 @@ erts_term_to_binary(Process* p, Eterm Term, int level, Uint flags) {
     return erts_term_to_binary_simple(p, Term, size, level, flags);
 }
 
-/* Define for testing */
-/* #define EXTREME_TTB_TRAPPING 1 */
+/* Define EXTREME_TTB_TRAPPING for testing in dist.h */
 
 #ifndef EXTREME_TTB_TRAPPING
-/*SVERK #define TERM_TO_BINARY_LOOP_FACTOR 32*/
 #define TERM_TO_BINARY_COMPRESS_CHUNK (1 << 18)
 #else
-/*SVERK #define TERM_TO_BINARY_LOOP_FACTOR 1*/
 #define TERM_TO_BINARY_COMPRESS_CHUNK 10
 #endif
 

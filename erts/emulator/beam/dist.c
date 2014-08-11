@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2014. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -722,7 +722,6 @@ void erts_dsend_context_dtor(Binary* ctx_bin)
     default:;
     }
     if (ctx->dss.phase >= ERTS_DSIG_SEND_PHASE_ALLOC && ctx->dss.obuf) {
-	void free_dist_obuf(ErtsDistOutputBuf *obuf); /*SVERK*/
 	free_dist_obuf(ctx->dss.obuf);
     }
     if (ctx->dep_to_deref)
