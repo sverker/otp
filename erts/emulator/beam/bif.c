@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2014. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -1798,11 +1798,10 @@ ebif_bang_2(BIF_ALIST_2)
 #define SEND_YIELD_CONTINUE     (-8)
 
 
-Sint do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp,
-	     RemoteSendContext*);
+Sint do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, RemoteSendContext*);
 
 static Sint remote_send(Process *p, DistEntry *dep,
-			Eterm to, Eterm full_to, Eterm msg, int suspend,
+			Eterm to, Eterm full_to, Eterm msg,
 			RemoteSendContext* ctx)
 {
     Sint res;
@@ -1810,14 +1809,14 @@ static Sint remote_send(Process *p, DistEntry *dep,
 
     ASSERT(is_atom(to) || is_external_pid(to));
 
-    code = erts_dsig_prepare(&ctx->dsd, dep, p, ERTS_DSP_NO_LOCK, !suspend);
+    code = erts_dsig_prepare(&ctx->dsd, dep, p, ERTS_DSP_NO_LOCK, !ctx->suspend);
     switch (code) {
     case ERTS_DSIG_PREP_NOT_ALIVE:
     case ERTS_DSIG_PREP_NOT_CONNECTED:
 	res = SEND_TRAP;
 	break;
     case ERTS_DSIG_PREP_WOULD_SUSPEND:
-	ASSERT(!suspend);
+	ASSERT(!ctx->suspend);
 	res = SEND_YIELD;
 	break;
     case ERTS_DSIG_PREP_CONNECTED: {
@@ -1855,8 +1854,7 @@ static Sint remote_send(Process *p, DistEntry *dep,
 }
 
 Sint
-do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp,
-	RemoteSendContext* ctx)
+do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, RemoteSendContext* ctx)
 {
     Eterm portid;
     Port *pt;
@@ -1888,7 +1886,7 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp,
 	    erts_send_error_to_logger(p->group_leader, dsbufp);
 	    return 0;
 	}
-	return remote_send(p, dep, to, to, msg, suspend, ctx);
+	return remote_send(p, dep, to, to, msg, ctx);
     } else if (is_atom(to)) {
 	Eterm id = erts_whereis_name_to_id(p, to);
 
@@ -1943,7 +1941,7 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp,
 	ret_val = 0;
         
 	if (pt) {
-	    int ps_flags = suspend ? 0 : ERTS_PORT_SIG_FLG_NOSUSPEND;
+	    int ps_flags = ctx->suspend ? 0 : ERTS_PORT_SIG_FLG_NOSUSPEND;
 	    *refp = NIL;
 
 	    switch (erts_port_command(p, ps_flags, pt, msg, refp)) {
@@ -1952,12 +1950,12 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp,
 		return SEND_USER_ERROR;
 	    case ERTS_PORT_OP_BUSY:
 		/* Nothing has been sent */
-		if (suspend)
+		if (ctx->suspend)
 		    erts_suspend(p, ERTS_PROC_LOCK_MAIN, pt);
 		return SEND_YIELD;
 	    case ERTS_PORT_OP_BUSY_SCHEDULED:
 		/* Message was sent */
-		if (suspend) {
+		if (ctx->suspend) {
 		    erts_suspend(p, ERTS_PROC_LOCK_MAIN, pt);
 		    ret_val = SEND_YIELD_RETURN;
 		    break;
@@ -2037,7 +2035,7 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp,
 	    return 0;
 	}
 
-	ret = remote_send(p, dep, tp[1], to, msg, suspend, ctx);
+	ret = remote_send(p, dep, tp[1], to, msg, ctx);
 	if (ret != SEND_YIELD_CONTINUE) {
 	    if (dep) {
 		erts_deref_dist_entry(dep);
@@ -2116,7 +2114,7 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
     ref = NIL;
 #endif
 
-    result = do_send(p, to, msg, ctx->suspend, &ref, ctx);
+    result = do_send(p, to, msg, &ref, ctx);
     if (result > 0) {
 	ERTS_VBUMP_REDS(p, result);
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
@@ -2242,7 +2240,7 @@ Eterm erl_send(Process *p, Eterm to, Eterm msg)
     ctx->dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
     ctx->dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
 
-    result = do_send(p, to, msg, !0, &ref, ctx);
+    result = do_send(p, to, msg, &ref, ctx);
     
     if (result > 0) {
 	ERTS_VBUMP_REDS(p, result);
