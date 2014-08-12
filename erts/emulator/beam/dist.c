@@ -732,12 +732,21 @@ Eterm erts_dsend_export_trap_context(Process* p, RemoteSendContext* ctx)
 {
     Binary* ctx_bin = erts_create_magic_binary(sizeof(ExportedRemoteSendContext),
 					       erts_dsend_context_dtor);
-    Eterm* hp = HAlloc(p, PROC_BIN_SIZE);
+    Uint hsz = !HALFWORD_HEAP ? PROC_BIN_SIZE :
+	(sizeof(ctx->ctl_heap) / sizeof(Eterm)) + PROC_BIN_SIZE;
+    Eterm* hp = HAlloc(p, hsz);
     ExportedRemoteSendContext* dst = ERTS_MAGIC_BIN_DATA(ctx_bin);
 
     sys_memcpy(&dst->ctx, ctx, sizeof(RemoteSendContext));
     ASSERT(ctx->dss.ctl == make_tuple(ctx->ctl_heap));
+#if !HALFWORD_HEAP
     dst->ctx.dss.ctl = make_tuple(dst->ctx.ctl_heap);
+#else
+    /* Must put control tuple in low mem */
+    sys_memcpy(hp, ctx->ctl_heap,  sizeof(ctx->ctl_heap));
+    dst->ctx.dss.ctl = make_tuple(hp);
+    hp += sizeof(ctx->ctl_heap) / sizeof(Eterm);
+#endif
     if (ctx->dss.acmp) {
 	sys_memcpy(&dst->acm, ctx->dss.acmp, sizeof(ErtsAtomCacheMap));
 	dst->ctx.dss.acmp = &dst->acm;
@@ -862,7 +871,6 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message,
 		   RemoteSendContext* ctx)
 {
     Eterm ctl;
-    /*DeclareTmpHeapNoproc(ctl_heap,5);*/
     Eterm token = NIL;
     Process *sender = dsdp->proc;
     int res;
@@ -876,8 +884,7 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message,
     DTRACE_CHARBUF(receiver_name, 64);
 #endif
 
-    /*UseTmpHeapNoproc(5);*/
-    if (SEQ_TRACE_TOKEN(sender) != NIL 
+    if (SEQ_TRACE_TOKEN(sender) != NIL
 #ifdef USE_VM_PROBES
 	&& SEQ_TRACE_TOKEN(sender) != am_have_dt_utag 
 #endif
@@ -917,7 +924,6 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message,
     ctx->dss.msg = message;
     ctx->dss.force_busy = 0;
     res = erts_dsig_send(dsdp, &ctx->dss);
-    /*UnUseTmpHeapNoproc(5);*/
     return res;
 }
 
@@ -926,7 +932,6 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message,
 		       RemoteSendContext* ctx)
 {
     Eterm ctl;
-    /*DeclareTmpHeapNoproc(ctl_heap,6);*/
     Eterm token = NIL;
     Process *sender = dsdp->proc;
     int res;
@@ -940,7 +945,6 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message,
     DTRACE_CHARBUF(receiver_name, 128);
 #endif
 
-    /*UseTmpHeapNoproc(6);*/
     if (SEQ_TRACE_TOKEN(sender) != NIL
 #ifdef USE_VM_PROBES
 	&& SEQ_TRACE_TOKEN(sender) != am_have_dt_utag 
@@ -982,7 +986,6 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message,
     ctx->dss.msg = message;
     ctx->dss.force_busy = 0;
     res = erts_dsig_send(dsdp, &ctx->dss);
-    /*UnUseTmpHeapNoproc(6);*/
     return res;
 }
 
