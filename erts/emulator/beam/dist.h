@@ -321,7 +321,7 @@ enum erts_dsig_send_phase {
     ERTS_DSIG_SEND_PHASE_FIN
 };
 
-struct dsig_send_state {
+struct erts_dsig_send_context {
     enum erts_dsig_send_phase phase;
     Sint reds;
 
@@ -346,15 +346,10 @@ typedef struct {
     Eterm ctl_heap[6];
     ErtsDSigData dsd;
     DistEntry* dep_to_deref;
-    struct dsig_send_state dss;
+    struct erts_dsig_send_context dss;
 
     Eterm return_term;
-}RemoteSendContext;
-
-typedef struct {
-    RemoteSendContext ctx;
-    ErtsAtomCacheMap acm;
-}ExportedRemoteSendContext;
+}ErtsSendContext;
 
 
 /*
@@ -365,10 +360,10 @@ typedef struct {
 #define ERTS_DSIG_SEND_CONTINUE 2
 
 extern int erts_dsig_send_link(ErtsDSigData *, Eterm, Eterm);
-extern int erts_dsig_send_msg(ErtsDSigData *, Eterm, Eterm, RemoteSendContext*);
+extern int erts_dsig_send_msg(ErtsDSigData *, Eterm, Eterm, ErtsSendContext*);
 extern int erts_dsig_send_exit_tt(ErtsDSigData *, Eterm, Eterm, Eterm, Eterm);
 extern int erts_dsig_send_unlink(ErtsDSigData *, Eterm, Eterm);
-extern int erts_dsig_send_reg_msg(ErtsDSigData *, Eterm, Eterm, RemoteSendContext*);
+extern int erts_dsig_send_reg_msg(ErtsDSigData *, Eterm, Eterm, ErtsSendContext*);
 extern int erts_dsig_send_group_leader(ErtsDSigData *, Eterm, Eterm);
 extern int erts_dsig_send_exit(ErtsDSigData *, Eterm, Eterm, Eterm);
 extern int erts_dsig_send_exit2(ErtsDSigData *, Eterm, Eterm, Eterm);
@@ -376,9 +371,9 @@ extern int erts_dsig_send_demonitor(ErtsDSigData *, Eterm, Eterm, Eterm, int);
 extern int erts_dsig_send_monitor(ErtsDSigData *, Eterm, Eterm, Eterm);
 extern int erts_dsig_send_m_exit(ErtsDSigData *, Eterm, Eterm, Eterm, Eterm);
 
-extern int erts_dsig_send(ErtsDSigData *dsdp, struct dsig_send_state* ctx);
+extern int erts_dsig_send(ErtsDSigData *dsdp, struct erts_dsig_send_context* ctx);
 extern void erts_dsend_context_dtor(Binary*);
-extern Eterm erts_dsend_export_trap_context(Process* p, RemoteSendContext* ctx);
+extern Eterm erts_dsend_export_trap_context(Process* p, ErtsSendContext* ctx);
 
 extern int erts_dist_command(Port *prt, int reds);
 extern void erts_dist_port_not_busy(Port *prt);

@@ -515,7 +515,7 @@ int erts_encode_dist_ext_size(Eterm term, Uint32 flags, ErtsAtomCacheMap *acmp,
     }
 }
 
-int erts_encode_dist_ext_size_int(Eterm term, struct dsig_send_state* ctx, Uint* szp)
+int erts_encode_dist_ext_size_int(Eterm term, struct erts_dsig_send_context* ctx, Uint* szp)
 {
     Uint sz;
     if (encode_size_struct_int(&ctx->u.sc, ctx->acmp, term, ctx->flags, &ctx->reds, &sz)) {

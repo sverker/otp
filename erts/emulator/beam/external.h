@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2014. All Rights Reserved.
  *
  * The contents of this file are subject to the Erlang Public License,
  * Version 1.1, (the "License"); you may not use this file except in
@@ -162,9 +162,9 @@ Uint erts_encode_ext_dist_header_size(ErtsAtomCacheMap *);
 Uint erts_encode_ext_dist_header_size(ErtsAtomCacheMap *);
 byte *erts_encode_ext_dist_header_setup(byte *, ErtsAtomCacheMap *);
 byte *erts_encode_ext_dist_header_finalize(byte *, ErtsAtomCache *, Uint32);
-struct dsig_send_state;
+struct erts_dsig_send_context;
 int erts_encode_dist_ext_size(Eterm, Uint32, ErtsAtomCacheMap*, Uint* szp);
-int erts_encode_dist_ext_size_int(Eterm term, struct dsig_send_state* ctx, Uint* szp);
+int erts_encode_dist_ext_size_int(Eterm term, struct erts_dsig_send_context* ctx, Uint* szp);
 struct TTBEncodeContext_;
 int erts_encode_dist_ext(Eterm, byte **, Uint32, ErtsAtomCacheMap *,
 			  struct TTBEncodeContext_ *, Sint* reds);

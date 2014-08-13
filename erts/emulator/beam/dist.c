@@ -711,7 +711,7 @@ static void clear_dist_entry(DistEntry *dep)
 
 void erts_dsend_context_dtor(Binary* ctx_bin)
 {
-    RemoteSendContext* ctx = ERTS_MAGIC_BIN_DATA(ctx_bin);
+    ErtsSendContext* ctx = ERTS_MAGIC_BIN_DATA(ctx_bin);
     switch (ctx->dss.phase) {
     case ERTS_DSIG_SEND_PHASE_MSG_SIZE:
 	DESTROY_SAVED_ESTACK(&ctx->dss.u.sc.estack);
@@ -728,16 +728,20 @@ void erts_dsend_context_dtor(Binary* ctx_bin)
 	erts_deref_dist_entry(ctx->dep_to_deref);
 }
 
-Eterm erts_dsend_export_trap_context(Process* p, RemoteSendContext* ctx)
+Eterm erts_dsend_export_trap_context(Process* p, ErtsSendContext* ctx)
 {
-    Binary* ctx_bin = erts_create_magic_binary(sizeof(ExportedRemoteSendContext),
+    struct exported_ctx {
+	ErtsSendContext ctx;
+	ErtsAtomCacheMap acm;
+    };
+    Binary* ctx_bin = erts_create_magic_binary(sizeof(struct exported_ctx),
 					       erts_dsend_context_dtor);
+    struct exported_ctx* dst = ERTS_MAGIC_BIN_DATA(ctx_bin);
     Uint hsz = !HALFWORD_HEAP ? PROC_BIN_SIZE :
 	(sizeof(ctx->ctl_heap) / sizeof(Eterm)) + PROC_BIN_SIZE;
     Eterm* hp = HAlloc(p, hsz);
-    ExportedRemoteSendContext* dst = ERTS_MAGIC_BIN_DATA(ctx_bin);
 
-    sys_memcpy(&dst->ctx, ctx, sizeof(RemoteSendContext));
+    sys_memcpy(&dst->ctx, ctx, sizeof(ErtsSendContext));
     ASSERT(ctx->dss.ctl == make_tuple(ctx->ctl_heap));
 #if !HALFWORD_HEAP
     dst->ctx.dss.ctl = make_tuple(dst->ctx.ctl_heap);
@@ -868,7 +872,7 @@ erts_dsig_send_demonitor(ErtsDSigData *dsdp, Eterm watcher,
 
 int
 erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message,
-		   RemoteSendContext* ctx)
+		   ErtsSendContext* ctx)
 {
     Eterm ctl;
     Eterm token = NIL;
@@ -929,7 +933,7 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message,
 
 int
 erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message,
-		       RemoteSendContext* ctx)
+		       ErtsSendContext* ctx)
 {
     Eterm ctl;
     Eterm token = NIL;
@@ -1743,7 +1747,7 @@ int erts_net_message(Port *prt,
 
 static int dsig_send_ctl(ErtsDSigData* dsdp, Eterm ctl, int force_busy)
 {
-    struct dsig_send_state ctx;
+    struct erts_dsig_send_context ctx;
     int ret;
     ctx.ctl = ctl;
     ctx.msg = THE_NON_VALUE;
@@ -1758,7 +1762,7 @@ static int dsig_send_ctl(ErtsDSigData* dsdp, Eterm ctl, int force_busy)
 }
 
 int
-erts_dsig_send(ErtsDSigData *dsdp, struct dsig_send_state* ctx)
+erts_dsig_send(ErtsDSigData *dsdp, struct erts_dsig_send_context* ctx)
 {
     Eterm cid;
 

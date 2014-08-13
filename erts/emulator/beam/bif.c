@@ -1798,11 +1798,11 @@ ebif_bang_2(BIF_ALIST_2)
 #define SEND_YIELD_CONTINUE     (-8)
 
 
-Sint do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, RemoteSendContext*);
+Sint do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, ErtsSendContext*);
 
 static Sint remote_send(Process *p, DistEntry *dep,
 			Eterm to, Eterm full_to, Eterm msg,
-			RemoteSendContext* ctx)
+			ErtsSendContext* ctx)
 {
     Sint res;
     int code;
@@ -1854,7 +1854,7 @@ static Sint remote_send(Process *p, DistEntry *dep,
 }
 
 Sint
-do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, RemoteSendContext* ctx)
+do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, ErtsSendContext* ctx)
 {
     Eterm portid;
     Port *pt;
@@ -2085,8 +2085,8 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
     int connect = !0;
     Eterm l = opts;
     Sint result;
-    DeclareTypedTmpHeap(RemoteSendContext, ctx, BIF_P);
-    UseTmpHeap(sizeof(RemoteSendContext)/sizeof(Eterm), BIF_P);
+    DeclareTypedTmpHeap(ErtsSendContext, ctx, BIF_P);
+    UseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), BIF_P);
 
     ctx->suspend = !0;
     ctx->dep_to_deref = NULL;
@@ -2178,7 +2178,7 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
     }
 
 done:
-    UnUseTmpHeap(sizeof(RemoteSendContext)/sizeof(Eterm), BIF_P);
+    UnUseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), BIF_P);
     return return_me;
 }
 
@@ -2190,7 +2190,7 @@ BIF_RETTYPE send_2(BIF_ALIST_2)
 static BIF_RETTYPE dsend_continue_trap_1(BIF_ALIST_1)
 {
     Binary* bin = ((ProcBin*) binary_val(BIF_ARG_1))->val;
-    RemoteSendContext* ctx = (RemoteSendContext*) ERTS_MAGIC_BIN_DATA(bin);
+    ErtsSendContext* ctx = (ErtsSendContext*) ERTS_MAGIC_BIN_DATA(bin);
     Sint initial_reds = (Sint) (ERTS_BIF_REDS_LEFT(BIF_P) * TERM_TO_BINARY_LOOP_FACTOR);
     int result;
 
@@ -2228,8 +2228,8 @@ Eterm erl_send(Process *p, Eterm to, Eterm msg)
     Eterm return_me;
     Eterm ref;
     Sint result;
-    DeclareTypedTmpHeap(RemoteSendContext, ctx, p);
-    UseTmpHeap(sizeof(RemoteSendContext)/sizeof(Eterm), p);
+    DeclareTypedTmpHeap(ErtsSendContext, ctx, p);
+    UseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), p);
 
 #ifdef DEBUG
     ref = NIL;
@@ -2293,7 +2293,7 @@ Eterm erl_send(Process *p, Eterm to, Eterm msg)
     }
 
 done:
-    UnUseTmpHeap(sizeof(RemoteSendContext)/sizeof(Eterm), p);
+    UnUseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), p);
     return return_me;
 }
 
