@@ -119,7 +119,7 @@ Export* dmonitor_p_trap = NULL;
 /* forward declarations */
 
 static void clear_dist_entry(DistEntry*);
-static int dsig_send(ErtsDSigData *, Eterm, Eterm, int);
+static int dsig_send_ctl(ErtsDSigData* dsdp, Eterm ctl, int force_busy);
 static void send_nodes_mon_msgs(Process *, Eterm, Eterm, Eterm, Eterm);
 static void init_nodes_monitors(void);
 
@@ -777,7 +777,7 @@ erts_dsig_send_link(ErtsDSigData *dsdp, Eterm local, Eterm remote)
     int res;
     UseTmpHeapNoproc(4);
 
-    res = dsig_send(dsdp, ctl, THE_NON_VALUE, 0);
+    res = dsig_send_ctl(dsdp, ctl, 0);
     UnUseTmpHeapNoproc(4);
     return res;
 }
@@ -790,7 +790,7 @@ erts_dsig_send_unlink(ErtsDSigData *dsdp, Eterm local, Eterm remote)
     int res;
 
     UseTmpHeapNoproc(4);
-    res = dsig_send(dsdp, ctl, THE_NON_VALUE, 0);
+    res = dsig_send_ctl(dsdp, ctl, 0);
     UnUseTmpHeapNoproc(4);
     return res;
 }
@@ -818,7 +818,7 @@ erts_dsig_send_m_exit(ErtsDSigData *dsdp, Eterm watcher, Eterm watched,
     erts_smp_de_links_unlock(dsdp->dep);
 #endif
 
-    res = dsig_send(dsdp, ctl, THE_NON_VALUE, 1);
+    res = dsig_send_ctl(dsdp, ctl, 1);
     UnUseTmpHeapNoproc(6);
     return res;
 }
@@ -839,7 +839,7 @@ erts_dsig_send_monitor(ErtsDSigData *dsdp, Eterm watcher, Eterm watched,
 		 make_small(DOP_MONITOR_P),
 		 watcher, watched, ref);
 
-    res = dsig_send(dsdp, ctl, THE_NON_VALUE, 0);
+    res = dsig_send_ctl(dsdp, ctl, 0);
     UnUseTmpHeapNoproc(5);
     return res;
 }
@@ -861,7 +861,7 @@ erts_dsig_send_demonitor(ErtsDSigData *dsdp, Eterm watcher,
 		 make_small(DOP_DEMONITOR_P),
 		 watcher, watched, ref);
 
-    res = dsig_send(dsdp, ctl, THE_NON_VALUE, force);
+    res = dsig_send_ctl(dsdp, ctl, force);
     UnUseTmpHeapNoproc(5);
     return res;
 }
@@ -1042,7 +1042,7 @@ erts_dsig_send_exit_tt(ErtsDSigData *dsdp, Eterm local, Eterm remote,
     DTRACE7(process_exit_signal_remote, sender_name, node_name,
             remote_name, reason_str, tok_label, tok_lastcnt, tok_serial);
     /* forced, i.e ignore busy */
-    res = dsig_send(dsdp, ctl, THE_NON_VALUE, 1);
+    res = dsig_send_ctl(dsdp, ctl, 1);
     UnUseTmpHeapNoproc(6);
     return res;
 }
@@ -1058,7 +1058,7 @@ erts_dsig_send_exit(ErtsDSigData *dsdp, Eterm local, Eterm remote, Eterm reason)
     ctl = TUPLE4(&ctl_heap[0],
 		 make_small(DOP_EXIT), local, remote, reason);
     /* forced, i.e ignore busy */
-    res =  dsig_send(dsdp, ctl, THE_NON_VALUE, 1);
+    res =  dsig_send_ctl(dsdp, ctl, 1);
     UnUseTmpHeapNoproc(5);
     return res;
 }
@@ -1074,7 +1074,7 @@ erts_dsig_send_exit2(ErtsDSigData *dsdp, Eterm local, Eterm remote, Eterm reason
     ctl = TUPLE4(&ctl_heap[0],
 		 make_small(DOP_EXIT2), local, remote, reason);
 
-    res = dsig_send(dsdp, ctl, THE_NON_VALUE, 0);
+    res = dsig_send_ctl(dsdp, ctl, 0);
     UnUseTmpHeapNoproc(5);
     return res;
 }
@@ -1091,7 +1091,7 @@ erts_dsig_send_group_leader(ErtsDSigData *dsdp, Eterm leader, Eterm remote)
     ctl = TUPLE3(&ctl_heap[0],
 		 make_small(DOP_GROUP_LEADER), leader, remote);
 
-    res = dsig_send(dsdp, ctl, THE_NON_VALUE, 0);
+    res = dsig_send_ctl(dsdp, ctl, 0);
     UnUseTmpHeapNoproc(4);
     return res;
 }
@@ -1741,14 +1741,20 @@ int erts_net_message(Port *prt,
     return -1;
 }
 
-static int dsig_send(ErtsDSigData *dsdp, Eterm ctl, Eterm msg, int force_busy)
+static int dsig_send_ctl(ErtsDSigData* dsdp, Eterm ctl, int force_busy)
 {
     struct dsig_send_state ctx;
+    int ret;
     ctx.ctl = ctl;
-    ctx.msg = msg;
+    ctx.msg = THE_NON_VALUE;
     ctx.force_busy = force_busy;
     ctx.phase = ERTS_DSIG_SEND_PHASE_INIT;
-    return erts_dsig_send(dsdp, &ctx);
+#ifdef DEBUG
+    ctx.reds = 1; /* provoke assert below (no reduction count without msg) */
+#endif
+    ret = erts_dsig_send(dsdp, &ctx);
+    ASSERT(ret != ERTS_DSIG_SEND_CONTINUE);
+    return ret;
 }
 
 int
