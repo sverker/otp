@@ -1531,3 +1531,18 @@ bitstr_list_len(ErtsIOListState *state)
     return ERTS_IOLIST_YIELD;
 }
 
+void debug_check_offheap_binaries(Process* p)
+{
+    union erl_off_heap_ptr u;
+
+    for (u.hdr = MSO(p).first; u.hdr; u.hdr = u.hdr->next) {
+	if (thing_subtag(u.hdr->thing_word) == REFC_BINARY_SUBTAG) {
+	    Binary* bin = u.pb->val;
+	    if (!(bin->flags & BIN_FLAG_MAGIC)) {
+		char *chicken = &bin->orig_bytes[bin->orig_size];
+		ERTS_ASSERT(sys_memcmp(chicken, "Pad", 3) == 0);
+	    }
+	}
+    }
+}
+

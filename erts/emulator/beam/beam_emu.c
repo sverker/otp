@@ -2547,7 +2547,9 @@ get_map_elements_fail:
 	c_p->fcalls = FCALLS;
 	PROCESS_MAIN_CHK_LOCKS(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p));
+	debug_check_offheap_binaries(c_p);
 	result = (*bf)(c_p, tmp_reg);
+	debug_check_offheap_binaries(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
 	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -2576,7 +2578,9 @@ get_map_elements_fail:
 	c_p->fcalls = FCALLS;
 	PROCESS_MAIN_CHK_LOCKS(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p));
+	debug_check_offheap_binaries(c_p);
 	result = (*bf)(c_p, tmp_reg);
+	debug_check_offheap_binaries(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
 	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -2607,7 +2611,9 @@ get_map_elements_fail:
 	SWAPOUT;
 	PROCESS_MAIN_CHK_LOCKS(c_p);
 	ERTS_SMP_UNREQ_PROC_MAIN_LOCK(c_p);
+	debug_check_offheap_binaries(c_p);
 	result = (*bf)(c_p, reg, live);
+	debug_check_offheap_binaries(c_p);
 	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -2643,7 +2649,9 @@ get_map_elements_fail:
 	SWAPOUT;
 	PROCESS_MAIN_CHK_LOCKS(c_p);
 	ERTS_SMP_UNREQ_PROC_MAIN_LOCK(c_p);
+	debug_check_offheap_binaries(c_p);
 	result = (*bf)(c_p, reg, live);
+	debug_check_offheap_binaries(c_p);
 	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -2682,7 +2690,9 @@ get_map_elements_fail:
 	SWAPOUT;
 	PROCESS_MAIN_CHK_LOCKS(c_p);
 	ERTS_SMP_UNREQ_PROC_MAIN_LOCK(c_p);
+	debug_check_offheap_binaries(c_p);
 	result = (*bf)(c_p, reg, live);
+	debug_check_offheap_binaries(c_p);
 	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	ERTS_SMP_REQ_PROC_MAIN_LOCK(c_p);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -2717,7 +2727,9 @@ get_map_elements_fail:
 	c_p->fcalls = FCALLS;
 	PROCESS_MAIN_CHK_LOCKS(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p));
+	debug_check_offheap_binaries(c_p);
 	result = (*bf)(c_p, tmp_reg);
+	debug_check_offheap_binaries(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
 	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -2742,7 +2754,9 @@ get_map_elements_fail:
 	bf = (BifFunction) Arg(0);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p));
+	debug_check_offheap_binaries(c_p);
 	result = (*bf)(c_p, tmp_reg);
+	debug_check_offheap_binaries(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
 	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -2776,7 +2790,9 @@ get_map_elements_fail:
 	PreFetch(1, next);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p));
 	reg[0] = r(0);
+	debug_check_offheap_binaries(c_p);
 	result = (*bf)(c_p, reg, I);
+	debug_check_offheap_binaries(c_p);
 	ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
 	ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
 	ERTS_HOLE_CHECK(c_p);
@@ -3521,7 +3537,9 @@ get_map_elements_fail:
 		struct enif_environment_t env;
 		erts_pre_nif(&env, c_p, (struct erl_module_nif*)I[2]);
 		reg[0] = r(0);
+		debug_check_offheap_binaries(c_p);
 		nif_bif_result = (*fp)(&env, bif_nif_arity, reg);
+		debug_check_offheap_binaries(c_p);
 		erts_post_nif(&env);
 #ifdef ERTS_DIRTY_SCHEDULERS
 		if (is_non_value(nif_bif_result) && c_p->freason == TRAP) {
@@ -3568,7 +3586,9 @@ get_map_elements_fail:
 	    {
 		Eterm (*bf)(Process*, Eterm*, BeamInstr*) = vbf;
 		ASSERT(!ERTS_PROC_IS_EXITING(c_p));
+		debug_check_offheap_binaries(c_p);
 		nif_bif_result = (*bf)(c_p, reg, I);
+		debug_check_offheap_binaries(c_p);
 		ASSERT(!ERTS_PROC_IS_EXITING(c_p) ||
 		       is_non_value(nif_bif_result));
 		ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);

@@ -235,9 +235,10 @@ ERTS_GLB_INLINE Binary *
 erts_bin_drv_alloc_fnf(Uint size)
 {
     Uint bsize = ERTS_SIZEOF_Binary(size) + CHICKEN_PAD;
-    void *res;
+    Binary *res;
     res = erts_alloc_fnf(ERTS_ALC_T_DRV_BINARY, bsize);
     ERTS_CHK_BIN_ALIGNMENT(res);
+    sys_memcpy(res->orig_bytes+size, "Pad", 3);
     return (Binary *) res;
 }
 
@@ -245,9 +246,10 @@ ERTS_GLB_INLINE Binary *
 erts_bin_drv_alloc(Uint size)
 {
     Uint bsize = ERTS_SIZEOF_Binary(size) + CHICKEN_PAD;
-    void *res;
+    Binary *res;
     res = erts_alloc(ERTS_ALC_T_DRV_BINARY, bsize);
     ERTS_CHK_BIN_ALIGNMENT(res);
+    sys_memcpy(res->orig_bytes+size, "Pad", 3);
     return (Binary *) res;
 }
 
@@ -256,9 +258,10 @@ ERTS_GLB_INLINE Binary *
 erts_bin_nrml_alloc(Uint size)
 {
     Uint bsize = ERTS_SIZEOF_Binary(size) + CHICKEN_PAD;
-    void *res;
+    Binary *res;
     res = erts_alloc(ERTS_ALC_T_BINARY, bsize);
     ERTS_CHK_BIN_ALIGNMENT(res);
+    sys_memcpy(res->orig_bytes+size, "Pad", 3);
     return (Binary *) res;
 }
 
@@ -273,6 +276,7 @@ erts_bin_realloc_fnf(Binary *bp, Uint size)
     else
 	nbp = erts_realloc_fnf(ERTS_ALC_T_BINARY, (void *) bp, bsize);
     ERTS_CHK_BIN_ALIGNMENT(nbp);
+    sys_memcpy(nbp->orig_bytes+size, "Pad", 3);
     return nbp;
 }
 
@@ -293,6 +297,7 @@ erts_bin_realloc(Binary *bp, Uint size)
 			      bp,
 			      bsize);
     ERTS_CHK_BIN_ALIGNMENT(nbp);
+    sys_memcpy(nbp->orig_bytes+size, "Pad", 3);
     return nbp;
 }
 
@@ -301,6 +306,8 @@ erts_bin_free(Binary *bp)
 {
     if (bp->flags & BIN_FLAG_MAGIC)
 	ERTS_MAGIC_BIN_DESTRUCTOR(bp)(bp);
+    else
+	ERTS_ASSERT(sys_memcmp(bp->orig_bytes+bp->orig_size, "Pad", 3) == 0);
     if (bp->flags & BIN_FLAG_DRV)
 	erts_free(ERTS_ALC_T_DRV_BINARY, (void *) bp);
     else

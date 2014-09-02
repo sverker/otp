@@ -609,6 +609,7 @@ Eterm erts_new_heap_binary(Process *p, byte *buf, int len, byte** datap);
 Eterm erts_new_mso_binary(Process*, byte*, int);
 Eterm new_binary(Process*, byte*, Uint);
 Eterm erts_realloc_binary(Eterm bin, size_t size);
+void debug_check_offheap_binaries(Process* p);
 
 /* erl_bif_info.c */
 
