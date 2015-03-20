@@ -20,7 +20,6 @@ Index vec_ix_top = 0;
 #define IS_LEAF ((Index)-1)
 
 
-
 Index random_ix(void)
 {
     return random() % NODE_SIZE;
@@ -33,6 +32,17 @@ void clear_node(Index node_ix)
     {
 	vec[node_ix].arr[i] = IS_FREE;
     }
+}
+
+void clear_hamt(void)
+{
+    vec_ix_top = 0;
+    clear_node(0);
+}
+
+int nr_of_nodes()
+{
+    return vec_ix_top + 1;
 }
 
 
@@ -72,52 +82,78 @@ double sq(double v)
     return v*v;
 }
 
+#define NSTATS (32*128)
+
+struct {
+    int nkeys;
+    double sum;
+    double sq_sum;
+}stats[NSTATS];
+
 void doit(int nkeys)
 {
-    int i, n;
-    int values[NVALUES];
-    double sum = 0;
-    double sq_sum = 0;
-    double sqdiff_sum = 0;
-    double avg, sq_avg;
-    double varians = 0;
+    int i, n, top_stat_ix=0;
+    int stat_ix;
+    int step;
+    int step_limit;
 
+    for (i = 0; i < sizeof(stats) / sizeof(*stats); i++) {
+	stats[i].nkeys = 0;
+	stats[i].sum = 0;
+	stats[i].sq_sum = 0;
+    }
 
     for (n = 0; n < NVALUES; n++) {
-        vec_ix_top = 0;
-	clear_node(0);
-        for (i = nkeys; i; i--) {
+	stat_ix = 0;
+	step = 1;
+	step_limit = 128;
+	clear_hamt();
+
+        for (i = 1; i <= nkeys; i++) {
             insert();
+	    if (i % step == 0) {
+		assert(stat_ix < NSTATS);
+		assert(n==0 || stats[stat_ix].nkeys == i);
+		stats[stat_ix].nkeys = i;
+		stats[stat_ix].sum += nr_of_nodes();
+		stats[stat_ix].sq_sum += sq(nr_of_nodes());
+		stat_ix++;
+		if (i > step_limit) {
+		    step *= 2;
+		    step_limit *= 2;
+		}
+	    }
         }
-        values[n] = vec_ix_top;
-        sum += values[n];
-        sq_sum += sq(values[n]);
-        //printf("Number of nodes: %d\n", values[n]);
     }
 
-    avg = sum / NVALUES;
-    sq_avg = sq_sum / NVALUES;
-    for (n = 0; n < NVALUES; n++) {
-        varians += sq(values[n] - avg) / NVALUES;
+    printf("Keys\tNodes/Keys\tsqrt(Keys)\tStdDev/sqrt(Keys)\n");
+    for (i = 0; i < stat_ix ; i++) {
+	double avg = stats[i].sum / NVALUES;
+	double sq_avg = stats[i].sq_sum / NVALUES;
+	double sqrt_nkeys = sqrt(stats[i].nkeys);
+	double std_dev = sqrt(sq_avg - sq(avg));
+	printf("%d\t%lf\t%lf\t%lf\n", stats[i].nkeys, avg / stats[i].nkeys,
+	       sqrt_nkeys, std_dev / sqrt_nkeys);
     }
-    printf("--- %d keys ---\n", nkeys);
-    printf("Average: %lf\n", avg);
-    printf("Std dev: %lf\n", sqrt(varians));
-    printf("Std dev: %lf\n", sqrt(sq_avg - sq(avg)));
-
     return;
 }
 
 
-int main()
+int main(int argc, char* argv[])
 {
-    int nkeys[] = {32, 100, 300, 1000, 3000, 10000, 30000, 100000, 300000,
-		  1000*1000, 3*1000*1000, 10*1000*1000,
-		  0};
     int k;
 
-    for (k=0; nkeys[k]; k++) {
-	doit(nkeys[k]);
+    if (argc == 2) {
+	char *endp;
+	int nkeys = (int)strtol(argv[1], &endp, 10);
+	if (endp != argv[k] && nkeys > 0)
+	    doit(nkeys);
+	else
+	    fprintf(stderr, "ERROR: Invalid number of keys: '%s'\n", argv[k]);
+    }
+    else {
+	fprintf(stderr, "Calculate expected number of nodes for different hamt sizes.\n\n");
+	fprintf(stderr, "Syntax: %s <max map size>\n\n", argv[0]);
     }
 
     return 0;
