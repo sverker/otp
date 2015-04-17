@@ -1575,6 +1575,14 @@ erts_bs_init_writable(Process* p, Eterm sz)
     return make_binary(sb);
 }
 
+void hipe_emasculate(Eterm bin)
+{
+    ProcBin* pb = (ProcBin *) boxed_val(bin);
+    if (pb->thing_word == HEADER_PROC_BIN && pb->flags != 0) {
+	erts_emasculate_writable_binary(pb);
+    }
+}
+
 void
 erts_emasculate_writable_binary(ProcBin* pb)
 {
@@ -1664,8 +1672,16 @@ erts_bs_get_utf8(ErlBinMatchBuffer* mb)
 	2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 3,3,3,3,3,3,3,3,9,9,9,9,9,9,9,9
     };
 
+    erts_fprintf(stderr, "erts_bs_get_utf8\n");
+
+    {
+	byte* bytes, bitof, bitsz;
+	ERTS_GET_BINARY_BYTES(mb->orig, bytes, bitof, bitsz);
+	ERTS_ASSERT(mb->base >= bytes && mb->base < (bytes + binary_size(mb->orig)));
+    }
+
     if ((remaining_bits = mb->size - mb->offset) < 8) {
-	return THE_NON_VALUE;
+	goto badmatch;
     }
     if (BIT_OFFSET(mb->offset) == 0) {
 	pos = mb->base + BYTE_OFFSET(mb->offset);
@@ -1682,11 +1698,11 @@ erts_bs_get_utf8(ErlBinMatchBuffer* mb)
       case 1:
 	/* Two bytes */
 	if (remaining_bits < 16) {
-	    return THE_NON_VALUE;
+	    goto badmatch;
 	}
 	a = pos[1];
 	if ((a & 0xC0) != 0x80) {
-	    return THE_NON_VALUE;
+	    goto badmatch;
 	}
 	result = (result << 6) + a - (Eterm) 0x00003080UL;
 	mb->offset += 16;
@@ -1694,24 +1710,24 @@ erts_bs_get_utf8(ErlBinMatchBuffer* mb)
       case 2:
 	/* Three bytes */
 	if (remaining_bits < 24) {
-	    return THE_NON_VALUE;
+	    goto badmatch;
 	}
 	a = pos[1];
 	b = pos[2];
 	if ((a & 0xC0) != 0x80 || (b & 0xC0) != 0x80 ||
 	    (result == 0xE0 && a < 0xA0)) {
-	    return THE_NON_VALUE;
+	    goto badmatch;
 	}
 	result = (((result << 6) + a) << 6) + b - (Eterm) 0x000E2080UL;
 	if (0xD800 <= result && result <= 0xDFFF) {
-	    return THE_NON_VALUE;
+	    goto badmatch;
 	}
 	mb->offset += 24;
 	break;
       case 3:
 	/* Four bytes */
 	if (remaining_bits < 32) {
-	    return THE_NON_VALUE;
+	    goto badmatch;
 	}
 	a = pos[1];
 	b = pos[2];
@@ -1719,19 +1735,30 @@ erts_bs_get_utf8(ErlBinMatchBuffer* mb)
 	if ((a & 0xC0) != 0x80 || (b & 0xC0) != 0x80 ||
 	    (c & 0xC0) != 0x80 ||
 	    (result == 0xF0 && a < 0x90)) {
-	    return THE_NON_VALUE;
+	    goto badmatch;
 	}
 	result = (((((result << 6) + a) << 6) + b) << 6) +
 	    c - (Eterm) 0x03C82080UL;
 	if (result > 0x10FFFF) {
-	    return THE_NON_VALUE;
+	    goto badmatch;
 	}
 	mb->offset += 32;
 	break;
       default:
-	return THE_NON_VALUE;
+	goto badmatch;
     }
     return make_small(result);
+
+badmatch:
+    if (BIT_OFFSET(mb->offset) || BIT_OFFSET(remaining_bits)) {
+	erts_fprintf(stderr, "erts_bs_get_utf8 badmatch with bit fiddle\n");
+    }
+    else if (remaining_bits) {
+	erts_fprintf(stderr, "erts_bs_get_utf8 badmatch: \"%.*s\"\n", BYTE_OFFSET(remaining_bits), pos);
+	erts_fprintf(stderr, "orig=%T\n", mb->orig);
+	abort();
+    }
+    return THE_NON_VALUE;
 }
 
 Eterm

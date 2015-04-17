@@ -98,6 +98,9 @@ AEXTERN(void,nbif_emulate_fpe,(Process*));
 void hipe_emulate_fpe(Process*);
 #endif
 
+AEXTERN(void,nbif_emasculate,(Eterm));
+void hipe_emasculate(Eterm);
+
 /*
  * Stuff that is different in SMP and non-SMP.
  */
