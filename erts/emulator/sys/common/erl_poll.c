@@ -436,6 +436,9 @@ woke_up(ErtsPollSet ps)
 
 #if ERTS_POLL_USE_WAKEUP_PIPE
 
+erts_atomic_t sverk_pipe;
+
+
 static ERTS_INLINE void
 wake_poller(ErtsPollSet ps, int interrupted, int async_signal_safe)
 {
@@ -484,6 +487,9 @@ wake_poller(ErtsPollSet ps, int interrupted, int async_signal_safe)
 			    ps->wake_fds[1],
 			    erl_errno_id(errno), errno);
 	}
+        else if (res > 0) {
+            erts_atomic_add_nob(&sverk_pipe, res);
+        }
     }
 }
 
@@ -498,10 +504,12 @@ cleanup_wakeup_pipe(ErtsPollSet ps)
     do {
 	char buf[32];
 	res = read(fd, buf, sizeof(buf));
+        if (res > 0) {
+            erts_atomic_add_nob(&sverk_pipe, -res);
 #if ERTS_POLL_ASYNC_INTERRUPT_SUPPORT
-	if (res > 0)
-	    intr = 1;
+            intr = 1;
 #endif
+        }
     } while (res > 0 || (res < 0 && errno == EINTR));
     if (res < 0 && errno != ERRNO_BLOCK) {
 	fatal_error("%s:%d:cleanup_wakeup_pipe(): "
@@ -532,6 +540,9 @@ create_wakeup_pipe(ErtsPollSet ps)
 		    erl_errno_id(errno),
 		    errno);
     }
+
+    erts_atomic_init_nob(&sverk_pipe, 0);
+
     SET_NONBLOCKING(wake_fds[0]);
     SET_NONBLOCKING(wake_fds[1]);
 
