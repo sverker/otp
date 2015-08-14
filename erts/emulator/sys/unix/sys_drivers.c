@@ -697,6 +697,7 @@ static ErlDrvData spawn_start(ErlDrvPort port_num, char* name,
         io_vector[i++].iov_len = sizeof(buffsz);
 
         io_vector[i].iov_base = &flags;
+        flags = htonl(flags);
         io_vector[i++].iov_len = sizeof(flags);
         buffsz += sizeof(flags);
 
@@ -713,6 +714,7 @@ static ErlDrvData spawn_start(ErlDrvPort port_num, char* name,
         buffsz += io_vector[i-1].iov_len;
 
         io_vector[i].iov_base = &env_len;
+        env_len = htonl(env_len);
         io_vector[i++].iov_len = sizeof(env_len);
         buffsz += io_vector[i-1].iov_len;
 
@@ -726,6 +728,7 @@ static ErlDrvData spawn_start(ErlDrvPort port_num, char* name,
         if (opts->spawn_type == ERTS_SPAWN_EXECUTABLE) {
 
             io_vector[i].iov_base = &argv_len;
+            argv_len = htonl(argv_len);
             io_vector[i++].iov_len = sizeof(argv_len);
             buffsz += io_vector[i-1].iov_len;
 
