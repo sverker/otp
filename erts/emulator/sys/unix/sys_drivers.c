@@ -185,7 +185,9 @@ void
 erl_sys_late_init(void)
 {
     SysDriverOpts opts;
+#ifdef ERTS_SMP
     Port *port;
+#endif
 
     sys_signal(SIGPIPE, SIG_IGN); /* Ignore - we'll handle the write failure */
 
@@ -202,7 +204,10 @@ erl_sys_late_init(void)
     opts.argv = NULL;
     opts.parallelism = erts_port_parallelism;
 
-    port = erts_open_driver(&forker_driver, make_internal_pid(0), "forker", &opts, NULL, NULL);
+#ifdef ERTS_SMP
+    port =
+#endif
+        erts_open_driver(&forker_driver, make_internal_pid(0), "forker", &opts, NULL, NULL);
 #ifdef ERTS_SMP
     erts_mtx_unlock(port->lock);
 #endif
@@ -821,10 +826,10 @@ static ErlDrvSSizeT spawn_control(ErlDrvData e, unsigned int cmd, char *buf,
     dd->alive = -1;
 
     if (dd->ifd)
-        driver_select(dd->port_num, dd->ifd->fd, ERL_DRV_READ | ERL_DRV_USE, 1);
+        driver_select(dd->port_num, abs(dd->ifd->fd), ERL_DRV_READ | ERL_DRV_USE, 1);
 
     if (dd->ofd)
-        driver_select(dd->port_num, dd->ofd->fd, ERL_DRV_WRITE | ERL_DRV_USE, 1);
+        driver_select(dd->port_num, abs(dd->ofd->fd), ERL_DRV_WRITE | ERL_DRV_USE, 1);
 
     return 0;
 }
@@ -1055,9 +1060,9 @@ static void clear_fd_data(ErtsSysFdData *fdd)
 
 static void nbio_stop_fd(ErlDrvPort prt, ErtsSysFdData *fdd)
 {
-    driver_select(prt, fdd->fd, DO_READ|DO_WRITE, 0);
+    driver_select(prt, abs(fdd->fd), DO_READ|DO_WRITE, 0);
     clear_fd_data(fdd);
-    SET_BLOCKING(fdd->fd);
+    SET_BLOCKING(abs(fdd->fd));
 
 }
 
@@ -1130,14 +1135,14 @@ static void stop(ErlDrvData ev)
         /* Stop has been called before the exit status has been reported */
         forker_remove_os_pid_mapping(dd);
 
-    if (dd->ifd /* should probably check if ifd i < 0 */) {
+    if (dd->ifd) {
         nbio_stop_fd(prt, dd->ifd);
-        driver_select(prt, dd->ifd->fd, ERL_DRV_USE, 0);  /* close(ifd); */
+        driver_select(prt, abs(dd->ifd->fd), ERL_DRV_USE, 0);  /* close(ifd); */
     }
 
     if (dd->ofd && dd->ofd != dd->ifd) {
 	nbio_stop_fd(prt, dd->ofd);
-	driver_select(prt, dd->ofd->fd, ERL_DRV_USE, 0);  /* close(ofd); */
+	driver_select(prt, abs(dd->ofd->fd), ERL_DRV_USE, 0);  /* close(ofd); */
     }
 
     erts_free(ERTS_ALC_T_DRV_TAB, dd);
@@ -1228,16 +1233,16 @@ static void output(ErlDrvData e, char* buf, ErlDrvSizeT len)
     struct iovec iv[2];
 
     /* (len > ((unsigned long)-1 >> (4-pb)*8)) */
-    if (((pb == 2) && (len > 0xffff)) || (pb == 1 && len > 0xff)) {
+    if (((pb == 2) && (len > 0xffff))
+        || (pb == 1 && len > 0xff)
+        || dd->pid == 0 /* Attempt at output before port is ready */) {
 	driver_failure_posix(ix, EINVAL);
 	return; /* -1; */
     }
     put_int32(len, lb);
     lbp = lb + (4-pb);
 
-    if ((sz = driver_sizeq(ix)) > 0 || ofd == -1) {
-        /* ofd == -1, happens when spawn driver hasn't yet
-           received the fd from the forker process/thread */
+    if ((sz = driver_sizeq(ix)) > 0) {
 	driver_enq(ix, lbp, pb);
 	driver_enq(ix, buf, len);
 	if (sz + len + pb >= (1 << 13))
@@ -1387,7 +1392,8 @@ static void ready_input(ErlDrvData e, ErlDrvEvent ready_fd)
                 dd->ifd = NULL;
             }
 
-            if (dd->ofd->fd < 0)
+            if (dd->ofd->fd < 0  || driver_sizeq(port_num) > 0)
+                /* we select in order to close fd or write queue */
                 driver_select(port_num, abs(dd->ofd->fd), ERL_DRV_WRITE|ERL_DRV_USE, 1);
 
             if (dd->alive == 1)
@@ -1523,7 +1529,10 @@ static void ready_output(ErlDrvData e, ErlDrvEvent ready_fd)
 
     if ((iv = (struct iovec*) driver_peekq(ix, &vsize)) == NULL) {
 	driver_select(ix, ready_fd, ERL_DRV_WRITE, 0);
-        if (dd->ofd->fd < 0) {
+        if (dd->pid > 0 && dd->ofd->fd < 0) {
+            /* The port was opened with 'in' option, which means we
+               should close the output fd as soon as the command has
+               been sent. */
             driver_select(ix, ready_fd, ERL_DRV_WRITE|ERL_DRV_USE, 0);
             erts_smp_atomic_add_nob(&sys_misc_mem_sz, -sizeof(ErtsSysFdData));
             dd->ofd = NULL;
