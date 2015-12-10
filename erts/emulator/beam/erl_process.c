@@ -353,7 +353,8 @@ int erts_system_profile_ts_type = ERTS_TRACE_FLG_NOW_TIMESTAMP;
 typedef enum {
     ERTS_PSTT_GC,	/* Garbage Collect */
     ERTS_PSTT_CPC,	/* Check Process Code */
-    ERTS_PSTT_COHMQ     /* Change off heap message queue */
+    ERTS_PSTT_COHMQ,    /* Change off heap message queue */
+    ERTS_PSTT_FTMQ      /* Flush trace msg queue */
 } ErtsProcSysTaskType;
 
 #define ERTS_MAX_PROC_SYS_TASK_ARGS 2
@@ -1040,7 +1041,7 @@ reply_sched_wall_time(void *vswtrp)
 	hpp = &hp;
     }
 
-    erts_queue_message(rp, &rp_locks, mp, msg, NIL);
+    erts_queue_message(rp, &rp_locks, mp, msg);
 
     if (swtrp->req_sched == esdp->no)
 	rp_locks &= ~ERTS_PROC_LOCK_MAIN;
@@ -9284,6 +9285,7 @@ Process *schedule(Process *p, int calls)
 	esdp = erts_scheduler_data;
 	ASSERT(esdp->current_process == p);
 #endif
+
 	reds = actual_reds = calls - esdp->virtual_reds;
 	if (reds < ERTS_PROC_MIN_CONTEXT_SWITCH_REDS_COST)
 	    reds = ERTS_PROC_MIN_CONTEXT_SWITCH_REDS_COST;
@@ -9296,7 +9298,15 @@ Process *schedule(Process *p, int calls)
 
 	p->reds += actual_reds;
 
-	erts_smp_proc_lock(p, ERTS_PROC_LOCK_STATUS);
+#ifdef ERTS_SMP
+	erts_smp_proc_lock(p, ERTS_PROC_LOCK_TRACE);
+        if (p->trace_msg_q) {
+            erts_smp_proc_unlock(p, ERTS_PROC_LOCK_TRACE);
+            erts_schedule_flush_trace_messages(p->common.id);
+        } else
+            erts_smp_proc_unlock(p, ERTS_PROC_LOCK_TRACE);
+#endif
+
 
 	state = erts_smp_atomic32_read_acqb(&p->state);
 
@@ -9305,17 +9315,19 @@ Process *schedule(Process *p, int calls)
 		erts_schedule_time_break(p, ERTS_BP_CALL_TIME_SCHEDULE_OUT);
 	    if (state & (ERTS_PSFLG_FREE|ERTS_PSFLG_EXITING)) {
 		if (ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED_EXIT))
-		    trace_sched(p, ((state & ERTS_PSFLG_FREE)
-				    ? am_out_exited
-				    : am_out_exiting));
+		    trace_sched(p, ERTS_PROC_LOCK_MAIN,
+                                ((state & ERTS_PSFLG_FREE)
+                                 ? am_out_exited
+                                 : am_out_exiting));
 	    }
 	    else {
-		if (ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED))
-		    trace_sched(p, am_out);
-		else if (ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED_PROCS))
-		    trace_virtual_sched(p, am_out);
+		if (ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED) ||
+                    ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED_PROCS))
+		    trace_sched(p, ERTS_PROC_LOCK_MAIN, am_out);
 	    }
 	}
+
+	erts_smp_proc_lock(p, ERTS_PROC_LOCK_STATUS);
 
 #ifdef ERTS_SMP
 	if (state & ERTS_PSFLG_PENDING_EXIT)
@@ -9740,27 +9752,27 @@ Process *schedule(Process *p, int calls)
 #endif
 	reds = context_reds;
 
+	erts_smp_proc_unlock(p, ERTS_PROC_LOCK_STATUS);
+
 	if (IS_TRACED(p)) {
 	    if (state & ERTS_PSFLG_EXITING) {
 		if (ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED_EXIT))
-		    trace_sched(p, am_in_exiting);
+		    trace_sched(p, ERTS_PROC_LOCK_MAIN, am_in_exiting);
 	    }
 	    else {
-		if (ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED))
-		    trace_sched(p, am_in);
-		else if (ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED_PROCS))
-		    trace_virtual_sched(p, am_in);
+		if (ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED) ||
+                    ARE_TRACE_FLAGS_ON(p, F_TRACE_SCHED_PROCS))
+		    trace_sched(p, ERTS_PROC_LOCK_MAIN, am_in);
 	    }
 	    if (IS_TRACED_FL(p, F_TRACE_CALLS)) {
 		erts_schedule_time_break(p, ERTS_BP_CALL_TIME_SCHEDULE_IN);
 	    }
 	}
 
-	erts_smp_proc_unlock(p, ERTS_PROC_LOCK_STATUS);
 
 #ifdef ERTS_SMP
-	if (is_not_nil(ERTS_TRACER_PROC(p)))
-	    erts_check_my_tracer_proc(p);
+        /* Clears tracer if it has been removed */
+        (void)ERTS_TRACER_PROC_IS_ENABLED(p);
 #endif
 
 	if (state & ERTS_PSFLG_RUNNING_SYS) {
@@ -9883,7 +9895,7 @@ notify_sys_task_executed(Process *c_p, ErtsProcSysTask *st, Eterm st_result)
 	ASSERT(hp_start + hsz == hp);
 #endif
 
-	erts_queue_message(rp, &rp_locks, mp, msg, NIL);
+	erts_queue_message(rp, &rp_locks, mp, msg);
 
 	if (c_p == rp)
 	    rp_locks &= ~ERTS_PROC_LOCK_MAIN;
@@ -10051,8 +10063,7 @@ execute_sys_tasks(Process *c_p, erts_aint32_t *statep, int in_reds)
 {
     int garbage_collected = 0;
     erts_aint32_t state = *statep;
-    int max_reds = in_reds;
-    int reds = 0;
+    int reds = in_reds;
     int qmask = 0;
 
     ERTS_SMP_LC_ASSERT(erts_proc_lc_my_proc_locks(c_p) == ERTS_PROC_LOCK_MAIN);
@@ -10080,12 +10091,12 @@ execute_sys_tasks(Process *c_p, erts_aint32_t *statep, int in_reds)
 	    if (c_p->flags & F_DISABLE_GC) {
 		save_gc_task(c_p, st, st_prio);
 		st = NULL;
-		reds++;
+		reds--;
 	    }
 	    else {
 		if (!garbage_collected) {
 		    FLAGS(c_p) |= F_NEED_FULLSWEEP;
-		    reds += erts_garbage_collect_nobump(c_p,
+		    reds -= erts_garbage_collect_nobump(c_p,
 							0,
 							c_p->arg_reg,
 							c_p->arity);
@@ -10094,21 +10105,30 @@ execute_sys_tasks(Process *c_p, erts_aint32_t *statep, int in_reds)
 		st_res = am_true;
 	    }
 	    break;
-	case ERTS_PSTT_CPC:
+	case ERTS_PSTT_CPC: {
+            int cpc_reds = 0;
 	    st_res = erts_check_process_code(c_p,
 					     st->arg[0],
                                              unsigned_val(st->arg[1]),
-					     &reds);
+					     &cpc_reds);
+            reds -= cpc_reds;
 	    if (is_non_value(st_res)) {
 		/* Needed gc, but gc was disabled */
 		save_gc_task(c_p, st, st_prio);
 		st = NULL;
 	    }
 	    break;
+        }
 	case ERTS_PSTT_COHMQ:
-	    reds += erts_complete_off_heap_message_queue_change(c_p);
+	    reds -= erts_complete_off_heap_message_queue_change(c_p);
 	    st_res = am_true;
 	    break;
+#ifdef ERTS_SMP
+        case ERTS_PSTT_FTMQ:
+	    reds -= erts_flush_trace_messages(c_p, ERTS_PROC_LOCK_MAIN);
+	    st_res = am_true;
+	    break;
+#endif
 	default:
 	    ERTS_INTERNAL_ERROR("Invalid process sys task type");
 	    st_res = am_false;
@@ -10118,11 +10138,11 @@ execute_sys_tasks(Process *c_p, erts_aint32_t *statep, int in_reds)
 	    reds += notify_sys_task_executed(c_p, st, st_res);
 
 	state = erts_smp_atomic32_read_acqb(&c_p->state);
-    } while (qmask && reds < max_reds);
+    } while (qmask && reds > 0);
 
     *statep = state;
 
-    return reds;
+    return in_reds - reds;
 }
 
 static int
@@ -10154,6 +10174,12 @@ cleanup_sys_tasks(Process *c_p, erts_aint32_t in_state, int in_reds)
 	case ERTS_PSTT_COHMQ:
 	    st_res = am_false;
 	    break;
+#ifdef ERTS_SMP
+        case ERTS_PSTT_FTMQ:
+	    reds -= erts_flush_trace_messages(c_p, ERTS_PROC_LOCK_MAIN);
+	    st_res = am_true;
+	    break;
+#endif
 	default:
 	    ERTS_INTERNAL_ERROR("Invalid process sys task type");
 	    st_res = am_false;
@@ -10289,8 +10315,8 @@ badarg:
     BIF_ERROR(BIF_P, BADARG);
 }
 
-void
-erts_schedule_complete_off_heap_message_queue_change(Eterm pid)
+static void
+erts_schedule_generic_sys_task(Eterm pid, ErtsProcSysTaskType type)
 {
     Process *rp = erts_proc_lookup(pid);
     if (rp) {
@@ -10300,7 +10326,7 @@ erts_schedule_complete_off_heap_message_queue_change(Eterm pid)
 
 	st = erts_alloc(ERTS_ALC_T_PROC_SYS_TSK,
 			ERTS_PROC_SYS_TASK_SIZE(0));
-	st->type = ERTS_PSTT_COHMQ;
+	st->type = type;
 	st->requester = NIL;
 	st->reply_tag = NIL;
 	st->req_id = NIL;
@@ -10313,6 +10339,18 @@ erts_schedule_complete_off_heap_message_queue_change(Eterm pid)
 	if (!schedule_process_sys_task(rp, ERTS_PSFLGS_GET_USR_PRIO(state), st))
 	    erts_free(ERTS_ALC_T_PROC_SYS_TSK, st);
     }
+}
+
+void
+erts_schedule_complete_off_heap_message_queue_change(Eterm pid)
+{
+    erts_schedule_generic_sys_task(pid, ERTS_PSTT_COHMQ);
+}
+
+void
+erts_schedule_flush_trace_messages(Eterm pid)
+{
+    erts_schedule_generic_sys_task(pid, ERTS_PSTT_FTMQ);
 }
 
 static void
@@ -10770,6 +10808,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
     Eterm res = THE_NON_VALUE;
     erts_aint32_t state = 0;
     erts_aint32_t prio = (erts_aint32_t) PRIORITY_NORMAL;
+    ErtsProcLocks locks = ERTS_PROC_LOCKS_ALL;
 #ifdef SHCOPY_SPAWN
     erts_shcopy_t info;
     INITIALIZE_SHCOPY(info);
@@ -10946,7 +10985,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 	    : STORE_NC(&p->htop, &p->off_heap, parent->group_leader);
     }
 
-    erts_get_default_tracing(&ERTS_TRACE_FLAGS(p), &ERTS_TRACER_PROC(p));
+    erts_get_default_tracing(&ERTS_TRACE_FLAGS(p), &ERTS_TRACER(p));
 
     p->msg.first = NULL;
     p->msg.last = &p->msg.first;
@@ -10982,21 +11021,47 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
     p->last_old_htop = NULL;
 #endif
 
+#ifdef ERTS_SMP
+    p->trace_msg_q = NULL;
+    p->scheduler_data = NULL;
+    p->suspendee = NIL;
+    p->pending_suspenders = NULL;
+    p->pending_exit.reason = THE_NON_VALUE;
+    p->pending_exit.bp = NULL;
+#endif
+
+#if !defined(NO_FPE_SIGNALS) || defined(HIPE)
+    p->fp_exception = 0;
+#endif
+
     if (IS_TRACED(parent)) {
 	if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOS) {
 	    ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent) & TRACEE_FLAGS);
-	    ERTS_TRACER_PROC(p) = ERTS_TRACER_PROC(parent);
+            erts_tracer_replace(&p->common, ERTS_TRACER(parent));
 	}
-	if (ARE_TRACE_FLAGS_ON(parent, F_TRACE_PROCS)) {
-	    trace_proc_spawn(parent, p->common.id, mod, func, args);
-	}
-	if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOS1) {
+        if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOS1) {
 	    /* Overrides TRACE_CHILDREN */
 	    ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent) & TRACEE_FLAGS);
-	    ERTS_TRACER_PROC(p) = ERTS_TRACER_PROC(parent);
+            erts_tracer_replace(&p->common, ERTS_TRACER(parent));
 	    ERTS_TRACE_FLAGS(p) &= ~(F_TRACE_SOS1 | F_TRACE_SOS);
 	    ERTS_TRACE_FLAGS(parent) &= ~(F_TRACE_SOS1 | F_TRACE_SOS);
 	}
+        if (so->flags & SPO_LINK && ERTS_TRACE_FLAGS(parent) & (F_TRACE_SOL|F_TRACE_SOL1)) {
+		ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent)&TRACEE_FLAGS);
+                erts_tracer_replace(&p->common, ERTS_TRACER(parent));
+		if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOL1) {/*maybe override*/
+		    ERTS_TRACE_FLAGS(p) &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
+		    ERTS_TRACE_FLAGS(parent) &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
+		}
+        }
+        if (ARE_TRACE_FLAGS_ON(parent, F_TRACE_PROCS)) {
+            locks &= ~(ERTS_PROC_LOCK_STATUS|ERTS_PROC_LOCK_TRACE);
+            erts_smp_proc_unlock(p, ERTS_PROC_LOCK_STATUS|ERTS_PROC_LOCK_TRACE);
+            erts_smp_proc_unlock(parent, ERTS_PROC_LOCK_STATUS|ERTS_PROC_LOCK_TRACE);
+            trace_proc_spawn(parent, p->common.id, mod, func, args);
+            if (so->flags & SPO_LINK)
+                trace_proc(parent, locks, parent, am_link, p->common.id);
+        }
     }
 
     /*
@@ -11007,10 +11072,6 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 #ifdef DEBUG
 	int ret;
 #endif
-	if (IS_TRACED_FL(parent, F_TRACE_PROCS)) {
-	    trace_proc(parent, parent, am_link, p->common.id);
-	}
-
 #ifdef DEBUG
 	ret = erts_add_link(&ERTS_P_LINKS(parent),  LINK_PID, p->common.id);
 	ASSERT(ret == 0);
@@ -11021,17 +11082,6 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 	erts_add_link(&ERTS_P_LINKS(p), LINK_PID, parent->common.id);
 #endif
 
-	if (IS_TRACED(parent)) {
-	    if (ERTS_TRACE_FLAGS(parent) & (F_TRACE_SOL|F_TRACE_SOL1)) {
-		ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent)&TRACEE_FLAGS);
-		ERTS_TRACER_PROC(p) = ERTS_TRACER_PROC(parent); /*maybe steal*/
-
-		if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOL1) {/*maybe override*/
-		    ERTS_TRACE_FLAGS(p) &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
-		    ERTS_TRACE_FLAGS(parent) &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
-		}
-	    }
-	}
     }
 
     /*
@@ -11046,19 +11096,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 	so->mref = mref;
     }
 
-#ifdef ERTS_SMP
-    p->scheduler_data = NULL;
-    p->suspendee = NIL;
-    p->pending_suspenders = NULL;
-    p->pending_exit.reason = THE_NON_VALUE;
-    p->pending_exit.bp = NULL;
-#endif
-
-#if !defined(NO_FPE_SIGNALS) || defined(HIPE)
-    p->fp_exception = 0;
-#endif
-
-    erts_smp_proc_unlock(p, ERTS_PROC_LOCKS_ALL);
+    erts_smp_proc_unlock(p, locks);
 
     res = p->common.id;
 
@@ -11082,7 +11120,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 
  error:
 
-    erts_smp_proc_unlock(parent, ERTS_PROC_LOCKS_ALL_MINOR);
+    erts_smp_proc_unlock(parent, locks & ERTS_PROC_LOCKS_ALL_MINOR);
 
     return res;
 }
@@ -11107,7 +11145,7 @@ void erts_init_empty_process(Process *p)
     p->rcount = 0;
     p->common.id = ERTS_INVALID_PID;
     p->reds = 0;
-    ERTS_TRACER_PROC(p) = NIL;
+    ERTS_TRACER(p) = erts_tracer_nil;
     ERTS_TRACE_FLAGS(p) = F_INITIAL_TRACE_FLAGS;
     p->group_leader = ERTS_INVALID_PID;
     p->flags = 0;
@@ -11224,7 +11262,7 @@ erts_debug_verify_clean_empty_process(Process* p)
     ASSERT(p->live_hf_end == ERTS_INVALID_HFRAG_PTR);
     ASSERT(p->heap == NULL);
     ASSERT(p->common.id == ERTS_INVALID_PID);
-    ASSERT(ERTS_TRACER_PROC(p) == NIL);
+    ASSERT(ERTS_TRACER_IS_NIL(ERTS_TRACER(p)));
     ASSERT(ERTS_TRACE_FLAGS(p) == F_INITIAL_TRACE_FLAGS);
     ASSERT(p->group_leader == ERTS_INVALID_PID);
     ASSERT(p->next == NULL);
@@ -11569,7 +11607,7 @@ send_exit_message(Process *to, ErtsProcLocks *to_locksp,
 	mp = erts_alloc_message_heap(to, to_locksp, term_size, &hp, &ohp);
 	mess = copy_struct(exit_term, term_size, &hp, ohp);
 #endif
-	erts_queue_message(to, to_locksp, mp, mess, NIL);
+	erts_queue_message(to, to_locksp, mp, mess);
     } else {
 	Eterm temp_token;
 	Uint sz_token;
@@ -11587,9 +11625,10 @@ send_exit_message(Process *to, ErtsProcLocks *to_locksp,
 	mess = copy_struct(exit_term, term_size, &hp, ohp);
 #endif
 	/* the trace token must in this case be updated by the caller */
-	seq_trace_output(token, mess, SEQ_TRACE_SEND, to->common.id, NULL);
+	seq_trace_output(token, mess, SEQ_TRACE_SEND, to->common.id, to);
 	temp_token = copy_struct(token, sz_token, &hp, ohp);
-	erts_queue_message(to, to_locksp, mp, mess, temp_token);
+        ERL_MESSAGE_TOKEN(mp) = temp_token;
+	erts_queue_message(to, to_locksp, mp, mess);
     }
 }
 
@@ -11698,6 +11737,9 @@ send_exit_signal(Process *c_p,		/* current process if and only
 
     if ((state & ERTS_PSFLG_TRAP_EXIT)
 	&& (reason != am_kill || (flags & ERTS_XSIG_FLG_IGN_KILL))) {
+        /* Is this allowed here? */
+        erts_smp_proc_unlock(rp, *rp_locks & ERTS_PROC_LOCKS_XSIG_SEND);
+        *rp_locks &= ~ERTS_PROC_LOCKS_XSIG_SEND;
         if (have_seqtrace(token) && token_update)
 	    seq_trace_update_send(token_update);
 	if (is_value(exit_tuple))
@@ -11995,6 +12037,7 @@ static void doit_exit_link(ErtsLink *lnk, void *vpcontext)
     DistEntry *dep;
     Process *rp;
 
+
     switch(lnk->type) {
     case LINK_PID:
 	if(is_internal_port(item)) {
@@ -12042,7 +12085,11 @@ static void doit_exit_link(ErtsLink *lnk, void *vpcontext)
 		    if (xres >= 0 && IS_TRACED_FL(rp, F_TRACE_PROCS)) {
 			/* We didn't exit the process and it is traced */
 			if (IS_TRACED_FL(rp, F_TRACE_PROCS)) {
-			    trace_proc(p, rp, am_getting_unlinked, p->common.id);
+                            if (rp_locks & ERTS_PROC_LOCKS_XSIG_SEND) {
+                                erts_smp_proc_unlock(rp, ERTS_PROC_LOCKS_XSIG_SEND);
+                                rp_locks &= ~ERTS_PROC_LOCKS_XSIG_SEND;
+                            }
+			    trace_proc(NULL, 0, rp, am_getting_unlinked, p->common.id);
 			}
 		    }
 		}
@@ -12159,8 +12206,6 @@ erts_do_exit_process(Process* p, Eterm reason)
 	if (IS_TRACED_FL(p, F_TRACE_CALLS))
 	    erts_schedule_time_break(p, ERTS_BP_CALL_TIME_SCHEDULE_EXITING);
 
-	if (IS_TRACED_FL(p,F_TRACE_PROCS))
-	    trace_proc(p, p, am_exit, reason);
     }
 
     erts_trace_check_exiting(p->common.id);
@@ -12175,6 +12220,10 @@ erts_do_exit_process(Process* p, Eterm reason)
     }
 
     erts_smp_proc_unlock(p, ERTS_PROC_LOCKS_ALL_MINOR);
+
+    if (IS_TRACED_FL(p,F_TRACE_PROCS))
+        trace_proc(p, ERTS_PROC_LOCK_MAIN, p, am_exit, reason);
+
 
     /*
      * p->u.initial of this process can *not* be used anymore;
@@ -12412,6 +12461,12 @@ erts_continue_exit_process(Process *p)
 
     if (nif_export)
 	erts_destroy_nif_export(nif_export);
+
+#ifdef ERTS_SMP
+    erts_flush_trace_messages(p, 0);
+#endif
+
+    ERTS_TRACER_CLEAR(&ERTS_TRACER(p));
 
     delete_process(p);
 

@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+
+<erlref>
+  <header>
+    <copyright>
+      <year>2016</year><year>2016</year>
+      <holder>Ericsson AB. All Rights Reserved.</holder>
+    </copyright>
+    <legalnotice>
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
+
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
+
+    </legalnotice>
+
+    <title>erl_tracer</title>
+    <prepared></prepared>
+    <docno></docno>
+    <date></date>
+    <rev></rev>
+  </header>
+  <module>erl_tracer</module>
+  <modulesummary>Erlang Tracer Behaviour</modulesummary>
+  <description>
+    <p>A behaviour module for implementing the back end of the erlang
+    tracing system. The functions in this module will be called whenever
+    a trace probe is triggered. Both the enabled and trace functions are
+    called in the context of the entity that triggered the trace probe.
+    This means that the overhead by having the tracing enabled will be
+    greatly effected by how much time is spent in these functions. So do as
+    little work as possible in these functions.</p>
+    <note>All functions in this behaviour have to be implemented as NIF's.
+    This is a limitation that may the lifted in the future.</note>
+
+  </description>
+
+  <datatypes>
+    <datatype>
+      <name name="trace_tag" />
+      <desc>
+	<p>The different trace tags that the tracer will be called with.
+        Each trace tag is described in greater detail in
+        <seealso marker="#trace">Module:trace/6</seealso>
+        </p>
+      </desc>
+    </datatype>
+    <datatype>
+      <name name="tracee" />
+      <desc>
+	<p>The process or port that the trace belongs to.
+        </p>
+      </desc>
+    </datatype>
+    <datatype>
+      <name name="trace_opts" />
+      <desc>
+	<p>The options for the tracee.
+        <taglist>
+          <tag><c><anno>timestamp</anno></c></tag>
+          <item>If not set to <c>undefined</c>, the trace has been requested to
+          include a timestamp.</item>
+          <tag><c><anno>match_spec_result</anno></c></tag>
+          <item>If not set to <c>true</c>, the trace has been requested to
+          include the output of a match specification that was run.</item>
+          <tag><c><anno>scheduler_id</anno></c></tag>
+          <item>If not set to <c>undefined</c>, the trace has been requested to
+          include the scheduler id.</item>
+        </taglist>
+        </p>
+      </desc>
+    </datatype>
+  </datatypes>
+
+  <section>
+    <title>CALLBACK FUNCTIONS</title>
+    <p>The following functions
+      should be exported from a <c>erl_tracer</c> callback module.</p>
+  </section>
+  <marker id="enabled"></marker>
+  <funcs>
+    <func>
+      <name>Module:enabled(TraceTag, TracerState, Tracee) -> Result</name>
+      <fsummary>Check if a trace event should be generated.</fsummary>
+      <type>
+        <v>TraceTag = <seealso marker="#type-trace_tag">trace_tag()</seealso> | trace_status</v>
+        <v>TracerState = term()</v>
+        <v>Tracee = <seealso marker="#type-trace_tag">tracee()</seealso></v>
+        <v>Result =  trace | discard | remove</v>
+      </type>
+      <desc>
+        <p>This callback will be called whenever a trace point is triggered. It
+        allows the tracer to decide whether a trace should be generated or not.
+        This check is made as early as possible in order to limit the amount of
+        overhead associated with tracing. If <c>trace</c> is returned the
+        necessary trace data will be created and the trace call-back of the tracer
+        will be called. If <c>discard</c> is returned, this trace call
+        will be discarded and no call to trace will be done. If
+        <c>remove</c> is returned, the VM will attempt to remove this tracer
+        from the tracee, together with any trace flags set on the tracee.
+        </p>
+        <p><c>trace_status</c> is a special type of <c>TraceTag</c> which is used
+        to check if the tracer should still be active. It is called in multiple
+        scenarios, but most significantly it is used when tracing is started
+        using this tracer.</p>
+        <p>This function may be called multiple times per trace point, so it
+        is important that it is both fast and side effect free.</p>
+      </desc>
+    </func>
+    <marker id="trace"></marker>
+    <func>
+      <name>Module:trace(TraceTag, TracerState, Tracee, FirstTraceTerm, SecondTraceTerm, Opts) -> Result</name>
+      <fsummary>Check if a trace event should be generated.</fsummary>
+      <type>
+        <v>TraceTag = <seealso marker="#type-trace_tag">trace_tag()</seealso></v>
+        <v>TracerState = term()</v>
+        <v>Tracee = <seealso marker="#type-trace_tag">tracee()</seealso></v>
+        <v>FirstTraceTerm = term()</v>
+        <v>SecondTraceTerm = term() | undefined</v>
+        <v>Opts = <seealso marker="#type-trace_opts">trace_opts()</seealso></v>
+        <v>Result =  ok</v>
+      </type>
+      <desc>
+        <p>This callback will be called when a trace point is triggered and
+        the <seealso marker="#enabled">Module:enabled/3</seealso>
+        callback returned <c>trace</c>. In it any side effects needed by
+        the tracer should be done. The trace point payload is located in
+        the <c>FirstTraceTerm</c> and <c>SecondTraceTerm</c>. The content
+        of the TraceTerms depends on which <c>TraceTag</c> has been triggered.
+        The <c>FirstTraceTerm</c> and <c>SecondTraceTerm</c> correspond to the
+        fourth and fifth slot in the trace tuples described in
+        <seealso marker="erlang#trace_3_trace_messages">erlang:trace/3</seealso>.
+        If the tuple only has four elements, <c>SecondTraceTerm</c> will be
+        <c>undefined</c>.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="trace">Module:trace(seq_trace, TracerState, Label, SeqTraceInfo, undefined, Opts) -> Result</name>
+      <fsummary>Check if a sequence trace event should be generated.</fsummary>
+      <type>
+        <v>TracerState = term()</v>
+        <v>Label = term()</v>
+        <v>SeqTraceInfo = term()</v>
+        <v>Opts = <seealso marker="#type-trace_opts">trace_opts()</seealso></v>
+        <v>Result =  ok</v>
+      </type>
+      <desc>
+        <p>The <c>TraceTag</c> <c>seq_trace</c> is handled a little bit
+        differently. There is not <c>Tracee</c> for seq_trace, instead the
+        <c>Label</c> associated with the seq_trace event is given.
+        For more info on what <c>Label</c> and <c>SeqTraceInfo</c> can be
+        see the <seealso marker="kernel:seq_trace">seq_trace</seealso> manual.</p>
+      </desc>
+    </func>
+  </funcs>
+</erlref>

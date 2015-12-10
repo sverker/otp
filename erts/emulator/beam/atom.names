@@ -193,6 +193,7 @@ atom dictionary
 atom dirty_cpu_schedulers_online
 atom disable_trace
 atom disabled
+atom discard
 atom display_items
 atom dist
 atom dist_cmd
@@ -226,6 +227,7 @@ atom exception_trace
 atom extended
 atom Eq='=:='
 atom Eqeq='=='
+atom erl_tracer
 atom erlang
 atom ERROR='ERROR'
 atom error_handler
@@ -346,6 +348,7 @@ atom match
 atom match_limit
 atom match_limit_recursion
 atom match_spec
+atom match_spec_result
 atom max
 atom maximum
 atom max_tables max_processes
@@ -562,6 +565,7 @@ atom static
 atom stderr_to_stdout
 atom stop
 atom stream
+atom strict_monotonic
 atom strict_monotonic_timestamp
 atom sunrm
 atom suspend
@@ -589,8 +593,9 @@ atom total_active_tasks
 atom total_heap_size
 atom total_run_queue_lengths
 atom tpkt
-atom trace trace_ts traced 
+atom trace trace_ts traced
 atom trace_control_word
+atom trace_status
 atom tracer
 atom trap_exit
 atom trim

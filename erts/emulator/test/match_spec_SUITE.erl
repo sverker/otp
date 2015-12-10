@@ -585,6 +585,8 @@ ms_trace2(Config) when is_list(Config) ->
 			   [[call,return_to],[]]},
 			  ms_trace2}]
 	    end),
+    %% Silence valgrind
+    erlang:trace_pattern({?MODULE,fn,'_'},[],[]),
     ok.
 
 
@@ -1024,7 +1026,11 @@ collect([]) ->
 collect([TM | TMs]) ->
     ?t:format(        "Expecting:      ~p~n", [TM]),
     receive
-	M0 ->
+        %% We only look at trace messages with the same tracee
+        %% as the message we are looking for. This because
+        %% the order of trace messages is only guaranteed from
+        %% within a single process.
+	M0 when element(2, M0) =:= element(2, TM); is_function(TM, 1) ->
 	    M = case element(1, M0) of
 		    trace_ts ->
 			list_to_tuple(lists:reverse(
