@@ -1285,6 +1285,9 @@ trace_info_on_load(Process* p, Eterm key)
 #undef FUNC_TRACE_GLOBAL_TRACE
 #undef FUNC_TRACE_LOCAL_TRACE
 
+#define container_of(ptr, type, member) \
+  (type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member))
+
 int
 erts_set_trace_pattern(Process*p, Eterm* mfa, int specified,
 		       Binary* match_prog_set, Binary *meta_match_prog_set,
@@ -1307,7 +1310,7 @@ erts_set_trace_pattern(Process*p, Eterm* mfa, int specified,
 
     for (i = 0; i < n; i++) {
 	BeamInstr* pc = fp[i].pc;
-	Export* ep = (Export *)(((char *)(pc-3)) - offsetof(Export, code));
+	Export* ep = container_of(pc, Export, code[3]);
 
 	if (on && !flags.breakpoint) {
 	    /* Turn on global call tracing */
@@ -1556,11 +1559,10 @@ install_exp_breakpoints(BpFunctions* f)
     BpFunction* fp = f->matching;
     Uint ne = f->matched;
     Uint i;
-    Uint offset = offsetof(Export, code) + 3*sizeof(BeamInstr);
 
     for (i = 0; i < ne; i++) {
 	BeamInstr* pc = fp[i].pc;
-	Export* ep = (Export *) (((char *)pc)-offset);
+	Export* ep = container_of(pc, Export, code[3]);
 
 	ep->addressv[code_ix] = pc;
     }
@@ -1573,11 +1575,10 @@ uninstall_exp_breakpoints(BpFunctions* f)
     BpFunction* fp = f->matching;
     Uint ne = f->matched;
     Uint i;
-    Uint offset = offsetof(Export, code) + 3*sizeof(BeamInstr);
 
     for (i = 0; i < ne; i++) {
 	BeamInstr* pc = fp[i].pc;
-	Export* ep = (Export *) (((char *)pc)-offset);
+	Export* ep = container_of(pc, Export, code[3]);
 
 	if (ep->addressv[code_ix] != pc) {
 	    continue;
@@ -1594,11 +1595,10 @@ clean_export_entries(BpFunctions* f)
     BpFunction* fp = f->matching;
     Uint ne = f->matched;
     Uint i;
-    Uint offset = offsetof(Export, code) + 3*sizeof(BeamInstr);
 
     for (i = 0; i < ne; i++) {
 	BeamInstr* pc = fp[i].pc;
-	Export* ep = (Export *) (((char *)pc)-offset);
+	Export* ep = container_of(pc, Export, code[3]);
 
 	if (ep->addressv[code_ix] == pc) {
 	    continue;
