@@ -375,6 +375,19 @@ int enif_send(ErlNifEnv* env, const ErlNifPid* to_pid,
     return 1;
 }
 
+int
+enif_port_command(ErlNifEnv *env, const ErlNifPort* to_port,
+                  ErlNifEnv *msg_env, ERL_NIF_TERM msg)
+{
+
+    Port *prt = erts_port_lookup(to_port->port_id,
+                                 (erts_port_synchronous_ops
+                                  ? ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP
+                                  : ERTS_PORT_SFLGS_INVALID_LOOKUP));
+    erts_port_output_async(prt, env->proc->common.id, msg);
+    return 1;
+}
+
 ERL_NIF_TERM enif_make_copy(ErlNifEnv* dst_env, ERL_NIF_TERM src_term)
 {
     Uint sz;

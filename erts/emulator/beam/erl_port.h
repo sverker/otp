@@ -941,6 +941,7 @@ ErtsPortOpResult erts_port_command(Process *, int, Port *, Eterm, Eterm *);
  * Signals from processes to ports.
  */
 ErtsPortOpResult erts_port_output(Process *, int, Port *, Eterm, Eterm, Eterm *);
+ErtsPortOpResult erts_port_output_async(Port *, Eterm, Eterm);
 ErtsPortOpResult erts_port_exit(Process *, int, Port *, Eterm, Eterm, Eterm *);
 ErtsPortOpResult erts_port_connect(Process *, int, Port *, Eterm, Eterm, Eterm *);
 ErtsPortOpResult erts_port_link(Process *, Port *, Eterm, Eterm *);
