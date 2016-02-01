@@ -1,0 +1,24 @@
+set terminal png
+set output 'trace_compare.png'
+set style fill solid
+
+set xlabel "Schedulers online"
+set ylabel "Runtime"
+
+set multiplot layout 2, 2 title "Trace overhead comparison" font ",14"
+
+set title "trace(self(), true, [sos, call])"
+plot 'bm.old.data' u 2: xtic(1) with histogram title "18.1.3",\
+     'bm.new.data' u 2: xtic(1) with histogram title "19.0",
+
+set title "trace(self(), true, [sos, call, arity])"
+plot 'bm.old.data' u 4: xtic(1) with histogram title "18.1.3",\
+     'bm.new.data' u 4: xtic(1) with histogram title "19.0"
+
+set title "trace(self(), true, [sos, call])"
+plot 'bm.old.data' u 3: xtic(1) with histogram title "18.1.3",\
+     'bm.new.data' u 3: xtic(1) with histogram title "19.0",
+
+set title "trace(self(), true, [sos, call, arity])"
+plot 'bm.old.data' u 5: xtic(1) with histogram title "18.1.3",\
+     'bm.new.data' u 5: xtic(1) with histogram title "19.0"

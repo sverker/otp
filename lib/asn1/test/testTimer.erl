@@ -19,11 +19,16 @@
 %%
 %%
 -module(testTimer).
--export([go/0]).
+-export([go/0, tracer/0]).
 
 -include_lib("test_server/include/test_server.hrl").
 
--define(times, 5000).
+-define(times, 1250).
+%-define(times, (1250 div 4)).
+%-define(times, 1).
+
+-define(par, 10).
+%-define(par, erlang:system_info(schedulers_online)).
 
 val() ->
     {'H323-UserInformation',{'H323-UU-PDU',
@@ -133,13 +138,85 @@ go() ->
     Bytes = Module:encode(Type, Value),
     Value = Module:decode(Type, Bytes),
 
-    {ValWr,done} = timer:tc(fun() -> encode(?times, Module, Type, Value) end),
-    io:format("ASN.1 encoding: ~p micro~n", [ValWr / ?times]),
+    catch proctracer:module_info(),
+
+    BMPayload = {Module, Type, Value, Bytes},
 
     done = decode(2, Module, Type, Bytes),
 
-    {ValRead,done} = timer:tc(fun() -> decode(?times, Module, Type, Bytes) end),
-    io:format("ASN.1 decoding: ~p micro~n", [ValRead /?times]),
+    {ValWr,TraceWr} = tc(fun() -> encode(?times, Module, Type, Value) end),
+    {ValRead,TraceRead} = tc(fun() -> decode(?times, Module, Type, Bytes) end),
+    ct:pal("Baseline:~n"
+           "ASN.1 encoding: ~.2f micro~n"
+           "ASN.1 decoding: ~.2f micro~n", [ValWr / ?times / ?par,
+                                            ValRead /?times / ?par]),
+
+    Baseline = {ValWr, ValRead, TraceWr, TraceRead},
+
+    erlang:trace_pattern({Module, '_', '_'}, [], [global]),
+    erlang:trace_pattern({Module, '_', '_'}, [], [local]),
+
+    run_benchmark("trace_pattern(~p, [global,local]):~n", BMPayload, Baseline),
+
+    %% os:cmd("lttng destroy"),
+    %% erlang:trace(self(), true, [call, {tracer, lttngtrace, []}]),
+    %% {CallTraceValWr,done} = tc(fun() -> encode(?times, Module, Type, Value) end),
+    %% {CallTraceValRead,done} = tc(fun() -> decode(?times, Module, Type, Bytes) end),
+    %% ct:pal("trace_pattern(~p, [global,local]),~n"
+    %%        "trace([call, {tracer, lttngtrace, []}]):~n"
+    %%        "ASN.1 encoding: ~p micro (~.1f%)~n"
+    %%        "ASN.1 decoding: ~p micro (~.1f%)~n",
+    %%        [Module,
+    %%         CallTraceValWr / ?times, CallTraceValWr / ValWr * 100.0 - 100,
+    %%         CallTraceValRead /?times, CallTraceValRead / ValRead * 100.0 - 100]),
+
+    %% os:cmd("lttng create"),
+    %% os:cmd("lttng enable-event --userspace com_ericsson_otp:call"),
+    %% os:cmd("lttng start"),
+    %% {LttngCallTraceValWr,done} = tc(fun() -> encode(?times, Module, Type, Value) end),
+    %% {LttngCallTraceValRead,done} = tc(fun() -> decode(?times, Module, Type, Bytes) end),
+    %% ct:pal("trace_pattern(~p, [global,local]),~n"
+    %%        "trace([call, {tracer, lttngtrace, []}]),~n"
+    %%        "lttng create + start:~n"
+    %%        "ASN.1 encoding: ~p micro (~.1f%)~n"
+    %%        "ASN.1 decoding: ~p micro (~.1f%)~n",
+    %%        [Module,
+    %%         LttngCallTraceValWr / ?times, LttngCallTraceValWr / ValWr * 100.0 - 100,
+    %%         LttngCallTraceValRead /?times, LttngCallTraceValRead / ValRead * 100.0 - 100]),
+    %% os:cmd("lttng stop"),
+    %% os:cmd("lttng destroy"),
+
+    %% erlang:trace(self(), true, [call, arity, {tracer, lttngtrace, []}]),
+    %% os:cmd("lttng create"),
+    %% os:cmd("lttng enable-event --userspace com_ericsson_otp:call"),
+    %% os:cmd("lttng start"),
+    %% {LttngCallArityTraceValWr,done} = tc(fun() -> encode(?times, Module, Type, Value) end),
+    %% {LttngCallArityTraceValRead,done} = tc(fun() -> decode(?times, Module, Type, Bytes) end),
+    %% ct:pal("trace_pattern(~p, [global,local]),~n"
+    %%        "trace([call, arity, {tracer, lttngtrace, []}]),~n"
+    %%        "lttng create + start:~n"
+    %%        "ASN.1 encoding: ~p micro (~.1f%)~n"
+    %%        "ASN.1 decoding: ~p micro (~.1f%)~n",
+    %%        [Module,
+    %%         LttngCallArityTraceValWr / ?times, LttngCallArityTraceValWr / ValWr * 100.0 - 100,
+    %%         LttngCallArityTraceValRead /?times, LttngCallArityTraceValRead / ValRead * 100.0 - 100]),
+    %% os:cmd("lttng stop"),
+    %% os:cmd("lttng destroy"),
+
+%    erlang:process_flag(scheduler, 2),
+
+    %% erlang:trace(self(), false, [call, arity]),
+%    dbg:tracer(port, dbg:trace_port(file, "/dev/null")),
+    dbg:tracer(port, fun() -> tracer() end),
+    dbg:p(self(), [sos,call]),
+    run_benchmark("trace_pattern(~p, [global,local]),~n"
+                  "trace([call, {tracer, \"/dev/null\"}]),~n",
+                  BMPayload, Baseline),
+
+    dbg:p(self(), [sos,call, arity]),
+    run_benchmark("trace_pattern(~p, [global,local]),~n"
+                  "trace([call, arity, {tracer, \"/dev/null\"}]),~n",
+                  BMPayload, Baseline),
 
     Comment = "encode: "++integer_to_list(round(ValWr/?times)) ++
 	" micro, decode: "++integer_to_list(round(ValRead /?times)) ++
@@ -157,3 +234,51 @@ decode(0, _Module, _Type, _Value) ->
 decode(N, Module, Type, Value) ->
     Module:decode(Type, Value),
     decode(N-1, Module, Type, Value).
+
+
+tc(Fun) ->
+    Before = erlang:monotonic_time(1000000),
+    par(Fun,?par),
+    After = erlang:monotonic_time(1000000),
+    Ref = erlang:trace_delivered(self()),
+    receive {trace_delivered, _, Ref} -> done end,
+    erlang:display({sync,sync_tracer()}),
+    AfterTrace = erlang:monotonic_time(1000000),
+    {After - Before, AfterTrace - Before}.
+
+run_benchmark(Slogan, {Module, Type, Value, Bytes}, {BaseEnc, BaseDec, BaseEncT, BaseDecT}) ->
+
+    {Enc,EncT} = tc(fun() -> encode(?times, Module, Type, Value) end),
+    {Dec,DecT} = tc(fun() -> decode(?times, Module, Type, Bytes) end),
+    sync_tracer(),
+
+    ct:pal(Slogan ++
+           "ASN.1 encoding: ~.2f micro (~.1f%), ~.2f micro (~.1f%)~n"
+           "ASN.1 decoding: ~.2f micro (~.1f%), ~.2f micro (~.1f%)~n",
+           [Module,
+            Enc / ?times / ?par, Enc / BaseEnc * 100.0 - 100,
+            EncT / ?times / ?par, EncT / BaseEncT * 100.0 - 100,
+            Dec/?times / ?par, Dec / BaseDec * 100.0 - 100,
+            DecT/?times / ?par, DecT / BaseDecT * 100.0 - 100
+           ]).
+
+par(Fun, Procs) ->
+    Refs = [spawn_monitor(Fun) || _ <- lists:seq(1,Procs)],
+    [receive {'DOWN', Ref, _, Pid, Res} -> Res = normal,Pid end || {_, Ref} <- Refs].
+
+tracer() ->
+    spawn(fun() ->
+                  catch erlang:process_flag(message_queue_data, off_heap),
+                  (fun F(N) -> receive {get, Pid} -> Pid ! N, F(0); _M -> F(N+1) end end)(0)
+          end).
+
+sync_tracer() ->
+    case erlang:trace_info(self(), tracer) of
+        {tracer, Tracer} when is_pid(Tracer) ->
+            Tracer ! {get, self()},
+            receive N -> N end;
+        {tracer, Tracer} when is_port(Tracer) ->
+            erlang:port_command(Tracer, term_to_binary({})),
+            erlang:port_control(Tracer, $f, <<>>);
+        _ -> 0
+    end.
