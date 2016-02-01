@@ -1058,6 +1058,8 @@ collect([TM | TMs]) ->
 			    flush({got_unexpected,M})
 		    end
 	    end
+    after 15000 ->
+            flush(timeout)
     end.
 
 flush(Reason) ->

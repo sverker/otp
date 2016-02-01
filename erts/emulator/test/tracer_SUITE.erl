@@ -31,7 +31,8 @@
          getting_linked/1, getting_unlinked/1, register/1, unregister/1,
          in/1, out/1, gc_start/1, gc_end/1]).
 
-suite() -> [{ct_hooks,[ts_install_cth]}].
+suite() -> [{ct_hooks,[ts_install_cth]},
+            {timetrap, {minutes, 1}}].
 
 all() ->
     [{group, basic}].
@@ -285,7 +286,7 @@ unregister(_Config) ->
 in(_Config) ->
 
     Tc = fun(Pid) ->
-                 Pid ! ok
+                 Pid ! fun() -> receive after 1 -> ok end end
          end,
 
     Expect =
