@@ -1093,7 +1093,7 @@ erts_call_trace(Process* p, BeamInstr mfa[3], Binary *match_spec,
     if (match_spec) {
         /* we have to make a copy of the tracer here as the match spec
            may remove it, and we still want to generate a trace message */
-        erts_tracer_update(&pre_ms_tracer, ERTS_TRACER(p));
+        erts_tracer_update(&pre_ms_tracer, *tracer);
         tracer = &pre_ms_tracer;
         pam_result = erts_match_set_run(p, match_spec, args, arity,
                                         ERTS_PAM_TMP_RESULT, &return_flags);
