@@ -219,5 +219,6 @@ typedef struct
 } ErtsTracingEvent;
 
 extern ErtsTracingEvent erts_send_tracing[];
+extern ErtsTracingEvent erts_receive_tracing[];
 
 #endif /* ERL_TRACE_H__ */

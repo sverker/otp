@@ -89,6 +89,7 @@ static void uninstall_exp_breakpoints(BpFunctions* f);
 static void clean_export_entries(BpFunctions* f);
 
 ErtsTracingEvent erts_send_tracing[ERTS_NUM_BP_IX];
+ErtsTracingEvent erts_receive_tracing[ERTS_NUM_BP_IX];
 
 void
 erts_bif_trace_init(void)
@@ -104,6 +105,8 @@ erts_bif_trace_init(void)
     for (i=0; i<ERTS_NUM_BP_IX; i++) {
         erts_send_tracing[i].on = 1;
         erts_send_tracing[i].match_spec = NULL;
+        erts_receive_tracing[i].on = 1;
+        erts_receive_tracing[i].match_spec = NULL;
     }
 }
 
