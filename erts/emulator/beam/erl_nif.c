@@ -3048,8 +3048,6 @@ erts_unload_nif(struct erl_module_nif* lib)
     ASSERT(lib != NULL);
     ASSERT(lib->mod != NULL);
 
-    erts_tracer_nif_delete(make_atom(lib->mod->module));
-
     for (rt = resource_type_list.next;
 	 rt != &resource_type_list;
 	 rt = next) {

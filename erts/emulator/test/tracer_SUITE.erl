@@ -25,8 +25,9 @@
 %%%
 
 -export([all/0, suite/0,groups/0, init_per_suite/1, end_per_suite/1,
-	 init_per_group/2,end_per_group/2]).
--export([load/1, invalid_tracers/1, opts/1]).
+	 init_per_group/2,end_per_group/2, init_per_testcase/2,
+         end_per_testcase/2]).
+-export([load/1, unload/1, invalid_tracers/1, opts/1]).
 -export([send/1, recv/1, spawn/1, exit/1, link/1, unlink/1,
          getting_linked/1, getting_unlinked/1, register/1, unregister/1,
          in/1, out/1, gc_start/1, gc_end/1]).
@@ -35,7 +36,7 @@ suite() -> [{ct_hooks,[ts_install_cth]},
             {timetrap, {minutes, 1}}].
 
 all() ->
-    [load, invalid_tracers, opts, {group, basic}].
+    [load, unload, invalid_tracers, opts, {group, basic}].
 
 groups() ->
     [{ basic, [], [send, recv, spawn, exit, link, unlink, getting_linked,
@@ -49,6 +50,25 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_group(_GroupName, Config) ->
+    Config.
+
+end_per_group(_GroupName, Config) ->
+    Config.
+
+init_per_testcase(TC, Config) when TC =:= load ->
+
+    DataDir = proplists:get_value(data_dir, Config),
+
+    Pid = erlang:spawn(fun F() ->
+                               receive
+                                   {get, Pid} ->
+                                       Pid ! DataDir,
+                                       F()
+                               end
+                       end),
+    register(tracer_test_config, Pid),
+    Config;
+init_per_testcase(_, Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     case catch tracer_test:enabled(trace_status, self(), self()) of
         discard ->
@@ -58,12 +78,63 @@ init_per_group(_GroupName, Config) ->
     end,
     Config.
 
-end_per_group(_GroupName, Config) ->
-    code:purge(tracer_test),
-    true = code:delete(tracer_test),
-    Config.
+end_per_testcase(TC, _Config) when TC =:= load ->
+    purge(),
+    exit(whereis(tracer_test_config), kill),
+    ok;
+end_per_testcase(_, _Config) ->
+    purge(),
+    ok.
 
 load(_Config) ->
+    purge(),
+    1 = erlang:trace(self(), true, [{tracer, tracer_test, []}, call]),
+    purge(),
+    1 = erlang:trace_pattern({?MODULE, all, 0}, [],
+                             [{meta, tracer_test, []}]),
+    ok.
+
+unload(_Config) ->
+
+    ServerFun = fun F(0, undefined) ->
+                        receive
+                            {N, Pid} -> F(N, Pid)
+                        end;
+                    F(0, Pid) ->
+                        Pid ! done,
+                        F(0, undefined);
+                    F(N, Pid) ->
+                        ?MODULE:all(),
+                        F(N-1, Pid)
+                end,
+
+    Pid = erlang:spawn_link(fun() -> ServerFun(0, undefined) end),
+
+
+    Tc = fun(N) ->
+                 Pid ! {N, self()},
+                 receive done -> ok after 1000 -> ct:fail(timeout) end,
+                 trace_delivered(Pid)
+         end,
+
+    1 = erlang:trace(Pid, true, [{tracer, tracer_test,
+                                  {#{ call => trace}, self(), []}},
+                                 call]),
+    1 = erlang:trace_pattern({?MODULE, all, 0}, [], []),
+
+    Tc(1),
+    receive _ -> ok after 0 -> ct:fail(timeout) end,
+
+    code:purge(tracer_test),
+    code:delete(tracer_test),
+
+    Tc(1),
+    receive M1 -> ct:fail({unexpected_message, M1}) after 0 -> ok end,
+
+    code:purge(tracer_test),
+
+    Tc(1),
+    receive M2 -> ct:fail({unexpected_message, M2}) after 0 -> ok end,
 
     ok.
 
@@ -322,7 +393,9 @@ unregister(_Config) ->
 in(_Config) ->
 
     Tc = fun(Pid) ->
-                 Pid ! fun() -> receive after 1 -> ok end end
+                 Self = self(),
+                 Pid ! fun() -> receive after 1 -> Self ! ok end end,
+                 receive ok -> ok end
          end,
 
     Expect =
@@ -330,18 +403,16 @@ in(_Config) ->
                 Opts = #{ timestamp => undefined,
                           scheduler_id => undefined,
                           match_spec_result => true },
-                receive
-                    {Pid, in, _, _, {erlang, apply, _}, _, _} ->
-                        %% This may arrive here because of race
-                        %% in process start and trace start.
-                        %% Ignore it.
-                        receive
-                            Msg ->
-                                {Pid, in, State, Pid, _, undefined, Opts} = Msg
-                        end;
-                    Msg ->
-                        {Pid, in, State, Pid, _, undefined, Opts} = Msg
-                end
+                N = (fun F(N) ->
+                             receive
+                                 Msg ->
+                                     {Pid, in, State, Pid, _,
+                                      undefined, Opts} = Msg,
+                                     F(N+1)
+                             after 0 -> N
+                             end
+                     end)(0),
+                true = N > 0
              end,
 
     test(in, running, Tc, Expect, true).
@@ -360,14 +431,16 @@ out(_Config) ->
                           match_spec_result => true },
 
                 %% We cannot predict how many out schedules there will be
-                (fun F() ->
-                         receive
-                             Msg ->
-                                 {Pid, out, State, Pid, _, undefined, Opts} = Msg,
-                                 F()
-                         after 0 -> ok
-                         end
-                 end)()
+                N = (fun F(N) ->
+                             receive
+                                 Msg ->
+                                     {Pid, out, State, Pid, _,
+                                      undefined, Opts} = Msg,
+                                     F(N+1)
+                             after 0 -> N
+                             end
+                     end)(0),
+                true = N > 0
              end,
 
     test(out, running, Tc, Expect, true, true).
@@ -501,4 +574,15 @@ trace_delivered(Pid) ->
             ok
     after 1000 ->
             timeout
+    end.
+
+purge() ->
+    %% Make sure module is not loaded
+    case erlang:module_loaded(tracer_test) of
+        true ->
+            code:purge(tracer_test),
+            true = code:delete(tracer_test),
+            code:purge(tracer_test);
+        _ ->
+            ok
     end.

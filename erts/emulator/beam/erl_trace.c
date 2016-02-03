@@ -2302,7 +2302,6 @@ erts_tracer_nif_delete(Eterm tracer_module)
 {
     ErtsTracerNif tnif_tmpl;
     ErtsTracerNif *tnif;
-    ASSERT(erts_smp_thr_progress_is_blocking());
     tnif_tmpl.module = tracer_module;
     erts_smp_rwmtx_rwlock(&tracer_mtx);
     tnif = hash_remove(tracer_hash, &tnif_tmpl);
