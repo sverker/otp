@@ -26,7 +26,7 @@
 
 -export([all/0, suite/0,groups/0, init_per_suite/1, end_per_suite/1,
 	 init_per_group/2,end_per_group/2]).
--export([enabled/3, trace/5, trace/6]).
+-export([load/1, invalid_tracers/1, opts/1]).
 -export([send/1, recv/1, spawn/1, exit/1, link/1, unlink/1,
          getting_linked/1, getting_unlinked/1, register/1, unregister/1,
          in/1, out/1, gc_start/1, gc_end/1]).
@@ -35,7 +35,7 @@ suite() -> [{ct_hooks,[ts_install_cth]},
             {timetrap, {minutes, 1}}].
 
 all() ->
-    [{group, basic}].
+    [load, invalid_tracers, opts, {group, basic}].
 
 groups() ->
     [{ basic, [], [send, recv, spawn, exit, link, unlink, getting_linked,
@@ -43,23 +43,59 @@ groups() ->
                    gc_start, gc_end]}].
 
 init_per_suite(Config) ->
-    DataDir = proplists:get_value(data_dir, Config),
-    case catch enabled(trace_status, self(), self()) of
-        discard ->
-            ok;
-        _ ->
-            ok = erlang:load_nif(filename:join(DataDir, atom_to_list(?MODULE)), 0)
-    end,
     Config.
 
 end_per_suite(_Config) ->
     ok.
 
 init_per_group(_GroupName, Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    case catch tracer_test:enabled(trace_status, self(), self()) of
+        discard ->
+            ok;
+        _ ->
+            tracer_test:load(DataDir)
+    end,
     Config.
 
 end_per_group(_GroupName, Config) ->
+    code:purge(tracer_test),
+    true = code:delete(tracer_test),
     Config.
+
+load(_Config) ->
+
+    ok.
+
+opts(_Config) ->
+    ok.
+
+invalid_tracers(_Config) ->
+    FailTrace = fun(A) ->
+                        try erlang:trace(self(), true, A) of
+                            _ -> ct:fail(A)
+                        catch _:_ -> ok end
+                end,
+
+    FailTrace([{tracer, foobar}, call]),
+    FailTrace([{tracer, foobar, []}, call]),
+    FailTrace([{tracer, make_ref(), []}, call]),
+    FailTrace([{tracer, lists, []}, call]),
+
+    FailTP = fun(MS,FL) ->
+                     try erlang:trace_pattern({?MODULE,all,0}, MS, FL) of
+                            _ -> ct:fail({MS, FL})
+                        catch _:_ -> ok end
+                end,
+
+    FailTP([],[{meta, foobar}]),
+    FailTP([],[{meta, foobar, []}]),
+    FailTP([],[{meta, make_ref(), []}]),
+    FailTP([],[{meta, lists, []}]),
+
+    ok.
+
+
 
 send(_Config) ->
 
@@ -393,7 +429,7 @@ test(Event, TraceFlag, Tc, Expect, Removes, Dies) ->
     %% Test that trace works
     State1 = {#{ Event => trace }, self(), ComplexState},
     Pid1 = start_tracee(),
-    1 = erlang:trace(Pid1, true, [TraceFlag, {tracer, ?MODULE, State1}]),
+    1 = erlang:trace(Pid1, true, [TraceFlag, {tracer, tracer_test, State1}]),
     Tc(Pid1),
     ok = trace_delivered(Pid1),
 
@@ -401,7 +437,7 @@ test(Event, TraceFlag, Tc, Expect, Removes, Dies) ->
     receive M11 -> ct:fail({unexpected, M11}) after 0 -> ok end,
     if not Dies ->
             {flags, [TraceFlag]} = erlang:trace_info(Pid1, flags),
-            {tracer, {?MODULE, State1}} = erlang:trace_info(Pid1, tracer),
+            {tracer, {tracer_test, State1}} = erlang:trace_info(Pid1, tracer),
             erlang:trace(Pid1, false, [TraceFlag]);
        true -> ok
     end,
@@ -409,13 +445,13 @@ test(Event, TraceFlag, Tc, Expect, Removes, Dies) ->
     %% Test that  discard works
     Pid2 = start_tracee(),
     State2 = {#{ Event => discard }, self(), ComplexState},
-    1 = erlang:trace(Pid2, true, [TraceFlag, {tracer, ?MODULE, State2}]),
+    1 = erlang:trace(Pid2, true, [TraceFlag, {tracer, tracer_test, State2}]),
     Tc(Pid2),
     ok = trace_delivered(Pid2),
     receive M2 -> ct:fail({unexpected, M2}) after 0 -> ok end,
     if not Dies ->
             {flags, [TraceFlag]} = erlang:trace_info(Pid2, flags),
-            {tracer, {?MODULE, State2}} = erlang:trace_info(Pid2, tracer),
+            {tracer, {tracer_test, State2}} = erlang:trace_info(Pid2, tracer),
             erlang:trace(Pid2, false, [TraceFlag]);
        true ->
             ok
@@ -424,7 +460,7 @@ test(Event, TraceFlag, Tc, Expect, Removes, Dies) ->
     %% Test that remove works
     Pid3 = start_tracee(),
     State3 = {#{ Event => remove }, self(), ComplexState},
-    1 = erlang:trace(Pid3, true, [TraceFlag, {tracer, ?MODULE, State3}]),
+    1 = erlang:trace(Pid3, true, [TraceFlag, {tracer, tracer_test, State3}]),
     Tc(Pid3),
     ok = trace_delivered(Pid3),
     receive M3 -> ct:fail({unexpected, M3}) after 0 -> ok end,
@@ -434,7 +470,7 @@ test(Event, TraceFlag, Tc, Expect, Removes, Dies) ->
                     {tracer, []} = erlang:trace_info(Pid3, tracer);
                true ->
                     {flags, [TraceFlag]} = erlang:trace_info(Pid3, flags),
-                    {tracer, {?MODULE, State3}} = erlang:trace_info(Pid3, tracer)
+                    {tracer, {tracer_test, State3}} = erlang:trace_info(Pid3, tracer)
             end,
             erlang:trace(Pid3, false, [TraceFlag]);
        true ->
@@ -466,16 +502,3 @@ trace_delivered(Pid) ->
     after 1000 ->
             timeout
     end.
-
-%%%
-%%% NIF placeholders
-%%%
-
-enabled(_, _, _) ->
-    erlang:nif_error(nif_not_loaded).
-
-trace(_, _, _, _, _) ->
-    erlang:nif_error(nif_not_loaded).
-
-trace(_, _, _, _, _, _) ->
-    erlang:nif_error(nif_not_loaded).

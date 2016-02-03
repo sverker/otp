@@ -1,13 +1,12 @@
 * Implement tracing nif backends
  - code purging of backends
  - test cases (especially for nif tracer backend)
-  - unloaded tracer moduled
-  - tracer module with incorrect callbacks
   - unload/reload tracer module
   - remove return from enabled in match spec
   - SOL + SOL1 + SCHED_EXIT + port trace
   - trace_info(on_load, meta | meta_match_spec | all | call_time | call_count)
   - erts_port_output_async to outputv (i.e. file tracing)
+  - new nif apis
  - documentation
 * Rewrite process + port tracing to use tracing nif backends (done)
 * Write lttng/dtrace/systemtap backends (maybe put backends in dyntrace?)

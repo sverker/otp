@@ -52,7 +52,7 @@
 -export([await_microstate_accounting_modifications/3,
 	 gather_microstate_accounting_result/2]).
 
--export([trace/3]).
+-export([trace/3, trace_pattern/3]).
 
 %% Auto import name clash
 -export([check_process_code/2]).
@@ -387,4 +387,7 @@ microstate_accounting(Ref, Threads) ->
     end.
 
 trace(_PidSpec, _How, _FlagList) ->
+    erlang:nif_error(undefined).
+
+trace_pattern(_MFA, _MatchSpec, _FlagList) ->
     erlang:nif_error(undefined).

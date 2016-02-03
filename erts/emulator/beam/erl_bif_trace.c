@@ -98,15 +98,9 @@ erts_bif_trace_init(void)
 /*
  * Turn on/off call tracing for the given function(s).
  */
-  
-Eterm
-trace_pattern_2(BIF_ALIST_2)
-{
-    return trace_pattern(BIF_P, BIF_ARG_1, BIF_ARG_2, NIL);
-}
 
 Eterm
-trace_pattern_3(BIF_ALIST_3)
+erts_internal_trace_pattern_3(BIF_ALIST_3)
 {
     return trace_pattern(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3);
 }
@@ -126,7 +120,7 @@ trace_pattern(Process* p, Eterm MFA, Eterm Pattern, Eterm flaglist)
     ErtsTracer meta_tracer = erts_tracer_nil;
 
     if (!erts_try_seize_code_write_permission(p)) {
-	ERTS_BIF_YIELD3(bif_export[BIF_trace_pattern_3], p, MFA, Pattern, flaglist);
+	ERTS_BIF_YIELD3(bif_export[BIF_erts_internal_trace_pattern_3], p, MFA, Pattern, flaglist);
     }
     finish_bp.current = -1;
 

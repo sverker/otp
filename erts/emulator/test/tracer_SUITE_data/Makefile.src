@@ -1,8 +1,8 @@
 
-NIF_LIBS = tracer_SUITE@dll@
+NIF_LIBS = tracer_test@dll@
 
 all: $(NIF_LIBS)
 
 @SHLIB_RULES@
 
-$(NIF_LIBS): tracer_SUITE.c
+$(NIF_LIBS): tracer_test.c
