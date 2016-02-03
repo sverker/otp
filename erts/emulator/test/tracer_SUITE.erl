@@ -176,13 +176,11 @@ send(_Config) ->
                  receive ok -> ok after 100 -> ct:fail(timeout) end
          end,
 
-    Expect = fun(Pid, State) ->
-                     Opts = #{ timestamp => undefined,
-                               scheduler_id => undefined,
-                               match_spec_result => true },
+    Expect = fun(Pid, State, EOpts) ->
                      receive
                          Msg ->
-                             {Pid, send, State, Pid, ok, Self, Opts} = Msg
+                             {Pid, send, State, Pid, ok, Self, Opts} = Msg,
+                             check_opts(EOpts, Opts)
                      end
              end,
     test(send, Tc, Expect).
@@ -194,13 +192,11 @@ recv(_Config) ->
                  Pid ! ok
          end,
 
-    Expect = fun(Pid, State) ->
-                     Opts = #{ timestamp => undefined,
-                               scheduler_id => undefined,
-                               match_spec_result => true },
+    Expect = fun(Pid, State, EOpts) ->
                      receive
                          Msg ->
-                             {undefined, 'receive', State, Pid, ok, undefined, Opts} = Msg
+                             {undefined, 'receive', State, Pid, ok, undefined, Opts} = Msg,
+                             check_opts(EOpts, Opts)
                      end
              end,
 
@@ -213,14 +209,12 @@ spawn(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
                         {Pid, spawn, State, Pid, NewPid,
                          {lists,seq,[1,10]}, Opts} = Msg,
+                        check_opts(EOpts, Opts),
                         true = is_pid(NewPid) andalso NewPid /= Pid
                 end
              end,
@@ -233,13 +227,11 @@ exit(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
-                        {Pid, exit, State, Pid, normal, undefined, Opts} = Msg
+                        {Pid, exit, State, Pid, normal, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts)
                 end
              end,
 
@@ -256,13 +248,11 @@ link(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
                         {Pid, link, State, Pid, NewPid, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts),
                         true = is_pid(NewPid) andalso NewPid /= Pid
                 end
              end,
@@ -281,13 +271,11 @@ unlink(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
                         {Pid, unlink, State, Pid, NewPid, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts),
                         true = is_pid(NewPid) andalso NewPid /= Pid
                 end
              end,
@@ -305,13 +293,11 @@ getting_linked(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
                         {NewPid, getting_linked, State, Pid, NewPid, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts),
                         true = is_pid(NewPid) andalso NewPid /= Pid
                 end
              end,
@@ -331,13 +317,11 @@ getting_unlinked(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
                         {NewPid, getting_unlinked, State, Pid, NewPid, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts),
                         true = is_pid(NewPid) andalso NewPid /= Pid
                 end
              end,
@@ -355,13 +339,11 @@ register(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
-                        {Pid, register, State, Pid, ?MODULE, undefined, Opts} = Msg
+                        {Pid, register, State, Pid, ?MODULE, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts)
                 end
              end,
 
@@ -378,13 +360,11 @@ unregister(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
-                        {Pid, unregister, State, Pid, ?MODULE, undefined, Opts} = Msg
+                        {Pid, unregister, State, Pid, ?MODULE, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts)
                 end
              end,
 
@@ -399,15 +379,13 @@ in(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 N = (fun F(N) ->
                              receive
                                  Msg ->
                                      {Pid, in, State, Pid, _,
                                       undefined, Opts} = Msg,
+                                     check_opts(EOpts, Opts),
                                      F(N+1)
                              after 0 -> N
                              end
@@ -425,17 +403,14 @@ out(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
-
+        fun(Pid, State, EOpts) ->
                 %% We cannot predict how many out schedules there will be
                 N = (fun F(N) ->
                              receive
                                  Msg ->
                                      {Pid, out, State, Pid, _,
                                       undefined, Opts} = Msg,
+                                     check_opts(EOpts, Opts),
                                      F(N+1)
                              after 0 -> N
                              end
@@ -455,13 +430,11 @@ gc_start(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
-                        {Pid, gc_start, State, Pid, _, undefined, Opts} = Msg
+                        {Pid, gc_start, State, Pid, _, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts)
                 end
              end,
 
@@ -477,13 +450,11 @@ gc_end(_Config) ->
          end,
 
     Expect =
-        fun(Pid, State) ->
-                Opts = #{ timestamp => undefined,
-                          scheduler_id => undefined,
-                          match_spec_result => true },
+        fun(Pid, State, EOpts) ->
                 receive
                     Msg ->
-                        {Pid, gc_end, State, Pid, _, undefined, Opts} = Msg
+                        {Pid, gc_end, State, Pid, _, undefined, Opts} = Msg,
+                        check_opts(EOpts, Opts)
                 end
              end,
 
@@ -498,6 +469,9 @@ test(Event, TraceFlag, Tc, Expect, Removes) ->
 test(Event, TraceFlag, Tc, Expect, Removes, Dies) ->
 
     ComplexState = {fun() -> ok end, <<0:(128*8)>>},
+    Opts = #{ timestamp => undefined,
+              scheduler_id => undefined,
+              match_spec_result => true },
 
     %% Test that trace works
     State1 = {#{ Event => trace }, self(), ComplexState},
@@ -506,12 +480,30 @@ test(Event, TraceFlag, Tc, Expect, Removes, Dies) ->
     Tc(Pid1),
     ok = trace_delivered(Pid1),
 
-    Expect(Pid1, State1),
+    Expect(Pid1, State1, Opts),
     receive M11 -> ct:fail({unexpected, M11}) after 0 -> ok end,
     if not Dies ->
             {flags, [TraceFlag]} = erlang:trace_info(Pid1, flags),
             {tracer, {tracer_test, State1}} = erlang:trace_info(Pid1, tracer),
             erlang:trace(Pid1, false, [TraceFlag]);
+       true -> ok
+    end,
+
+    %% Test that trace works with scheduler id and timestamp
+    Pid1T = start_tracee(),
+    1 = erlang:trace(Pid1T, true, [TraceFlag, {tracer, tracer_test, State1},
+                                   timestamp, scheduler_id]),
+    Tc(Pid1T),
+    ok = trace_delivered(Pid1T),
+
+    Expect(Pid1T, State1, Opts#{ scheduler_id := number,
+                                 timestamp := timestamp}),
+    receive M11T -> ct:fail({unexpected, M11T}) after 0 -> ok end,
+    if not Dies ->
+            {flags, [scheduler_id, TraceFlag, timestamp]}
+                = erlang:trace_info(Pid1T, flags),
+            {tracer, {tracer_test, State1}} = erlang:trace_info(Pid1T, tracer),
+            erlang:trace(Pid1T, false, [TraceFlag]);
        true -> ok
     end,
 
@@ -550,6 +542,18 @@ test(Event, TraceFlag, Tc, Expect, Removes, Dies) ->
             ok
     end,
     ok.
+
+check_opts(#{ scheduler_id := number } = E, #{ scheduler_id := N } = O)
+  when is_integer(N) ->
+    E1 = maps:remove(scheduler_id, E),
+    O1 = maps:remove(scheduler_id, O),
+    if E1 == O1 -> ok;
+       true -> ct:fail({invalid_opts, E, O})
+    end;
+check_opts(Opts, Opts) ->
+    ok;
+check_opts(E,O) ->
+    ct:fail({invalid_opts, E, O}).
 
 start_tracee() ->
     spawn_link(
