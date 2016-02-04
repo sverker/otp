@@ -1224,7 +1224,6 @@ delete_code(Module* modp)
     modp->curr.catches = BEAM_CATCHES_NIL;
     modp->curr.nif = NULL;
 
-    erts_tracer_nif_delete(module);
 }
 
 

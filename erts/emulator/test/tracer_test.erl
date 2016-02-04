@@ -25,7 +25,7 @@
 %%%
 
 -export([enabled/3, trace/6]).
--export([load/1]).
+-export([load/1, load/2]).
 -on_load(load/0).
 
 enabled(_, _, _) ->
@@ -41,10 +41,15 @@ load() ->
         Pid ->
             Pid ! {get, self()},
             receive
+                {Conf, Postfix} ->
+                    load(Conf, Postfix);
                 Conf ->
                     load(Conf)
             end
     end.
 
 load(DataDir) ->
-    erlang:load_nif(filename:join(DataDir, atom_to_list(?MODULE)), 0).
+    load(DataDir, "").
+load(DataDir, Postfix) ->
+    SoFile = atom_to_list(?MODULE) ++ Postfix,
+    erlang:load_nif(filename:join(DataDir, SoFile) , 0).

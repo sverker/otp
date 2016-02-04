@@ -33,8 +33,9 @@
   <description>
     <p>A behaviour module for implementing the back end of the erlang
     tracing system. The functions in this module will be called whenever
-    a trace probe is triggered. Both the enabled and trace functions are
-    called in the context of the entity that triggered the trace probe.
+    a trace probe is triggered. Both the <c>enabled</c> and <c>trace</c>
+    functions are called in the context of the entity that triggered the
+    trace probe.
     This means that the overhead by having the tracing enabled will be
     greatly effected by how much time is spent in these functions. So do as
     little work as possible in these functions.</p>

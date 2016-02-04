@@ -2235,7 +2235,7 @@ struct ErtsTracerNif_ {
     ErlNifFunc *trace;
 };
 
-static Hash *tracer_hash;
+static Hash *tracer_hash = NULL;
 static erts_smp_rwmtx_t tracer_mtx;
 
 static ErtsTracerNif *
@@ -2291,33 +2291,14 @@ lookup_tracer_nif(const ErtsTracer tracer)
     erts_smp_rwmtx_rlock(&tracer_mtx);
     if ((tnif = hash_get(tracer_hash, &tnif_tmpl)) == NULL) {
         erts_smp_rwmtx_runlock(&tracer_mtx);
-        return load_tracer_nif(tracer);
+        tnif = load_tracer_nif(tracer);
+        ASSERT(!tnif || tnif->nif_mod);
+        return tnif;
     }
     erts_smp_rwmtx_runlock(&tracer_mtx);
+    ASSERT(tnif->nif_mod);
     return tnif;
 }
-
-int
-erts_tracer_nif_delete(Eterm tracer_module)
-{
-    ErtsTracerNif tnif_tmpl;
-    ErtsTracerNif *tnif;
-    tnif_tmpl.module = tracer_module;
-    erts_smp_rwmtx_rwlock(&tracer_mtx);
-    tnif = hash_remove(tracer_hash, &tnif_tmpl);
-    erts_smp_rwmtx_rwunlock(&tracer_mtx);
-    if (tnif) {
-        /* Since we are blocking, we could just free the
-           tracer nif here, but in order to be future
-           proof we schedule the deletion of the nif */
-        erts_schedule_thr_prgr_later_op(
-            tracer_free_fun, tnif,
-            (ErtsThrPrgrLaterOp*)(tnif + 1));
-        return 1;
-    }
-    return 0;
-}
-
 
 /* This function converts an Erlang tracer term to ErtsTracer.
    It returns THE_NON_VALUE if an invalid tracer term was given.
@@ -2664,21 +2645,43 @@ erts_tracer_update(ErtsTracer *tracer, const ErtsTracer new_tracer)
 
 static void init_tracer_nif()
 {
-    HashFunctions hf;
     erts_smp_rwmtx_opt_t rwmtx_opt = ERTS_SMP_RWMTX_OPT_DEFAULT_INITER;
     rwmtx_opt.type = ETHR_RWMUTEX_TYPE_FREQUENT_READ;
     erts_smp_rwmtx_init_opt(&tracer_mtx, &rwmtx_opt, "tracer_mtx");
 
-    hf.hash = tracer_hash_fun;
-    hf.cmp = tracer_cmp_fun;
-    hf.alloc = tracer_alloc_fun;
-    hf.free = tracer_free_fun;
-    hf.meta_alloc = (HMALLOC_FUN) erts_alloc;
-    hf.meta_free = (HMFREE_FUN) erts_free;
-    hf.meta_print = (HMPRINT_FUN) erts_print;
+    erts_tracer_nif_clear();
 
-    tracer_hash = hash_new(ERTS_ALC_T_TRACER_NIF, "tracer_hash", 10, hf);
+}
 
+int erts_tracer_nif_clear()
+{
+
+    erts_smp_rwmtx_rlock(&tracer_mtx);
+    if (!tracer_hash || tracer_hash->nobjs) {
+
+        HashFunctions hf;
+        hf.hash = tracer_hash_fun;
+        hf.cmp = tracer_cmp_fun;
+        hf.alloc = tracer_alloc_fun;
+        hf.free = tracer_free_fun;
+        hf.meta_alloc = (HMALLOC_FUN) erts_alloc;
+        hf.meta_free = (HMFREE_FUN) erts_free;
+        hf.meta_print = (HMPRINT_FUN) erts_print;
+
+        erts_smp_rwmtx_runlock(&tracer_mtx);
+        erts_smp_rwmtx_rwlock(&tracer_mtx);
+
+        if (tracer_hash)
+            hash_delete(tracer_hash);
+
+        tracer_hash = hash_new(ERTS_ALC_T_TRACER_NIF, "tracer_hash", 10, hf);
+
+        erts_smp_rwmtx_rwunlock(&tracer_mtx);
+        return 1;
+    }
+
+    erts_smp_rwmtx_runlock(&tracer_mtx);
+    return 0;
 }
 
 static int tracer_cmp_fun(void* a, void* b)
@@ -2700,7 +2703,16 @@ static void *tracer_alloc_fun(void* tmpl)
     return obj;
 }
 
-static void tracer_free_fun(void* obj)
+static void tracer_free_fun_cb(void* obj)
 {
     erts_free(ERTS_ALC_T_TRACER_NIF, obj);
+}
+
+static void tracer_free_fun(void* obj)
+{
+    ErtsTracerNif *tnif = obj;
+    erts_schedule_thr_prgr_later_op(
+        tracer_free_fun_cb, obj,
+        (ErtsThrPrgrLaterOp*)(tnif + 1));
+
 }

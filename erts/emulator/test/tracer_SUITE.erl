@@ -27,7 +27,7 @@
 -export([all/0, suite/0,groups/0, init_per_suite/1, end_per_suite/1,
 	 init_per_group/2,end_per_group/2, init_per_testcase/2,
          end_per_testcase/2]).
--export([load/1, unload/1, invalid_tracers/1, opts/1]).
+-export([load/1, unload/1, reload/1, invalid_tracers/1]).
 -export([send/1, recv/1, spawn/1, exit/1, link/1, unlink/1,
          getting_linked/1, getting_unlinked/1, register/1, unregister/1,
          in/1, out/1, gc_start/1, gc_end/1]).
@@ -36,7 +36,7 @@ suite() -> [{ct_hooks,[ts_install_cth]},
             {timetrap, {minutes, 1}}].
 
 all() ->
-    [load, unload, invalid_tracers, opts, {group, basic}].
+    [load, unload, reload, invalid_tracers, {group, basic}].
 
 groups() ->
     [{ basic, [], [send, recv, spawn, exit, link, unlink, getting_linked,
@@ -44,6 +44,7 @@ groups() ->
                    gc_start, gc_end]}].
 
 init_per_suite(Config) ->
+    purge(),
     Config.
 
 end_per_suite(_Config) ->
@@ -55,7 +56,7 @@ init_per_group(_GroupName, Config) ->
 end_per_group(_GroupName, Config) ->
     Config.
 
-init_per_testcase(TC, Config) when TC =:= load ->
+init_per_testcase(TC, Config) when TC =:= load; TC =:= reload ->
 
     DataDir = proplists:get_value(data_dir, Config),
 
@@ -78,7 +79,7 @@ init_per_testcase(_, Config) ->
     end,
     Config.
 
-end_per_testcase(TC, _Config) when TC =:= load ->
+end_per_testcase(TC, _Config) when TC =:= load; TC =:= reload ->
     purge(),
     exit(whereis(tracer_test_config), kill),
     ok;
@@ -138,7 +139,28 @@ unload(_Config) ->
 
     ok.
 
-opts(_Config) ->
+reload(_Config) ->
+
+    Tracer = spawn_link(fun F() -> receive _M -> F() end end),
+    Tracee = spawn_link(fun F() -> ?MODULE:all(), F() end),
+
+
+    [begin
+         erlang:trace(Tracee, true, [{tracer, tracer_test,
+                                      {#{ call => trace }, Tracer, []}},
+                                     call]),
+         erlang:trace_pattern({?MODULE, all, 0}, []),
+
+         false = code:purge(tracer_test),
+         {module, _} = code:load_file(tracer_test),
+
+         {tracer, []} = erlang:trace_info(Tracee, tracer),
+
+         false = code:purge(tracer_test),
+         true = code:delete(tracer_test),
+         false = code:purge(tracer_test)
+     end || _ <- lists:seq(1,15)],
+
     ok.
 
 invalid_tracers(_Config) ->
