@@ -66,13 +66,13 @@
       <desc>
 	<p>The options for the tracee.
         <taglist>
-          <tag><c><anno>timestamp</anno></c></tag>
+          <tag><c>timestamp</c></tag>
           <item>If not set to <c>undefined</c>, the trace has been requested to
           include a timestamp.</item>
-          <tag><c><anno>match_spec_result</anno></c></tag>
+          <tag><c>match_spec_result</c></tag>
           <item>If not set to <c>true</c>, the trace has been requested to
           include the output of a match specification that was run.</item>
-          <tag><c><anno>scheduler_id</anno></c></tag>
+          <tag><c>scheduler_id</c></tag>
           <item>If not set to <c>undefined</c>, the trace has been requested to
           include the scheduler id.</item>
         </taglist>

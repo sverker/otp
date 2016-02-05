@@ -165,7 +165,7 @@ ERL_NIF_API_FUNC_DECL(ErlNifTime, enif_time_offset, (ErlNifTimeUnit));
 ERL_NIF_API_FUNC_DECL(ErlNifTime, enif_convert_time_unit, (ErlNifTime, ErlNifTimeUnit, ErlNifTimeUnit));
 ERL_NIF_API_FUNC_DECL(ERL_NIF_TERM, enif_now_time, (ErlNifEnv *env));
 ERL_NIF_API_FUNC_DECL(ERL_NIF_TERM, enif_cpu_time, (ErlNifEnv *env));
-ERL_NIF_API_FUNC_DECL(ERL_NIF_TERM, enif_unique_integer, (ErlNifEnv *env, int properties));
+ERL_NIF_API_FUNC_DECL(ERL_NIF_TERM, enif_make_unique_integer, (ErlNifEnv *env, ErlNifUniqueInteger properties));
 ERL_NIF_API_FUNC_DECL(int, enif_is_process_alive, (ErlNifEnv *env, ErlNifPid *pid));
 ERL_NIF_API_FUNC_DECL(int, enif_is_port_alive, (ErlNifEnv *env, ErlNifPort *port_id));
 ERL_NIF_API_FUNC_DECL(int, enif_get_local_port, (ErlNifEnv* env, ERL_NIF_TERM, ErlNifPort* port_id));
@@ -329,7 +329,7 @@ ERL_NIF_API_FUNC_DECL(int,enif_is_on_dirty_scheduler,(ErlNifEnv*));
 #  define enif_convert_time_unit ERL_NIF_API_FUNC_MACRO(enif_convert_time_unit)
 #  define enif_now_time ERL_NIF_API_FUNC_MACRO(enif_now_time)
 #  define enif_cpu_time ERL_NIF_API_FUNC_MACRO(enif_cpu_time)
-#  define enif_unique_integer ERL_NIF_API_FUNC_MACRO(enif_unique_integer)
+#  define enif_make_unique_integer ERL_NIF_API_FUNC_MACRO(enif_make_unique_integer)
 #  define enif_is_process_alive ERL_NIF_API_FUNC_MACRO(enif_is_process_alive)
 #  define enif_is_port_alive ERL_NIF_API_FUNC_MACRO(enif_is_port_alive)
 #  define enif_get_local_port ERL_NIF_API_FUNC_MACRO(enif_get_local_port)

@@ -43,7 +43,11 @@
 	 dirty_nif_exception/1, call_dirty_nif_exception/1, nif_schedule/1,
 	 nif_exception/1, call_nif_exception/1,
 	 nif_nan_and_inf/1, nif_atom_too_long/1,
-	 nif_monotonic_time/1, nif_time_offset/1, nif_convert_time_unit/1
+	 nif_monotonic_time/1, nif_time_offset/1, nif_convert_time_unit/1,
+         nif_now_time/1, nif_cpu_time/1, nif_unique_integer/1,
+         nif_is_process_alive/1, nif_is_port_alive/1,
+         nif_term_to_binary/1, nif_binary_to_term/1,
+         nif_port_command/1
 	]).
 
 -export([many_args_100/100]).
@@ -74,7 +78,11 @@ all() ->
      otp_9668, consume_timeslice,
      nif_schedule, dirty_nif, dirty_nif_send, dirty_nif_exception,
      nif_exception, nif_nan_and_inf, nif_atom_too_long,
-     nif_monotonic_time, nif_time_offset, nif_convert_time_unit
+     nif_monotonic_time, nif_time_offset, nif_convert_time_unit,
+     nif_now_time, nif_cpu_time, nif_unique_integer,
+     nif_is_process_alive, nif_is_port_alive,
+     nif_term_to_binary, nif_binary_to_term,
+     nif_port_command
     ].
 
 groups() -> 
@@ -1311,9 +1319,10 @@ send3_make_blob() ->
             repeat(N bsr 1,
                    fun(_) -> grow_blob(MsgEnv,other_term(),rand:uniform(1 bsl 20))
                    end, void),
-            case (N band 1) of
+            case (N band 3) of
                 0 -> {term,copy_blob(MsgEnv)};
-                1 -> {msgenv,MsgEnv}
+                1 -> {copy,copy_blob(MsgEnv)};
+                _ -> {msgenv,MsgEnv}
             end
     end.
 
@@ -1326,11 +1335,18 @@ send3_send(Pid, Msg) ->
 send3_send_nif(Pid, {term,Blob}) ->
     %%io:format("~p send term nif\n",[self()]),
     send_term(Pid, {blob, Blob}) =:= 1;
+send3_send_nif(Pid, {copy,Blob}) ->
+    %%io:format("~p send term nif\n",[self()]),
+    send_copy_term(Pid, {blob, Blob}) =:= 1;
 send3_send_nif(Pid, {msgenv,MsgEnv}) ->
     %%io:format("~p send blob nif\n",[self()]),   
     send3_blob(MsgEnv, Pid, blob) =:= 1.
 
 send3_send_bang(Pid, {term,Blob}) ->
+    %%io:format("~p send term bang\n",[self()]),   
+    Pid ! {blob, Blob},
+    true;
+send3_send_bang(Pid, {copy,Blob}) ->
     %%io:format("~p send term bang\n",[self()]),   
     Pid ! {blob, Blob},
     true;
@@ -1924,6 +1940,111 @@ chk_ctu(Time, FromTU, [ToTU|ToTUs]) ->
 	    chk_ctu(Time, FromTU, ToTUs)
     end.
 
+nif_now_time(Config) ->
+    ensure_lib_loaded(Config),
+
+    N1 = now(),
+    NifN1 = now_time(),
+    NifN2 = now_time(),
+    N2 = now(),
+    true = N1 < NifN1,
+    true = NifN1 < NifN2,
+    true = NifN2 < N2.
+
+nif_cpu_time(Config) ->
+    ensure_lib_loaded(Config),
+
+    try cpu_time() of
+        {_, _, _} ->
+            ok
+    catch error:badarg ->
+            {comment, "cpu_time not supported"}
+    end.
+
+nif_unique_integer(Config) ->
+    ensure_lib_loaded(Config),
+
+    UM1 = erlang:unique_integer([monotonic]),
+    UM2 = unique_integer_nif([monotonic]),
+    UM3 = erlang:unique_integer([monotonic]),
+
+    true = UM1 < UM2,
+    true = UM2 < UM3,
+
+    UMP1 = erlang:unique_integer([monotonic, positive]),
+    UMP2 = unique_integer_nif([monotonic, positive]),
+    UMP3 = erlang:unique_integer([monotonic, positive]),
+
+    true = 0 =< UMP1,
+    true = UMP1 < UMP2,
+    true = UMP2 < UMP3,
+
+    UP1 = erlang:unique_integer([positive]),
+    UP2 = unique_integer_nif([positive]),
+    UP3 = erlang:unique_integer([positive]),
+
+    true = 0 =< UP1,
+    true = 0 =< UP2,
+    true = 0 =< UP3,
+
+    true = is_integer(unique_integer_nif([])),
+    true = is_integer(unique_integer_nif([])),
+    true = is_integer(unique_integer_nif([])).
+
+nif_is_process_alive(Config) ->
+    ensure_lib_loaded(Config),
+
+    {Pid,_} = spawn_monitor(fun() -> receive ok -> nok end end),
+    true = is_process_alive_nif(Pid),
+    exit(Pid, die),
+    receive _ -> ok end, %% Clear monitor
+    false = is_process_alive_nif(Pid).
+
+nif_is_port_alive(Config) ->
+    ensure_lib_loaded(Config),
+
+    Port = open_port({spawn,"/bin/sh -s unix:cmd"},[stderr_to_stdout,eof]),
+    true = is_port_alive_nif(Port),
+    port_close(Port),
+    false = is_port_alive_nif(Port).
+
+nif_term_to_binary(Config) ->
+    ensure_lib_loaded(Config),
+    T = {#{ok => nok}, <<0:8096>>, lists:seq(1,100)},
+    Bin = term_to_binary(T),
+    ct:log("~p",[Bin]),
+    Bin = term_to_binary_nif(T, undefined),
+    true = term_to_binary_nif(T, self()),
+    receive Bin -> ok end.
+
+nif_binary_to_term(Config) ->
+    ensure_lib_loaded(Config),
+    T = {#{ok => nok}, <<0:8096>>, lists:seq(1,100)},
+    Bin = term_to_binary(T),
+    T = binary_to_term_nif(Bin, undefined),
+    true = binary_to_term_nif(Bin, self()),
+    receive T -> ok end.
+
+nif_port_command(Config) ->
+    ensure_lib_loaded(Config),
+    Port = open_port({spawn,"/bin/sh -s unix:cmd"},[stderr_to_stdout,eof]),
+    true = port_command_nif(Port, "echo hello\n"),
+    receive {Port,{data,"hello\n"}} -> ok
+    after 1000 -> ct:fail(timeout) end,
+
+    RefcBin = lists:flatten([lists:duplicate(100, "hello"),"\n"]),
+    true = port_command_nif(Port, iolist_to_binary(["echo ",RefcBin])),
+    receive {Port,{data,RefcBin}} -> ok
+    after 1000 -> ct:fail(timeout) end,
+
+    IoList = [lists:duplicate(100,<<"hello">>),"\n"],
+    true = port_command_nif(Port, ["echo ",IoList]),
+    FlatIoList = binary_to_list(iolist_to_binary(IoList)),
+    receive {Port,{data,FlatIoList}} -> ok
+    after 1000 -> ct:fail(timeout) end,
+
+    port_close(Port).
+
 %% The NIFs:
 lib_version() -> undefined.
 call_history() -> ?nif_stub.
@@ -1967,6 +2088,7 @@ send_blob_thread(_,_,_) -> ?nif_stub.
 join_send_thread(_) -> ?nif_stub.
 copy_blob(_) -> ?nif_stub.
 send_term(_,_) -> ?nif_stub.
+send_copy_term(_,_) -> ?nif_stub.
 reverse_list(_) -> ?nif_stub.
 echo_int(_) -> ?nif_stub.
 type_sizes() -> ?nif_stub.
@@ -1981,6 +2103,12 @@ call_dirty_nif_zero_args() -> ?nif_stub.
 call_nif_exception(_) -> ?nif_stub.
 call_nif_nan_or_inf(_) -> ?nif_stub.
 call_nif_atom_too_long(_) -> ?nif_stub.
+unique_integer_nif(_) -> ?nif_stub.
+is_process_alive_nif(_) -> ?nif_stub.
+is_port_alive_nif(_) -> ?nif_stub.
+term_to_binary_nif(_, _) -> ?nif_stub.
+binary_to_term_nif(_, _) -> ?nif_stub.
+port_command_nif(_, _) -> ?nif_stub.
 
 %% maps
 is_map_nif(_) -> ?nif_stub.
@@ -1997,7 +2125,8 @@ sorted_list_from_maps_nif(_) -> ?nif_stub.
 monotonic_time(_) -> ?nif_stub.
 time_offset(_) -> ?nif_stub.
 convert_time_unit(_,_,_) -> ?nif_stub.
-    
+now_time() -> ?nif_stub.
+cpu_time() -> ?nif_stub.
 
 nif_stub_error(Line) ->
     exit({nif_not_loaded,module,?MODULE,line,Line}).

@@ -208,7 +208,8 @@ static ERL_NIF_TERM trace(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
             ts = enif_make_int64(env, mon);
         } else if (enif_compare(value, atom_strict_monotonic) == 0) {
             ErlNifTime mon = enif_monotonic_time(ERL_NIF_NSEC);
-            ERL_NIF_TERM unique = enif_unique_integer(env, ERL_NIF_UNIQUE_MONOTONIC);
+            ERL_NIF_TERM unique = enif_make_unique_integer(
+                env, ERL_NIF_UNIQUE_MONOTONIC);
             ts = enif_make_tuple2(env, enif_make_int64(env, mon), unique);
         } else if (enif_compare(value, atom_timestamp) == 0) {
             ts = enif_now_time(env);

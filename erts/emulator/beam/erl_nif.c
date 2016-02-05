@@ -130,6 +130,7 @@ void erts_pre_nif(ErlNifEnv* env, Process* p, struct erl_module_nif* mod_nif)
     env->fpe_was_unmasked = erts_block_fpe();
     env->tmp_obj_list = NULL;
     env->exception_thrown = 0;
+    env->tracee = NULL;
 }
 
 /* Temporary object header, auto-deallocated when NIF returns
@@ -451,7 +452,7 @@ enif_send(ErlNifEnv* env, const ErlNifPid* to_pid,
 	flush_env(env); /* Needed for ERTS_HOLE_CHECK */
     }
 
-    if (!env->tracee) {
+    if (!env || !env->tracee) {
         erts_queue_message(rp, &rp_locks, mp, msg);
     }
 #ifdef ERTS_SMP
@@ -463,7 +464,6 @@ enif_send(ErlNifEnv* env, const ErlNifPid* to_pid,
            tracee */
         ErlTraceMessageQueue *msgq;
         Process *t_p = env->tracee;
-
 
         erts_smp_proc_lock(t_p, ERTS_PROC_LOCK_TRACE);
 
@@ -538,6 +538,9 @@ enif_port_command(ErlNifEnv *env, const ErlNifPort* to_port,
                                  (erts_port_synchronous_ops
                                   ? ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP
                                   : ERTS_PORT_SFLGS_INVALID_LOOKUP));
+    if (!prt)
+        return 0;
+
     erts_port_output_async(prt, env->proc->common.id, msg);
     return 1;
 }
@@ -809,12 +812,23 @@ int enif_term_to_binary(ErlNifEnv *dst_env, ERL_NIF_TERM term,
                         ErlNifBinary *bin)
 {
     Sint size;
+    byte *bp;
+    Binary* refbin;
 
     size = erts_encode_ext_size(term);
     if (!enif_alloc_binary(size, bin))
         return 0;
 
-    erts_encode_ext(term, &bin->data);
+    refbin = bin->ref_bin;
+
+    bp = bin->data;
+
+    erts_encode_ext(term, &bp);
+
+    bin->size = bp - bin->data;
+    refbin->orig_size = bin->size;
+
+    ASSERT(bin->data + bin->size == bp);
 
     return 1;
 }
@@ -829,12 +843,23 @@ int enif_binary_to_term(ErlNifEnv *dst_env, ErlNifBinary *bin,
         return 0;
 
     if (size > 0) {
+        byte *bp;
 
-        if (!alloc_heap(dst_env, size))
-            return 0;
+        if (is_internal_pid(dst_env->proc->common.id)) {
+            flush_env(dst_env);
+            erts_factory_proc_prealloc_init(&factory, dst_env->proc, size);
+            cache_env(dst_env);
+        } else {
 
-        erts_factory_heap_frag_init(&factory, dst_env->heap_frag);
-        *term = erts_decode_ext(&factory, &bin->data);
+            /* this is guaranteed to create a heap fragment */
+            if (!alloc_heap(dst_env, size))
+                return 0;
+
+            erts_factory_heap_frag_init(&factory, dst_env->heap_frag);
+        }
+
+        bp = bin->data;
+        *term = erts_decode_ext(&factory, &bp);
 
         if (is_non_value(*term)) {
             return 0;
@@ -1461,7 +1486,7 @@ enif_cpu_time(ErlNifEnv *env)
 }
 
 ERL_NIF_TERM
-enif_unique_integer(ErlNifEnv *env, int properties)
+enif_make_unique_integer(ErlNifEnv *env, ErlNifUniqueInteger properties)
 {
     int monotonic = properties & ERL_NIF_UNIQUE_MONOTONIC;
     int positive = properties & ERL_NIF_UNIQUE_POSITIVE;
