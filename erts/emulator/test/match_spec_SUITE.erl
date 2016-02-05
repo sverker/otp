@@ -24,7 +24,7 @@
 	 init_per_group/2,end_per_group/2, not_run/1]).
 -export([test_1/1, test_2/1, test_3/1, bad_match_spec_bin/1,
 	 trace_control_word/1, silent/1, silent_no_ms/1, silent_test/1,
-	 ms_trace2/1, ms_trace3/1, boxed_and_small/1,
+	 ms_trace2/1, ms_trace3/1, ms_trace_dead/1, boxed_and_small/1,
 	 destructive_in_test_bif/1, guard_exceptions/1,
 	 empty_list/1,
 	 unary_plus/1, unary_minus/1, moving_labels/1]).
@@ -59,7 +59,7 @@ all() ->
 	false ->
 	    [test_1, test_2, test_3, bad_match_spec_bin,
 	     trace_control_word, silent, silent_no_ms, silent_test, ms_trace2,
-	     ms_trace3, boxed_and_small, destructive_in_test_bif,
+	     ms_trace3, ms_trace_dead, boxed_and_small, destructive_in_test_bif,
 	     guard_exceptions, unary_plus, unary_minus, fpe,
 	     moving_labels,
 	     faulty_seq_trace,
@@ -699,7 +699,35 @@ ms_trace3(Config) when is_list(Config) ->
 	    end),
     ok.
 
-
+ms_trace_dead(doc) ->
+    ["Test that a dead tracer is removed using ms"];
+ms_trace_dead(suite) -> [];
+ms_trace_dead(Config) when is_list(Config) ->
+    Self = self(),
+    TFun = fun F() -> receive M -> Self ! M, F() end end,
+    {Tracer, MRef} = spawn_monitor(TFun),
+    MetaTracer = spawn_link(TFun),
+    erlang:trace_pattern({?MODULE, f1, '_'},
+                         [{'_',[],[{trace,[],
+                                    [call,{const,{tracer,Tracer}}]}]}],
+                         [{meta, MetaTracer}]),
+    erlang:trace_pattern({?MODULE, f2, '_'}, []),
+    ?MODULE:f2(1,2),
+    ?MODULE:f1(1),
+    {tracer,Tracer} = erlang:trace_info(self(), tracer),
+    {tracer,[call]} = erlang:trace_info(self(), flags),
+    ?MODULE:f2(2,3),
+    receive {trace, Self, call, {?MODULE, f2, _}} -> ok end,
+    exit(Tracer, stop),
+    receive {'DOWN',MRef,_,_,_} -> ok end,
+    ?MODULE:f1(2),
+    {tracer,[]} = erlang:trace_info(self(), tracer),
+    ?MODULE:f2(3,4),
+    TRef = erlang:trace_delivered(all),
+    receive {trace_delivered, _, TRef} -> ok end,
+    receive {trace_ts, Self, call, {?MODULE, f1, _}, _} -> ok end,
+    receive {trace_ts, Self, call, {?MODULE, f1, _}, _} -> ok end,
+    receive M -> ct:fail({unexpected, M}) after 10 -> ok end.
 
 destructive_in_test_bif(doc) ->
     ["Test that destructive operations in test bif does not really happen"];
