@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2016. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 
@@ -25,7 +26,7 @@
 	 match_bin/1,
 	 string_plusplus/1,
 	 pattern_expr/1,
-         guard_3/1, guard_4/1,
+         guard_3/1, guard_4/1, guard_5/1,
          lc/1,
          simple_cases/1,
          unary_plus/1,
@@ -38,10 +39,13 @@
 	 otp_7550/1,
          otp_8133/1,
          otp_10622/1,
+         otp_13228/1,
          funs/1,
 	 try_catch/1,
 	 eval_expr_5/1,
-	 zero_width/1]).
+	 zero_width/1,
+         eep37/1,
+         eep43/1]).
 
 %%
 %% Define to run outside of test server
@@ -77,10 +81,12 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [guard_1, guard_2, match_pattern, string_plusplus,
-     pattern_expr, match_bin, guard_3, guard_4, lc,
+     pattern_expr, match_bin, guard_3, guard_4, guard_5, lc,
      simple_cases, unary_plus, apply_atom, otp_5269,
      otp_6539, otp_6543, otp_6787, otp_6977, otp_7550,
-     otp_8133, otp_10622, funs, try_catch, eval_expr_5, zero_width].
+     otp_8133, otp_10622, otp_13228,
+     funs, try_catch, eval_expr_5, zero_width,
+     eep37, eep43].
 
 groups() -> 
     [].
@@ -245,6 +251,20 @@ guard_4(Config) when is_list(Config) ->
                 false),
     ok.
 
+guard_5(doc) ->
+    ["Guards with erlang:'=='/2"];
+guard_5(suite) ->
+    [];
+guard_5(Config) when is_list(Config) ->
+    {ok,Tokens ,_} =
+	erl_scan:string("case 1 of A when erlang:'=='(A, 1) -> true end."),
+    {ok, [Expr]} = erl_parse:parse_exprs(Tokens),
+    true = guard_5_compiled(),
+    {value, true, [{'A',1}]} = erl_eval:expr(Expr, []),
+    ok.
+
+guard_5_compiled() ->
+    case 1 of A when erlang:'=='(A, 1) -> true end.
 
 lc(doc) ->
     ["OTP-4518."];
@@ -992,7 +1012,7 @@ otp_10622(Config) when is_list(Config) ->
           <<0>>),
     check(fun() -> <<"\x{aa}ff"/utf8>> = <<"\x{aa}ff"/utf8>> end,
           "<<\"\\x{aa}ff\"/utf8>> = <<\"\\x{aa}ff\"/utf8>>. ",
-          <<"Â\xaaff">>),
+          <<"Ã‚\xaaff">>),
     %% The same bug as last example:
     check(fun() -> case <<"foo"/utf8>> of
                        <<"foo"/utf8>> -> true
@@ -1023,6 +1043,13 @@ otp_10622(Config) when is_list(Config) ->
           [a]),
 
     ok.
+
+otp_13228(doc) ->
+    ["OTP-13228. ERL-32: non-local function handler bug."];
+otp_13228(_Config) ->
+    LFH = {value, fun(foo, [io_fwrite]) -> worked end},
+    EFH = {value, fun({io, fwrite}, [atom]) -> io_fwrite end},
+    {value, worked, []} = parse_and_run("foo(io:fwrite(atom)).", LFH, EFH).
 
 funs(doc) ->
     ["Simple cases, just to cover some code."];
@@ -1399,6 +1426,87 @@ zero_width(Config) when is_list(Config) ->
 			ok
 		end, "begin {'EXIT',{badarg,_}} = (catch <<not_a_number:0>>), "
 		"ok end.", ok),
+    ok.
+
+eep37(Config) when is_list(Config) ->
+    check(fun () -> (fun _(X) -> X end)(42) end,
+          "(fun _(X) -> X end)(42).",
+          42),
+    check(fun () -> (fun _Id(X) -> X end)(42) end,
+          "(fun _Id(X) -> X end)(42).", 42),
+    check(fun () -> is_function((fun Self() -> Self end)(), 0) end,
+          "is_function((fun Self() -> Self end)(), 0).",
+          true),
+    check(fun () ->
+                  F = fun Fact(N) when N > 0 ->
+                              N * Fact(N - 1);
+                          Fact(0) ->
+                              1
+                       end,
+                  F(6)
+          end,
+          "(fun Fact(N) when N > 0 -> N * Fact(N - 1); Fact(0) -> 1 end)(6).",
+          720),
+    ok.
+
+eep43(Config) when is_list(Config) ->
+    check(fun () -> #{} end, " #{}.", #{}),
+    check(fun () -> #{a => b} end, "#{a => b}.", #{a => b}),
+    check(fun () ->
+                  Map = #{a => b},
+                  {Map#{a := b},Map#{a => c},Map#{d => e}}
+          end,
+          "begin "
+          "    Map = #{a => B=b}, "
+          "    {Map#{a := B},Map#{a => c},Map#{d => e}} "
+          "end.",
+          {#{a => b},#{a => c},#{a => b,d => e}}),
+    check(fun () ->
+                  lists:map(fun (X) -> X#{price := 0} end,
+                            [#{hello => 0, price => nil}])
+          end,
+          "lists:map(fun (X) -> X#{price := 0} end,
+                     [#{hello => 0, price => nil}]).",
+          [#{hello => 0, price => 0}]),
+    check(fun () ->
+		Map = #{ <<33:333>> => "wat" },
+		#{ <<33:333>> := "wat" } = Map
+	  end,
+	  "begin "
+	  "   Map = #{ <<33:333>> => \"wat\" }, "
+	  "   #{ <<33:333>> := \"wat\" } = Map  "
+	  "end.",
+	  #{ <<33:333>> => "wat" }),
+    check(fun () ->
+		K1 = 1,
+		K2 = <<42:301>>,
+		K3 = {3,K2},
+		Map = #{ K1 => 1, K2 => 2, K3 => 3, {2,2} => 4},
+		#{ K1 := 1, K2 := 2, K3 := 3, {2,2} := 4} = Map
+	  end,
+	  "begin "
+	  "    K1 = 1, "
+	  "    K2 = <<42:301>>, "
+	  "    K3 = {3,K2}, "
+	  "    Map = #{ K1 => 1, K2 => 2, K3 => 3, {2,2} => 4}, "
+	  "    #{ K1 := 1, K2 := 2, K3 := 3, {2,2} := 4} = Map "
+	  "end.",
+	  #{ 1 => 1, <<42:301>> => 2, {3,<<42:301>>} => 3, {2,2} => 4}),
+    check(fun () ->
+		X = key,
+		(fun(#{X := value}) -> true end)(#{X => value})
+	  end,
+	  "begin "
+	  "    X = key, "
+	  "    (fun(#{X := value}) -> true end)(#{X => value}) "
+	  "end.",
+	  true),
+
+    error_check("[camembert]#{}.", {badmap,[camembert]}),
+    error_check("[camembert]#{nonexisting:=v}.", {badmap,[camembert]}),
+    error_check("#{} = 1.", {badmatch,1}),
+    error_check("[]#{a=>error(bad)}.", bad),
+    error_check("(#{})#{nonexisting:=value}.", {badkey,nonexisting}),
     ok.
 
 %% Check the string in different contexts: as is; in fun; from compiled code.

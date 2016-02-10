@@ -3,16 +3,17 @@
  *
  * Copyright Ericsson AB 2001-2013. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -32,7 +33,7 @@ void
 erts_sys_init_float(void)
 {
 # ifdef SIGFPE
-    sys_sigset(SIGFPE, SIG_IGN); /* Ignore so we can test for NaN and Inf */
+    sys_signal(SIGFPE, SIG_IGN); /* Ignore so we can test for NaN and Inf */
 # endif
 }
 
@@ -46,7 +47,7 @@ static void erts_init_fp_exception(void)
 {
     /* XXX: the wrappers prevent using a pthread destructor to
        deallocate the key's value; so when/where do we do that? */
-    erts_tsd_key_create(&fpe_key);
+    erts_tsd_key_create(&fpe_key,"fp_exception");
 }
 
 void erts_thread_init_fp_exception(void)
@@ -85,7 +86,7 @@ static void set_current_fp_exception(unsigned long pc)
 
 void erts_fp_check_init_error(volatile unsigned long *fpexnp)
 {
-    char buf[64];
+    char buf[128];
     snprintf(buf, sizeof buf, "ERTS_FP_CHECK_INIT at %p: detected unhandled FPE at %p\r\n",
 	     __builtin_return_address(0), (void*)*fpexnp);
     if (write(2, buf, strlen(buf)) <= 0)
@@ -152,7 +153,7 @@ static int mask_sse2(void)
 
 #if defined(__x86_64__)
 
-static inline int cpu_has_sse2(void) { return 1; }
+static ERTS_INLINE int cpu_has_sse2(void) { return 1; }
 
 #else /* !__x86_64__ */
 
@@ -179,7 +180,7 @@ static unsigned int xor_eflags(unsigned int mask)
     return eax;
 }
 
-static __inline__ unsigned int cpuid_eax(unsigned int op)
+static ERTS_INLINE unsigned int cpuid_eax(unsigned int op)
 {
     unsigned int eax, save_ebx;
 
@@ -195,7 +196,7 @@ static __inline__ unsigned int cpuid_eax(unsigned int op)
     return eax;
 }
 
-static __inline__ unsigned int cpuid_edx(unsigned int op)
+static ERTS_INLINE unsigned int cpuid_edx(unsigned int op)
 {
     unsigned int eax, edx, save_ebx;
  
@@ -215,7 +216,7 @@ static __inline__ unsigned int cpuid_edx(unsigned int op)
  * register on the Intel486 processor to generate alignment
  * faults. This bit cannot be set on the Intel386 processor.
  */
-static __inline__ int is_386(void)
+static ERTS_INLINE int is_386(void)
 {
     return ((xor_eflags(1<<18) >> 18) & 1) == 0;
 }
@@ -223,7 +224,7 @@ static __inline__ int is_386(void)
 /* Newer x86 processors have a CPUID instruction, as indicated by
  * the ID bit (#21) in EFLAGS being modifiable.
  */
-static __inline__ int has_CPUID(void)
+static ERTS_INLINE int has_CPUID(void)
 {
     return (xor_eflags(1<<21) >> 21) & 1;
 }
@@ -667,7 +668,7 @@ static void fpe_sig_handler(int sig)
 
 static void erts_thread_catch_fp_exceptions(void)
 {
-    sys_sigset(SIGFPE, fpe_sig_handler);
+    sys_signal(SIGFPE, fpe_sig_handler);
     unmask_fpe();
 }
 
@@ -832,6 +833,8 @@ sys_chars_to_double(char* buf, double* fp)
     return 0;
 }
 
+#ifdef USE_MATHERR
+
 int
 matherr(struct exception *exc)
 {
@@ -842,3 +845,5 @@ matherr(struct exception *exc)
 #endif
     return 1;
 }
+
+#endif

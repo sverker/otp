@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2006-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -40,7 +41,8 @@ groups() ->
       [{group, primitive_datatypes},
        {group, derived_datatypes}]},
      {validation_tests, [],
-      [{group, xmlSchemaPrimerExamples},
+      [{group, xmlXsdAndExample},
+       {group, xmlSchemaPrimerExamples},
        {group, miscXMLexamples}]},
      {primitive_datatypes, [],
       [string, boolean, decimal, float, double, duration,
@@ -54,6 +56,8 @@ groups() ->
        negativeInteger, long, int, short, byte,
        nonNegativeInteger, unsignedLong, unsignedInt,
        unsignedShort, unsignedByte, positiveInteger]},
+     {xmlXsdAndExample, [],
+      [xml_xsd, xml_lang_attr]},
      {xmlSchemaPrimerExamples, [],
       [po, po1, po2, ipo, ipo_redefine, '4Q99']},
      {miscXMLexamples, [],
@@ -862,6 +866,19 @@ compare_duration(_Config) ->
     ?line indefinite = xmerl_xsd_type:compare_durations("P5M","P153D"),
     ?line lt = xmerl_xsd_type:compare_durations("P5M","P154D").
 
+xml_xsd(suite) -> [];
+xml_xsd(Config) ->
+    DataDir = ?config(data_dir, Config),
+    Options = [{fetch_path, [DataDir]}],
+    {ok, _} = xmerl_xsd:process_schema("xml.xsd", Options).
+
+xml_lang_attr(suite) -> [];
+xml_lang_attr(Config) ->
+    DataDir = ?config(data_dir, Config),
+    {Element, _} = xmerl_scan:file(filename:join([DataDir, "book.xml"])),
+    Options = [{fetch_path, [DataDir]}],
+    {ok, Schema} = xmerl_xsd:process_schema("book.xsd", Options),
+    {Element, _} = xmerl_xsd:validate(Element, Schema).
 
 po(suite) -> [];
 po(Config) ->

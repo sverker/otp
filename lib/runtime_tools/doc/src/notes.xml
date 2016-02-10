@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE chapter SYSTEM "chapter.dtd">
 
 <chapter>
@@ -8,16 +8,17 @@
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -31,6 +32,252 @@
   <p>This document describes the changes made to the Runtime_Tools
     application.</p>
 
+<section><title>Runtime_Tools 1.9.2</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Clarified dbg:stop documentation</p>
+          <p>
+	    Own Id: OTP-13078</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Runtime_Tools 1.9.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The <c>trace_file_drv</c> did not handle <c>EINTR</c>
+	    correct which caused it to fail when the runtime system
+	    received a signal.</p>
+          <p>
+	    Own Id: OTP-12890 Aux Id: seq12885 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Runtime_Tools 1.9</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Change license text from Erlang Public License to Apache
+	    Public License v2</p>
+          <p>
+	    Own Id: OTP-12845</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Runtime_Tools 1.8.16</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The trace process started by <c>dbg</c> would not always
+	    terminate when <c>dbg:stop/0</c> was called.</p>
+          <p>
+	    Own Id: OTP-12517</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Runtime_Tools 1.8.15</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Add <c>nif_version</c> to <c>erlang:system_info/1</c> in
+	    order to get the NIF API version of the runtime system in
+	    a way similar to <c>driver_version</c>.</p>
+          <p>
+	    Own Id: OTP-12298</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Runtime_Tools 1.8.14</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The documentation for the return value of
+	    dbg:{stop,stop_clear} functions are now correct (Thanks
+	    to Luca Favatella)</p>
+          <p>
+	    Own Id: OTP-11603</p>
+        </item>
+        <item>
+          <p>
+	    Fix DTrace build on Illumos. (Thanks to Ryan Zezeski.)</p>
+          <p>
+	    Own Id: OTP-11622</p>
+        </item>
+        <item>
+          <p>
+	    Do not turn off scheduler_wall_time, as it can interfere
+	    with other applications usage.</p>
+          <p>
+	    Own Id: OTP-11693 Aux Id: seq12528 </p>
+        </item>
+        <item>
+          <p>
+	    Application upgrade (appup) files are corrected for the
+	    following applications: </p>
+          <p>
+	    <c>asn1, common_test, compiler, crypto, debugger,
+	    dialyzer, edoc, eldap, erl_docgen, et, eunit, gs, hipe,
+	    inets, observer, odbc, os_mon, otp_mibs, parsetools,
+	    percept, public_key, reltool, runtime_tools, ssh,
+	    syntax_tools, test_server, tools, typer, webtool, wx,
+	    xmerl</c></p>
+          <p>
+	    A new test utility for testing appup files is added to
+	    test_server. This is now used by most applications in
+	    OTP.</p>
+          <p>
+	    (Thanks to Tobias Schlager)</p>
+          <p>
+	    Own Id: OTP-11744</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Allow install path to have unicode characters.</p>
+          <p>
+	    Own Id: OTP-10877</p>
+        </item>
+        <item>
+          <p>
+	    The <c>erts_alloc_config</c> tool has been updated to
+	    produce configurations that better fit todays SMP support
+	    in the VM.</p>
+          <p>
+	    Own Id: OTP-11662</p>
+        </item>
+        <item>
+          <p>
+	    The <seealso
+	    marker="kernel:app"><c>app</c></seealso>-file key
+	    <seealso
+	    marker="kernel:app#runtime_dependencies"><c>runtime_dependencies</c></seealso>
+	    has been introduced.</p>
+          <p>
+	    Runtime dependencies have been added to all app-files in
+	    OTP. Note that these may not be completely correct during
+	    OTP 17, but this is actively being worked on.</p>
+          <p>
+	    The function <seealso
+	    marker="runtime_tools:system_information#sanity_check/0"><c>system_information:sanity_check/0</c></seealso>
+	    will verify all declared runtime dependencies in the
+	    system when called.</p>
+          <p>
+	    Own Id: OTP-11773</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Runtime_Tools 1.8.13</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Observer did not produce correct result when ERTS
+	    internal memory allocators had been disabled.</p>
+          <p>
+	    Own Id: OTP-11520</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Runtime_Tools 1.8.12</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The process trace flag 'silent' is now allowed in call to
+	    dbg:p/2.</p>
+          <p>
+	    Own Id: OTP-11222</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Introduced functionality for inspection of system and
+	    build configuration.</p>
+          <p>
+	    Own Id: OTP-11196</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Runtime_Tools 1.8.11</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Some bugs related to calculation of CPU/scheduler
+	    utilization in observer are corrected.</p>
+          <p>
+	    Current function for a process is accepted to be
+	    'undefined' when running hipe.</p>
+          <p>
+	    Own Id: OTP-10894</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+	    <p>Erlang source files with non-ASCII characters are now
+	    encoded in UTF-8 (instead of latin1).</p>
+          <p>
+	    Own Id: OTP-11041 Aux Id: OTP-10907 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
 <section><title>Runtime_Tools 1.8.10</title>
 
     <section><title>Fixed Bugs and Malfunctions</title>
@@ -38,7 +285,7 @@
         <item>
           <p>
 	    Fix Table Viewer refresh crash on no more existing ets
-	    tables (Thanks to Peti Gömori)</p>
+	    tables (Thanks to Peti GÃ¶mori)</p>
           <p>
 	    Own Id: OTP-10635</p>
         </item>

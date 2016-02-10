@@ -2,18 +2,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1999-2009. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -69,13 +70,8 @@ request(Pid, true, Timeout, Msg, RequestId) ->
     gen_server:cast(Pid, {request, Timeout, Msg, RequestId, self(), MRef}),
     receive
 	{MRef, Reply} ->
-	    erlang:demonitor(MRef),
-            receive 
-                {'DOWN', MRef, _, _, _} -> 
-                    Reply
-            after 0 -> 
-                    Reply
-            end;
+	    erlang:demonitor(MRef, [flush]),
+            Reply;
 	{'DOWN', MRef, _, Pid, _Reason} when is_pid(Pid) ->
             receive
 		%% Clear EXIT message from queue
@@ -117,7 +113,8 @@ stop(Pid) ->
 %%-----------------------------------------------------------------
 init({connect, Host, Port, SocketType, SocketOptions, Parent, Key, NewKey}) ->
     process_flag(trap_exit, true), 
-    case catch orber_socket:connect(SocketType, Host, Port, SocketOptions) of
+    case catch orber_socket:connect(SocketType, Host, Port, 
+				    orber_socket:get_ip_family_opts(Host) ++ SocketOptions) of
 	{'EXCEPTION', _E} ->
 	    ignore;
 	%% We used to reply the below but since this would generate a CRASH REPORT
@@ -444,13 +441,7 @@ collect_fragments(GIOPHdr1, InBuffer, Bytes, Proxy, RequestId, MRef) ->
 	%% the reply and send it to the client.
 	{fragment, #giop_message{byte_order = ByteOrder,
 				 message    = Message} = GIOPHdr2, RequestId, MRef} ->
-	    erlang:demonitor(MRef),
-            receive 
-                {'DOWN', MRef, _, _, _} -> 
-		    ok
-            after 0 -> 
-		    ok
-            end,
+	    erlang:demonitor(MRef, [flush]),
 	    case catch cdr_decode:dec_message_header(null, GIOPHdr2, Message) of
 		{_, #fragment_header{}, FragBody, _, _} ->
 		    %% This buffer is all the fragments concatenated.
@@ -484,13 +475,8 @@ Unable to decode Reply or LocateReply header",[?LINE, NewGIOP, Error], ?DEBUG_LE
 	{MRef, {'EXCEPTION', E}} ->
 	    orber:dbg("[~p] orber_iiop:collect_fragments(~p);", 
 		      [?LINE, E], ?DEBUG_LEVEL),
-	    erlang:demonitor(MRef),
-            receive 
-                {'DOWN', MRef, _, _, _} -> 
-		    corba:raise(E)
-            after 0 -> 
-		    corba:raise(E)
-            end;
+	    erlang:demonitor(MRef, [flush]),
+            corba:raise(E);
 	{'DOWN', MRef, _, Proxy, Reason} when is_pid(Proxy) ->
 	    orber:dbg("[~p] orber_iiop:collect_fragments(~p);~n"
 		      "Monitor generated a DOWN message.", 
@@ -511,13 +497,8 @@ clear_queue(Proxy, RequestId, MRef) ->
 	{MRef, RequestId, cancelled} ->
 	    %% This is the last message that the proxy will send
 	    %% after we've cancelled the request.
-	    erlang:demonitor(MRef),
-	    receive 
-		{'DOWN', MRef, _, _, _} -> 
-		    ok
-	    after 0 -> 
-		    ok
-	    end;
+	    erlang:demonitor(MRef, [flush]),
+	    ok;
 	{'DOWN', MRef, _, Proxy, _Reason} ->
 	    %% The proxy terminated. Clear EXIT message from queue
             receive

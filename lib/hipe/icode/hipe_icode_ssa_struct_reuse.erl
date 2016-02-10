@@ -2,18 +2,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2009. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2015. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -70,9 +71,9 @@
 %% var - maps variables to expression value numbers. These variables are
 %% defined or used by the structure expressions.
 
--record(maps, {var   = gb_trees:empty() :: gb_tree(),
-	       instr = gb_trees:empty() :: gb_tree(),
-	       expr  = gb_trees:empty() :: gb_tree()}).
+-record(maps, {var   = gb_trees:empty() :: gb_trees:tree(),
+	       instr = gb_trees:empty() :: gb_trees:tree(),
+	       expr  = gb_trees:empty() :: gb_trees:tree()}).
 
 maps_var(#maps{var = Out}) -> Out.
 maps_instr(#maps{instr = Out}) -> Out.
@@ -129,8 +130,8 @@ maps_expr_key_enter(Expr, Maps) ->
 	       key	      = none        :: 'none' | tuple(), % illegal_icode_instr()
 	       defs 	      = none        :: 'none' | [icode_var()],
 	       direct_replace = false       :: boolean(),
-	       inserts 	      = ?SETS:new() :: ?SET(_),
-	       use 	      = ?SETS:new() :: ?SET(_)}).
+	       inserts 	      = ?SETS:new() :: ?SETS:?SET(_),
+	       use 	      = ?SETS:new() :: ?SETS:?SET(_)}).
 
 expr_id(#expr{id = Out}) -> Out.
 expr_defs(#expr{defs = Out}) -> Out.
@@ -169,7 +170,7 @@ expr_create(Key, Defs) ->
 %% exprid - a expression value number which is the expression that
 %%          the variable is defined by.
 
--record(varinfo, {use = ?SETS:new() :: ?SET(_),
+-record(varinfo, {use = ?SETS:new() :: ?SETS:?SET(_),
 		  ref = none        :: 'none' | {non_neg_integer(), non_neg_integer()},
 		  elem = none       :: 'none' | {icode_var(), non_neg_integer()},
 		  exprid = none     :: 'none' | non_neg_integer()}).
@@ -211,16 +212,16 @@ varinfo_use_add(#varinfo{use = UseSet} = I, Use) ->
   pred			= none             :: 'none' | [icode_lbl()],
   succ 			= none             :: 'none' | [icode_lbl()],
   code     		= []               :: [tuple()], % [illegal_icode_instr()]
-  phi			= gb_trees:empty() :: gb_tree(),
+  phi			= gb_trees:empty() :: gb_trees:tree(),
   varmap		= []               :: [{icode_var(), icode_var()}],
   pre_loop		= false            :: boolean(),
-  non_struct_defs 	= gb_sets:new()    :: gb_set(),
-  up_expr     		= none             :: 'none' | ?SET(_),
-  killed_expr 		= none             :: 'none' | ?SET(_),
-  sub_inserts		= ?SETS:new()      :: ?SET(_),
-  inserts 		= ?SETS:new()      :: ?SET(_),
-  antic_in    		= none             :: 'none' | ?SET(_),
-  antic_out   		= none             :: 'none' | ?SET(_),
+  non_struct_defs 	= gb_sets:new()    :: gb_sets:set(),
+  up_expr     		= none             :: 'none' | ?SETS:?SET(_),
+  killed_expr 		= none             :: 'none' | ?SETS:?SET(_),
+  sub_inserts		= ?SETS:new()      :: ?SETS:?SET(_),
+  inserts 		= ?SETS:new()      :: ?SETS:?SET(_),
+  antic_in    		= none             :: 'none' | ?SETS:?SET(_),
+  antic_out   		= none             :: 'none' | ?SETS:?SET(_),
   struct_type		= []               :: [struct_type()],
   struct_elems		= []               :: [struct_elems()]}).
 
@@ -313,13 +314,13 @@ node_create(Label, Pred, Succ) ->
 %% tree - the tree of nodes, with labels as keys and node records as values
 
 -record(nodes, {
-  domtree	                   :: hipe_dominators:domTree(),
+  domtree       = none             :: 'none' | hipe_dominators:domTree(),
   labels 	= none             :: 'none' | [icode_lbl()],
   postorder 	= none             :: 'none' | [icode_lbl()],            
   start_label	= none             :: 'none' | icode_lbl(),
   rev_postorder = none             :: 'none' | [icode_lbl()],
   all_expr	= none             :: 'none' | [non_neg_integer()],
-  tree  	= gb_trees:empty() :: gb_tree()}).
+  tree  	= gb_trees:empty() :: gb_trees:tree()}).
 
 nodes_postorder(#nodes{postorder = Out}) -> Out.
 nodes_rev_postorder(#nodes{rev_postorder = Out}) -> Out.
@@ -356,7 +357,7 @@ nodes_create() -> #nodes{}.
 %% del_red_test - flag that is set to true when the reduction test
 %% 	has been inserted is used to move the reduction test.
 
--record(update, {inserted     = gb_trees:empty() :: gb_tree(),
+-record(update, {inserted     = gb_trees:empty() :: gb_trees:tree(),
 		 del_red_test = false            :: boolean()}).
 
 update_inserted_lookup(#update{inserted = Inserted}, ExprId) ->
@@ -389,7 +390,7 @@ update_del_red_test_set(Update) ->
 %%-----------------------------------------------------------------------------
 %% Main function called from the hipe_main module
 
--spec struct_reuse(#cfg{}) -> #cfg{}.
+-spec struct_reuse(cfg()) -> cfg().
 
 struct_reuse(CFG) ->
   %% debug_init_case_count(?SR_INSTR_TYPE),

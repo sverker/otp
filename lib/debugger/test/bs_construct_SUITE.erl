@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2000-2012. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -454,6 +455,8 @@ in_guard(Config) when is_list(Config) ->
     ?line 1 = in_guard(<<16#74ad:16>>, 16#e95, 5),
     ?line 2 = in_guard(<<16#3A,16#F7,"hello">>, 16#3AF7, <<"hello">>),
     ?line 3 = in_guard(<<16#FBCD:14,3.1415/float,3:2>>, 16#FBCD, 3.1415),
+    ?line 3 = in_guard(<<16#FBCD:14,3/float,3:2>>, 16#FBCD, 3),
+    ?line 3 = in_guard(<<16#FBCD:14,(2 bsl 226)/float,3:2>>, 16#FBCD, 2 bsl 226),
     nope = in_guard(<<1>>, 42, b),
     nope = in_guard(<<1>>, a, b),
     nope = in_guard(<<1,2>>, 1, 1),
@@ -645,19 +648,27 @@ make_sub_bin(Bin0) ->
 %% give the same result.
 
 dynamic(Config) when is_list(Config) ->
-    ?line dynamic_1(fun dynamic_big/5),
-    ?line dynamic_1(fun dynamic_little/5),
+    Ps = [spawn_monitor(fun() ->
+				dynamic_1(Fun)
+			end) || Fun <- [fun dynamic_big/5,
+					fun dynamic_little/5]],
+    [receive
+	 {'DOWN',Ref,process,Pid,normal} ->
+	     ok;
+	 {'DOWN',Ref,process,Pid,Exit} ->
+	     ?t:fail({Pid,Exit})
+     end || {Pid,Ref} <- Ps],
     ok.
 
 dynamic_1(Dynamic) ->
-    <<Lpad:128>> = erlang:md5([0]),
-    <<Rpad:128>> = erlang:md5([1]),
-    <<Int:128>> = erlang:md5([2]),
-    8385 = dynamic_2(0, {Int,Lpad,Rpad,Dynamic}, 0).
+    <<Lpad:64,_/binary>> = erlang:md5([0]),
+    <<Rpad:64,_/binary>> = erlang:md5([1]),
+    <<Int:64,_/binary>> = erlang:md5([2]),
+    2145 = dynamic_2(0, {Int,Lpad,Rpad,Dynamic}, 0).
 
-dynamic_2(129, _, Count) -> Count;
+dynamic_2(64+1, _, Count) -> Count;
 dynamic_2(Bef, Data, Count0) ->
-    Count = dynamic_3(Bef, 128-Bef, Data, Count0),
+    Count = dynamic_3(Bef, 64-Bef, Data, Count0),
     dynamic_2(Bef+1, Data, Count).
 
 dynamic_3(_, -1, _, Count) -> Count;
@@ -678,13 +689,13 @@ dynamic_big(Bef, N, Int, Lpad, Rpad) ->
     <<MaskedInt:N>> = NumBin,
 
     %% Construct the binary in two different ways.
-    Bin = id(<<Lpad:Bef,NumBin/bitstring,Rpad:(128-Bef-N)>>),
-    Bin = <<Lpad:Bef,Int:N,Rpad:(128-Bef-N)>>,
+    Bin = id(<<Lpad:Bef,NumBin/bitstring,Rpad:(64-Bef-N)>>),
+    Bin = <<Lpad:Bef,Int:N,Rpad:(64-Bef-N)>>,
 
     %% Further verify the result by matching.
     LpadMasked = Lpad band ((1 bsl Bef) - 1),
-    RpadMasked = Rpad band ((1 bsl (128-Bef-N)) - 1),
-    Rbits = (128-Bef-N),
+    RpadMasked = Rpad band ((1 bsl (64-Bef-N)) - 1),
+    Rbits = (64-Bef-N),
     <<LpadMasked:Bef,MaskedInt:N,RpadMasked:Rbits>> = id(Bin),
     ok.
 
@@ -694,13 +705,13 @@ dynamic_little(Bef, N, Int, Lpad, Rpad) ->
     <<MaskedInt:N/little>> = NumBin,
 
     %% Construct the binary in two different ways.
-    Bin = id(<<Lpad:Bef/little,NumBin/bitstring,Rpad:(128-Bef-N)/little>>),
-    Bin = <<Lpad:Bef/little,Int:N/little,Rpad:(128-Bef-N)/little>>,
+    Bin = id(<<Lpad:Bef/little,NumBin/bitstring,Rpad:(64-Bef-N)/little>>),
+    Bin = <<Lpad:Bef/little,Int:N/little,Rpad:(64-Bef-N)/little>>,
 
     %% Further verify the result by matching.
     LpadMasked = Lpad band ((1 bsl Bef) - 1),
-    RpadMasked = Rpad band ((1 bsl (128-Bef-N)) - 1),
-    Rbits = (128-Bef-N),
+    RpadMasked = Rpad band ((1 bsl (64-Bef-N)) - 1),
+    Rbits = (64-Bef-N),
     <<LpadMasked:Bef/little,MaskedInt:N/little,RpadMasked:Rbits/little>> = id(Bin),
     ok.
 

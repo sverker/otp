@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2009-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -284,6 +285,24 @@ events_to_check(_, 0) ->
 events_to_check(Test, N) ->
     test_events(Test) ++ events_to_check(Test, N-1).
 
+
+%%%!
+%%%! IMPORTANT NOTE ABOUT THE TEST ORDER:
+%%%!
+%%%! When merging testspec terms, CT will group the tests by TestDir and
+%%%! Suite, before term order (in testspec). That means that if tests
+%%%! are ordered like e.g:
+%%%!   {Dir1,Suite11}, {Dir2,Suite21}, {Dir1,Suite12},
+%%%! the execution order after merge (even if no merge takes place),
+%%%! will be:
+%%%!   {Dir1,[Suite11,Suite12]}, {Dir2,Suite21}
+%%%!
+%%%! Also, tests in a tree of included testspecs are always collected
+%%%! and merged in depth-first manner, meaning even if a particular test is
+%%%! on a higher level in the tree, it may be executed later than a test on a
+%%%! lower level.
+%%%!
+
 test_events(start_separate) ->
     [{?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
@@ -300,6 +319,7 @@ test_events(start_separate) ->
      {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{3,2,15}},
@@ -415,6 +435,7 @@ test_events(incl_separate1) ->
 
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{3,2,15}},
@@ -448,6 +469,7 @@ test_events(incl_separate2) ->
      {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{3,2,15}},
@@ -468,6 +490,7 @@ test_events(incl_separate2) ->
      {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{2,2,10}},
@@ -483,6 +506,7 @@ test_events(incl_separate2) ->
      {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{2,2,10}},
@@ -498,6 +522,7 @@ test_events(incl_separate2) ->
      {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{3,2,15}},
@@ -545,6 +570,7 @@ test_events(incl_join1) ->
      {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{4,4,20}},
@@ -614,6 +640,7 @@ test_events(incl_both1) ->
      {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{3,2,15}},
@@ -634,6 +661,7 @@ test_events(incl_both1) ->
      {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{2,2,10}},
@@ -649,6 +677,7 @@ test_events(incl_both1) ->
      {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{2,2,10}},
@@ -692,6 +721,7 @@ test_events(incl_both2) ->
      {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{3,2,15}},
@@ -712,6 +742,7 @@ test_events(incl_both2) ->
      {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]},
+
      {?eh,start_logging,{'DEF','RUNDIR'}},
      {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
      {?eh,start_info,{2,2,10}},
@@ -728,18 +759,890 @@ test_events(incl_both2) ->
      {?eh,test_done,{'DEF','STOP_TIME'}},
      {?eh,stop_logging,[]}];
 
-test_events(incl_both_and_join1) -> [];
-test_events(incl_both_and_join2) -> [];
-test_events(rec_incl_separate1) -> [];
-test_events(rec_incl_separate2) -> [];
-test_events(rec_incl_join1) -> [];
-test_events(rec_incl_join2) -> [];
-test_events(rec_incl_separate_join1) -> [];
-test_events(rec_incl_separate_join2) -> [];
-test_events(rec_incl_join_separate1) -> [];
-test_events(rec_incl_join_separate2) -> [];
+test_events(incl_both_and_join1) -> 
+    [
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{5,3,25}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{3,6,{3,3}}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{5,10,{5,5}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
 
-test_events(_) ->
-    [].
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{3,2,15}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{3,6,{3,3}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
 
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{3,6,{3,3}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
 
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{2,2,10}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(incl_both_and_join2) ->
+    [
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{3,6,{3,3}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{3,2,15}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{3,6,{3,3}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{2,2,10}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(rec_incl_separate1) ->
+    [
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}] 
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{1,1,5}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+     
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{1,1,5}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{1,1,5}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(rec_incl_separate2) ->
+    [
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{1,1,5}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++	
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+	 
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{1,1,5}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{1,1,5}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+	
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(rec_incl_join1) ->
+    [
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{5,5,25}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{5,10,{5,5}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(rec_incl_join2) ->
+    [
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{5,5,25}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{5,10,{5,5}}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(rec_incl_separate_join1) ->
+    [
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{1,1,5}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(rec_incl_separate_join2) ->
+    [
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{1,1,5}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+
+     {?eh,stop_logging,[]},
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{4,4,20}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{4,8,{4,4}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(rec_incl_join_separate1) ->
+    [{?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{2,2,10}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{2,2,10}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}];
+
+test_events(rec_incl_join_separate2) ->
+    [{?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}},
+     {?eh,start_info,{2,2,10}},
+     {?eh,tc_start,{t23_SUITE,init_per_suite}},
+     {?eh,tc_done,{t23_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t23_SUITE,end_per_suite}},
+     {?eh,tc_done,{t23_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}},
+     {?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec2_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]},
+
+     {?eh,start_logging,{'DEF','RUNDIR'}},
+     {?eh,test_start,{'DEF',{'START_TIME','LOGDIR'}}}]
+	++ flat_spec1_events() ++
+    [{?eh,test_done,{'DEF','STOP_TIME'}},
+     {?eh,stop_logging,[]}].
+
+%%%-----------------------------------------------------------------
+
+flat_spec1_events() ->
+    [
+     {?eh,start_info,{2,2,10}},
+     {?eh,tc_start,{t11_SUITE,init_per_suite}},
+     {?eh,tc_done,{t11_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t11_SUITE,ok_tc}},
+     {?eh,tc_done,{t11_SUITE,ok_tc,ok}},
+     {?eh,test_stats,{1,0,{0,0}}},
+     {?eh,tc_start,{t11_SUITE,exit_tc}},
+     {?eh,tc_done,{t11_SUITE,exit_tc,{failed,{error,kaboom}}}},
+     {?eh,test_stats,{1,1,{0,0}}},
+     {?eh,tc_start,{t11_SUITE,to_tc}},
+     {?eh,tc_done,{t11_SUITE,to_tc,{failed,{timetrap_timeout,1}}}},
+     {?eh,test_stats,{1,2,{0,0}}},
+     {?eh,tc_start,{t11_SUITE,autoskip_tc}},
+     {?eh,tc_done,
+      {t11_SUITE,autoskip_tc,{auto_skipped,
+			      {failed,
+			       {t11_SUITE,init_per_testcase,
+				{kaboom,'_'}}}}}},
+     {?eh,test_stats,{1,2,{0,1}}},
+     {?eh,tc_start,{t11_SUITE,userskip_tc}},
+     {?eh,tc_done,{t11_SUITE,userskip_tc,{skipped,"user skipped"}}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t11_SUITE,end_per_suite}},
+     {?eh,tc_done,{t11_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,init_per_suite}},
+     {?eh,tc_done,{t21_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t21_SUITE,ok_tc}},
+     {?eh,tc_done,{t21_SUITE,ok_tc,ok}},
+     {?eh,test_stats,{2,2,{1,1}}},
+     {?eh,tc_start,{t21_SUITE,exit_tc}},
+     {?eh,tc_done,{t21_SUITE,exit_tc,{failed,{error,kaboom}}}},
+     {?eh,test_stats,{2,3,{1,1}}},
+     {?eh,tc_start,{t21_SUITE,to_tc}},
+     {?eh,tc_done,{t21_SUITE,to_tc,{failed,{timetrap_timeout,1}}}},
+     {?eh,test_stats,{2,4,{1,1}}},
+     {?eh,tc_start,{t21_SUITE,autoskip_tc}},
+     {?eh,tc_done,
+      {t21_SUITE,autoskip_tc,{auto_skipped,
+			      {failed,
+			       {t21_SUITE,init_per_testcase,
+				{kaboom,'_'}}}}}},
+     {?eh,test_stats,{2,4,{1,2}}},
+     {?eh,tc_start,{t21_SUITE,userskip_tc}},
+     {?eh,tc_done,{t21_SUITE,userskip_tc,{skipped,"user skipped"}}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t21_SUITE,end_per_suite}},
+     {?eh,tc_done,{t21_SUITE,end_per_suite,ok}}].
+
+flat_spec2_events() ->
+    [
+     {?eh,start_info,{3,2,15}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,ok_tc}},
+     {?eh,tc_done,{t12_SUITE,ok_tc,ok}},
+     {?eh,test_stats,{1,0,{0,0}}},
+     {?eh,tc_start,{t12_SUITE,exit_tc}},
+     {?eh,tc_done,{t12_SUITE,exit_tc,{failed,{error,kaboom}}}},
+     {?eh,test_stats,{1,1,{0,0}}},
+     {?eh,tc_start,{t12_SUITE,to_tc}},
+     {?eh,tc_done,{t12_SUITE,to_tc,{failed,{timetrap_timeout,1}}}},
+     {?eh,test_stats,{1,2,{0,0}}},
+     {?eh,tc_start,{t12_SUITE,autoskip_tc}},
+     {?eh,tc_done,
+      {t12_SUITE,autoskip_tc,{auto_skipped,
+			      {failed,
+			       {t12_SUITE,init_per_testcase,
+				{kaboom,'_'}}}}}},
+     {?eh,test_stats,{1,2,{0,1}}},
+     {?eh,tc_start,{t12_SUITE,userskip_tc}},
+     {?eh,tc_done,{t12_SUITE,userskip_tc,{skipped,"user skipped"}}},
+     {?eh,test_stats,{1,2,{1,1}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,init_per_suite}},
+     {?eh,tc_done,{t12_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t12_SUITE,ok_tc}},
+     {?eh,tc_done,{t12_SUITE,ok_tc,ok}},
+     {?eh,test_stats,{2,2,{1,1}}},
+     {?eh,tc_start,{t12_SUITE,exit_tc}},
+     {?eh,tc_done,{t12_SUITE,exit_tc,{failed,{error,kaboom}}}},
+     {?eh,test_stats,{2,3,{1,1}}},
+     {?eh,tc_start,{t12_SUITE,to_tc}},
+     {?eh,tc_done,{t12_SUITE,to_tc,{failed,{timetrap_timeout,1}}}},
+     {?eh,test_stats,{2,4,{1,1}}},
+     {?eh,tc_start,{t12_SUITE,autoskip_tc}},
+     {?eh,tc_done,
+      {t12_SUITE,autoskip_tc,{auto_skipped,
+			      {failed,
+			       {t12_SUITE,init_per_testcase,
+				{kaboom,'_'}}}}}},
+     {?eh,test_stats,{2,4,{1,2}}},
+     {?eh,tc_start,{t12_SUITE,userskip_tc}},
+     {?eh,tc_done,{t12_SUITE,userskip_tc,{skipped,"user skipped"}}},
+     {?eh,test_stats,{2,4,{2,2}}},
+     {?eh,tc_start,{t12_SUITE,end_per_suite}},
+     {?eh,tc_done,{t12_SUITE,end_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,init_per_suite}},
+     {?eh,tc_done,{t22_SUITE,init_per_suite,ok}},
+     {?eh,tc_start,{t22_SUITE,ok_tc}},
+     {?eh,tc_done,{t22_SUITE,ok_tc,ok}},
+     {?eh,test_stats,{3,4,{2,2}}},
+     {?eh,tc_start,{t22_SUITE,exit_tc}},
+     {?eh,tc_done,{t22_SUITE,exit_tc,{failed,{error,kaboom}}}},
+     {?eh,test_stats,{3,5,{2,2}}},
+     {?eh,tc_start,{t22_SUITE,to_tc}},
+     {?eh,tc_done,{t22_SUITE,to_tc,{failed,{timetrap_timeout,1}}}},
+     {?eh,test_stats,{3,6,{2,2}}},
+     {?eh,tc_start,{t22_SUITE,autoskip_tc}},
+     {?eh,tc_done,
+      {t22_SUITE,autoskip_tc,{auto_skipped,
+			      {failed,
+			       {t22_SUITE,init_per_testcase,
+				{kaboom,'_'}}}}}},
+     {?eh,test_stats,{3,6,{2,3}}},
+     {?eh,tc_start,{t22_SUITE,userskip_tc}},
+     {?eh,tc_done,{t22_SUITE,userskip_tc,{skipped,"user skipped"}}},
+     {?eh,test_stats,{3,6,{3,3}}},
+     {?eh,tc_start,{t22_SUITE,end_per_suite}},
+     {?eh,tc_done,{t22_SUITE,end_per_suite,ok}}].

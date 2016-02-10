@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
-      <year>2007</year><year>2012</year>
+      <year>2007</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -76,9 +77,10 @@
 
   <datatypes>
     <datatype>
-      <name><marker id="type-assoc_id">assoc_id()</marker></name>
+      <name>assoc_id()</name>
       <desc>
-        <p>An opaque term returned in for example #sctp_paddr_change{}
+        <p><marker id="type-assoc_id"/>
+	  An opaque term returned in for example #sctp_paddr_change{}
           that identifies an association for an SCTP socket. The term
           is opaque except for the special value <c>0</c> that has a
           meaning such as "the whole endpoint" or "all future associations".
@@ -97,9 +99,10 @@
       <desc><marker id="type-sctp_socket"></marker></desc>
     </datatype>
     <datatype>
-      <name><marker id="type-sctp_socket">sctp_socket()</marker></name>
+      <name>sctp_socket()</name>
       <desc>
-        <p>Socket identifier returned from <c>open/*</c>.</p>
+        <p><marker id="type-sctp_socket"/>
+	 Socket identifier returned from <c>open/*</c>.</p>
         <marker id="exports"></marker>
       </desc>
     </datatype>
@@ -145,7 +148,7 @@
           <c><anno>Addr</anno></c> and <c><anno>Port</anno></c>. The <c><anno>Timeout</anno></c>,
           is expressed in milliseconds. A socket can be associated with multiple peers.</p>
 
-        <p><b>WARNING:</b>Using a value of <c><anno>Timeout</anno></c> less than
+        <p><em>WARNING:</em>Using a value of <c><anno>Timeout</anno></c> less than
         the maximum time taken by the OS to establish an association (around 4.5 minutes
         if the default values from RFC 4960 are used) can result in
         inconsistent or incorrect return values. This is especially
@@ -169,7 +172,7 @@
         <p>The number of outbound and inbound streams can be set by
           giving an <c>sctp_initmsg</c> option to <c>connect</c>
           as in:</p>
-<pre>  connect(<anno>Socket</anno>, Ip, <anno>Port</anno>,
+<pre>  connect(Socket, Ip, Port>,
         [{sctp_initmsg,#sctp_initmsg{num_ostreams=OutStreams,
                                      max_instreams=MaxInStreams}}])        </pre>
         <p>All options <c><anno>Opt</anno></c> are set on the socket before the
@@ -322,7 +325,7 @@
 	<p>
 	  Branch off an existing association <anno>Assoc</anno>
 	  in a socket <anno>Socket</anno> of type <c>seqpacket</c>
-	  (one-to-may style) into
+	  (one-to-many style) into
 	  a new socket <anno>NewSocket</anno> of type <c>stream</c>
 	  (one-to-one style).
 	</p>
@@ -496,9 +499,11 @@
       orthogonal to the sets of TCP, UDP and generic INET options:
       only those options which are explicitly listed below are allowed
       for SCTP sockets. Options can be set on the socket using
-      <c>gen_sctp:open/1,2</c> or <c>inet:setopts/2</c>,
-      retrieved using <c>inet:getopts/2</c>, and when calling
-      <c>gen_sctp:connect/4,5</c> options can be changed.</p>
+      <seealso marker="#open/1"><c>gen_sctp:open/1,2</c></seealso>
+      or <seealso marker="inet#setopts/2"><c>inet:setopts/2</c></seealso>,
+      retrieved using <seealso marker="inet#getopts/2"><c>inet:getopts/2</c></seealso>,
+      and when calling <seealso marker="#connect/4"><c>gen_sctp:connect/4,5</c></seealso>
+      options can be changed.</p>
     <marker id="option-binary"></marker>
     <marker id="option-list"></marker>
     <taglist>
@@ -507,7 +512,7 @@
         <p>Determines the type of data returned from <c>gen_sctp:recv/1,2</c>.</p>
         <marker id="option-active"></marker>
       </item>
-      <tag><c>{active, true|false|once}</c></tag>
+      <tag><c>{active, true|false|once|N}</c></tag>
       <item>
         <list type="bulleted">
           <item>
@@ -524,10 +529,27 @@
           </item>
           <item>
             <p>If <c>once</c>, only one message is automatically placed
-              in the message queue, after that the mode is automatically
-              re-set to passive. This provides flow control as well as
+              in the message queue, and after that the mode is automatically
+              reset to passive. This provides flow control as well as
               the possibility for the receiver to listen for its incoming
               SCTP data interleaved with other inter-process messages.</p>
+          </item>
+          <item>
+            <p>If <c>active</c> is specified as an integer <c>N</c> in the
+              range -32768 to 32767 (inclusive), then that number is added to
+              the socket's count of the number of data messages to be
+              delivered to the controlling process. If the result of the
+              addition would be negative, the count is set to 0. Once the
+              count reaches 0, either through the delivery of messages or by
+              being explicitly set with <seealso
+              marker="inet#setopts/2">inet:setopts/2</seealso>, the socket's
+              mode is automatically reset to passive (<c>{active,
+              false}</c>) mode. When a socket in this active mode transitions to
+              passive mode, the message <c>{sctp_passive, Socket}</c> is sent
+              to the controlling process to notify it that if it wants to
+              receive more data messages from the socket, it must call
+              <seealso marker="inet#setopts/2">inet:setopts/2</seealso> to set
+              the socket back into an active mode.</p>
           </item>
         </list>
       </item>
@@ -942,7 +964,7 @@
 <pre>  #sctp_paddrinfo{
         assoc_id  = assoc_id(),
         address   = {IP, Port},
-        state     = inactive | active,
+        state     = inactive | active | unconfirmed,
         cwnd      = integer(),
         srtt      = integer(),
         rto       = integer(),

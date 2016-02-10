@@ -1,18 +1,19 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1997-2012. All Rights Reserved.
+ * Copyright Ericsson AB 1997-2013. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -38,16 +39,21 @@
 #ifdef HAVE_SYS_UIO_H
 #include <sys/types.h>
 #include <sys/uio.h>
+#if defined(HAVE_SENDFILE) && (defined(__FreeBSD__) || defined(__DragonFly__))
+/* Need to define __BSD_VISIBLE in order to expose prototype of sendfile */
+#define __BSD_VISIBLE 1
+#include <sys/socket.h>
+#endif
 #endif
 #if defined(HAVE_SENDFILE) && (defined(__linux__) || (defined(__sun) && defined(__SVR4)))
 #include <sys/sendfile.h>
 #endif
 
 #if defined(__APPLE__) && defined(__MACH__) && !defined(__DARWIN__)
-#define DARWIN 1
+#define __DARWIN__ 1
 #endif
 
-#if defined(DARWIN) || defined(HAVE_LINUX_FALLOC_H) || defined(HAVE_POSIX_FALLOCATE)
+#if defined(__DARWIN__) || defined(HAVE_LINUX_FALLOC_H) || defined(HAVE_POSIX_FALLOCATE)
 #include <fcntl.h>
 #endif
 
@@ -99,6 +105,11 @@ check_error(int result, Efile_error *errInfo)
 	return 0;
     }
     return 1;
+}
+
+int
+efile_init() {
+   return 1;
 }
 
 int
@@ -355,7 +366,12 @@ efile_openfile(Efile_error* errInfo,	/* Where to return error codes. */
     int fd;
     int mode;			/* Open mode. */
 
-    if (stat(name, &statbuf) >= 0 && !ISREG(statbuf)) {
+    if (stat(name, &statbuf) < 0) {
+	/* statbuf is undefined: if the caller depends on it,
+	   i.e. invoke_read_file(), fail the call immediately */
+	if (pSize && flags == EFILE_MODE_READ)
+	    return check_error(-1, errInfo);
+    } else if (!ISREG(statbuf)) {
 	/*
 	 * For UNIX only, here is some ugly code to allow
 	 * /dev/null to be opened as a file.
@@ -403,6 +419,15 @@ efile_openfile(Efile_error* errInfo,	/* Where to return error codes. */
 
     if (flags & EFILE_MODE_EXCL) {
 	mode |= O_EXCL;
+    }
+
+    if (flags & EFILE_MODE_SYNC) {
+#ifdef O_SYNC
+	mode |= O_SYNC;
+#else
+	errno = ENOTSUP;
+	return check_error(-1, errInfo);
+#endif
     }
 
     fd = open(name, mode, FILE_MODE);
@@ -456,11 +481,11 @@ efile_fsync(Efile_error *errInfo, /* Where to return error codes. */
 #ifdef NO_FSYNC
   undefined fsync /* XXX: Really? */
 #else
-#if defined(DARWIN) && defined(F_FULLFSYNC)
+#if defined(__DARWIN__) && defined(F_FULLFSYNC)
     return check_error(fcntl(fd, F_FULLFSYNC), errInfo);
 #else
     return check_error(fsync(fd), errInfo);
-#endif /* DARWIN */
+#endif /* __DARWIN__ */
 #endif /* NO_FSYNC */
 }
 
@@ -620,7 +645,8 @@ efile_writev(Efile_error* errInfo,   /* Where to return error codes */
 		    do {
 			w = write(fd, iov[cnt].iov_base, iov[cnt].iov_len);
 		    } while (w < 0 && errno == EINTR);
-		    ASSERT(w <= iov[cnt].iov_len);
+		    ASSERT(w <= iov[cnt].iov_len ||
+			   (w == -1 && errno != EINTR));
 		}
 	    if (w < 0) return check_error(-1, errInfo);
 	    /* Move forward to next buffer to write */
@@ -629,7 +655,7 @@ efile_writev(Efile_error* errInfo,   /* Where to return error codes */
 		    if (w < iov[cnt].iov_len) {
 			/* Adjust the buffer for next write */
 			iov[cnt].iov_len -= w;
-			iov[cnt].iov_base += w;
+			iov[cnt].iov_base = ((char *)iov[cnt].iov_base) + w;
 			w = 0;
 			break;
 		    } else {
@@ -941,7 +967,7 @@ efile_sendfile(Efile_error* errInfo, int in_fd, int out_fd,
 	  retval = len;
       }
     } while (len == SENDFILE_CHUNK_SIZE);
-#elif defined(DARWIN)
+#elif defined(__DARWIN__)
     int retval;
     off_t len;
     do {

@@ -35,8 +35,7 @@
          analyze_function_name/1, analyze_implicit_fun/1,
          analyze_import_attribute/1, analyze_module_attribute/1,
          analyze_record_attribute/1, analyze_record_expr/1,
-         analyze_record_field/1, analyze_rule/1,
-         analyze_wild_attribute/1, annotate_bindings/1,
+         analyze_record_field/1, analyze_wild_attribute/1, annotate_bindings/1,
          annotate_bindings/2, fold/3, fold_subtrees/3, foldl_listlist/3,
          function_name_expansions/1, is_fail_expr/1, limit/2, limit/3,
          map/2, map_subtrees/2, mapfold/3, mapfold_subtrees/3,
@@ -288,7 +287,7 @@ mapfoldl(_, S, []) ->
 %%
 %% @see //stdlib/sets
 
--spec variables(erl_syntax:syntaxTree()) -> set().
+-spec variables(erl_syntax:syntaxTree()) -> sets:set(atom()).
 
 variables(Tree) ->
     variables(Tree, sets:new()).
@@ -343,7 +342,7 @@ default_variable_name(N) ->
 %%
 %% @see new_variable_name/2
 
--spec new_variable_name(set()) -> atom().
+-spec new_variable_name(sets:set(atom())) -> atom().
 
 new_variable_name(S) ->
     new_variable_name(fun default_variable_name/1, S).
@@ -360,16 +359,16 @@ new_variable_name(S) ->
 %% within a reasonably small range relative to the number of elements in
 %% the set.
 %%
-%% This function uses the module `random' to generate new
+%% This function uses the module `rand' to generate new
 %% keys. The seed it uses may be initialized by calling
-%% `random:seed/0' or `random:seed/3' before this
+%% `rand:seed/1' or `rand:seed/2' before this
 %% function is first called.
 %%
 %% @see new_variable_name/1
 %% @see //stdlib/sets
 %% @see //stdlib/random
 
--spec new_variable_name(fun((integer()) -> atom()), set()) -> atom().
+-spec new_variable_name(fun((integer()) -> atom()), sets:set(atom())) -> atom().
 
 new_variable_name(F, S) ->
     R = start_range(S),
@@ -405,7 +404,13 @@ start_range(S) ->
 %% order, but (pseudo-)randomly distributed over the range.
 
 generate(_Key, Range) ->
-    random:uniform(Range).    % works well
+    _ = case rand:export_seed() of
+	    undefined ->
+		rand:seed(exsplus, {753,8,73});
+	    _ ->
+		ok
+	end,
+    rand:uniform(Range).			% works well
 
 
 %% =====================================================================
@@ -416,7 +421,7 @@ generate(_Key, Range) ->
 %% 
 %% @see new_variable_name/1
 
--spec new_variable_names(integer(), set()) -> [atom()].
+-spec new_variable_names(integer(), sets:set(atom())) -> [atom()].
 
 new_variable_names(N, S) ->
     new_variable_names(N, fun default_variable_name/1, S).
@@ -432,7 +437,7 @@ new_variable_names(N, S) ->
 %% 
 %% @see new_variable_name/2
 
--spec new_variable_names(integer(), fun((integer()) -> atom()), set()) ->
+-spec new_variable_names(integer(), fun((integer()) -> atom()), sets:set(atom())) ->
 	[atom()].
 
 new_variable_names(N, F, S) when is_integer(N) ->
@@ -527,8 +532,6 @@ vann(Tree, Env) ->
             vann_try_expr(Tree, Env);
         function ->
             vann_function(Tree, Env);
-        rule ->
-            vann_rule(Tree, Env);
         fun_expr ->
             vann_fun_expr(Tree, Env);
         list_comp ->
@@ -566,15 +569,6 @@ vann_function(Tree, Env) ->
     N = erl_syntax:function_name(Tree),
     {N1, _, _} = vann(N, Env),
     Tree1 = rewrite(Tree, erl_syntax:function(N1, Cs1)),
-    Bound = [],
-    {ann_bindings(Tree1, Env, Bound, Free), Bound, Free}.
-
-vann_rule(Tree, Env) ->
-    Cs = erl_syntax:rule_clauses(Tree),
-    {Cs1, {_, Free}} = vann_clauses(Cs, Env),
-    N = erl_syntax:rule_name(Tree),
-    {N1, _, _} = vann(N, Env),
-    Tree1 = rewrite(Tree, erl_syntax:rule(N1, Cs1)),
     Bound = [],
     {ann_bindings(Tree1, Env, Bound, Free), Bound, Free}.
 
@@ -946,7 +940,7 @@ is_fail_expr(E) ->
 %%
 %%          Forms = syntaxTree() | [syntaxTree()]
 %%          Key = attributes | errors | exports | functions | imports
-%%                | module | records | rules | warnings
+%%                | module | records | warnings
 %%
 %% @doc Analyzes a sequence of "program forms". The given
 %% `Forms' may be a single syntax tree of type
@@ -1047,16 +1041,6 @@ is_fail_expr(E) ->
 %% 	 that each record name occurs at most once in the list. The
 %% 	 order of listing is not defined.</dd>
 %%
-%%     <dt>`{rules, Rules}'</dt>
-%%       <dd><ul>
-%% 	    <li>`Rules = [{atom(), integer()}]'</li>
-%%       </ul>
-%% 	 `Rules' is a list of the names of the rules that are
-%% 	 defined in `Forms' (cf.
-%% 	 `analyze_rule/1'). We do not guarantee that each
-%% 	 name occurs at most once in the list. The order of listing is
-%% 	 not defined.</dd>
-%%
 %%     <dt>`{warnings, Warnings}'</dt>
 %%       <dd><ul>
 %% 	    <li>`Warnings = [term()]'</li>
@@ -1074,12 +1058,11 @@ is_fail_expr(E) ->
 %% @see analyze_import_attribute/1
 %% @see analyze_record_attribute/1
 %% @see analyze_function/1
-%% @see analyze_rule/1
 %% @see erl_syntax:error_marker_info/1
 %% @see erl_syntax:warning_marker_info/1
 
 -type key() :: 'attributes' | 'errors' | 'exports' | 'functions' | 'imports'
-             | 'module' | 'records' | 'rules' | 'warnings'.
+             | 'module' | 'records' | 'warnings'.
 -type info_pair() :: {key(), term()}.
 
 -spec analyze_forms(erl_syntax:forms()) -> [info_pair()].
@@ -1099,8 +1082,6 @@ collect_form(Node, Info) ->
             Info;
         {function, Name} ->
             finfo_add_function(Name, Info);
-        {rule, Name} ->
-            finfo_add_rule(Name, Info);
         {error_marker, Data} ->
             finfo_add_error(Data, Info);
         {warning_marker, Data} ->
@@ -1136,8 +1117,7 @@ collect_attribute(_, {N, V}, Info) ->
 		records        = []   :: [{atom(), [{atom(), field_default()}]}],
 		errors         = []   :: [term()],
 		warnings       = []   :: [term()],
-		functions      = []   :: [{atom(), arity()}],
-		rules          = []   :: [{atom(), arity()}]}).
+		functions      = []   :: [{atom(), arity()}]}).
 
 -type field_default() :: 'none' | erl_syntax:syntaxTree().
 
@@ -1183,9 +1163,6 @@ finfo_add_warning(R, Info) ->
 finfo_add_function(F, Info) ->
     Info#forms{functions = [F | Info#forms.functions]}.
 
-finfo_add_rule(F, Info) ->
-    Info#forms{rules = [F | Info#forms.rules]}.
-
 finfo_to_list(Info) ->
     [{Key, Value}
      || {Key, {value, Value}} <-
@@ -1197,8 +1174,7 @@ finfo_to_list(Info) ->
              {records, list_value(Info#forms.records)},
              {errors, list_value(Info#forms.errors)},
              {warnings, list_value(Info#forms.warnings)},
-             {functions, list_value(Info#forms.functions)},
-             {rules, list_value(Info#forms.rules)}
+             {functions, list_value(Info#forms.functions)}
             ]].
 
 list_value([]) ->
@@ -1229,10 +1205,6 @@ list_value(List) ->
 %%
 %% 	    <dd>where `Info = analyze_function(Node)'.</dd>
 %%
-%%   <dt>`{rule, Info}'</dt>
-%%
-%% 	    <dd>where `Info = analyze_rule(Node)'.</dd>
-%%
 %%   <dt>`{warning_marker, Info}'</dt>
 %%
 %% 	    <dd>where `Info =
@@ -1245,7 +1217,6 @@ list_value(List) ->
 %%
 %% @see analyze_attribute/1
 %% @see analyze_function/1
-%% @see analyze_rule/1
 %% @see erl_syntax:is_form/1
 %% @see erl_syntax:error_marker_info/1
 %% @see erl_syntax:warning_marker_info/1
@@ -1258,8 +1229,6 @@ analyze_form(Node) ->
             {attribute, analyze_attribute(Node)};
         function ->
             {function, analyze_function(Node)};
-        rule ->
-            {rule, analyze_rule(Node)};
         error_marker ->
             {error_marker, erl_syntax:error_marker_info(Node)};
         warning_marker ->
@@ -1357,8 +1326,6 @@ analyze_attribute(file, Node) ->
     analyze_file_attribute(Node);
 analyze_attribute(record, Node) ->
     analyze_record_attribute(Node);
-analyze_attribute(define, _Node) ->
-    define;
 analyze_attribute(spec, _Node) ->
     spec;
 analyze_attribute(_, Node) ->
@@ -1671,7 +1638,7 @@ analyze_record_attribute_tuple(Node) ->
 %%   <dt>`record_expr':</dt>
 %%     <dd>`{atom(), [{atom(), Value}]}'</dd>
 %%   <dt>`record_access':</dt>
-%%     <dd>`{atom(), atom()} | atom()'</dd>
+%%     <dd>`{atom(), atom()}'</dd>
 %%   <dt>`record_index_expr':</dt>
 %%     <dd>`{atom(), atom()}'</dd>
 %% </dl>
@@ -1681,9 +1648,7 @@ analyze_record_attribute_tuple(Node) ->
 %% listed in the order they appear. (See
 %% `analyze_record_field/1' for details on the field
 %% descriptors). For a `record_access' node,
-%% `Info' represents the record name and the field name (or
-%% if the record name is not included, only the field name; this is
-%% allowed only in Mnemosyne-query syntax). For a
+%% `Info' represents the record name and the field name. For a
 %% `record_index_expr' node, `Info' represents the
 %% record name and the name field name.
 %%
@@ -1715,18 +1680,14 @@ analyze_record_expr(Node) ->
 	    F = erl_syntax:record_access_field(Node),
 	    case erl_syntax:type(F) of
 		atom ->
-		    case erl_syntax:record_access_type(Node) of
-			none ->
-			    {record_access, erl_syntax:atom_value(F)};
-			A ->
-			    case erl_syntax:type(A) of
-				atom ->
-				    {record_access,
-				     {erl_syntax:atom_value(A),
-				      erl_syntax:atom_value(F)}};
-				_ ->
-				    throw(syntax_error)
-			    end
+		    A = erl_syntax:record_access_type(Node),
+                    case erl_syntax:type(A) of
+                        atom ->
+                            {record_access,
+                             {erl_syntax:atom_value(A),
+                              erl_syntax:atom_value(F)}};
+                        _ ->
+                            throw(syntax_error)
 		    end;
 		_ ->
 		    throw(syntax_error)
@@ -1837,8 +1798,6 @@ analyze_file_attribute(Node) ->
 %% The evaluation throws `syntax_error' if
 %% `Node' does not represent a well-formed function
 %% definition.
-%%
-%% @see analyze_rule/1
 
 -spec analyze_function(erl_syntax:syntaxTree()) -> {atom(), arity()}.
 
@@ -1850,37 +1809,6 @@ analyze_function(Node) ->
                 atom ->
                     {erl_syntax:atom_value(N),
                      erl_syntax:function_arity(Node)};
-                _ ->
-                    throw(syntax_error)
-            end;
-        _ ->
-            throw(syntax_error)
-    end.
-
-
-%% =====================================================================
-%% @spec analyze_rule(Node::syntaxTree()) -> {atom(), integer()}
-%%
-%% @doc Returns the name and arity of a Mnemosyne rule. The result is a
-%% pair `{Name, A}' if `Node' represents a rule
-%% "`Name(<em>P_1</em>, ..., <em>P_A</em>) :- ...'".
-%%
-%% The evaluation throws `syntax_error' if
-%% `Node' does not represent a well-formed Mnemosyne
-%% rule.
-%%
-%% @see analyze_function/1
-
--spec analyze_rule(erl_syntax:syntaxTree()) -> {atom(), arity()}.
-
-analyze_rule(Node) ->
-    case erl_syntax:type(Node) of
-        rule ->
-            N = erl_syntax:rule_name(Node),
-            case erl_syntax:type(N) of
-                atom ->
-                    {erl_syntax:atom_value(N),
-                     erl_syntax:rule_arity(Node)};
                 _ ->
                     throw(syntax_error)
             end;

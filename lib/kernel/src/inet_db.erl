@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -632,20 +633,22 @@ make_hostent(Name, Datas, Aliases, Type) ->
 
 hostent_by_domain(Domain, Type) ->
     ?dbg("hostent_by_domain: ~p~n", [Domain]),
-    hostent_by_domain(stripdot(Domain), [], Type).
+    hostent_by_domain(stripdot(Domain), [], [], Type).
 
-hostent_by_domain(Domain, Aliases, Type) ->
+hostent_by_domain(Domain, Aliases, LAliases, Type) ->
     case lookup_type(Domain, Type) of
 	[] ->
 	    case lookup_cname(Domain) of
 		[] ->  
 		    {error, nxdomain};
 		[CName | _] ->
-		    case lists:member(CName, [Domain | Aliases]) of
+		    LDomain = tolower(Domain),
+		    case lists:member(CName, [LDomain | LAliases]) of
                         true -> 
 			    {error, nxdomain};
                         false ->
-			    hostent_by_domain(CName, [Domain | Aliases], Type)
+			    hostent_by_domain(CName, [Domain | Aliases],
+					      [LDomain | LAliases], Type)
 		    end
 	    end;
 	Addrs ->
@@ -670,24 +673,26 @@ lookup_rr(Domain, Class, Type) ->
 %% match data field directly and cache RRs.
 %%
 res_hostent_by_domain(Domain, Type, Rec) ->
-    res_cache_answer(Rec),
-    RRs = Rec#dns_rec.anlist,
+    RRs = lists:map(fun lower_rr/1, Rec#dns_rec.anlist),
+    res_cache_answer(Rec#dns_rec{anlist = RRs}),
     ?dbg("res_hostent_by_domain: ~p - ~p~n", [Domain, RRs]),
-    res_hostent_by_domain(stripdot(Domain), [], Type, RRs).
+    res_hostent_by_domain(stripdot(Domain), [], [], Type, RRs).
 
-res_hostent_by_domain(Domain, Aliases, Type, RRs) ->
-    case res_lookup_type(Domain, Type, RRs) of
+res_hostent_by_domain(Domain, Aliases, LAliases, Type, RRs) ->
+    LDomain = tolower(Domain),
+    case res_lookup_type(LDomain, Type, RRs) of
 	[] ->
-	    case res_lookup_type(Domain, ?S_CNAME, RRs) of
+	    case res_lookup_type(LDomain, ?S_CNAME, RRs) of
 		[] ->  
 		    {error, nxdomain};
 		[CName | _] ->
-		    case lists:member(CName, [Domain | Aliases]) of
+		    case lists:member(tolower(CName), [LDomain | LAliases]) of
 			true -> 
 			    {error, nxdomain};
 			false ->
 			    res_hostent_by_domain(CName, [Domain | Aliases],
-						  Type, RRs)
+						  [LDomain | LAliases], Type,
+						  RRs)
 		    end
 	    end;
 	Addrs ->
@@ -720,7 +725,8 @@ gethostbyaddr(IP) ->
 %%
 res_gethostbyaddr(IP, Rec) ->
     {ok, {IP1, HType, HLen}} = dnt(IP),
-    res_cache_answer(Rec),
+    RRs = lists:map(fun lower_rr/1, Rec#dns_rec.anlist),
+    res_cache_answer(Rec#dns_rec{anlist = RRs}),
     ent_gethostbyaddr(Rec#dns_rec.anlist, IP1, HType, HLen).
 
 ent_gethostbyaddr(RRs, IP, AddrType, Length) ->
@@ -845,7 +851,8 @@ init([]) ->
     process_flag(trap_exit, true),
     Db = ets:new(inet_db, [public, named_table]),
     reset_db(Db),
-    Cache = ets:new(inet_cache, [public, bag, {keypos,2}, named_table]),
+    CacheOpts = [public, bag, {keypos,#dns_rr.domain}, named_table],
+    Cache = ets:new(inet_cache, CacheOpts),
     BynameOpts = [protected, bag, named_table, {keypos,1}],
     ByaddrOpts = [protected, bag, named_table, {keypos,3}],
     HostsByname = ets:new(inet_hosts_byname, BynameOpts),
@@ -901,15 +908,21 @@ reset_db(Db) ->
 handle_call(Request, From, #state{db=Db}=State) ->
     case Request of
 	{load_hosts_file,IPNmAs} when is_list(IPNmAs) ->
-	    NIPs = lists:flatten([ [{N,if tuple_size(IP) =:= 4 -> inet;
-					  tuple_size(IP) =:= 8 -> inet6
-				       end,IP} || N <- [Nm|As]]
-				   || {IP,Nm,As} <- IPNmAs]),
+	    NIPs =
+		lists:flatten(
+		  [ [{N,
+		      if tuple_size(IP) =:= 4 -> inet;
+			 tuple_size(IP) =:= 8 -> inet6
+		      end,IP} || N <- [Nm|As]]
+		    || {IP,Nm,As} <- IPNmAs]),
 	    Byname = State#state.hosts_file_byname,
 	    Byaddr = State#state.hosts_file_byaddr,
 	    ets:delete_all_objects(Byname),
 	    ets:delete_all_objects(Byaddr),
-	    ets:insert(Byname, NIPs),
+	    %% Byname has lowercased names while Byaddr keep the name casing.
+	    %% This is to be able to reconstruct the original
+	    %% /etc/hosts entry.
+	    ets:insert(Byname, [{tolower(N),Type,IP} || {N,Type,IP} <- NIPs]),
 	    ets:insert(Byaddr, NIPs),
 	    {reply, ok, State};
 
@@ -938,16 +951,14 @@ handle_call(Request, From, #state{db=Db}=State) ->
 	    {reply, ok, State};
 
 	{add_rr, RR} when is_record(RR, dns_rr) ->
-	    RR1 = lower_rr(RR),
-	    ?dbg("add_rr: ~p~n", [RR1]),
-	    do_add_rr(RR1, Db, State),
+	    ?dbg("add_rr: ~p~n", [RR]),
+	    do_add_rr(RR, Db, State),
 	    {reply, ok, State};
 
 	{del_rr, RR} when is_record(RR, dns_rr) ->
-	    RR1 = lower_rr(RR),
 	    %% note. del_rr will handle wildcards !!!
 	    Cache = State#state.cache,
-	    ets:match_delete(Cache, RR1),
+	    ets:match_delete(Cache, RR),
 	    {reply, ok, State};
 
 	{lookup_rr, Domain, Class, Type} ->
@@ -1112,7 +1123,7 @@ handle_call(Request, From, #state{db=Db}=State) ->
 	{set_cache_refresh, Time} when is_integer(Time), Time > 0 ->
 	    Time1 = ((Time+999) div 1000)*1000, %% round up
 	    ets:insert(Db, {cache_refresh_interval, Time1}),
-	    stop_timer(State#state.cache_timer),
+	    _ = stop_timer(State#state.cache_timer),
 	    {reply, ok, State#state{cache_timer = init_timer()}};
 
 	clear_hosts ->
@@ -1126,7 +1137,7 @@ handle_call(Request, From, #state{db=Db}=State) ->
 
 	reset ->
 	    reset_db(Db),
-	    stop_timer(State#state.cache_timer),
+	    _ = stop_timer(State#state.cache_timer),
 	    {reply, ok, State#state{cache_timer = init_timer()}};
 
 	{add_rc_list, List} ->
@@ -1176,7 +1187,7 @@ handle_info(_Info, State) ->
 -spec terminate(term(), state()) -> 'ok'.
 
 terminate(_Reason, State) ->
-    stop_timer(State#state.cache_timer),
+    _ = stop_timer(State#state.cache_timer),
     ok.
 
 %%%----------------------------------------------------------------------
@@ -1225,15 +1236,19 @@ handle_set_file(ParseFun, Bin, From, State) ->
 	    handle_rc_list(Opts, From, State)
     end.
 
+%% Byname has lowercased names while Byaddr keep the name casing.
+%% This is to be able to reconstruct the original /etc/hosts entry.
+
 do_add_host(Byname, Byaddr, Names, Type, IP) ->
     do_del_host(Byname, Byaddr, IP),
-    NIPs = [{tolower(N),Type,IP} || N <- Names],
-    ets:insert(Byname, NIPs),
-    ets:insert(Byaddr, NIPs),
+    ets:insert(Byname, [{tolower(N),Type,IP} || N <- Names]),
+    ets:insert(Byaddr, [{N,Type,IP} || N <- Names]),
     ok.
 
 do_del_host(Byname, Byaddr, IP) ->
-    [ets:delete_object(Byname, NIP) || NIP <- ets:lookup(Byaddr, IP)],
+    _ =
+	[ets:delete_object(Byname, {tolower(Name),Type,Addr}) ||
+	    {Name,Type,Addr} <- ets:lookup(Byaddr, IP)],
     ets:delete(Byaddr, IP),
     ok.
 
@@ -1363,8 +1378,7 @@ cache_rr(_Db, Cache, RR) ->
     ets:insert(Cache, RR).
 
 times() ->
-    {Mega,Secs,_} = erlang:now(),
-    Mega*1000000 + Secs.
+    erlang:convert_time_unit(erlang:monotonic_time() - erlang:system_info(start_time),native,seconds).
 
 %% lookup and remove old entries
 
@@ -1391,25 +1405,27 @@ filter_rr([RR | RRs], Time) ->
     [RR | filter_rr(RRs, Time)];
 filter_rr([], _Time) ->  [].
 
+%% Lower case the domain name before storage.
+%%
+lower_rr(#dns_rr{domain=Domain}=RR) when is_list(Domain) ->
+    RR#dns_rr { domain = tolower(Domain) };
+lower_rr(RR) -> RR.
 
 %%
-%% Lower case the domain name before storage 
+%% Case fold upper-case to lower-case according to RFC 4343
+%% "Domain Name System (DNS) Case Insensitivity Clarification".
 %%
-lower_rr(RR) ->
-    Dn = RR#dns_rr.domain,
-    if is_list(Dn) ->
-	    RR#dns_rr { domain = tolower(Dn) };
-       true -> RR
-    end.
-
-%%
-%% Map upper-case to lower-case
 %% NOTE: this code is in kernel and we don't want to relay
-%% to much on stdlib
+%% to much on stdlib. Furthermore string:to_lower/1
+%% does not follow RFC 4343.
 %%
 tolower([]) -> [];
-tolower([C|Cs]) when C >= $A, C =< $Z -> [(C-$A)+$a|tolower(Cs)];
-tolower([C|Cs]) -> [C|tolower(Cs)].
+tolower([C|Cs]) when is_integer(C) ->
+    if  C >= $A, C =< $Z ->
+	    [(C-$A)+$a|tolower(Cs)];
+	true ->
+	    [C|tolower(Cs)]
+    end.
 
 dn_ip6_int(A,B,C,D,E,F,G,H) ->
     dnib(H) ++ dnib(G) ++ dnib(F) ++ dnib(E) ++ 

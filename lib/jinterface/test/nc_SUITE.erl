@@ -1,19 +1,19 @@
-%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %%
 %% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -105,12 +105,13 @@ end_per_suite(Config) ->
 init_per_testcase(Case, Config) ->
     T = case atom_to_list(Case) of
 	    "unicode"++_ -> 240;
-	    _ -> 30
+	    _ -> 120
 	end,
     WatchDog = test_server:timetrap(test_server:seconds(T)),
     [{watchdog, WatchDog}| Config].
 
 end_per_testcase(_Case, Config) ->
+    jitu:kill_all_jnodes(),
     WatchDog = ?config(watchdog, Config),
     test_server:timetrap_cancel(WatchDog).
 
@@ -214,6 +215,7 @@ decompress_roundtrip(Config) when is_list(Config) ->
 	 0.0,
 	 math:sqrt(2),
 	 <<1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,31:5>>,
+	 "{}",
 	 RandomBin1k,
 	 RandomBin1M,
 	 RandomBin10M,
@@ -243,6 +245,7 @@ compress_roundtrip(Config) when is_list(Config) ->
 	 0.0,
 	 math:sqrt(2),
 	 <<1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,31:5>>,
+	 "{}",
 	 RandomBin1k,
 	 RandomBin1M,
 	 RandomBin10M,
@@ -695,15 +698,18 @@ run_server(Server, Config, Action, ExtraArgs) ->
     true = register(Name, self()),
     JName = make_name(),
     spawn_link(fun () ->
+		       %% Setting max memory to 256. This is due to
+		       %% echo_server sometimes failing with
+		       %% OutOfMemoryException one some test machines.
 		       ok = jitu:java(?config(java, Config),
 				      ?config(data_dir, Config),
 				      atom_to_list(Server),
 				      [JName,
 				       erlang:get_cookie(),
 				       node(),
-				       Name]++ExtraArgs
-				     ),
-						%,"-DOtpConnection.trace=3"),
+				       Name]++ExtraArgs,
+				      " -Xmx256m"),
+				      %% " -Xmx256m -DOtpConnection.trace=3"),
 		       Name ! {done, JName}
 	       end),
     receive

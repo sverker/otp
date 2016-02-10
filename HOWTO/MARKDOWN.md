@@ -223,8 +223,11 @@ places. Appropriate attributes to the `X` tag will also be generated.
     \%CopyrightBegin\% and \%CopyrightEnd\% "tags" will be removed from
     the output.
 
-*   All occurrences of \%OTP-REL% will be replaced by current release number
-    (e.g. R14A).
+*   All occurrences of \%OTP-REL% will be replaced by current OTP release number
+    (e.g. 17).
+
+*   All occurrences of \%OTP-VSN% will be replaced by current OTP version
+    (e.g. 17.0).
 
 *   All occurrences of \%ERTS-VSN% will be replaced by current ERTS version
     (e.g. 5.8).
@@ -243,16 +246,17 @@ Copyright and License
 
 Copyright Ericsson AB 2010-2013. All Rights Reserved.
 
-The contents of this file are subject to the Erlang Public License,
-Version 1.1, (the "License"); you may not use this file except in
-compliance with the License. You should have received a copy of the
-Erlang Public License along with this software. If not, it can be
-retrieved online at http://www.erlang.org/.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+ 
+    http://www.apache.org/licenses/LICENSE-2.0
 
-Software distributed under the License is distributed on an "AS IS"
-basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-the License for the specific language governing rights and limitations
-under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
 %CopyrightEnd%
 

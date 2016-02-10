@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html">wxRadioBox</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html">wxRadioBox</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxControl}
 %% <br />{@link wxWindow}
@@ -88,7 +89,7 @@ new(Parent,Id,Title,Pos={PosX,PosY},Size={SizeW,SizeH},Choices)
  when is_record(Parent, wx_ref),is_integer(Id),is_list(Title),is_integer(PosX),is_integer(PosY),is_integer(SizeW),is_integer(SizeH),is_list(Choices) ->
   new(Parent,Id,Title,Pos,Size,Choices, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxwxradiobox">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxwxradiobox">external documentation</a>.
 -spec new(Parent, Id, Title, Pos, Size, Choices, [Option]) -> wxRadioBox() when
 	Parent::wxWindow:wxWindow(), Id::integer(), Title::unicode:chardata(), Pos::{X::integer(), Y::integer()}, Size::{W::integer(), H::integer()}, Choices::[unicode:chardata()],
 	Option :: {majorDim, integer()}
@@ -116,7 +117,7 @@ create(This,Parent,Id,Title,Pos={PosX,PosY},Size={SizeW,SizeH},Choices)
  when is_record(This, wx_ref),is_record(Parent, wx_ref),is_integer(Id),is_list(Title),is_integer(PosX),is_integer(PosY),is_integer(SizeW),is_integer(SizeH),is_list(Choices) ->
   create(This,Parent,Id,Title,Pos,Size,Choices, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxcreate">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxcreate">external documentation</a>.
 -spec create(This, Parent, Id, Title, Pos, Size, Choices, [Option]) -> boolean() when
 	This::wxRadioBox(), Parent::wxWindow:wxWindow(), Id::integer(), Title::unicode:chardata(), Pos::{X::integer(), Y::integer()}, Size::{W::integer(), H::integer()}, Choices::[unicode:chardata()],
 	Option :: {majorDim, integer()}
@@ -145,7 +146,7 @@ enable(This)
  when is_record(This, wx_ref) ->
   enable(This, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxenable">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxenable">external documentation</a>.
 %% <br /> Also:<br />
 %% enable(This, [Option]) -> boolean() when<br />
 %% 	This::wxRadioBox(),<br />
@@ -169,7 +170,7 @@ enable(#wx_ref{type=ThisT,ref=ThisRef}, Options)
   wxe_util:call(?wxRadioBox_Enable_1,
   <<ThisRef:32/?UI, 0:32,BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxenable">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxenable">external documentation</a>.
 -spec enable(This, N, [Option]) -> boolean() when
 	This::wxRadioBox(), N::integer(),
 	Option :: {enable, boolean()}.
@@ -182,7 +183,7 @@ enable(#wx_ref{type=ThisT,ref=ThisRef},N, Options)
   wxe_util:call(?wxRadioBox_Enable_2,
   <<ThisRef:32/?UI,N:32/?UI, BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxgetselection">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxgetselection">external documentation</a>.
 -spec getSelection(This) -> integer() when
 	This::wxRadioBox().
 getSelection(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -190,7 +191,7 @@ getSelection(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxRadioBox_GetSelection,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxgetstring">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxgetstring">external documentation</a>.
 -spec getString(This, N) -> unicode:charlist() when
 	This::wxRadioBox(), N::integer().
 getString(#wx_ref{type=ThisT,ref=ThisRef},N)
@@ -199,7 +200,7 @@ getString(#wx_ref{type=ThisT,ref=ThisRef},N)
   wxe_util:call(?wxRadioBox_GetString,
   <<ThisRef:32/?UI,N:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxsetselection">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxsetselection">external documentation</a>.
 -spec setSelection(This, N) -> ok when
 	This::wxRadioBox(), N::integer().
 setSelection(#wx_ref{type=ThisT,ref=ThisRef},N)
@@ -216,7 +217,7 @@ show(This)
  when is_record(This, wx_ref) ->
   show(This, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxshow">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxshow">external documentation</a>.
 %% <br /> Also:<br />
 %% show(This, [Option]) -> boolean() when<br />
 %% 	This::wxRadioBox(),<br />
@@ -240,7 +241,7 @@ show(#wx_ref{type=ThisT,ref=ThisRef}, Options)
   wxe_util:call(?wxRadioBox_Show_1,
   <<ThisRef:32/?UI, 0:32,BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxshow">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxshow">external documentation</a>.
 -spec show(This, N, [Option]) -> boolean() when
 	This::wxRadioBox(), N::integer(),
 	Option :: {show, boolean()}.
@@ -253,7 +254,7 @@ show(#wx_ref{type=ThisT,ref=ThisRef},N, Options)
   wxe_util:call(?wxRadioBox_Show_2,
   <<ThisRef:32/?UI,N:32/?UI, BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxgetcolumncount">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxgetcolumncount">external documentation</a>.
 -spec getColumnCount(This) -> integer() when
 	This::wxRadioBox().
 getColumnCount(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -261,7 +262,7 @@ getColumnCount(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxRadioBox_GetColumnCount,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxgetitemhelptext">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxgetitemhelptext">external documentation</a>.
 -spec getItemHelpText(This, N) -> unicode:charlist() when
 	This::wxRadioBox(), N::integer().
 getItemHelpText(#wx_ref{type=ThisT,ref=ThisRef},N)
@@ -270,7 +271,7 @@ getItemHelpText(#wx_ref{type=ThisT,ref=ThisRef},N)
   wxe_util:call(?wxRadioBox_GetItemHelpText,
   <<ThisRef:32/?UI,N:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxgetitemtooltip">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxgetitemtooltip">external documentation</a>.
 -spec getItemToolTip(This, Item) -> wxToolTip:wxToolTip() when
 	This::wxRadioBox(), Item::integer().
 getItemToolTip(#wx_ref{type=ThisT,ref=ThisRef},Item)
@@ -279,7 +280,7 @@ getItemToolTip(#wx_ref{type=ThisT,ref=ThisRef},Item)
   wxe_util:call(?wxRadioBox_GetItemToolTip,
   <<ThisRef:32/?UI,Item:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxgetitemfrompoint">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxgetitemfrompoint">external documentation</a>.
 -spec getItemFromPoint(This, Pt) -> integer() when
 	This::wxRadioBox(), Pt::{X::integer(), Y::integer()}.
 getItemFromPoint(#wx_ref{type=ThisT,ref=ThisRef},{PtX,PtY})
@@ -288,7 +289,7 @@ getItemFromPoint(#wx_ref{type=ThisT,ref=ThisRef},{PtX,PtY})
   wxe_util:call(?wxRadioBox_GetItemFromPoint,
   <<ThisRef:32/?UI,PtX:32/?UI,PtY:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxgetrowcount">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxgetrowcount">external documentation</a>.
 -spec getRowCount(This) -> integer() when
 	This::wxRadioBox().
 getRowCount(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -296,7 +297,7 @@ getRowCount(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxRadioBox_GetRowCount,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxisitemenabled">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxisitemenabled">external documentation</a>.
 -spec isItemEnabled(This, N) -> boolean() when
 	This::wxRadioBox(), N::integer().
 isItemEnabled(#wx_ref{type=ThisT,ref=ThisRef},N)
@@ -305,7 +306,7 @@ isItemEnabled(#wx_ref{type=ThisT,ref=ThisRef},N)
   wxe_util:call(?wxRadioBox_IsItemEnabled,
   <<ThisRef:32/?UI,N:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxisitemshown">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxisitemshown">external documentation</a>.
 -spec isItemShown(This, N) -> boolean() when
 	This::wxRadioBox(), N::integer().
 isItemShown(#wx_ref{type=ThisT,ref=ThisRef},N)
@@ -314,7 +315,7 @@ isItemShown(#wx_ref{type=ThisT,ref=ThisRef},N)
   wxe_util:call(?wxRadioBox_IsItemShown,
   <<ThisRef:32/?UI,N:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxsetitemhelptext">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxsetitemhelptext">external documentation</a>.
 -spec setItemHelpText(This, N, HelpText) -> ok when
 	This::wxRadioBox(), N::integer(), HelpText::unicode:chardata().
 setItemHelpText(#wx_ref{type=ThisT,ref=ThisRef},N,HelpText)
@@ -324,7 +325,7 @@ setItemHelpText(#wx_ref{type=ThisT,ref=ThisRef},N,HelpText)
   wxe_util:cast(?wxRadioBox_SetItemHelpText,
   <<ThisRef:32/?UI,N:32/?UI,(byte_size(HelpText_UC)):32/?UI,(HelpText_UC)/binary, 0:(((8- ((4+byte_size(HelpText_UC)) band 16#7)) band 16#7))/unit:8>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxradiobox.html#wxradioboxsetitemtooltip">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxradiobox.html#wxradioboxsetitemtooltip">external documentation</a>.
 -spec setItemToolTip(This, Item, Text) -> ok when
 	This::wxRadioBox(), Item::integer(), Text::unicode:chardata().
 setItemToolTip(#wx_ref{type=ThisT,ref=ThisRef},Item,Text)

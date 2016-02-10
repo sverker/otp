@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2015. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -369,6 +370,13 @@ copy({var,_Line,Name} = VarDef,Bound) ->
 copy({'fun',Line,{clauses,Clauses}},Bound) -> % Dont export bindings from funs
     {NewClauses,_IgnoredBindings} = copy_list(Clauses,Bound),
     {{'fun',Line,{clauses,NewClauses}},Bound};
+copy({named_fun,Line,Name,Clauses},Bound) -> % Dont export bindings from funs
+    Bound1 = case Name of
+                 '_' -> Bound;
+                 Name -> gb_sets:add(Name,Bound)
+             end,
+    {NewClauses,_IgnoredBindings} = copy_list(Clauses,Bound1),
+    {{named_fun,Line,Name,NewClauses},Bound};
 copy({'case',Line,Of,ClausesList},Bound) -> % Dont export bindings from funs
     {NewOf,NewBind0} = copy(Of,Bound),
     {NewClausesList,NewBindings} = copy_case_clauses(ClausesList,NewBind0,[]),
@@ -718,10 +726,10 @@ transform_head([V],OuterBound) ->
     th(NewV,NewBind,OuterBound).
 
 
-toplevel_head_match({match,Line,{var,_,VName},Expr},B,OB) ->
+toplevel_head_match({match,_,{var,Line,VName},Expr},B,OB) ->
     warn_var_clash(Line,VName,OB),
     {Expr,new_bind({VName,'$_'},B)};
-toplevel_head_match({match,Line,Expr,{var,_,VName}},B,OB) ->
+toplevel_head_match({match,_,Expr,{var,Line,VName}},B,OB) ->
     warn_var_clash(Line,VName,OB),
     {Expr,new_bind({VName,'$_'},B)};
 toplevel_head_match(Other,B,_OB) ->
@@ -815,9 +823,10 @@ th(T,B,OB) when is_tuple(T) ->
 th(Nonstruct,B,_OB) ->
     {Nonstruct,B}.
 
-warn_var_clash(Line,Name,OuterBound) ->
+warn_var_clash(Anno,Name,OuterBound) ->
     case gb_sets:is_member(Name,OuterBound) of
 	true ->
+            Line = erl_anno:line(Anno),
 	    add_warning(Line,{?WARN_SHADOW_VAR,Name});
 	_ ->
 	    ok
@@ -903,6 +912,7 @@ bool_test(is_pid,1) -> true;
 bool_test(is_port,1) -> true;
 bool_test(is_reference,1) -> true;
 bool_test(is_tuple,1) -> true;
+bool_test(is_map,1) -> true;
 bool_test(is_binary,1) -> true;
 bool_test(is_function,1) -> true;
 bool_test(is_record,2) -> true;
@@ -917,6 +927,7 @@ real_guard_function(node,0) -> true;
 real_guard_function(node,1) -> true;
 real_guard_function(round,1) -> true;
 real_guard_function(size,1) -> true;
+real_guard_function(map_size,1) -> true;
 real_guard_function(tl,1) -> true;
 real_guard_function(trunc,1) -> true;
 real_guard_function(self,0) -> true;
@@ -1070,6 +1081,12 @@ normalise({cons,_,Head,Tail}) ->
     [normalise(Head)|normalise(Tail)];
 normalise({tuple,_,Args}) ->
     list_to_tuple(normalise_list(Args));
+normalise({map,_,Pairs0}) ->
+    Pairs1 = lists:map(fun ({map_field_exact,_,K,V}) ->
+                               {normalise(K),normalise(V)}
+                       end,
+                       Pairs0),
+    maps:from_list(Pairs1);
 %% Special case for unary +/-.
 normalise({op,_,'+',{char,_,I}}) -> I;
 normalise({op,_,'+',{integer,_,I}}) -> I;

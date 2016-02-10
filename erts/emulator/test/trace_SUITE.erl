@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -34,6 +35,7 @@
 	 system_monitor_args/1, more_system_monitor_args/1,
 	 system_monitor_long_gc_1/1, system_monitor_long_gc_2/1, 
 	 system_monitor_large_heap_1/1, system_monitor_large_heap_2/1,
+	 system_monitor_long_schedule/1,
 	 bad_flag/1, trace_delivered/1]).
 
 -include_lib("test_server/include/test_server.hrl").
@@ -52,6 +54,7 @@ all() ->
      set_on_first_spawn, system_monitor_args,
      more_system_monitor_args, system_monitor_long_gc_1,
      system_monitor_long_gc_2, system_monitor_large_heap_1,
+      system_monitor_long_schedule,
      system_monitor_large_heap_2, bad_flag, trace_delivered].
 
 groups() -> 
@@ -179,12 +182,34 @@ send_trace(Config) when is_list(Config) ->
     ?line {trace, Sender, send, to_receiver, Receiver} = receive_first(),
     ?line receive_nothing(),
 
+    %% Check that a message sent to another registered process is traced.
+    register(?MODULE,Receiver),
+    Sender ! {send_please, ?MODULE, to_receiver},
+    {trace, Sender, send, to_receiver, ?MODULE} = receive_first(),
+    receive_nothing(),
+    unregister(?MODULE),
+
     %% Check that a message sent to this process is traced.
     ?line Sender ! {send_please, self(), to_myself},
     ?line receive to_myself -> ok end,
     ?line Self = self(),
     ?line {trace, Sender, send, to_myself, Self} = receive_first(),
     ?line receive_nothing(),
+
+    %% Check that a message sent to dead process is traced.
+    {Pid,Ref} = spawn_monitor(fun() -> ok end),
+    receive {'DOWN',Ref,_,_,_} -> ok end,
+    Sender ! {send_please, Pid, to_dead},
+    {trace, Sender, send_to_non_existing_process, to_dead, Pid} = receive_first(),
+    receive_nothing(),
+
+    %% Check that a message sent to unknown registrated process is traced.
+    BadargSender = fun_spawn(fun sender/0),
+    1 = erlang:trace(BadargSender, true, [send]),
+    unlink(BadargSender),
+    BadargSender ! {send_please, not_registered, to_unknown},
+    {trace, BadargSender, send, to_unknown, not_registered} = receive_first(),
+    receive_nothing(),
 
     %% Another process should not be able to trace Sender.
     ?line Intruder = fun_spawn(fun() -> erlang:trace(Sender, true, [send]) end),
@@ -507,6 +532,65 @@ try_l(Val) ->
 
     ?line {Self,Comb1} = erlang:system_monitor(undefined),
     ?line [{large_heap,Val},{long_gc,Arbitrary2}] = lists:sort(Comb1).
+
+monitor_sys(Parent) ->
+    receive 
+	{monitor,Pid,long_schedule,Data} when is_pid(Pid) -> 
+	    io:format("Long schedule of ~w: ~w~n",[Pid,Data]),
+	    Parent ! {Pid,Data},
+	    monitor_sys(Parent);
+	{monitor,Port,long_schedule,Data} when is_port(Port) -> 
+	    {name,Name} = erlang:port_info(Port,name),
+	    io:format("Long schedule of ~w (~p): ~w~n",[Port,Name,Data]),
+	    Parent ! {Port,Data},
+	    monitor_sys(Parent);
+	Other ->
+	    erlang:display(Other)
+    end.
+
+start_monitor() ->
+    Parent = self(),
+    Mpid = spawn_link(fun() -> monitor_sys(Parent) end),
+    erlang:system_monitor(Mpid,[{long_schedule,100}]),
+    erlang:yield(), % Need to be rescheduled for the trace to take
+    ok.
+
+system_monitor_long_schedule(suite) ->
+    [];
+system_monitor_long_schedule(doc) ->
+    ["Tests erlang:system_monitor(Pid, [{long_schedule,Time}])"];
+system_monitor_long_schedule(Config) when is_list(Config) ->
+    Path = ?config(data_dir, Config),
+    erl_ddll:start(),
+    case (catch load_driver(Path, slow_drv)) of
+	ok ->
+	    do_system_monitor_long_schedule();
+	_Error ->
+	    {skip, "Unable to load slow_drv (windows or no usleep()?)"}
+    end.
+do_system_monitor_long_schedule() ->
+    start_monitor(),
+    Port = open_port({spawn_driver,slow_drv}, []),
+    "ok" = erlang:port_control(Port,0,[]),
+    Self = self(),
+    receive
+	{Self,L} when is_list(L) ->
+	    ok
+    after 1000 ->
+	    ?t:fail(no_trace_of_pid)
+    end,
+    "ok" = erlang:port_control(Port,1,[]),
+    "ok" = erlang:port_control(Port,2,[]),
+    receive
+	{Port,LL} when is_list(LL) ->
+	    ok
+    after 1000 ->
+	    ?t:fail(no_trace_of_port)
+    end,
+    port_close(Port),
+    erlang:system_monitor(undefined),
+    ok.
+
 
 -define(LONG_GC_SLEEP, 670).
 
@@ -849,7 +933,7 @@ suspend_exit(suite) ->
     [];
 suspend_exit(Config) when is_list(Config) ->
     ?line Dog = test_server:timetrap(test_server:minutes(2)),
-    ?line random:seed(4711,17,4711),
+    rand:seed(exsplus, {4711,17,4711}),
     ?line do_suspend_exit(5000),
     ?line test_server:timetrap_cancel(Dog),
     ?line ok.
@@ -857,7 +941,7 @@ suspend_exit(Config) when is_list(Config) ->
 do_suspend_exit(0) ->
     ?line ok;
 do_suspend_exit(N) ->
-    ?line Work = random:uniform(50),
+    Work = rand:uniform(50),
     ?line Parent = self(),
     ?line {Suspendee, Mon2}
 	= spawn_monitor(fun () ->
@@ -1366,7 +1450,7 @@ receive_nothing() ->
 	    ok
     end.
 
-
+
 %%% Models for various kinds of processes.
 
 process(Dest) ->
@@ -1521,3 +1605,11 @@ issue_non_empty_runq_warning(DeadLine, RQLen) ->
 	      "         Processes info: ~p~n",
 	      [DeadLine div 1000, RQLen, self(), PIs]),
     receive after 1000 -> ok end.
+
+load_driver(Dir, Driver) ->
+    case erl_ddll:load_driver(Dir, Driver) of
+	ok -> ok;
+	{error, Error} = Res ->
+	    io:format("~s\n", [erl_ddll:format_error(Error)]),
+	    Res
+    end.

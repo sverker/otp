@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2002-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -64,6 +65,8 @@ all() ->
 	    [load_api, util_api, util_values, port, unavailable];
 	{unix, linux} ->
 	    [load_api, util_api, util_values, port, unavailable];
+	{unix, freebsd} ->
+	    [load_api, util_api, util_values, port, unavailable];
 	{unix, _OSname} -> [load_api];
 	_OS -> [unavailable]
     end.
@@ -88,6 +91,7 @@ load_api(Config) when is_list(Config) ->
     ?line N = cpu_sup:nprocs(),
     ?line true = is_integer(N),
     ?line true = N>0,
+    ?line true = N<1000000,
 
     %% avg1()
     ?line Load1 = cpu_sup:avg1(),
@@ -256,8 +260,8 @@ port(Config) when is_list(Config) ->
 terminate(suite) ->
     [];
 terminate(Config) when is_list(Config) ->
-    ?line ok = application:set_env(os_mon, start_cpu_sup, false),
-    ?line ok = supervisor:terminate_child(os_mon_sup, cpu_sup),
+    ok = application:set_env(os_mon, start_cpu_sup, false),
+    _ = supervisor:terminate_child(os_mon_sup, cpu_sup),
     ok.
 
 unavailable(suite) ->

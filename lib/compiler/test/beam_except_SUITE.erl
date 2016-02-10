@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2011-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -57,6 +58,11 @@ coverage(_) ->
 
     {'EXIT',{undef,[{erlang,error,[a,b,c],_}|_]}} =
 	(catch erlang:error(a, b, c)),
+
+    {'EXIT',{badarith,[{?MODULE,bar,1,[File,{line,9}]}|_]}} =
+	(catch bar(x)),
+    {'EXIT',{{case_clause,{1}},[{?MODULE,bar,1,[File,{line,9}]}|_]}} =
+	(catch bar(0)),
     ok.
 
 -file("fake.erl", 1).
@@ -65,3 +71,8 @@ fc(a) ->	                                %Line 2
 fc(L) when length(L) > 2 ->			%Line 4
     %% Not the same as a "real" function_clause error.
     error(function_clause, [L]).		%Line 6
+%% Would crash the compiler.
+bar(X) ->					%Line 8
+    case {X+1} of				%Line 9
+	1 -> ok					%Line 10
+    end.					%Line 11

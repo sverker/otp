@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -40,6 +41,7 @@
 	 process_info_2_list/1, process_info_lock_reschedule/1,
 	 process_info_lock_reschedule2/1,
 	 process_info_lock_reschedule3/1,
+         process_info_garbage_collection/1,
 	 bump_reductions/1, low_prio/1, binary_owner/1, yield/1, yield2/1,
 	 process_status_exiting/1,
 	 otp_4725/1, bad_register/1, garbage_collect/1, otp_6237/1,
@@ -51,7 +53,13 @@
 	 processes_term_proc_list/1,
 	 otp_7738_waiting/1, otp_7738_suspended/1,
 	 otp_7738_resume/1,
-	 garb_other_running/1]).
+	 garb_other_running/1,
+	 no_priority_inversion/1,
+	 no_priority_inversion2/1,
+	 system_task_blast/1,
+	 system_task_on_suspended/1,
+	 gc_request_when_gc_disabled/1,
+	 gc_request_blast_when_gc_disabled/1]).
 -export([prio_server/2, prio_client/2]).
 
 -export([init_per_testcase/2, end_per_testcase/2]).
@@ -68,12 +76,15 @@ all() ->
      process_info_other_dist_msg, process_info_2_list,
      process_info_lock_reschedule,
      process_info_lock_reschedule2,
-     process_info_lock_reschedule3, process_status_exiting,
+     process_info_lock_reschedule3,
+     process_info_garbage_collection,
+     process_status_exiting,
      bump_reductions, low_prio, yield, yield2, otp_4725,
      bad_register, garbage_collect, process_info_messages,
      process_flag_badarg, process_flag_heap_size,
      spawn_opt_heap_size, otp_6237, {group, processes_bif},
-     {group, otp_7738}, garb_other_running].
+     {group, otp_7738}, garb_other_running,
+     {group, system_task}].
 
 groups() -> 
     [{t_exit_2, [],
@@ -87,12 +98,26 @@ groups() ->
        processes_gc_trap, processes_term_proc_list]},
      {otp_7738, [],
       [otp_7738_waiting, otp_7738_suspended,
-       otp_7738_resume]}].
+       otp_7738_resume]},
+     {system_task, [],
+      [no_priority_inversion, no_priority_inversion2,
+       system_task_blast, system_task_on_suspended,
+       gc_request_when_gc_disabled, gc_request_blast_when_gc_disabled]}].
 
 init_per_suite(Config) ->
-    Config.
+    A0 = case application:start(sasl) of
+	     ok -> [sasl];
+	     _ -> []
+	 end,
+    A = case application:start(os_mon) of
+	     ok -> [os_mon|A0];
+	     _ -> A0
+	 end,
+    [{started_apps, A}|Config].
 
 end_per_suite(Config) ->
+    As = ?config(started_apps, Config),
+    lists:foreach(fun (A) -> application:stop(A) end, As),
     catch erts_debug:set_internal_state(available_internal_state, false),
     Config.
 
@@ -101,7 +126,6 @@ init_per_group(_GroupName, Config) ->
 
 end_per_group(_GroupName, Config) ->
     Config.
-
 
 init_per_testcase(Func, Config) when is_atom(Func), is_list(Config) ->
     Dog=?t:timetrap(?t:minutes(10)),
@@ -359,16 +383,15 @@ eat_high(Low) ->
     process_flag(priority, high),
     receive after 1000 -> ok end,
     exit(Low, {you, are, dead}),
-    {_, Sec, _} = now(),
-    loop(Sec, Sec).
+    loop(erlang:monotonic_time() + erlang:convert_time_unit(5,seconds,native)).
 
 %% Busy loop for 5 seconds.
 
-loop(OrigSec, CurrentSec) when CurrentSec < OrigSec+5 ->
-    {_, NewSec, _} = now(),
-    loop(OrigSec, NewSec);
-loop(_, _) ->
-    ok.
+loop(StopTime) ->
+    case StopTime >= erlang:monotonic_time() of
+	true -> ok;
+	false -> loop(StopTime)
+    end.
 
 
 %% Tries to send two different exit messages to a process.
@@ -912,6 +935,48 @@ start_spawner() ->
 stop_spawner() ->
     ok.
 
+%% Tests erlang:process_info(Pid, garbage_collection_info)
+process_info_garbage_collection(_Config) ->
+    Parent = self(),
+    Pid = spawn_link(
+            fun() ->
+                    receive go -> ok end,
+                    (fun F(0) ->
+                             Parent ! deep,
+                             receive ok -> ok end,
+                             [];
+                         F(N) ->
+                             timer:sleep(1),
+                             [lists:seq(1,100) | F(N-1)]
+                     end)(1000),
+                    Parent ! shallow,
+                    receive done -> ok end
+            end),
+    {garbage_collection_info, Before} =
+        erlang:process_info(Pid, garbage_collection_info),
+    Pid ! go, receive deep -> ok end,
+    {_, Deep} = erlang:process_info(Pid, garbage_collection_info),
+    Pid ! ok, receive shallow -> ok end,
+    {_, After} = erlang:process_info(Pid, garbage_collection_info),
+    Pid ! done,
+
+    %% Do some general checks to see if everything seems to be roughly correct
+    ct:log("Before: ~p",[Before]),
+    ct:log("Deep: ~p",[Deep]),
+    ct:log("After: ~p",[After]),
+
+    %% Check stack_size
+    true = proplists:get_value(stack_size, Before) < proplists:get_value(stack_size, Deep),
+    true = proplists:get_value(stack_size, After) < proplists:get_value(stack_size, Deep),
+
+    %% Check used heap size
+    true = proplists:get_value(heap_size, Before) + proplists:get_value(old_heap_size, Before)
+        < proplists:get_value(heap_size, Deep) + proplists:get_value(old_heap_size, Deep),
+    true = proplists:get_value(heap_size, Before) + proplists:get_value(old_heap_size, Before)
+        < proplists:get_value(heap_size, After) + proplists:get_value(old_heap_size, After),
+
+    ok.
+
 %% Tests erlang:bump_reductions/1.
 bump_reductions(Config) when is_list(Config) ->
     erlang:garbage_collect(),
@@ -1379,6 +1444,9 @@ processes_large_tab(doc) ->
 processes_large_tab(suite) ->
     [];
 processes_large_tab(Config) when is_list(Config) ->
+    sys_mem_cond_run(2048, fun () -> processes_large_tab_test(Config) end).
+
+processes_large_tab_test(Config) ->
     enable_internal_state(),
     MaxDbgLvl = 20,
     MinProcTabSize = 2*(1 bsl 15),
@@ -1430,6 +1498,9 @@ processes_default_tab(doc) ->
 processes_default_tab(suite) ->
     [];
 processes_default_tab(Config) when is_list(Config) ->
+    sys_mem_cond_run(1024, fun () -> processes_default_tab_test(Config) end).
+
+processes_default_tab_test(Config) ->
     {ok, DefaultNode} = start_node(Config, ""),
     Res = rpc:call(DefaultNode, ?MODULE, processes_bif_test, []),
     stop_node(DefaultNode),
@@ -1452,7 +1523,15 @@ processes_this_tab(doc) ->
 processes_this_tab(suite) ->
     [];
 processes_this_tab(Config) when is_list(Config) ->
-    chk_processes_bif_test_res(processes_bif_test()).
+    Mem = case {erlang:system_info(build_type),
+                erlang:system_info(allocator)} of
+              {lcnt, {_, _Vsn, [sys_alloc], _Opts}} ->
+                  %% When running +Mea min + lcnt we may need more memory
+                  1024 * 4;
+              _ ->
+                  1024
+          end,
+    sys_mem_cond_run(Mem, fun () -> chk_processes_bif_test_res(processes_bif_test()) end).
 
 chk_processes_bif_test_res(ok) -> ok;
 chk_processes_bif_test_res({comment, _} = Comment) -> Comment;
@@ -1494,6 +1573,7 @@ processes_bif_cleaner() ->
 
 spawn_initial_hangarounds(Cleaner) ->
     TabSz = erlang:system_info(process_limit),
+    erts_debug:set_internal_state(next_pid,TabSz),
     spawn_initial_hangarounds(Cleaner,
 			      TabSz,
 			      TabSz*2,
@@ -1538,14 +1618,21 @@ hangaround(Cleaner, Type) ->
 spawn_initial_hangarounds(_Cleaner, NP, Max, Len, HAs) when NP > Max ->
     {Len, HAs};
 spawn_initial_hangarounds(Cleaner, NP, Max, Len, HAs) ->
-    erts_debug:set_internal_state(next_pid,NP),
+    Skip = 30,
     HA1 = spawn_opt(?MODULE, hangaround, [Cleaner, initial_hangaround],
 		    [{priority, low}]),
     HA2 = spawn_opt(?MODULE, hangaround, [Cleaner, initial_hangaround],
 		    [{priority, normal}]),
     HA3 = spawn_opt(?MODULE, hangaround, [Cleaner, initial_hangaround],
 		    [{priority, high}]),
-    spawn_initial_hangarounds(Cleaner, NP+30, Max, Len+3, [HA1,HA2,HA3|HAs]).
+    spawn_drop(Skip),
+    spawn_initial_hangarounds(Cleaner, NP+Skip, Max, Len+3, [HA1,HA2,HA3|HAs]).
+
+spawn_drop(N) when N =< 0 ->
+    ok;
+spawn_drop(N) ->
+    spawn(fun () -> ok end),
+    spawn_drop(N-1).
 
 do_processes(WantReds) ->
     erts_debug:set_internal_state(reds_left, WantReds),
@@ -2087,6 +2174,9 @@ otp_7738_resume(Config) when is_list(Config) ->
     otp_7738_test(resume).
 
 otp_7738_test(Type) ->
+    sys_mem_cond_run(3072, fun () -> do_otp_7738_test(Type) end).
+
+do_otp_7738_test(Type) ->
     T = self(),
     S = spawn_link(fun () ->
 		receive
@@ -2188,6 +2278,208 @@ garb_other_running(Config) when is_list(Config) ->
     receive {'DOWN', Mon, process, Pid, normal} -> ok end,
     ok.
 
+no_priority_inversion(Config) when is_list(Config) ->
+    Prio = process_flag(priority, max),
+    HTLs = lists:map(fun (_) ->
+			     spawn_opt(fun () ->
+					       tok_loop()
+				       end,
+				       [{priority, high}, monitor, link])
+		     end,
+		     lists:seq(1, 2*erlang:system_info(schedulers))),
+    receive after 500 -> ok end,
+    LTL = spawn_opt(fun () ->
+			    tok_loop()
+		    end,
+		    [{priority, low}, monitor, link]),
+    false = erlang:check_process_code(element(1, LTL), nonexisting_module),
+    true = erlang:garbage_collect(element(1, LTL)),
+    lists:foreach(fun ({P, _}) ->
+			  unlink(P),
+			  exit(P, kill)
+		  end, [LTL | HTLs]),
+    lists:foreach(fun ({P, M}) ->
+			  receive
+			      {'DOWN', M, process, P, killed} ->
+				  ok
+			  end
+		  end, [LTL | HTLs]),
+    process_flag(priority, Prio),
+    ok.
+
+no_priority_inversion2(Config) when is_list(Config) ->
+    Prio = process_flag(priority, max),
+    MTLs = lists:map(fun (_) ->
+			     spawn_opt(fun () ->
+					       tok_loop()
+				       end,
+				       [{priority, max}, monitor, link])
+		     end,
+		     lists:seq(1, 2*erlang:system_info(schedulers))),
+    receive after 500 -> ok end,
+    {PL, ML} = spawn_opt(fun () ->
+			       tok_loop()
+		       end,
+		       [{priority, low}, monitor, link]),
+    RL = request_gc(PL, low),
+    RN = request_gc(PL, normal),
+    RH = request_gc(PL, high),
+    receive
+	{garbage_collect, _, _} ->
+	    ?t:fail(unexpected_gc)
+    after 1000 ->
+	    ok
+    end,
+    RM = request_gc(PL, max),
+    receive
+	{garbage_collect, RM, true} ->
+	    ok
+    end,
+    lists:foreach(fun ({P, _}) ->
+			  unlink(P),
+			  exit(P, kill)
+		  end, MTLs),
+    lists:foreach(fun ({P, M}) ->
+			  receive
+			      {'DOWN', M, process, P, killed} ->
+				  ok
+			  end
+		  end, MTLs),
+    receive
+	{garbage_collect, RH, true} ->
+	    ok
+    end,
+    receive
+	{garbage_collect, RN, true} ->
+	    ok
+    end,
+    receive
+	{garbage_collect, RL, true} ->
+	    ok
+    end,
+    unlink(PL),
+    exit(PL, kill),
+    receive
+	{'DOWN', ML, process, PL, killed} ->
+	    ok
+    end,
+    process_flag(priority, Prio),
+    ok.
+
+request_gc(Pid, Prio) ->
+    Ref = make_ref(),
+    erts_internal:request_system_task(Pid, Prio, {garbage_collect, Ref}),
+    Ref.
+
+system_task_blast(Config) when is_list(Config) ->
+    Me = self(),
+    GCReq = fun () ->
+		    RL = gc_req(Me, 100),
+		    lists:foreach(fun (R) ->
+					  receive
+					      {garbage_collect, R, true} ->
+						  ok
+					  end
+				  end, RL),
+		    exit(it_worked)
+	    end,
+    HTLs = lists:map(fun (_) -> spawn_monitor(GCReq) end, lists:seq(1, 1000)),
+    lists:foreach(fun ({P, M}) ->
+			  receive
+			      {'DOWN', M, process, P, it_worked} ->
+				  ok
+			  end
+		  end, HTLs),
+    ok.
+
+gc_req(_Pid, 0) ->
+    [];
+gc_req(Pid, N) ->
+    R0 = request_gc(Pid, low),
+    R1 = request_gc(Pid, normal),
+    R2 = request_gc(Pid, high),
+    R3 = request_gc(Pid, max),
+    [R0, R1, R2, R3 | gc_req(Pid, N-1)].
+
+system_task_on_suspended(Config) when is_list(Config) ->
+    {P, M} = spawn_monitor(fun () ->
+				   tok_loop()
+			   end),
+    true = erlang:suspend_process(P),
+    {status, suspended} = process_info(P, status),
+    true = erlang:garbage_collect(P),
+    {status, suspended} = process_info(P, status),
+    true = erlang:resume_process(P),
+    false = ({status, suspended} == process_info(P, status)),
+    exit(P, kill),
+    receive
+	{'DOWN', M, process, P, killed} ->
+	    ok
+    end.
+
+gc_request_when_gc_disabled(Config) when is_list(Config) ->
+    Master = self(),
+    AIS = erts_debug:set_internal_state(available_internal_state, true),
+    {P, M} = spawn_opt(fun () ->
+			       true = erts_debug:set_internal_state(gc_state,
+								    false),
+			       Master ! {self(), gc_state, false},
+			       receive after 1000 -> ok end,
+			       Master ! {self(), gc_state, true},
+			       false = erts_debug:set_internal_state(gc_state,
+								     true),
+			       receive after 100 -> ok end
+		       end, [monitor, link]),
+    receive {P, gc_state, false} -> ok end,
+    ReqId = make_ref(),
+    async = garbage_collect(P, [{async, ReqId}]),
+    receive
+	{garbage_collect, ReqId, Result} ->
+	    ?t:fail({unexpected_gc, Result});
+	{P, gc_state, true} ->
+	    ok
+    end,
+    receive {garbage_collect, ReqId, true} -> ok end,
+    erts_debug:set_internal_state(available_internal_state, AIS),
+    receive {'DOWN', M, process, P, _Reason} -> ok end,
+    ok.
+
+gc_request_blast_when_gc_disabled(Config) when is_list(Config) ->
+    Master = self(),
+    AIS = erts_debug:set_internal_state(available_internal_state, true),
+    {P, M} = spawn_opt(fun () ->
+			       true = erts_debug:set_internal_state(gc_state,
+								    false),
+			       Master ! {self(), gc_state, false},
+			       receive after 1000 -> ok end,
+			       false = erts_debug:set_internal_state(gc_state,
+								     true),
+			       receive after 100 -> ok end
+		       end, [monitor, link]),
+    receive {P, gc_state, false} -> ok end,
+    PMs = lists:map(fun (N) ->
+			    Prio = case N rem 4 of
+				       0 -> max;
+				       1 -> high;
+				       2 -> normal;
+				       3 -> low
+				   end,
+			    spawn_opt(fun () ->
+					      erlang:garbage_collect(P)
+				      end, [monitor, link, {priority, Prio}])
+		    end, lists:seq(1, 10000)),
+    lists:foreach(fun ({Proc, Mon}) ->
+			  receive
+			      {'DOWN', Mon, process, Proc, normal} ->
+				  ok
+			  end
+		  end,
+		  PMs),
+    erts_debug:set_internal_state(available_internal_state, AIS),
+    receive {'DOWN', M, process, P, _Reason} -> ok end,
+    ok.
+
+
 %% Internal functions
 
 wait_until(Fun) ->
@@ -2211,16 +2503,13 @@ start_node(Config) ->
 
 start_node(Config, Args) when is_list(Config) ->
     Pa = filename:dirname(code:which(?MODULE)),
-    {A, B, C} = now(),
     Name = list_to_atom(atom_to_list(?MODULE)
 			      ++ "-"
 			      ++ atom_to_list(?config(testcase, Config))
 			      ++ "-"
-			      ++ integer_to_list(A)
+			      ++ integer_to_list(erlang:system_time(seconds))
 			      ++ "-"
-			      ++ integer_to_list(B)
-			      ++ "-"
-			      ++ integer_to_list(C)),
+			      ++ integer_to_list(erlang:unique_integer([positive]))),
     ?t:start_node(Name, slave, [{args, "-pa "++Pa++" "++Args}]).
 
 stop_node(Node) ->
@@ -2230,4 +2519,32 @@ enable_internal_state() ->
     case catch erts_debug:get_internal_state(available_internal_state) of
 	true -> true;
 	_ -> erts_debug:set_internal_state(available_internal_state, true)
+    end.
+
+sys_mem_cond_run(ReqSizeMB, TestFun) when is_integer(ReqSizeMB) ->
+    case total_memory() of
+	TotMem when is_integer(TotMem), TotMem >= ReqSizeMB ->
+	    TestFun();
+	TotMem when is_integer(TotMem) ->
+	    {skipped, "Not enough memory ("++integer_to_list(TotMem)++" MB)"};
+	undefined ->
+	    {skipped, "Could not retrieve memory information"}
+    end.
+
+
+total_memory() ->
+    %% Totat memory in MB.
+    try
+	MemoryData = memsup:get_system_memory_data(),
+	case lists:keysearch(total_memory, 1, MemoryData) of
+	    {value, {total_memory, TM}} ->
+		TM div (1024*1024);
+	    false ->
+		{value, {system_total_memory, STM}} =
+		    lists:keysearch(system_total_memory, 1, MemoryData),
+		STM div (1024*1024)
+	end
+    catch
+	_ : _ ->
+	    undefined
     end.

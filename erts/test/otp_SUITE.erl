@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -23,7 +24,8 @@
 	 init_per_suite/1,end_per_suite/1]).
 -export([undefined_functions/1,deprecated_not_in_obsolete/1,
 	 obsolete_but_not_deprecated/1,call_to_deprecated/1,
-         call_to_size_1/1,strong_components/1]).
+         call_to_size_1/1,call_to_now_0/1,strong_components/1,
+	 erl_file_encoding/1,xml_file_encoding/1,runtime_dependencies/1]).
 
 -include_lib("test_server/include/test_server.hrl").
 
@@ -34,7 +36,9 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 all() -> 
     [undefined_functions, deprecated_not_in_obsolete,
      obsolete_but_not_deprecated, call_to_deprecated,
-     call_to_size_1, strong_components].
+     call_to_size_1, call_to_now_0, strong_components,
+     erl_file_encoding, xml_file_encoding,
+     runtime_dependencies].
 
 groups() -> 
     [].
@@ -91,7 +95,8 @@ undefined_functions(Config) when is_list(Config) ->
     Undef4 = eunit_filter(Undef3),
     Undef5 = dialyzer_filter(Undef4),
     Undef6 = wx_filter(Undef5),
-    Undef  = gs_filter(Undef6),
+    Undef7 = gs_filter(Undef6),
+    Undef = diameter_filter(Undef7),
 
     case Undef of
 	[] -> ok;
@@ -214,6 +219,19 @@ gs_filter(Undef) ->
 	_ -> Undef
     end.
 
+diameter_filter(Undef) ->
+    %% Filter away function calls that are catched.
+    filter(fun({{diameter_lib,_,_},{erlang,convert_time_unit,3}}) ->
+                   false;
+              ({{diameter_lib,_,_},{erlang,monotonic_time,0}}) ->
+                   false;
+              ({{diameter_lib,_,_},{erlang,unique_integer,0}}) ->
+                   false;
+              ({{diameter_lib,_,_},{erlang,time_offset,0}}) ->
+                   false;
+	      (_) -> true
+	   end, Undef).
+
 deprecated_not_in_obsolete(Config) when is_list(Config) ->
     ?line Server = ?config(xref_server, Config),
     ?line {ok,DeprecatedFunctions} = xref:q(Server, "DF"),
@@ -270,48 +288,77 @@ call_to_deprecated(Config) when is_list(Config) ->
     {comment,integer_to_list(length(DeprecatedCalls))++" calls to deprecated functions"}.
 
 call_to_size_1(Config) when is_list(Config) ->
-    Server = ?config(xref_server, Config),
-
     %% Applications that do not call erlang:size/1:
     Apps = [asn1,compiler,debugger,kernel,observer,parsetools,
-	    runtime_tools,stdlib,tools,webtool],
+	    runtime_tools,stdlib,tools],
+    not_recommended_calls(Config, Apps, {erlang,size,1}).
 
-    Fs = [{erlang,size,1}],
+call_to_now_0(Config) when is_list(Config) ->
+    %% Applications that do not call erlang:now/1:
+    Apps = [asn1,common_test,compiler,debugger,dialyzer,
+	    gs,kernel,mnesia,observer,parsetools,reltool,
+	    runtime_tools,sasl,stdlib,syntax_tools,
+	    test_server,tools],
+    not_recommended_calls(Config, Apps, {erlang,now,0}).
+
+not_recommended_calls(Config, Apps0, MFA) ->
+    Server = ?config(xref_server, Config),
+
+    Apps = [App || App <- Apps0, is_present_application(App, Server)],
+
+    Fs = [MFA],
 
     Q1 = io_lib:format("E || ~p : Fun", [Fs]),
-    ?line {ok,AllCallsToSize1} = xref:q(Server, lists:flatten(Q1)),
+    {ok,AllCallsToMFA} = xref:q(Server, lists:flatten(Q1)),
 
     Q2 = io_lib:format("E | ~p : App || ~p : Fun", [Apps,Fs]),
-    ?line {ok,CallsToSize1} = xref:q(Server, lists:flatten(Q2)),
+    {ok,CallsToMFA} = xref:q(Server, lists:flatten(Q2)),
 
-    case CallsToSize1 of
+    case CallsToMFA of
 	[] -> 
             ok;
 	_ ->
-            io:format("These calls cause an error:~n"),
+            io:format("These calls are not allowed:\n"),
 	    foreach(fun ({MFA1,MFA2}) ->
-			    io:format("~s calls soon to be deprecated ~s",
+			    io:format("~s calls non-recommended ~s",
 				      [format_mfa(MFA1),format_mfa(MFA2)])
-		    end, CallsToSize1)
+		    end, CallsToMFA)
     end,
 
-    %% Enumerate calls to erlang:size/1 from other applications than
-    %% the ones known not to call erlang:size/1:
-    case AllCallsToSize1--CallsToSize1 of
+    %% Enumerate calls to MFA from other applications than
+    %% the ones known not to call MFA:
+    case AllCallsToMFA--CallsToMFA of
         [] ->
             ok;
         Calls ->
-            io:format("~n~nThese calls do not cause an error (yet):~n"),
+            io:format("~n~nThese calls are allowed for now:\n"),
             foreach(fun ({MFA1,MFA2}) ->
-                            io:format("~s calls soon to be deprecated ~s",
+                            io:format("~s calls non-recommended ~s",
                                       [format_mfa(MFA1),format_mfa(MFA2)])
                     end, Calls)
     end,
-    case CallsToSize1 of
+    case CallsToMFA of
 	[] -> 
-            ok;
+            SkippedApps = ordsets:subtract(ordsets:from_list(Apps0),
+                                           ordsets:from_list(Apps)),
+            case SkippedApps of
+                [] ->
+                    ok;
+                _ ->
+                    AppStrings = [atom_to_list(A) || A <- SkippedApps],
+                    Mess = io_lib:format("Application(s) not present: ~s\n",
+                                         [string:join(AppStrings, ", ")]),
+                    {comment, Mess}
+            end;
 	_ ->
-	    ?line ?t:fail({length(CallsToSize1),calls_to_size_1})
+	    ?t:fail({length(CallsToMFA),calls_to_size_1})
+    end.
+
+is_present_application(Name, Server) ->
+    Q = io_lib:format("~w : App", [Name]),
+    case xref:q(Server, lists:flatten(Q)) of
+        {ok,[Name]} -> true;
+        {error,_,_} -> false
     end.
 
 strong_components(Config) when is_list(Config) ->
@@ -319,6 +366,189 @@ strong_components(Config) when is_list(Config) ->
     ?line {ok,Cs} = xref:q(Server, "components AE"),
     io:format("\n\nStrong components:\n\n~p\n", [Cs]),
     ok.
+
+erl_file_encoding(_Config) ->
+    Root = code:root_dir(),
+    Wc = filename:join([Root,"**","*.erl"]),
+    ErlFiles = ordsets:subtract(ordsets:from_list(filelib:wildcard(Wc)),
+				release_files(Root, "*.erl")),
+    {ok, MP} = re:compile(".*lib/(ic)|(orber)|(cos).*", [unicode]),
+    Fs = [F || F <- ErlFiles,
+	       filter_use_latin1_coding(F, MP),
+	       case epp:read_encoding(F) of
+		   none -> false;
+		   _ -> true
+	       end],
+    case Fs of
+	[] ->
+	    ok;
+	[_|_] ->
+	    io:put_chars("Files with \"coding:\":\n"),
+	    [io:put_chars(F) || F <- Fs],
+	    ?t:fail()
+    end.
+
+filter_use_latin1_coding(F, MP) ->
+    case re:run(F, MP) of
+	nomatch ->
+	    true;
+        {match, _} ->
+	    false
+    end.
+
+xml_file_encoding(_Config) ->
+    XmlFiles = xml_files(),
+    Fs = [F || F <- XmlFiles, is_bad_encoding(F)],
+    case Fs of
+	[] ->
+	    ok;
+	[_|_] ->
+	    io:put_chars("Encoding should be \"utf-8\" or \"UTF-8\":\n"),
+	    [io:put_chars(F) || F <- Fs],
+	    ?t:fail()
+    end.
+
+xml_files() ->
+    Root = code:root_dir(),
+    AllWc = filename:join([Root,"**","*.xml"]),
+    AllXmlFiles = ordsets:from_list(filelib:wildcard(AllWc)),
+    TestsWc = filename:join([Root,"lib","*","test","**","*.xml"]),
+    TestXmlFiles = ordsets:from_list(filelib:wildcard(TestsWc)),
+    XmerlWc = filename:join([Root,"lib","xmerl","**","*.xml"]),
+    XmerlXmlFiles = ordsets:from_list(filelib:wildcard(XmerlWc)),
+    Ignore = ordsets:union([TestXmlFiles,XmerlXmlFiles,
+			    release_files(Root, "*.xml")]),
+    ordsets:subtract(AllXmlFiles, Ignore).
+
+release_files(Root, Ext) ->
+    Wc = filename:join([Root,"release","**",Ext]),
+    filelib:wildcard(Wc).
+
+is_bad_encoding(File) ->
+    {ok,Bin} = file:read_file(File),
+    case Bin of
+	<<"<?xml version=\"1.0\" encoding=\"utf-8\"",_/binary>> ->
+	    false;
+	<<"<?xml version=\"1.0\" encoding=\"UTF-8\"",_/binary>> ->
+	    false;
+	_ ->
+	    true
+    end.
+
+runtime_dependencies(Config) ->
+    %% Ignore applications intentionally not declaring dependencies
+    %% found by xref.
+    IgnoreApps = [diameter],
+
+
+    %% Verify that (at least) OTP application runtime dependencies found
+    %% by xref are listed in the runtime_dependencies field of the .app file
+    %% of each application.
+    Server = ?config(xref_server, Config),
+    {ok, AE} = xref:q(Server, "AE"),
+    SAE = lists:keysort(1, AE),
+    put(ignored_failures, []),
+    {AppDep, AppDeps} = lists:foldl(fun ({App, App}, Acc) ->
+					    Acc;
+					({App, Dep}, {undefined, []}) ->
+					    {{App, [Dep]}, []};
+					({App, Dep}, {{App, Deps}, AppDeps}) ->
+					    {{App, [Dep|Deps]}, AppDeps};
+					({App, Dep}, {AppDep, AppDeps}) ->
+					    {{App, [Dep]}, [AppDep | AppDeps]}
+				    end,
+				    {undefined, []},
+				    SAE),
+    [] = lists:filter(fun ({missing_runtime_dependency,
+			    AppFile,
+			    common_test}) ->
+			      %% The test_server app is contaminated by
+			      %% common_test when run in a source tree. It
+			      %% should however *not* be contaminated
+			      %% when run in an installation.
+			      case {filename:basename(AppFile),
+				    is_run_in_src_tree()} of
+				  {"test_server.app", true} ->
+				      false;
+				  _ ->
+				      true
+			      end;
+			  (_) ->
+			      true
+		      end,
+		      check_apps_deps([AppDep|AppDeps], IgnoreApps)),
+    case IgnoreApps of
+	[] ->
+	    ok;
+	_ ->
+	    Comment = lists:flatten(io_lib:format("Ignored applications: ~p "
+						  "Ignored failures: ~p",
+						  [IgnoreApps,
+						   get(ignored_failures)])),
+	    {comment, Comment}
+    end.
+
+is_run_in_src_tree() ->
+    %% At least currently run_erl is not present in <code-root>/bin
+    %% in the source tree, but present in <code-root>/bin of an
+    %% ordinary installation.
+    case file:read_file_info(filename:join([code:root_dir(),
+					    "bin",
+					    "run_erl"])) of
+	{ok, _} -> false;
+	{error, _} -> true
+    end.
+
+have_rdep(_App, [], _Dep) ->
+    false;
+have_rdep(App, [RDep | RDeps], Dep) ->		    
+    [AppStr, _VsnStr] = string:tokens(RDep, "-"),
+    case Dep == list_to_atom(AppStr) of
+	true ->
+	    io:format("~p -> ~s~n", [App, RDep]),
+	    true;
+	false ->
+	    have_rdep(App, RDeps, Dep)
+    end.
+
+check_app_deps(_App, _AppFile, _AFDeps, [], _IgnoreApps) ->
+    [];
+check_app_deps(App, AppFile, AFDeps, [XRDep | XRDeps], IgnoreApps) ->
+    ResOtherDeps = check_app_deps(App, AppFile, AFDeps, XRDeps, IgnoreApps),
+    case have_rdep(App, AFDeps, XRDep) of
+	true ->
+	    ResOtherDeps;
+	false ->
+	    Failure = {missing_runtime_dependency, AppFile, XRDep},
+	    case lists:member(App, IgnoreApps) of
+		true ->
+		    put(ignored_failures, [Failure | get(ignored_failures)]),
+		    ResOtherDeps;
+		false ->
+		    [Failure | ResOtherDeps]
+	    end
+    end.
+
+check_apps_deps([], _IgnoreApps) ->
+    [];
+check_apps_deps([{App, Deps}|AppDeps], IgnoreApps) ->
+    ResOtherApps = check_apps_deps(AppDeps, IgnoreApps),
+    AppFile = code:where_is_file(atom_to_list(App) ++ ".app"),
+    {ok,[{application, App, Info}]} = file:consult(AppFile),
+    case lists:keyfind(runtime_dependencies, 1, Info) of
+	{runtime_dependencies, RDeps} ->
+	    check_app_deps(App, AppFile, RDeps, Deps, IgnoreApps)
+		++ ResOtherApps;
+	false ->
+	    Failure = {missing_runtime_dependencies_key, AppFile},
+	    case lists:member(App, IgnoreApps) of
+		true ->
+		    put(ignored_failures, [Failure | get(ignored_failures)]),
+		    ResOtherApps;
+		false ->
+		    [Failure | ResOtherApps]
+	    end
+    end.
 
 %%%
 %%% Common help functions.

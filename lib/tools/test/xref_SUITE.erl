@@ -1,19 +1,19 @@
-%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2000-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 
@@ -1048,7 +1048,7 @@ read_expected(Version) ->
     POS1 = 28, POS2 = POS1+10, POS3 = POS2+6, POS4 = POS3+6, POS5 = POS4+10,
     POS6 = POS5+5, POS7 = POS6+6, POS8 = POS7+6, POS9 = POS8+8,
     POS10 = POS9+10, POS11 = POS10+7, POS12 = POS11+8, POS13 = POS12+10,
-    POS14 = POS13+18, % POS15 = POS14+23,
+    POS14 = POS13+18, POS15 = POS14+23,
 
     FF = {read,funfuns,0},
     U = [{POS1+5,{FF,{dist,'$F_EXPR',0}}},
@@ -1151,17 +1151,13 @@ read_expected(Version) ->
 	  {POS8+4,{FF,{a,b,1}}},
 	  {POS8+4,{FF,{erlang,apply,2}}},
 	  {POS8+5,{FF,{erlang,apply,2}}},
-	  {POS8+6,{FF,{erlang,apply,3}}},
 	  {POS8+6,{FF,{m,f,1}}},
-	  {POS8+7,{FF,{erlang,apply,3}}},
-	  {POS9+1,{FF,{erlang,apply,3}}},
 	  {POS9+1,{FF,{read,bi,0}}},
 	  {POS9+2,{FF,{a,b,1}}},
 	  {POS9+2,{FF,{erlang,apply,2}}},
 	  {POS9+3,{FF,{erlang,apply,2}}},
 	  {POS9+4,{FF,{erlang,apply,2}}},
 	  {POS9+4,{FF,{erlang,not_a_function,1}}},
-	  {POS9+5,{FF,{erlang,apply,3}}},
 	  {POS9+5,{FF,{mod,func,2}}},
 	  {POS9+6,{FF,{erlang,apply,1}}},
 	  {POS9+7,{FF,{erlang,apply,2}}},
@@ -1169,17 +1165,11 @@ read_expected(Version) ->
 	  {POS9+8,{FF,{q,f,1}}},
 	  {POS10+4,{FF,{erlang,apply,2}}},
 	  {POS10+5,{FF,{mod1,fun1,1}}},
-	  {POS11+1,{FF,{erlang,apply,3}}},
-	  {POS11+2,{FF,{erlang,apply,3}}},
-	  {POS11+3,{FF,{erlang,apply,3}}},
-	  {POS11+4,{FF,{erlang,apply,3}}},
 	  {POS11+6,{FF,{erlang,apply,2}}},
 	  {POS12+1,{FF,{erlang,apply,2}}},
 	  {POS12+4,{FF,{erlang,apply,2}}},
-	  {POS12+5,{FF,{erlang,apply,3}}},
 	  {POS12+5,{FF,{m3,f3,2}}},
 	  {POS12+7,{FF,{erlang,apply,2}}},
-	  {POS12+8,{FF,{erlang,apply,3}}},
 	  {POS13+1,{FF,{dm,df,1}}},
 	  {POS13+6,{{read,bi,0},{foo,module_info,0}}},
 	  {POS13+7,{{read,bi,0},{read,module_info,0}}},
@@ -1189,19 +1179,10 @@ read_expected(Version) ->
 
     OK = case Version of
 	     abstract_v1 ->
-		 [{POS8+3, {FF,{erlang,apply,3}}},
-		  {POS10+1, {FF,{erlang,apply,3}}},
-		  {POS10+6, {FF,{erlang,apply,3}}}]
-                 ++
                  [{0,{FF,{read,'$F_EXPR',178}}},
                   {0,{FF,{modul,'$F_EXPR',179}}}]
                  ++ O1;
 	     _ ->
-%                 [{POS15+2,{{read,bi,0},{foo,t,0}}},
-%                  {POS15+3,{{read,bi,0},{bar,t,0}}},
-%                  {POS15+6,{{read,bi,0},{read,local,0}}},
-%                  {POS15+8,{{read,bi,0},{foo,t,0}}},
-%                  {POS15+10,{{read,bi,0},{bar,t,0}}}] ++
                  [{16,{FF,{read,'$F_EXPR',178}}},
                   {17,{FF,{modul,'$F_EXPR',179}}}]
                  ++
@@ -1212,23 +1193,39 @@ read_expected(Version) ->
     OKB1 = [{POS13+1,{FF,{erts_debug,apply,4}}},
             {POS13+2,{FF,{erts_debug,apply,4}}},
             {POS13+3,{FF,{erts_debug,apply,4}}},
-            {POS1+3, {FF,{erlang,binary_to_term,1}}},
+	    {POS1+3, {FF,{erlang,binary_to_term,1}}},
             {POS3+1, {FF,{erlang,spawn,3}}},
             {POS3+2, {FF,{erlang,spawn,3}}},
             {POS3+3,  {FF,{erlang,spawn_link,3}}},
             {POS3+4, {FF,{erlang,spawn_link,3}}},
             {POS6+4, {FF,{erlang,spawn,3}}},
+	    {POS8+6,{FF,{erlang,apply,3}}},
+	    {POS8+7,{FF,{erlang,apply,3}}},
+	    {POS9+1,{FF,{erlang,apply,3}}},
+	    {POS9+5,{FF,{erlang,apply,3}}},
+	    {POS11+1,{FF,{erlang,apply,3}}},
+	    {POS11+2,{FF,{erlang,apply,3}}},
+	    {POS11+3,{FF,{erlang,apply,3}}},
+	    {POS11+4,{FF,{erlang,apply,3}}},
+	    {POS12+5,{FF,{erlang,apply,3}}},
+	    {POS12+8,{FF,{erlang,apply,3}}},
             {POS13+5, {{read,bi,0},{erlang,length,1}}},
             {POS14+3, {{read,bi,0},{erlang,length,1}}}],
 
     %% Operators (OTP-8647):
     OKB = case Version of
               abstract_v1 ->
-                  [];
+		  [{POS8+3, {FF,{erlang,apply,3}}},
+		   {POS10+1, {FF,{erlang,apply,3}}},
+		   {POS10+6, {FF,{erlang,apply,3}}}];
               _ ->
                   [{POS13+16, {{read,bi,0},{erlang,'!',2}}},
                    {POS13+16, {{read,bi,0},{erlang,'-',1}}},
-                   {POS13+16, {{read,bi,0},{erlang,self,0}}}]
+                   {POS13+16, {{read,bi,0},{erlang,self,0}}},
+                   {POS15+1,  {{read,bi,0},{erlang,'>',2}}},
+                   {POS15+2,  {{read,bi,0},{erlang,'-',2}}},
+                   {POS15+2,  {{read,bi,0},{erlang,'*',2}}},
+                   {POS15+8,  {{read,bi,0},{erlang,'/',2}}}]
           end
         ++ [{POS14+19, {{read,bi,0},{erlang,'+',2}}},
             {POS14+21, {{read,bi,0},{erlang,'+',2}}},

@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -39,7 +40,6 @@ all() ->
      {group, consistency_after_move_replica},
      {group, consistency_after_transform_table},
      consistency_after_change_table_copy_type,
-     {group, consistency_after_fallback},
      {group, consistency_after_restore},
      consistency_after_rename_of_node,
      {group, checkpoint_retainer_consistency},
@@ -99,10 +99,14 @@ groups() ->
       [{group, updates_during_checkpoint_activation},
        {group, updates_during_checkpoint_iteration},
        {group, load_table_with_activated_checkpoint},
-       {group,
-	add_table_copy_to_table_checkpoint}]},
+       {group, add_table_copy_to_table_checkpoint},
+       {group, consistency_after_fallback}
+      ]},
      {updates_during_checkpoint_activation, [],
-      [updates_during_checkpoint_activation_2_ram,
+      [updates_during_checkpoint_activation_1_ram,
+       updates_during_checkpoint_activation_1_disc,
+       updates_during_checkpoint_activation_1_disc_only,
+       updates_during_checkpoint_activation_2_ram,
        updates_during_checkpoint_activation_2_disc,
        updates_during_checkpoint_activation_2_disc_only,
        updates_during_checkpoint_activation_3_ram,
@@ -692,7 +696,7 @@ consistency_after_restore(ReplicaType, Op, Config) ->
     ?verify_mnesia(Nodes, []).
 
 change_tab(Father, Tab, Test) ->
-    Key = random:uniform(20),
+    Key = rand:uniform(20),
     Update = fun() ->
 		     case mnesia:read({Tab, Key}) of
 			 [{Tab, Key, 1}] -> 
@@ -729,6 +733,18 @@ consistency_after_rename_of_node(doc) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+updates_during_checkpoint_activation_1_ram(suite) -> [];
+updates_during_checkpoint_activation_1_ram(Config) when is_list(Config) ->
+    updates_during_checkpoint_activation(ram_copies, 1, Config).
+
+updates_during_checkpoint_activation_1_disc(suite) -> [];
+updates_during_checkpoint_activation_1_disc(Config) when is_list(Config) ->
+    updates_during_checkpoint_activation(disc_copies, 1, Config).
+
+updates_during_checkpoint_activation_1_disc_only(suite) -> [];
+updates_during_checkpoint_activation_1_disc_only(Config) when is_list(Config) ->
+    updates_during_checkpoint_activation(disc_only_copies, 1, Config).
 
 updates_during_checkpoint_activation_2_ram(suite) -> [];
 updates_during_checkpoint_activation_2_ram(Config) when is_list(Config) ->
@@ -771,7 +787,8 @@ updates_during_checkpoint_activation(ReplicaType,NodeConfig,Config) ->
     timer:sleep(timer:seconds(Delay)),
 
     {ok, CPName, _NodeList} =
-        mnesia:activate_checkpoint([{max, mnesia:system_info(tables)}]),
+        mnesia:activate_checkpoint([{max, mnesia:system_info(tables)},
+				    {ram_overrides_dump, true}]),
     timer:sleep(timer:seconds(Delay)),
 
     %% Stop tpcb

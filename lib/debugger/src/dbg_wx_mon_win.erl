@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -36,12 +37,14 @@
 
 -include_lib("wx/include/wx.hrl").
 
+-define(STRTEXT, "Use range of +pc flag").
+
 -define(default_rows,10).
 
 -record(moduleInfo, {module, menubtn}).
 -record(procInfo, {pid, row}).
 -record(breakInfo, {point, status, break}).
--record(break, {mb, smi, emi, dimi, demi}).  %% BUGBUG defined in dbg_ui_win
+-record(break, {mb, smi, emi, dimi, demi}).
 -record(winInfo, {window,       % gsobj()
 		  grid,         % gsobj()
 		  row,          % int() Last row in grid
@@ -60,6 +63,9 @@
 		  ebutton,      % gsobj()
 		  selected=[],  % ['First Call'|'On Break'|'On Exit']
 
+                  %% Strings button(s)
+                  stringsbutton,% gsobj()
+
 		  slabel,       % showing Stack Trace option
 		  blabel        % showing Back Trace Size
 		 }).
@@ -71,13 +77,6 @@
 init() ->
     dbg_wx_win:init().
 
-%%--------------------------------------------------------------------
-%% create_win(GS, Title, Menus) -> #winInfo{}
-%%   GS = gsobj()
-%%   Title = string()
-%%   Menus = [menu()]  See dbg_ui_win.erl
-%%--------------------------------------------------------------------
-
 -define(GRID,1000).
 
 -define(PAD, 5).
@@ -85,6 +84,10 @@ init() ->
 -define(Wg, 770).
 -define(W, 800).
 -define(H, 390).
+
+%% FIXME
+-define(autoId, 314).
+-define(stringsId, 271).
 
 create_win(_Wx, Title, Menus) ->
     wx:batch(fun() -> create_win_batch(Title, Menus) end).
@@ -104,19 +107,19 @@ create_win_batch(Title, Menus) ->
     Hlb = 200,
     Listbox = wxListBox:new(Panel, ?wxID_ANY, [{size,{?Wf,Hlb}},
 					       {style,?wxLB_SINGLE}]),
-    wxSizer:add(LeftSz,Listbox,[{proportion,1}, {border,3}]),
+    wxSizer:add(LeftSz,Listbox,[{proportion,1},{border,3},{flag,?wxEXPAND}]),
     wxListBox:connect(Listbox, command_listbox_doubleclicked),
     wxListBox:connect(Listbox, right_down),
 
     SBox = wxStaticBox:new(Panel, ?wxID_ANY, "Auto Attach:"),
     SBS  = wxStaticBoxSizer:new(SBox, ?wxVERTICAL),
-    Fbtn = wxCheckBox:new(Panel, ?wxID_ANY, "First Call"),
+    Fbtn = wxCheckBox:new(Panel, ?autoId, "First Call"),
     wxSizer:add(SBS,Fbtn),
-    Bbtn = wxCheckBox:new(Panel, ?wxID_ANY, "On Break"),
+    Bbtn = wxCheckBox:new(Panel, ?autoId, "On Break"),
     wxSizer:add(SBS,Bbtn),
-    Ebtn = wxCheckBox:new(Panel, ?wxID_ANY, "On Exit"),
+    Ebtn = wxCheckBox:new(Panel, ?autoId, "On Exit"),
     wxSizer:add(SBS,Ebtn),
-    wxFrame:connect(Panel, command_checkbox_clicked), 
+    wxFrame:connect(Panel, command_checkbox_clicked),
     wxSizer:add(LeftSz,SBS, [{flag,?wxEXPAND}]),
 
     SLabel = wxStaticText:new(Panel, ?wxID_ANY, "Stack Trace:\n On (with tail)"), 
@@ -124,6 +127,12 @@ create_win_batch(Title, Menus) ->
     BLabel = wxStaticText:new(Panel, ?wxID_ANY, "Back Trace Size:\n 50000"), 
     wxSizer:add(LeftSz,BLabel),
     
+    StringsBox = wxStaticBox:new(Panel, ?wxID_ANY, "Strings:"),
+    StringsBS  = wxStaticBoxSizer:new(StringsBox, ?wxVERTICAL),
+    Stringsbtn = wxCheckBox:new(Panel, ?stringsId, ?STRTEXT),
+    wxSizer:add(StringsBS,Stringsbtn),
+    wxSizer:add(LeftSz,StringsBS, [{flag,?wxEXPAND}]),
+
     %% Create list_crtl / grid
     Grid = wxListCtrl:new(Panel, [{winid, ?GRID},
 				  {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL 
@@ -177,6 +186,7 @@ create_win_batch(Title, Menus) ->
     #winInfo{window=Win, grid=Grid, row=0, focus=0,
 	     listbox=Listbox,
 	     fbutton=Fbtn, bbutton=Bbtn, ebutton=Ebtn,
+             stringsbutton=Stringsbtn,
 	     slabel=SLabel, blabel=BLabel}.
 
 %%--------------------------------------------------------------------
@@ -190,11 +200,13 @@ get_window(WinInfo) ->
 %%--------------------------------------------------------------------
 %% show_option(WinInfo, Option, Value) -> void()
 %%   WinInfo = #winInfo{}
-%%   Option = auto_attach | stack_trace | back_trace
+%%   Option = auto_attach | stack_trace | back_trace | strings
 %%   Value = [Flag]                          % Option==auto_attach
 %%             Flag = init | break | exit
 %%         | true | all | no_tail | false    % Option==stack_trace
-%%         | int()                           % Option==back_trace
+%%         | integer()                       % Option==back_trace
+%%         | [SFlag]                         % Option==strings
+%%             SFlag = str_on
 %%--------------------------------------------------------------------
 show_option(WinInfo, Option, Value) ->
     case Option of	
@@ -219,15 +231,28 @@ show_option(WinInfo, Option, Value) ->
 
 	back_trace ->
 	    Text = "Back Trace Size:\n " ++ integer_to_list(Value),
-	    wxStaticText:setLabel(WinInfo#winInfo.blabel, Text)
+	    wxStaticText:setLabel(WinInfo#winInfo.blabel, Text);
+        strings ->
+	    wx:foreach(fun(Button) ->
+				  wxCheckBox:setValue(Button, false)
+			  end,
+			  option_buttons(WinInfo, [str_on])),
+	    wx:foreach(fun(Button) ->
+				  wxCheckBox:setValue(Button, true)
+			  end,
+			  option_buttons(WinInfo, Value))
     end.
 
+%% Auto Attach
 option_buttons(WinInfo, [init|Flags]) ->
     [WinInfo#winInfo.fbutton|option_buttons(WinInfo, Flags)];
 option_buttons(WinInfo, [break|Flags]) ->
     [WinInfo#winInfo.bbutton|option_buttons(WinInfo, Flags)];
 option_buttons(WinInfo, [exit|Flags]) ->
     [WinInfo#winInfo.ebutton|option_buttons(WinInfo, Flags)];
+%% Strings
+option_buttons(WinInfo, [str_on|Flags]) ->
+    [WinInfo#winInfo.stringsbutton|option_buttons(WinInfo, Flags)];
 option_buttons(_WinInfo, []) ->
     [].
 
@@ -538,7 +563,8 @@ handle_event(#wx{obj=ListBox, event=#wxMouse{type=right_down, x=X,y=Y}},
     end;
 
 %% Auto attach buttons
-handle_event(#wx{event=#wxCommand{type=command_checkbox_clicked}}, 
+handle_event(#wx{id=?autoId,
+                 event=#wxCommand{type=command_checkbox_clicked}},
 	     WinInfo) ->
     Check = fun(Button, NamesAcc) ->
 		    case wxCheckBox:isChecked(Button) of
@@ -554,6 +580,23 @@ handle_event(#wx{event=#wxCommand{type=command_checkbox_clicked}},
 		      WinInfo#winInfo.bbutton,
 		      WinInfo#winInfo.fbutton]),
     {'Auto Attach', Names};
+
+%% Strings button(s)
+handle_event(#wx{id=?stringsId,
+                 event=#wxCommand{type=command_checkbox_clicked}},
+	     WinInfo) ->
+    Check = fun(Button, NamesAcc) ->
+		    case wxCheckBox:isChecked(Button) of
+			true ->
+			    Name = wxCheckBox:getLabel(Button),
+			    [list_to_atom(Name)|NamesAcc];
+			false ->
+			    NamesAcc
+		    end
+	    end,
+    Names = wx:foldl(Check, [],
+		     [WinInfo#winInfo.stringsbutton]),
+    {'Strings', Names};
 
 %% Process grid
 handle_event(#wx{event=#wxList{type=command_list_item_selected,
@@ -575,7 +618,6 @@ handle_event(#wx{userData=Data,
 	     _WinInfo) ->
     Data;
 handle_event(_Event, _WinInfo) ->
-%%    io:format("Ev: ~p~n",[_Event]),
     ignore.
 
 %%====================================================================

@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -69,11 +70,15 @@
     returns_valid_empty_extra/1,
     returns_valid_populated_extra_with_nulls/1,
 
+    names_stdout/1,
+
     buffer_overrun_1/1,
     buffer_overrun_2/1,
     no_nonlocal_register/1,
     no_nonlocal_kill/1,
-    no_live_killing/1
+    no_live_killing/1,
+
+    socket_reset_before_alive2_reply_is_written/1
    ]).
 
 
@@ -118,8 +123,10 @@ all() ->
      too_large, alive_req_too_small_1, alive_req_too_small_2,
      alive_req_too_large, returns_valid_empty_extra,
      returns_valid_populated_extra_with_nulls,
+     names_stdout,
      {group, buffer_overrun}, no_nonlocal_register,
-     no_nonlocal_kill, no_live_killing].
+     no_nonlocal_kill, no_live_killing,
+     socket_reset_before_alive2_reply_is_written].
 
 groups() -> 
     [{buffer_overrun, [],
@@ -239,11 +246,7 @@ register_node(Name,Port) ->
     register_node_v2(Port,$M,0,5,5,Name,"").
 
 register_node_v2(Port, NodeType, Prot, HVsn, LVsn, Name, Extra) ->
-    Utf8Name = unicode:characters_to_binary(Name),
-    Req = [?EPMD_ALIVE2_REQ, put16(Port), NodeType, Prot,
-	   put16(HVsn), put16(LVsn),
-	   put16(size(Utf8Name)), binary_to_list(Utf8Name),
-	   size16(Extra), Extra],
+    Req = alive2_req(Port, NodeType, Prot, HVsn, LVsn, Name, Extra),
     case send_req(Req) of
 	{ok,Sock} ->
 	    case recv(Sock,4) of
@@ -759,6 +762,24 @@ returns_valid_populated_extra_with_nulls(Config) when is_list(Config) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+names_stdout(doc) ->
+    ["Test that epmd -names prints registered nodes to stdout"];
+names_stdout(suite) ->
+    [];
+names_stdout(Config) when is_list(Config) ->
+    ?line ok = epmdrun(),
+    ?line {ok,Sock} = register_node("foobar"),
+    ?line ok = epmdrun("-names"),
+    ?line {ok, Data} = receive {_Port, {data, D}} -> {ok, D}
+		       after 10000 -> {error, timeout}
+		       end,
+    ?line {match,_} = re:run(Data, "^epmd: up and running", [multiline]),
+    ?line {match,_} = re:run(Data, "^name foobar at port", [multiline]),
+    ?line ok = close(Sock),
+    ok.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 buffer_overrun_1(suite) ->
     [];
 buffer_overrun_1(doc) ->
@@ -916,6 +937,42 @@ no_live_killing(Config) when is_list(Config) ->
     ?line close(Sock3),
     ok.
 
+socket_reset_before_alive2_reply_is_written(doc) ->
+    ["Check for regression - don't make zombie from node which "
+     "sends TCP RST at wrong time"];
+socket_reset_before_alive2_reply_is_written(suite) ->
+    [];
+socket_reset_before_alive2_reply_is_written(Config) when is_list(Config) ->
+    %% - delay_write for easier triggering of race condition
+    %% - relaxed_command_check for gracefull shutdown of epmd even if there
+    %%   is stuck node.
+    ?line ok = epmdrun("-delay_write 1 -relaxed_command_check"),
+
+    %% We can't use send_req/1 directly as we want to do inet:setopts/2
+    %% on our socket.
+    ?line {ok, Sock} = connect(),
+
+    %% Issuing close/1 on such socket will result in immediate RST packet.
+    ?line ok = inet:setopts(Sock, [{linger, {true, 0}}]),
+
+    Req = alive2_req(4711, 77, 0, 5, 5, "test", []),
+    ?line ok = send(Sock, [size16(Req), Req]),
+
+    timer:sleep(500), %% Wait for the first 1/2 of delay_write before closing
+    ?line ok = close(Sock),
+
+    timer:sleep(500 + ?SHORT_PAUSE), %% Wait for the other 1/2 of delay_write
+
+    %% Wait another delay_write interval, due to delay doubling in epmd.
+    %% Should be removed when this is issue is fixed there.
+    timer:sleep(1000),
+
+    ?line {ok, SockForNames} = connect_active(),
+
+    %% And there should be no stuck nodes
+    ?line {ok, []} = do_get_names(SockForNames),
+    ?line ok = close(SockForNames),
+    ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Terminate all tests with killing epmd.
@@ -968,7 +1025,7 @@ epmdrun(Epmd,Args0) ->
 	       O ->
 		   " "++O
 	   end,
-  osrun("\"" ++ Epmd ++ "\"" ++ Args ++ " " ?EPMDARGS " -port " ++ integer_to_list(?PORT)).
+  osrun("\"" ++ Epmd ++ "\"" ++ " " ?EPMDARGS " -port " ++ integer_to_list(?PORT) ++ Args).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1178,3 +1235,12 @@ flat_count([_|T], N) ->
     flat_count(T, N);
 flat_count([], N) -> N.
     
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+alive2_req(Port, NodeType, Prot, HVsn, LVsn, Name, Extra) ->
+    Utf8Name = unicode:characters_to_binary(Name),
+    [?EPMD_ALIVE2_REQ, put16(Port), NodeType, Prot,
+     put16(HVsn), put16(LVsn),
+     put16(size(Utf8Name)), binary_to_list(Utf8Name),
+     size16(Extra), Extra].

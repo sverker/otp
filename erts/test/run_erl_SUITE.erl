@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2005-2012. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -140,12 +141,10 @@ heavier_1(Config) ->
 
     ?line ToErl = open_port({spawn,"to_erl "++Pipe}, []),
     io:format("ToErl = ~p\n", [ToErl]),
-    X = 1,
-    Y = 555,
-    Z = 42,
-    ?line random:seed(X, Y, Z),
-    SeedCmd = lists:flatten(io_lib:format("random:seed(~p, ~p, ~p). \r\n",
-					  [X,Y,Z])),
+    Seed = {1,555,42},
+    rand:seed(exsplus, Seed),
+    SeedCmd = lists:flatten(io_lib:format("rand:seed(exsplus, ~p). \r\n",
+					  [Seed])),
     ?line io:format("~p\n", [SeedCmd]),
     ?line erlang:port_command(ToErl, SeedCmd),
 
@@ -156,9 +155,9 @@ heavier_1(Config) ->
 	"F = fun(F,0) -> ok; "++
 	       "(F,N) -> " ++
 	           "io:format(\"\\\"~s\\\"~n\","++
-	                     "[[35|[random:uniform(25)+65 || " ++
+	                     "[[35|[rand:uniform(25)+65 || " ++
 	                     "_ <- lists:seq(1, "++
-	                                "random:uniform("++
+	                                "rand:uniform("++
                                              integer_to_list(MaxLen)++
                                         "))]]]), "++
 	           "F(F,N-1) "++
@@ -188,8 +187,8 @@ receive_all(Iter, ToErl, MaxLen) ->
 
 receive_all_1(0, _, _, _) -> ok;
 receive_all_1(Iter, Line, ToErl, MaxLen) ->
-    NumChars = random:uniform(MaxLen),
-    Pattern = [random:uniform(25)+65 || _ <- lists:seq(1, NumChars)],
+    NumChars = rand:uniform(MaxLen),
+    Pattern = [rand:uniform(25)+65 || _ <- lists:seq(1, NumChars)],
     receive_all_2(Iter, {NumChars,Pattern}, Line, ToErl, MaxLen).
     
 

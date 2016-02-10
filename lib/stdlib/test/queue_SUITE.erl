@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1999-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -469,7 +470,7 @@ oops(suite) ->
 oops(Config) when is_list(Config) ->
     ?line N = 3142,
     ?line Optab = optab(),
-    ?line Seed0 = random:seed0(),
+    ?line Seed0 = rand:seed(exsplus, {1,2,4}),
     ?line {Is,Seed} = random_list(N, tuple_size(Optab), Seed0, []),
     ?line io:format("~p ", [Is]),
     ?line QA = queue:new(),
@@ -561,20 +562,20 @@ args([], _, Seed, R) ->
 args([q|Ts], [Q|Qs]=Qss, Seed, R) ->
     args(Ts, if Qs =:= [] -> Qss; true -> Qs end, Seed, [Q|R]);
 args([l|Ts], Qs, Seed0, R) ->
-    {N,Seed1} = random:uniform_s(17, Seed0),
+    {N,Seed1} = rand:uniform_s(17, Seed0),
     {L,Seed} = random_list(N, 4711, Seed1, []),
     args(Ts, Qs, Seed, [L|R]);
 args([t|Ts], Qs, Seed0, R) ->
-    {T,Seed} = random:uniform_s(4711, Seed0),
+    {T,Seed} = rand:uniform_s(4711, Seed0),
     args(Ts, Qs, Seed, [T|R]);
 args([n|Ts], Qs, Seed0, R) ->
-    {N,Seed} = random:uniform_s(17, Seed0),
+    {N,Seed} = rand:uniform_s(17, Seed0),
     args(Ts, Qs, Seed, [N|R]).
 
 random_list(0, _, Seed, R) ->
     {R,Seed};
 random_list(N, M, Seed0, R) ->
-    {X,Seed} = random:uniform_s(M, Seed0),
+    {X,Seed} = rand:uniform_s(M, Seed0),
     random_list(N-1, M, Seed, [X|R]).
 
 call(Func, As) ->

@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxmdiclientwindow.html">wxMDIClientWindow</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxmdiclientwindow.html">wxMDIClientWindow</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxWindow}
 %% <br />{@link wxEvtHandler}
@@ -77,7 +78,7 @@ parent_class(wxEvtHandler) -> true;
 parent_class(_Class) -> erlang:error({badtype, ?MODULE}).
 
 -type wxMDIClientWindow() :: wx:wx_object().
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxmdiclientwindow.html#wxmdiclientwindowwxmdiclientwindow">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxmdiclientwindow.html#wxmdiclientwindowwxmdiclientwindow">external documentation</a>.
 -spec new() -> wxMDIClientWindow().
 new() ->
   wxe_util:construct(?wxMDIClientWindow_new_0,
@@ -91,7 +92,7 @@ new(Parent)
  when is_record(Parent, wx_ref) ->
   new(Parent, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxmdiclientwindow.html#wxmdiclientwindowwxmdiclientwindow">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxmdiclientwindow.html#wxmdiclientwindowwxmdiclientwindow">external documentation</a>.
 -spec new(Parent, [Option]) -> wxMDIClientWindow() when
 	Parent::wxMDIParentFrame:wxMDIParentFrame(),
 	Option :: {style, integer()}.
@@ -112,7 +113,7 @@ createClient(This,Parent)
  when is_record(This, wx_ref),is_record(Parent, wx_ref) ->
   createClient(This,Parent, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxmdiclientwindow.html#wxmdiclientwindowcreateclient">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxmdiclientwindow.html#wxmdiclientwindowcreateclient">external documentation</a>.
 -spec createClient(This, Parent, [Option]) -> boolean() when
 	This::wxMDIClientWindow(), Parent::wxMDIParentFrame:wxMDIParentFrame(),
 	Option :: {style, integer()}.

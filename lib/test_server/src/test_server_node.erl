@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -26,10 +27,9 @@
 
 %% Test Controller interface
 -export([is_release_available/1]).
--export([stop/1]).
 -export([start_tracer_node/2,trace_nodes/2,stop_tracer_node/1]).
--export([start_node/5, stop_node/2]).
--export([kill_nodes/1, nodedown/2]).
+-export([start_node/5, stop_node/1]).
+-export([kill_nodes/0, nodedown/1]).
 %% Internal export
 -export([node_started/1,trc/1,handle_debug/4]).
 
@@ -57,23 +57,12 @@ is_release_available(Rel) ->
 	    false
     end.
 
-stop(TI) ->
-    kill_nodes(TI).
-
-nodedown(Sock, TI) ->
+nodedown(Sock) ->
     Match = #slave_info{name='$1',socket=Sock,client='$2',_='_'},
     case ets:match(slave_tab,Match) of
-	[[Node,Client]] -> % Slave node died
+	[[Node,_Client]] -> % Slave node died
 	    gen_tcp:close(Sock),
 	    ets:delete(slave_tab,Node),
-	    close_target_client(Client),
-	    HostAtom = test_server_sup:hostatom(Node),
-	    case lists:member(HostAtom,TI#target_info.slave_targets) of
-		true -> 
-		    put(test_server_free_targets,
-			get(test_server_free_targets) ++ [HostAtom]);
-		false -> ok
-	    end,
 	    slave_died;
 	[] ->
 	    ok
@@ -94,7 +83,7 @@ start_tracer_node(TraceFile,TI) ->
     Cookie = TI#target_info.cookie,
     {ok,LSock} = gen_tcp:listen(0,[binary,{reuseaddr,true},{packet,2}]),
     {ok,TracePort} = inet:port(LSock),
-    Prog = pick_erl_program(default),
+    Prog = quote_progname(pick_erl_program(default)),
     Cmd = lists:concat([Prog, " -sname tracer -hidden -setcookie ", Cookie, 
 			" -s ", ?MODULE, " trc ", TraceFile, " ", 
 			TracePort, " ", TI#target_info.os_family]),
@@ -300,9 +289,11 @@ start_node(_SlaveName, _Type, _Options, _From, _TI) ->
 
 %%
 %% Peer nodes are always started on the same host as test_server_ctrl
-%% Socket communication is used in case target and controller is
-%% not the same node (target must not know the controller node
-%% via erlang distribution)
+%%
+%% (Socket communication is used since in early days the test target
+%% and the test server controller node could be on different hosts and
+%% the target could not know the controller node via erlang
+%% distribution)
 %%
 start_node_peer(SlaveName, OptList, From, TI) ->
     SuppliedArgs = start_node_get_option_value(args, OptList, []),
@@ -322,7 +313,7 @@ start_node_peer(SlaveName, OptList, From, TI) ->
     FailOnError = start_node_get_option_value(fail_on_error, OptList, true),
     Pa = TI#target_info.test_server_dir,
     Prog0 = start_node_get_option_value(erl, OptList, default),
-    Prog = pick_erl_program(Prog0),
+    Prog = quote_progname(pick_erl_program(Prog0)),
     Args = 
 	case string:str(SuppliedArgs,"-setcookie") of
 	    0 -> "-setcookie " ++ TI#target_info.cookie ++ " " ++ SuppliedArgs;
@@ -403,8 +394,6 @@ do_start_node_slave(Host0, SlaveName, Args, Prog, Cleanup) ->
 	    _ -> cast_to_list(Host0)
 	end,
     Cmd = Prog ++ " " ++ Args,
-    %% Can use slave.erl here because I'm both controller and target
-    %% so I will ping the new node anyway
     case slave:start(Host, SlaveName, Args, no_link, Prog) of
 	{ok,Nodename} ->
 	    case Cleanup of
@@ -545,61 +534,36 @@ start_node_get_option_value(Key, List, Default) ->
 %% stop_node(Name) -> ok | {error,Reason}
 %%
 %% Clean up - test_server will stop this node
-stop_node(Name, TI) ->
+stop_node(Name) ->
     case ets:lookup(slave_tab,Name) of
-	[#slave_info{client=Client}] -> 
+	[#slave_info{}] ->
 	    ets:delete(slave_tab,Name),
-	    HostAtom = test_server_sup:hostatom(Name),
-	    case lists:member(HostAtom,TI#target_info.slave_targets) of
-		true -> 
-		    put(test_server_free_targets,
-			get(test_server_free_targets) ++ [HostAtom]);
-		false -> ok
-	    end,
-	    close_target_client(Client),
 	    ok;
 	[] -> 
 	    {error, not_a_slavenode}
     end.
 	    
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% kill_nodes(TI) -> ok
+%% kill_nodes() -> ok
 %%
 %% Brutally kill all slavenodes that were not stopped by test_server
-kill_nodes(TI) ->
+kill_nodes() ->
     case ets:match_object(slave_tab,'_') of
 	[] -> [];
 	List ->
-	    lists:map(fun(SI) -> kill_node(SI,TI) end, List)
+	    lists:map(fun(SI) -> kill_node(SI) end, List)
     end.
 
-kill_node(SI,TI) ->
+kill_node(SI) ->
     Name = SI#slave_info.name,
     ets:delete(slave_tab,Name),
-    HostAtom = test_server_sup:hostatom(Name),
-    case lists:member(HostAtom,TI#target_info.slave_targets) of
-	true ->
-	    put(test_server_free_targets,
-		get(test_server_free_targets) ++ [HostAtom]);
-	false -> ok
-    end,
     case SI#slave_info.socket of
 	undefined ->
 	    catch rpc:call(Name,erlang,halt,[]);
 	Sock ->
 	    gen_tcp:close(Sock)
     end,
-    close_target_client(SI#slave_info.client),
     Name.
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% Platform specific code
-
-close_target_client(undefined) ->
-    ok.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% cast_to_list(X) -> string()
@@ -626,13 +590,36 @@ pick_erl_program(L) ->
 	{release, S} ->
 	    find_release(S);
 	this ->
-	    lib:progname()
+	    cast_to_list(lib:progname())
+    end.
+
+%% This is an attempt to distinguish between spaces in the program
+%% path and spaces that separate arguments. The program is quoted to
+%% allow spaces in the path.
+%%
+%% Arguments could exist either if the executable is excplicitly given
+%% ({prog,String}) or if the -program switch to beam is used and
+%% includes arguments (typically done by cerl in OTP test environment
+%% in order to ensure that slave/peer nodes are started with the same
+%% emulator and flags as the test node. The return from lib:progname()
+%% could then typically be '/<full_path_to>/cerl -gcov').
+quote_progname(Progname) ->
+    do_quote_progname(string:tokens(Progname," ")).
+
+do_quote_progname([Prog]) ->
+    "\""++Prog++"\"";
+do_quote_progname([Prog,Arg|Args]) ->
+    case os:find_executable(Prog) of
+	false ->
+	    do_quote_progname([Prog++" "++Arg | Args]);
+	_ ->
+	    %% this one has an executable - we assume the rest are arguments
+	    "\""++Prog++"\""++
+		lists:flatten(lists:map(fun(X) -> [" ",X] end, [Arg|Args]))
     end.
 
 random_element(L) ->
-    {A,B,C} = now(),
-    E = lists:sum([A,B,C]) rem length(L),
-    lists:nth(E+1, L).
+    lists:nth(rand:uniform(length(L)), L).
 
 find_release(latest) ->
     "/usr/local/otp/releases/latest/bin/erl";
@@ -665,7 +652,7 @@ find_rel_linux(Rel) ->
     end.
 
 find_rel_suse(Rel, SuseRel) ->
-    Root = "/usr/local/otp/releases/otp_beam_linux_sles",
+    Root = "/usr/local/otp/releases/sles",
     case SuseRel of
 	"11" ->
 	    %% Try both SuSE 11, SuSE 10 and SuSe 9 in that order.
@@ -685,10 +672,10 @@ find_rel_suse(Rel, SuseRel) ->
 find_rel_suse_1(Rel, RootWc) ->
     case erlang:system_info(wordsize) of
 	4 ->
-	    find_rel_suse_2(Rel, RootWc++"_i386");
+	    find_rel_suse_2(Rel, RootWc++"_32");
 	8 ->
-	    find_rel_suse_2(Rel, RootWc++"_x64") ++
-		find_rel_suse_2(Rel, RootWc++"_i386")
+	    find_rel_suse_2(Rel, RootWc++"_64") ++
+		find_rel_suse_2(Rel, RootWc++"_32")
     end.
 
 find_rel_suse_2(Rel, RootWc) ->

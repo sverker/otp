@@ -1,25 +1,26 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
 -module(sys_SUITE).
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2,log/1,log_to_file/1,
-	 stats/1,trace/1,suspend/1,install/1]).
+	 stats/1,trace/1,suspend/1,install/1,special_process/1]).
 -export([handle_call/3,terminate/2,init/1]).
 -include_lib("test_server/include/test_server.hrl").
 
@@ -27,14 +28,12 @@
 
 
 %% Doesn't look into change_code at all
-%% Doesn't address writing your own process that understands
-%% system messages at all.
 
 
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [log, log_to_file, stats, trace, suspend, install].
+    [log, log_to_file, stats, trace, suspend, install, special_process].
 
 groups() -> 
     [].
@@ -156,6 +155,76 @@ install(Config) when is_list(Config) ->
 	   {spy_got,{request,3},sys_SUITE_server}] = Msgs,
     ?line stop(),
     ok.
+
+special_process(suite) -> [];
+special_process(Config) when is_list(Config) ->
+    ok = spec_proc(sys_sp1),
+    ok = spec_proc(sys_sp2).
+
+spec_proc(Mod) ->
+    {ok,_} = Mod:start_link(100),
+    ok = sys:statistics(Mod,true),
+    ok = sys:trace(Mod,true),
+    1 = Ch = Mod:alloc(),
+    Free = lists:seq(2,100),
+    Replace = case sys:get_state(Mod) of
+		  {[Ch],Free} ->
+		      fun({A,F}) ->
+			      Free = F,
+			      {A,[2,3,4]}
+		      end;
+		  {state,[Ch],Free} ->
+		      fun({state,A,F}) ->
+			      Free = F,
+			      {state,A,[2,3,4]}
+		      end
+	      end,
+    case sys:replace_state(Mod, Replace) of
+	{[Ch],[2,3,4]} -> ok;
+	{state,[Ch],[2,3,4]} -> ok
+    end,
+    ok = Mod:free(Ch),
+    case sys:get_state(Mod) of
+	{[],[1,2,3,4]} -> ok;
+	{state,[],[1,2,3,4]} -> ok
+    end,
+    {ok,[{start_time,_},
+	 {current_time,_},
+	 {reductions,_},
+	 {messages_in,2},
+	 {messages_out,1}]} = sys:statistics(Mod,get),
+    ok = sys:statistics(Mod,false),
+    [] = sys:replace_state(Mod, fun(_) -> [] end),
+    process_flag(trap_exit,true),
+    ok = case catch sys:get_state(Mod) of
+	     [] ->
+		 ok;
+	     {'EXIT',{{callback_failed,
+		       {Mod,system_get_state},{throw,fail}},_}} ->
+		 ok
+	 end,
+    ok = sys:terminate(Mod, normal),
+    {ok,_} = Mod:start_link(4),
+    ok = case catch sys:replace_state(Mod, fun(_) -> {} end) of
+	     {} ->
+		 ok;
+	     {'EXIT',{{callback_failed,
+		       {Mod,system_replace_state},{throw,fail}},_}} ->
+		 ok
+	 end,
+    ok = sys:terminate(Mod, normal),
+    {ok,_} = Mod:start_link(4),
+    StateFun = fun(_) -> error(fail) end,
+    ok = case catch sys:replace_state(Mod, StateFun) of
+	     {} ->
+		 ok;
+	     {'EXIT',{{callback_failed,
+		       {Mod,system_replace_state},{error,fail}},_}} ->
+		 ok;
+	     {'EXIT',{{callback_failed,StateFun,{error,fail}},_}} ->
+		 ok
+	 end,
+    ok = sys:terminate(Mod, normal).
 
 %%%%%%%%%%%%%%%%%%%%
 %% Dummy server

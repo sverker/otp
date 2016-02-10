@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxprogressdialog.html">wxProgressDialog</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxprogressdialog.html">wxProgressDialog</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxDialog}
 %% <br />{@link wxTopLevelWindow}
@@ -94,7 +95,7 @@ new(Title,Message)
  when is_list(Title),is_list(Message) ->
   new(Title,Message, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxprogressdialog.html#wxprogressdialogwxprogressdialog">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxprogressdialog.html#wxprogressdialogwxprogressdialog">external documentation</a>.
 -spec new(Title, Message, [Option]) -> wxProgressDialog() when
 	Title::unicode:chardata(), Message::unicode:chardata(),
 	Option :: {maximum, integer()}
@@ -112,7 +113,7 @@ new(Title,Message, Options)
   wxe_util:construct(?wxProgressDialog_new,
   <<(byte_size(Title_UC)):32/?UI,(Title_UC)/binary, 0:(((8- ((4+byte_size(Title_UC)) band 16#7)) band 16#7))/unit:8,(byte_size(Message_UC)):32/?UI,(Message_UC)/binary, 0:(((8- ((4+byte_size(Message_UC)) band 16#7)) band 16#7))/unit:8, BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxprogressdialog.html#wxprogressdialogresume">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxprogressdialog.html#wxprogressdialogresume">external documentation</a>.
 -spec resume(This) -> ok when
 	This::wxProgressDialog().
 resume(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -120,7 +121,7 @@ resume(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:cast(?wxProgressDialog_Resume,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxprogressdialog.html#wxprogressdialogupdate">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxprogressdialog.html#wxprogressdialogupdate">external documentation</a>.
 -spec update(This) -> ok when
 	This::wxProgressDialog().
 update(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -136,7 +137,7 @@ update(This,Value)
  when is_record(This, wx_ref),is_integer(Value) ->
   update(This,Value, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxprogressdialog.html#wxprogressdialogupdate">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxprogressdialog.html#wxprogressdialogupdate">external documentation</a>.
 -spec update(This, Value, [Option]) -> boolean() when
 	This::wxProgressDialog(), Value::integer(),
 	Option :: {newmsg, unicode:chardata()}.

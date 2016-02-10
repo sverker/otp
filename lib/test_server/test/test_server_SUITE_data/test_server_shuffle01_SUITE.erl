@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2009-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -223,7 +224,7 @@ conf5_end(_Config) ->
     ok.
 
 conf6_init(Config) when is_list(Config) ->
-    [{shuffle,{_,_,_}}] = ?config(tc_group_properties,Config),
+    validate_shuffle(Config),
     test_server:comment("Shuffle (random)"),
     init = ?config(suite,Config),
     [{cc6,conf6}|Config].
@@ -241,22 +242,27 @@ conf5(suite) ->					% test specification
 
 conf7_init(Config) when is_list(Config) ->
     test_server:comment("Group 7, Shuffle (random seed)"),
-    case proplists:get_value(shuffle,?config(tc_group_properties,Config)) of
-	{_,_,_} -> ok
-    end,
+    validate_shuffle(Config),
     [{cc7,conf7}|Config].
 conf7_end(_Config) ->
     ok.
 
 conf8_init(Config) when is_list(Config) ->
     test_server:comment("Group 8, Shuffle (user start seed)"),
-    case proplists:get_value(shuffle,?config(tc_group_properties,Config)) of
-	{_,_,_} -> ok
-    end,
+    validate_shuffle(Config),
     init = ?config(suite,Config),
     [{cc8,conf8}|Config].
 conf8_end(_Config) ->
     ok.
+
+validate_shuffle(Config) ->
+    case proplists:get_value(shuffle, ?config(tc_group_properties,Config)) of
+	{_,_,_} ->
+	    ok;
+	Seed ->
+	    %% Must be a valid seed.
+	    _ = rand:seed_s(rand:export_seed_s(Seed))
+    end.
 
 
 %%---------- test cases ----------

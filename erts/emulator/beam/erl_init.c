@@ -3,16 +3,17 @@
  *
  * Copyright Ericsson AB 1997-2013. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -35,7 +36,7 @@
 #include "dist.h"
 #include "erl_mseg.h"
 #include "erl_threads.h"
-#include "erl_bif_timer.h"
+#include "erl_hl_timer.h"
 #include "erl_instrument.h"
 #include "erl_printf_term.h"
 #include "erl_misc_utils.h"
@@ -45,6 +46,9 @@
 #include "erl_thr_queue.h"
 #include "erl_async.h"
 #include "erl_ptab.h"
+#include "erl_bif_unique.h"
+#define ERTS_WANT_TIMER_WHEEL_API
+#include "erl_time.h"
 
 #ifdef HIPE
 #include "hipe_mode_switch.h"	/* for hipe_mode_switch_init() */
@@ -87,11 +91,6 @@ const int etp_arch_bits = 32;
 #else
 # error "Not 64-bit, nor 32-bit arch"
 #endif
-#if HALFWORD_HEAP
-const int etp_halfword = 1;
-#else
-const int etp_halfword = 0;
-#endif
 #ifdef HIPE
 const int etp_hipe = 1;
 #else
@@ -117,6 +116,8 @@ const int etp_big_endian = 1;
 #else
 const int etp_big_endian = 0;
 #endif
+const Eterm etp_the_non_value = THE_NON_VALUE;
+
 /*
  * Note about VxWorks: All variables must be initialized by executable code,
  * not by an initializer. Otherwise a new instance of the emulator will
@@ -131,8 +132,14 @@ extern void ConWaitForExit(void);
 
 static void erl_init(int ncpu,
 		     int proc_tab_sz,
+		     int legacy_proc_tab,
 		     int port_tab_sz,
-		     int port_tab_sz_ignore_files);
+		     int port_tab_sz_ignore_files,
+		     int legacy_port_tab,
+		     int time_correction,
+		     ErtsTimeWarpMode time_warp_mode,
+		     int node_tab_delete_delay,
+		     ErtsDbSpinCount db_spin_count);
 
 static erts_atomic_t exiting;
 
@@ -145,7 +152,7 @@ volatile int erts_writing_erl_crash_dump = 0;
 int erts_initialized = 0;
 
 #if defined(USE_THREADS) && !defined(ERTS_SMP)
-static erts_tid_t main_thread;
+erts_tid_t erts_main_thread;
 #endif
 
 int erts_use_sender_punish;
@@ -159,9 +166,6 @@ int H_MIN_SIZE;			/* The minimum heap grain */
 int BIN_VH_MIN_SIZE;		/* The minimum binary virtual*/
 
 Uint32 erts_debug_flags;	/* Debug flags. */
-#ifdef ERTS_OPCODE_COUNTER_SUPPORT
-int count_instructions;
-#endif
 int erts_backtrace_depth;	/* How many functions to show in a backtrace
 				 * in error codes.
 				 */
@@ -176,16 +180,19 @@ int erts_compat_rel;
 
 static int no_schedulers;
 static int no_schedulers_online;
+#ifdef ERTS_DIRTY_SCHEDULERS
+static int no_dirty_cpu_schedulers;
+static int no_dirty_cpu_schedulers_online;
+static int no_dirty_io_schedulers;
+#endif
 
 #ifdef DEBUG
 Uint32 verbose;             /* See erl_debug.h for information about verbose */
 #endif
 
-int erts_disable_tolerant_timeofday; /* Time correction can be disabled it is
-				      * not and/or it is too slow.
-				      */
-
 int erts_atom_table_size = ATOM_LIMIT;	/* Maximum number of atoms */
+
+int erts_pd_initial_size = 8;  /* must be power of 2 */
 
 int erts_modified_timing_level;
 
@@ -262,6 +269,19 @@ this_rel_num(void)
     return this_rel;
 }
 
+static ERTS_INLINE void
+set_default_time_adj(int *time_correction_p, ErtsTimeWarpMode *time_warp_mode_p)
+{
+    *time_correction_p = 1;
+    *time_warp_mode_p = ERTS_NO_TIME_WARP_MODE;
+    if (!erts_check_time_adj_support(*time_correction_p,
+				     *time_warp_mode_p)) {
+	*time_correction_p = 0;
+	ASSERT(erts_check_time_adj_support(*time_correction_p,
+					   *time_warp_mode_p));
+    }
+}
+
 /*
  * Common error printout function, all error messages
  * that don't go to the error logger go through here.
@@ -277,37 +297,63 @@ static int early_init(int *argc, char **argv);
 void
 erts_short_init(void)
 {
-    int ncpu = early_init(NULL, NULL);
+    
+    int ncpu;
+    int time_correction;
+    ErtsTimeWarpMode time_warp_mode;
+
+    set_default_time_adj(&time_correction,
+			 &time_warp_mode);
+    ncpu = early_init(NULL, NULL);
     erl_init(ncpu,
 	     ERTS_DEFAULT_MAX_PROCESSES,
+	     0,
 	     ERTS_DEFAULT_MAX_PORTS,
-	     0);
+	     0,
+	     0,
+	     time_correction,
+	     time_warp_mode,
+	     ERTS_NODE_TAB_DELAY_GC_DEFAULT,
+	     ERTS_DB_SPNCNT_NORMAL);
     erts_initialized = 1;
 }
 
 static void
 erl_init(int ncpu,
 	 int proc_tab_sz,
+	 int legacy_proc_tab,
 	 int port_tab_sz,
-	 int port_tab_sz_ignore_files)
+	 int port_tab_sz_ignore_files,
+	 int legacy_port_tab,
+	 int time_correction,
+	 ErtsTimeWarpMode time_warp_mode,
+	 int node_tab_delete_delay,
+	 ErtsDbSpinCount db_spin_count)
 {
     init_benchmarking();
 
+    erts_bif_unique_init();
     erts_init_monitors();
-    erts_init_gc();
-    erts_init_time();
+    erts_init_time(time_correction, time_warp_mode);
     erts_init_sys_common_misc();
-    erts_init_process(ncpu, proc_tab_sz);
+    erts_init_process(ncpu, proc_tab_sz, legacy_proc_tab);
     erts_init_scheduling(no_schedulers,
-			 no_schedulers_online);
+			 no_schedulers_online
+#ifdef ERTS_DIRTY_SCHEDULERS
+			 , no_dirty_cpu_schedulers,
+			 no_dirty_cpu_schedulers_online,
+			 no_dirty_io_schedulers
+#endif
+			 );
+    erts_late_init_time_sup();
     erts_init_cpu_topology(); /* Must be after init_scheduling */
+    erts_init_gc(); /* Must be after init_scheduling */
     erts_alloc_late_init();
 
     H_MIN_SIZE      = erts_next_heap_size(H_MIN_SIZE, 0);
     BIN_VH_MIN_SIZE = erts_next_heap_size(BIN_VH_MIN_SIZE, 0);
 
     erts_init_trace();
-    erts_init_binary();
     erts_init_bits();
     erts_code_ix_init();
     erts_init_fun_table();
@@ -320,39 +366,44 @@ erl_init(int ncpu,
     erts_ddll_init();
     init_emulator();
     erts_ptab_init(); /* Must be after init_emulator() */
+    erts_init_binary(); /* Must be after init_emulator() */
     erts_bp_init();
-    init_db(); /* Must be after init_emulator */
-    erts_bif_timer_init();
-    erts_init_node_tables();
+    init_db(db_spin_count); /* Must be after init_emulator */
+    erts_init_node_tables(node_tab_delete_delay);
     init_dist();
     erl_drv_thr_init();
     erts_init_async();
-    erts_init_io(port_tab_sz, port_tab_sz_ignore_files);
+    erts_init_io(port_tab_sz, port_tab_sz_ignore_files, legacy_port_tab);
     init_load();
     erts_init_bif();
     erts_init_bif_chksum();
     erts_init_bif_binary();
     erts_init_bif_re();
     erts_init_unicode(); /* after RE to get access to PCRE unicode */
+    erts_init_external();
+    erts_init_map();
     erts_delay_trap = erts_export_put(am_erlang, am_delay_trap, 2);
     erts_late_init_process();
 #if HAVE_ERTS_MSEG
     erts_mseg_late_init(); /* Must be after timer (erts_init_time()) and thread
 			      initializations */
 #endif
+    erl_sys_late_init();
 #ifdef HIPE
     hipe_mode_switch_init(); /* Must be after init_load/beam_catches/init */
 #endif
     packet_parser_init();
     erl_nif_init();
+    erts_msacc_init();
 }
 
-static void
+static Eterm
 erl_first_process_otp(char* modname, void* code, unsigned size, int argc, char** argv)
 {
     int i;
     Eterm start_mod;
     Eterm args;
+    Eterm res;
     Eterm* hp;
     Process parent;
     ErlSpawnOpts so;
@@ -382,11 +433,35 @@ erl_first_process_otp(char* modname, void* code, unsigned size, int argc, char**
     hp += 2;
     args = CONS(hp, env, args);
 
-    so.flags = 0;
-    (void) erl_create_process(&parent, start_mod, am_start, args, &so);
+    so.flags = erts_default_spo_flags|SPO_SYSTEM_PROC;
+    res = erl_create_process(&parent, start_mod, am_start, args, &so);
     erts_smp_proc_unlock(&parent, ERTS_PROC_LOCK_MAIN);
     erts_cleanup_empty_process(&parent);
+    return res;
 }
+
+static Eterm
+erl_system_process_otp(Eterm parent_pid, char* modname)
+{
+    Eterm start_mod;
+    Process* parent;
+    ErlSpawnOpts so;
+    Eterm res;
+
+    start_mod = erts_atom_put((byte *) modname, sys_strlen(modname), ERTS_ATOM_ENC_LATIN1, 1);
+    if (erts_find_function(start_mod, am_start, 0,
+			   erts_active_code_ix()) == NULL) {
+	erl_exit(5, "No function %s:start/0\n", modname);
+    }
+
+    parent = erts_pid2proc(NULL, 0, parent_pid, ERTS_PROC_LOCK_MAIN);
+
+    so.flags = erts_default_spo_flags|SPO_SYSTEM_PROC;
+    res = erl_create_process(parent, start_mod, am_start, NIL, &so);
+    erts_smp_proc_unlock(parent, ERTS_PROC_LOCK_MAIN);
+    return res;
+}
+
 
 Eterm
 erts_preloaded(Process* p)
@@ -477,87 +552,120 @@ void erts_usage(void)
 
     /*    erts_fprintf(stderr, "-# number  set the number of items to be used in traces etc\n"); */
 
-    erts_fprintf(stderr, "-a size     suggested stack size in kilo words for threads\n");
-    erts_fprintf(stderr, "            in the async-thread pool, valid range is [%d-%d]\n",
+    erts_fprintf(stderr, "-a size        suggested stack size in kilo words for threads\n");
+    erts_fprintf(stderr, "               in the async-thread pool, valid range is [%d-%d]\n",
 		 ERTS_ASYNC_THREAD_MIN_STACK_SIZE,
 		 ERTS_ASYNC_THREAD_MAX_STACK_SIZE);
-    erts_fprintf(stderr, "-A number   set number of threads in async thread pool,\n");
-    erts_fprintf(stderr, "            valid range is [0-%d]\n",
+    erts_fprintf(stderr, "-A number      set number of threads in async thread pool,\n");
+    erts_fprintf(stderr, "               valid range is [0-%d]\n",
 		 ERTS_MAX_NO_OF_ASYNC_THREADS);
 
-    erts_fprintf(stderr, "-B[c|d|i]   c to have Ctrl-c interrupt the Erlang shell,\n");
-    erts_fprintf(stderr, "            d (or no extra option) to disable the break\n");
-    erts_fprintf(stderr, "            handler, i to ignore break signals\n");
+    erts_fprintf(stderr, "-B[c|d|i]      c to have Ctrl-c interrupt the Erlang shell,\n");
+    erts_fprintf(stderr, "               d (or no extra option) to disable the break\n");
+    erts_fprintf(stderr, "               handler, i to ignore break signals\n");
 
     /*    erts_fprintf(stderr, "-b func    set the boot function (default boot)\n"); */
 
-    erts_fprintf(stderr, "-c          disable continuous date/time correction with\n");
-    erts_fprintf(stderr, "            respect to uptime\n");
-
-    erts_fprintf(stderr, "-d          don't write a crash dump for internally detected errors\n");
-    erts_fprintf(stderr, "            (halt(String) will still produce a crash dump)\n");
-    erts_fprintf(stderr, "-fn[u|a|l]  Control how filenames are interpreted\n");
-    erts_fprintf(stderr, "-hms size   set minimum heap size in words (default %d)\n",
+    erts_fprintf(stderr, "-c bool        enable or disable time correction\n");
+    erts_fprintf(stderr, "-C mode        set time warp mode; valid modes are:\n");
+    erts_fprintf(stderr, "               no_time_warp|single_time_warp|multi_time_warp\n");
+    erts_fprintf(stderr, "-d             don't write a crash dump for internally detected errors\n");
+    erts_fprintf(stderr, "               (halt(String) will still produce a crash dump)\n");
+    erts_fprintf(stderr, "-fn[u|a|l]     Control how filenames are interpreted\n");
+    erts_fprintf(stderr, "-hms size      set minimum heap size in words (default %d)\n",
 	       H_DEFAULT_SIZE);
-    erts_fprintf(stderr, "-hmbs size  set minimum binary virtual heap size in words (default %d)\n",
+    erts_fprintf(stderr, "-hmbs size     set minimum binary virtual heap size in words (default %d)\n",
 	       VH_DEFAULT_SIZE);
+    erts_fprintf(stderr, "-hpds size     initial process dictionary size (default %d)\n",
+	       erts_pd_initial_size);
 
     /*    erts_fprintf(stderr, "-i module  set the boot module (default init)\n"); */
 
-    erts_fprintf(stderr, "-K boolean  enable or disable kernel poll\n");
-    erts_fprintf(stderr, "-n[s|a|d]   Control behavior of signals to ports\n");
-    erts_fprintf(stderr, "            Note that this flag is deprecated!\n");
-    erts_fprintf(stderr, "-M<X> <Y>   memory allocator switches,\n");
-    erts_fprintf(stderr, "            see the erts_alloc(3) documentation for more info.\n");
-    erts_fprintf(stderr, "-pc <set>   Control what characters are considered printable (default latin1)\n");
-    erts_fprintf(stderr, "-P number   set maximum number of processes on this node,\n");
-    erts_fprintf(stderr, "            valid range is [%d-%d]\n",
+    erts_fprintf(stderr, "-K boolean     enable or disable kernel poll\n");
+    erts_fprintf(stderr, "-n[s|a|d]      Control behavior of signals to ports\n");
+    erts_fprintf(stderr, "               Note that this flag is deprecated!\n");
+    erts_fprintf(stderr, "-M<X> <Y>      memory allocator switches,\n");
+    erts_fprintf(stderr, "               see the erts_alloc(3) documentation for more info.\n");
+    erts_fprintf(stderr, "-pc <set>      Control what characters are considered printable (default latin1)\n");
+    erts_fprintf(stderr, "-P number      set maximum number of processes on this node,\n");
+    erts_fprintf(stderr, "               valid range is [%d-%d]\n",
 		 ERTS_MIN_PROCESSES, ERTS_MAX_PROCESSES);
-    erts_fprintf(stderr, "-Q number   set maximum number of ports on this node,\n");
-    erts_fprintf(stderr, "            valid range is [%d-%d]\n",
+    erts_fprintf(stderr, "-Q number      set maximum number of ports on this node,\n");
+    erts_fprintf(stderr, "               valid range is [%d-%d]\n",
 		 ERTS_MIN_PORTS, ERTS_MAX_PORTS);
-    erts_fprintf(stderr, "-R number   set compatibility release number,\n");
-    erts_fprintf(stderr, "            valid range [%d-%d]\n",
+    erts_fprintf(stderr, "-R number      set compatibility release number,\n");
+    erts_fprintf(stderr, "               valid range [%d-%d]\n",
 		 this_rel-2, this_rel);
 
-    erts_fprintf(stderr, "-r          force ets memory block to be moved on realloc\n");
-    erts_fprintf(stderr, "-rg amount  set reader groups limit\n");
-    erts_fprintf(stderr, "-sbt type   set scheduler bind type, valid types are:\n");
-    erts_fprintf(stderr, "-stbt type  u|ns|ts|ps|s|nnts|nnps|tnnps|db\n");
-    erts_fprintf(stderr, "-sbwt val   set scheduler busy wait threshold, valid values are:\n");
-    erts_fprintf(stderr, "            none|very_short|short|medium|long|very_long.\n");
-    erts_fprintf(stderr, "-scl bool   enable/disable compaction of scheduler load,\n");
-    erts_fprintf(stderr, "            see the erl(1) documentation for more info.\n");
-    erts_fprintf(stderr, "-sct cput   set cpu topology,\n");
-    erts_fprintf(stderr, "            see the erl(1) documentation for more info.\n");
-    erts_fprintf(stderr, "-sws val    set scheduler wakeup strategy, valid values are:\n");
-    erts_fprintf(stderr, "            default|legacy.\n");
-    erts_fprintf(stderr, "-swt val    set scheduler wakeup threshold, valid values are:\n");
-    erts_fprintf(stderr, "            very_low|low|medium|high|very_high.\n");
-    erts_fprintf(stderr, "-sss size   suggested stack size in kilo words for scheduler threads,\n");
-    erts_fprintf(stderr, "            valid range is [%d-%d]\n",
+    erts_fprintf(stderr, "-r             force ets memory block to be moved on realloc\n");
+    erts_fprintf(stderr, "-rg amount     set reader groups limit\n");
+    erts_fprintf(stderr, "-sbt type      set scheduler bind type, valid types are:\n");
+    erts_fprintf(stderr, "-stbt type     u|ns|ts|ps|s|nnts|nnps|tnnps|db\n");
+    erts_fprintf(stderr, "-sbwt val      set scheduler busy wait threshold, valid values are:\n");
+    erts_fprintf(stderr, "               none|very_short|short|medium|long|very_long.\n");
+    erts_fprintf(stderr, "-scl bool      enable/disable compaction of scheduler load,\n");
+    erts_fprintf(stderr, "               see the erl(1) documentation for more info.\n");
+    erts_fprintf(stderr, "-sct cput      set cpu topology,\n");
+    erts_fprintf(stderr, "               see the erl(1) documentation for more info.\n");
+    erts_fprintf(stderr, "-secio bool    enable/disable eager check I/O scheduling,\n");
+    erts_fprintf(stderr, "               see the erl(1) documentation for more info.\n");
+#if ERTS_HAVE_SCHED_UTIL_BALANCING_SUPPORT_OPT
+    erts_fprintf(stderr, "-sub bool      enable/disable scheduler utilization balancing,\n");
+#else
+    erts_fprintf(stderr, "-sub false     disable scheduler utilization balancing,\n");
+#endif
+    erts_fprintf(stderr, "               see the erl(1) documentation for more info.\n");
+    erts_fprintf(stderr, "-sws val       set scheduler wakeup strategy, valid values are:\n");
+    erts_fprintf(stderr, "               default|legacy.\n");
+    erts_fprintf(stderr, "-swct val      set scheduler wake cleanup threshold, valid values are:\n");
+    erts_fprintf(stderr, "               very_lazy|lazy|medium|eager|very_eager.\n");
+    erts_fprintf(stderr, "-swt val       set scheduler wakeup threshold, valid values are:\n");
+    erts_fprintf(stderr, "               very_low|low|medium|high|very_high.\n");
+    erts_fprintf(stderr, "-sss size      suggested stack size in kilo words for scheduler threads,\n");
+    erts_fprintf(stderr, "               valid range is [%d-%d]\n",
 		 ERTS_SCHED_THREAD_MIN_STACK_SIZE,
 		 ERTS_SCHED_THREAD_MAX_STACK_SIZE);
-    erts_fprintf(stderr, "-spp Bool   set port parallelism scheduling hint\n");
-    erts_fprintf(stderr, "-S n1:n2    set number of schedulers (n1), and number of\n");
-    erts_fprintf(stderr, "            schedulers online (n2), valid range for both\n");
-    erts_fprintf(stderr, "            numbers are [1-%d]\n",
+    erts_fprintf(stderr, "-spp Bool      set port parallelism scheduling hint\n");
+    erts_fprintf(stderr, "-S n1:n2       set number of schedulers (n1), and number of\n");
+    erts_fprintf(stderr, "               schedulers online (n2), maximum for both\n");
+    erts_fprintf(stderr, "               numbers is %d\n",
 		 ERTS_MAX_NO_OF_SCHEDULERS);
-    erts_fprintf(stderr, "-t size     set the maximum number of atoms the "
-			 "emulator can handle\n");
-    erts_fprintf(stderr, "            valid range is [%d-%d]\n",
+    erts_fprintf(stderr, "-SP p1:p2      specify schedulers (p1) and schedulers online (p2)\n");
+    erts_fprintf(stderr, "               as percentages of logical processors configured and logical\n");
+    erts_fprintf(stderr, "               processors available, respectively\n");
+#ifdef ERTS_DIRTY_SCHEDULERS
+    erts_fprintf(stderr, "-SDcpu n1:n2   set number of dirty CPU schedulers (n1), and number of\n");
+    erts_fprintf(stderr, "               dirty CPU schedulers online (n2), valid range for both\n");
+    erts_fprintf(stderr, "               numbers is [1-%d], and n2 must be less than or equal to n1\n",
+		 ERTS_MAX_NO_OF_DIRTY_CPU_SCHEDULERS);
+    erts_fprintf(stderr, "-SDPcpu p1:p2  specify dirty CPU schedulers (p1) and dirty CPU schedulers\n");
+    erts_fprintf(stderr, "               online (p2) as percentages of logical processors configured\n");
+    erts_fprintf(stderr, "               and logical processors available, respectively\n");
+    erts_fprintf(stderr, "-SDio n        set number of dirty I/O schedulers, valid range is [0-%d]\n",
+		 ERTS_MAX_NO_OF_DIRTY_IO_SCHEDULERS);
+#endif
+    erts_fprintf(stderr, "-t size        set the maximum number of atoms the emulator can handle\n");
+    erts_fprintf(stderr, "               valid range is [%d-%d]\n",
 		 MIN_ATOM_TABLE_SIZE, MAX_ATOM_TABLE_SIZE);
-    erts_fprintf(stderr, "-T number   set modified timing level,\n");
-    erts_fprintf(stderr, "            valid range is [0-%d]\n",
+    erts_fprintf(stderr, "-T number      set modified timing level, valid range is [0-%d]\n",
 		 ERTS_MODIFIED_TIMING_LEVELS-1);
-    erts_fprintf(stderr, "-V          print Erlang version\n");
+    erts_fprintf(stderr, "-V             print Erlang version\n");
 
-    erts_fprintf(stderr, "-v          turn on chatty mode (GCs will be reported etc)\n");
+    erts_fprintf(stderr, "-v             turn on chatty mode (GCs will be reported etc)\n");
 
-    erts_fprintf(stderr, "-W<i|w>     set error logger warnings mapping,\n");
-    erts_fprintf(stderr, "            see error_logger documentation for details\n");
-    erts_fprintf(stderr, "-zdbbl size set the distribution buffer busy limit in kilobytes\n");
-    erts_fprintf(stderr, "            valid range is [1-%d]\n", INT_MAX/1024);
+    erts_fprintf(stderr, "-W<i|w|e>      set error logger warnings mapping,\n");
+    erts_fprintf(stderr, "               see error_logger documentation for details\n");
+    erts_fprintf(stderr, "-xmqd  val     set default message queue data flag for processes,\n");
+    erts_fprintf(stderr, "               valid values are: off_heap | on_heap | mixed\n");
+    erts_fprintf(stderr, "-zdbbl size    set the distribution buffer busy limit in kilobytes\n");
+    erts_fprintf(stderr, "               valid range is [1-%d]\n", INT_MAX/1024);
+    erts_fprintf(stderr, "-zdntgc time   set delayed node table gc in seconds\n");
+    erts_fprintf(stderr, "               valid values are infinity or intergers in the range [0-%d]\n",
+		 ERTS_NODE_TAB_DELAY_GC_MAX);
+#if 0
+    erts_fprintf(stderr, "-zebwt  val    set ets busy wait threshold, valid values are:\n");
+    erts_fprintf(stderr, "               none|very_short|short|medium|long|very_long|extremely_long\n");
+#endif
     erts_fprintf(stderr, "\n");
     erts_fprintf(stderr, "Note that if the emulator is started with erlexec (typically\n");
     erts_fprintf(stderr, "from the erl script), these flags should be specified with +.\n");
@@ -622,15 +730,29 @@ early_init(int *argc, char **argv) /*
     int ncpuavail;
     int schdlrs;
     int schdlrs_onln;
+    int schdlrs_percentage = 100;
+    int schdlrs_onln_percentage = 100;
     int max_main_threads;
+#ifdef ERTS_DIRTY_SCHEDULERS
+    int dirty_cpu_scheds;
+    int dirty_cpu_scheds_online;
+    int dirty_cpu_scheds_pctg = 100;
+    int dirty_cpu_scheds_onln_pctg = 100;
+    int dirty_io_scheds;
+#endif
     int max_reader_groups;
     int reader_groups;
     char envbuf[21]; /* enough for any 64-bit integer */
     size_t envbufsz;
 
+#if defined(USE_THREADS) && !defined(ERTS_SMP)
+    erts_main_thread = erts_thr_self();
+#endif
+
+    erts_save_emu_args(*argc, argv);
+
     erts_sched_compact_load = 1;
     erts_printf_eterm_func = erts_printf_term;
-    erts_disable_tolerant_timeofday = 0;
     display_items = 200;
     erts_backtrace_depth = DEFAULT_BACKTRACE_SIZE;
     erts_async_max_threads = ERTS_DEFAULT_NO_ASYNC_THREADS;
@@ -671,7 +793,7 @@ early_init(int *argc, char **argv) /*
 #endif
 #ifdef ERTS_SMP
     erts_smp_atomic32_init_nob(&erts_writing_erl_crash_dump, 0L);
-    erts_tsd_key_create(&erts_is_crash_dumping_key);
+    erts_tsd_key_create(&erts_is_crash_dumping_key,"erts_is_crash_dumping_key");
 #else
     erts_writing_erl_crash_dump = 0;
 #endif
@@ -680,9 +802,6 @@ early_init(int *argc, char **argv) /*
 			       (erts_aint32_t) ((Uint16) -1));
 
     erts_pre_init_process();
-#if defined(USE_THREADS) && !defined(ERTS_SMP)
-    main_thread = erts_thr_self();
-#endif
 
     /*
      * We need to know the number of schedulers to use before we
@@ -695,6 +814,12 @@ early_init(int *argc, char **argv) /*
 
     schdlrs = no_schedulers;
     schdlrs_onln = no_schedulers_online;
+
+#ifdef ERTS_DIRTY_SCHEDULERS
+    dirty_cpu_scheds = no_schedulers;
+    dirty_cpu_scheds_online = no_schedulers_online;
+    dirty_io_scheds = 10;
+#endif
 
     envbufsz = sizeof(envbuf);
 
@@ -736,7 +861,7 @@ early_init(int *argc, char **argv) /*
 		case 'A': {
 		    /* set number of threads in thread pool */
 		    char *arg = get_arg(argv[i]+2, argv[i+1], &i);
-		    if (((erts_async_max_threads = atoi(arg)) < 0) ||
+		    if (((erts_async_max_threads = atoi(arg)) < ERTS_MIN_NO_OF_ASYNC_THREADS) ||
 			(erts_async_max_threads > ERTS_MAX_NO_OF_ASYNC_THREADS)) {
 			erts_fprintf(stderr,
 				     "bad number of async threads %s\n",
@@ -747,63 +872,257 @@ early_init(int *argc, char **argv) /*
 		    }
 		    break;
 		}
-		case 'S' : {
-		    int tot, onln;
-		    char *arg = get_arg(argv[i]+2, argv[i+1], &i);
-		    switch (sscanf(arg, "%d:%d", &tot, &onln)) {
-		    case 0:
-			switch (sscanf(arg, ":%d", &onln)) {
+		case 'S' :
+		    if (argv[i][2] == 'P') {
+			int ptot, ponln;
+			char *arg = get_arg(argv[i]+3, argv[i+1], &i);
+			switch (sscanf(arg, "%d:%d", &ptot, &ponln)) {
+			case 0:
+			    switch (sscanf(arg, ":%d", &ponln)) {
+			    case 1:
+				if (ponln < 0)
+				    goto bad_SP;
+				ptot = 100;
+				goto chk_SP;
+			    default:
+				goto bad_SP;
+			    }
 			case 1:
-			    tot = no_schedulers;
-			    goto chk_S;
+			    if (ptot < 0)
+				goto bad_SP;
+			    ponln = ptot < 100 ? ptot : 100;
+			    goto chk_SP;
+			case 2:
+			    if (ptot < 0 || ponln < 0)
+				goto bad_SP;
+			chk_SP:
+			    schdlrs_percentage = ptot;
+			    schdlrs_onln_percentage = ponln;
+			    break;
 			default:
-			    goto bad_S;
-			}
-		    case 1:
-			onln = tot < schdlrs_onln ? tot : schdlrs_onln;
-		    case 2:
-		    chk_S:
-			if (tot > 0)
-			    schdlrs = tot;
-			else
-			    schdlrs = no_schedulers + tot;
-			if (onln > 0)
-			    schdlrs_onln = onln;
-			else
-			    schdlrs_onln = no_schedulers_online + onln;
-			if (schdlrs < 1 || ERTS_MAX_NO_OF_SCHEDULERS < schdlrs) {
-			    erts_fprintf(stderr,
-					 "bad amount of schedulers %d\n",
-					 tot);
-			    erts_usage();
-			}
-			if (schdlrs_onln < 1 || schdlrs < schdlrs_onln) {
-			    erts_fprintf(stderr,
-					 "bad amount of schedulers online %d "
-					 "(total amount of schedulers %d)\n",
-					 schdlrs_onln, schdlrs);
-			    erts_usage();
-			}
-			break;
-		    default:
-		    bad_S:
-			erts_fprintf(stderr,
-				     "bad amount of schedulers %s\n",
-				     arg);
-			erts_usage();
-			break;
-		    }
+                        bad_SP:
+                            erts_fprintf(stderr,
+                                         "bad schedulers percentage specifier %s\n",
+                                         arg);
+                            erts_usage();
+                            break;
+                        }
 
-		    VERBOSE(DEBUG_SYSTEM,
-			    ("using %d:%d scheduler(s)\n", tot, onln));
-		    break;
-		}
+                        VERBOSE(DEBUG_SYSTEM,
+                                ("using %d:%d scheduler percentages\n",
+                                 schdlrs_percentage, schdlrs_onln_percentage));
+                    }
+#ifdef ERTS_DIRTY_SCHEDULERS
+		    else if (argv[i][2] == 'D') {
+			char *arg;
+			char *type = argv[i]+3;
+			if (strncmp(type, "Pcpu", 4) == 0) {
+			    int ptot, ponln;
+			    arg = get_arg(argv[i]+7, argv[i+1], &i);
+			    switch (sscanf(arg, "%d:%d", &ptot, &ponln)) {
+			    case 0:
+				switch (sscanf(arg, ":%d", &ponln)) {
+				case 1:
+				    if (ponln < 0)
+					goto bad_SDPcpu;
+				    ptot = 100;
+				    goto chk_SDPcpu;
+				default:
+				    goto bad_SDPcpu;
+				}
+			    case 1:
+				if (ptot < 0)
+				    goto bad_SDPcpu;
+				ponln = ptot < 100 ? ptot : 100;
+				goto chk_SDPcpu;
+			    case 2:
+				if (ptot < 0 || ponln < 0)
+				    goto bad_SDPcpu;
+			    chk_SDPcpu:
+				dirty_cpu_scheds_pctg = ptot;
+				dirty_cpu_scheds_onln_pctg = ponln;
+				break;
+			    default:
+			    bad_SDPcpu:
+				erts_fprintf(stderr,
+					     "bad dirty CPU schedulers percentage specifier %s\n",
+					     arg);
+				erts_usage();
+				break;
+			    }
+			    VERBOSE(DEBUG_SYSTEM,
+				    ("using %d:%d dirty CPU scheduler percentages\n",
+				     dirty_cpu_scheds_pctg, dirty_cpu_scheds_onln_pctg));
+			} else if (strncmp(type, "cpu", 3) == 0) {
+			    int tot, onln;
+			    arg = get_arg(argv[i]+6, argv[i+1], &i);
+			    switch (sscanf(arg, "%d:%d", &tot, &onln)) {
+			    case 0:
+				switch (sscanf(arg, ":%d", &onln)) {
+				case 1:
+				    tot = no_schedulers;
+				    goto chk_SDcpu;
+				default:
+				    goto bad_SDcpu;
+				}
+			    case 1:
+				onln = tot < dirty_cpu_scheds_online ?
+				    tot : dirty_cpu_scheds_online;
+			    case 2:
+			    chk_SDcpu:
+				if (tot > 0)
+				    dirty_cpu_scheds = tot;
+				else
+				    dirty_cpu_scheds = no_schedulers + tot;
+				if (onln > 0)
+				    dirty_cpu_scheds_online = onln;
+				else
+				    dirty_cpu_scheds_online = no_schedulers_online + onln;
+				if (dirty_cpu_scheds < 1 ||
+				    ERTS_MAX_NO_OF_DIRTY_CPU_SCHEDULERS < dirty_cpu_scheds) {
+				    erts_fprintf(stderr,
+						 "bad amount of dirty CPU schedulers %d\n",
+						 tot);
+				    erts_usage();
+				}
+				if (dirty_cpu_scheds_online < 1 ||
+				    dirty_cpu_scheds < dirty_cpu_scheds_online) {
+				    erts_fprintf(stderr,
+						 "bad amount of dirty CPU schedulers online %d "
+						 "(total amount of dirty CPU schedulers %d)\n",
+						 dirty_cpu_scheds_online, dirty_cpu_scheds);
+				    erts_usage();
+				}
+				break;
+			    default:
+			    bad_SDcpu:
+				erts_fprintf(stderr,
+					     "bad amount of dirty CPU schedulers %s\n",
+					     arg);
+				erts_usage();
+				break;
+			    }
+			    VERBOSE(DEBUG_SYSTEM,
+				    ("using %d:%d dirty CPU scheduler(s)\n", tot, onln));
+			} else if (strncmp(type, "io", 2) == 0) {
+			    arg = get_arg(argv[i]+5, argv[i+1], &i);
+			    dirty_io_scheds = atoi(arg);
+			    if (dirty_io_scheds < 0 ||
+				dirty_io_scheds > ERTS_MAX_NO_OF_DIRTY_IO_SCHEDULERS) {
+				erts_fprintf(stderr,
+					     "bad number of dirty I/O schedulers %s\n",
+					     arg);
+				erts_usage();
+			    }
+			    VERBOSE(DEBUG_SYSTEM,
+				    ("using %d dirty I/O scheduler(s)\n", dirty_io_scheds));
+			} else {
+			    erts_fprintf(stderr,
+					 "bad or missing dirty scheduler specifier: %s\n",
+					 argv[i]);
+			    erts_usage();
+			    break;
+			}
+		    }
+#endif
+		    else {
+			int tot, onln;
+			char *arg = get_arg(argv[i]+2, argv[i+1], &i);
+			switch (sscanf(arg, "%d:%d", &tot, &onln)) {
+			case 0:
+			    switch (sscanf(arg, ":%d", &onln)) {
+			    case 1:
+				tot = no_schedulers;
+				goto chk_S;
+			    default:
+				goto bad_S;
+			    }
+			case 1:
+			    onln = tot < schdlrs_onln ? tot : schdlrs_onln;
+			case 2:
+			chk_S:
+			    if (tot > 0)
+				schdlrs = tot;
+			    else
+				schdlrs = no_schedulers + tot;
+			    if (onln > 0)
+				schdlrs_onln = onln;
+			    else
+				schdlrs_onln = no_schedulers_online + onln;
+			    if (schdlrs < 1 || ERTS_MAX_NO_OF_SCHEDULERS < schdlrs) {
+				erts_fprintf(stderr,
+					     "bad amount of schedulers %d\n",
+					     tot);
+				erts_usage();
+			    }
+			    if (schdlrs_onln < 1 || schdlrs < schdlrs_onln) {
+				erts_fprintf(stderr,
+					     "bad amount of schedulers online %d "
+					     "(total amount of schedulers %d)\n",
+					     schdlrs_onln, schdlrs);
+				erts_usage();
+			    }
+			    break;
+			default:
+			bad_S:
+			    erts_fprintf(stderr,
+					 "bad amount of schedulers %s\n",
+					 arg);
+			    erts_usage();
+			    break;
+			}
+
+			VERBOSE(DEBUG_SYSTEM,
+				("using %d:%d scheduler(s)\n", tot, onln));
+		    }
+                    break;
 		default:
 		    break;
 		}
 	    }
 	    i++;
 	}
+
+#ifdef ERTS_SMP
+	/* apply any scheduler percentages */
+	if (schdlrs_percentage != 100 || schdlrs_onln_percentage != 100) {
+	    schdlrs = schdlrs * schdlrs_percentage / 100;
+	    schdlrs_onln = schdlrs_onln * schdlrs_onln_percentage / 100;
+	    if (schdlrs < 1)
+                schdlrs = 1;
+            if (ERTS_MAX_NO_OF_SCHEDULERS < schdlrs) {
+		erts_fprintf(stderr,
+			     "bad schedulers percentage %d "
+			     "(total amount of schedulers %d)\n",
+			     schdlrs_percentage, schdlrs);
+		erts_usage();
+	    }
+	    if (schdlrs_onln < 1)
+                schdlrs_onln = 1;
+            if (schdlrs < schdlrs_onln) {
+		erts_fprintf(stderr,
+			     "bad schedulers online percentage %d "
+			     "(total amount of schedulers %d, online %d)\n",
+			     schdlrs_onln_percentage, schdlrs, schdlrs_onln);
+		erts_usage();
+	    }
+	}
+#else
+	/* Silence gcc warnings */
+	(void)schdlrs_percentage;
+	(void)schdlrs_onln_percentage;
+#endif
+#ifdef ERTS_DIRTY_SCHEDULERS
+	/* apply any dirty scheduler precentages */
+	if (dirty_cpu_scheds_pctg != 100 || dirty_cpu_scheds_onln_pctg != 100) {
+	    dirty_cpu_scheds = dirty_cpu_scheds * dirty_cpu_scheds_pctg / 100;
+	    dirty_cpu_scheds_online = dirty_cpu_scheds_online * dirty_cpu_scheds_onln_pctg / 100;
+	}
+	if (dirty_cpu_scheds > schdlrs)
+	    dirty_cpu_scheds = schdlrs;
+	if (dirty_cpu_scheds_online > schdlrs_onln)
+	    dirty_cpu_scheds_online = schdlrs_onln;
+#endif
     }
 
 #ifndef USE_THREADS
@@ -815,6 +1134,11 @@ early_init(int *argc, char **argv) /*
     no_schedulers_online = schdlrs_onln;
 
     erts_no_schedulers = (Uint) no_schedulers;
+#endif
+#ifdef ERTS_DIRTY_SCHEDULERS
+    erts_no_dirty_cpu_schedulers = no_dirty_cpu_schedulers = dirty_cpu_scheds;
+    no_dirty_cpu_schedulers_online = dirty_cpu_scheds_online;
+    erts_no_dirty_io_schedulers = no_dirty_io_schedulers = dirty_io_scheds;
 #endif
     erts_early_init_scheduling(no_schedulers);
 
@@ -833,10 +1157,18 @@ early_init(int *argc, char **argv) /*
      *
      * * Unmanaged threads that need to register:
      * ** Async threads (see erl_async.c)
+     * ** Dirty scheduler threads
      */
     erts_thr_progress_init(no_schedulers,
 			   no_schedulers+2,
-			   erts_async_max_threads);
+#ifndef ERTS_DIRTY_SCHEDULERS
+			   erts_async_max_threads
+#else
+			   erts_async_max_threads +
+			   erts_no_dirty_cpu_schedulers +
+			   erts_no_dirty_io_schedulers
+#endif
+			   );
 #endif
     erts_thr_q_init();
     erts_init_utils();
@@ -863,6 +1195,7 @@ early_init(int *argc, char **argv) /*
 	erts_thr_late_init(&elid);
     }
 #endif
+    erts_msacc_early_init();
 
 #ifdef ERTS_ENABLE_LOCK_CHECK
     erts_lc_late_init();
@@ -921,6 +1254,16 @@ erl_start(int argc, char **argv)
     int proc_tab_sz = ERTS_DEFAULT_MAX_PROCESSES;
     int port_tab_sz = ERTS_DEFAULT_MAX_PORTS;
     int port_tab_sz_ignore_files = 0;
+    int legacy_proc_tab = 0;
+    int legacy_port_tab = 0;
+    int time_correction;
+    ErtsTimeWarpMode time_warp_mode;
+    int node_tab_delete_delay = ERTS_NODE_TAB_DELAY_GC_DEFAULT;
+    ErtsDbSpinCount db_spin_count = ERTS_DB_SPNCNT_NORMAL;
+    Eterm otp_ring0_pid;
+
+    set_default_time_adj(&time_correction,
+			 &time_warp_mode);
 
     envbufsz = sizeof(envbuf);
     if (erts_sys_getenv_raw(ERL_MAX_ETS_TABLES_ENV, envbuf, &envbufsz) == 0)
@@ -952,7 +1295,7 @@ erl_start(int argc, char **argv)
     verbose = DEBUG_DEFAULT;
 #endif
 
-    erts_error_logger_warnings = am_error;
+    erts_error_logger_warnings = am_warning;
 
     while (i < argc) {
 	if (argv[i][0] != '-') {
@@ -1087,6 +1430,7 @@ erl_start(int argc, char **argv)
 		    case 't': verbose |= DEBUG_THREADS; break;
 		    case 'p': verbose |= DEBUG_PROCESSES; break;
 		    case 'm': verbose |= DEBUG_MESSAGES; break;
+		    case 'c': verbose |= DEBUG_SHCOPY; break;
 		    default : erts_fprintf(stderr,"Unknown verbose option: %c\n",*ch);
 		    }
 		}
@@ -1099,6 +1443,7 @@ erl_start(int argc, char **argv)
 	    if (verbose & DEBUG_THREADS) erts_printf("THREADS ");
 	    if (verbose & DEBUG_PROCESSES) erts_printf("PROCESSES ");
 	    if (verbose & DEBUG_MESSAGES) erts_printf("MESSAGES ");
+	    if (verbose & DEBUG_SHCOPY) erts_printf("SHCOPY ");
             erts_printf("\n");
 #else
 	    erts_fprintf(stderr, "warning: -v (only in debug compiled code)\n");
@@ -1141,6 +1486,7 @@ erl_start(int argc, char **argv)
 	     *
 	     * h|ms  - min_heap_size
 	     * h|mbs - min_bin_vheap_size
+	     * h|pds - erts_pd_initial_size
 	     *
 	     */
 	    if (has_prefix("mbs", sub_param)) {
@@ -1158,6 +1504,14 @@ erl_start(int argc, char **argv)
 		    erts_usage();
 		}
 		VERBOSE(DEBUG_SYSTEM, ("using minimum heap size %d\n", H_MIN_SIZE));
+	    } else if (has_prefix("pds", sub_param)) {
+		arg = get_arg(sub_param+3, argv[i+1], &i);
+		if (!erts_pd_set_initial_size(atoi(arg))) {
+		    erts_fprintf(stderr, "bad initial process dictionary size %s\n", arg);
+		    erts_usage();
+		}
+		VERBOSE(DEBUG_SYSTEM, ("using initial process dictionary size %d\n",
+			    erts_pd_initial_size));
 	    } else {
 	        /* backward compatibility */
 		arg = get_arg(argv[i]+2, argv[i+1], &i);
@@ -1266,31 +1620,50 @@ erl_start(int argc, char **argv)
 
 	case 'P': /* set maximum number of processes */
 	    arg = get_arg(argv[i]+2, argv[i+1], &i);
-	    errno = 0;
-	    proc_tab_sz = strtol(arg, NULL, 10);
-	    if (errno != 0
-		|| proc_tab_sz < ERTS_MIN_PROCESSES
-		|| ERTS_MAX_PROCESSES < proc_tab_sz) {
-		erts_fprintf(stderr, "bad number of processes %s\n", arg);
-		erts_usage();
+	    if (strcmp(arg, "legacy") == 0)
+		legacy_proc_tab = 1;
+	    else {
+		errno = 0;
+		proc_tab_sz = strtol(arg, NULL, 10);
+		if (errno != 0
+		    || proc_tab_sz < ERTS_MIN_PROCESSES
+		    || ERTS_MAX_PROCESSES < proc_tab_sz) {
+		    erts_fprintf(stderr, "bad number of processes %s\n", arg);
+		    erts_usage();
+		}
 	    }
 	    break;
 
 	case 'Q': /* set maximum number of ports */
 	    arg = get_arg(argv[i]+2, argv[i+1], &i);
-	    errno = 0;
-	    port_tab_sz = strtol(arg, NULL, 10);
-	    if (errno != 0
-		|| port_tab_sz < ERTS_MIN_PROCESSES
-		|| ERTS_MAX_PROCESSES < port_tab_sz) {
-		erts_fprintf(stderr, "bad number of ports %s\n", arg);
-		erts_usage();
+	    if (strcmp(arg, "legacy") == 0)
+		legacy_port_tab = 1;
+	    else {
+		errno = 0;
+		port_tab_sz = strtol(arg, NULL, 10);
+		if (errno != 0
+		    || port_tab_sz < ERTS_MIN_PROCESSES
+		    || ERTS_MAX_PROCESSES < port_tab_sz) {
+		    erts_fprintf(stderr, "bad number of ports %s\n", arg);
+		    erts_usage();
+		}
+		port_tab_sz_ignore_files = 1;
 	    }
-	    port_tab_sz_ignore_files = 1;
 	    break;
 
 	case 'S' : /* Was handled in early_init() just read past it */
-	    (void) get_arg(argv[i]+2, argv[i+1], &i);
+	    if (argv[i][2] == 'D') {
+		char* type = argv[i]+3;
+		if (strcmp(type, "Pcpu") == 0)
+		    (void) get_arg(argv[i]+7, argv[i+1], &i);
+		if (strcmp(type, "cpu") == 0)
+		    (void) get_arg(argv[i]+6, argv[i+1], &i);
+		else if (strcmp(type, "io") == 0)
+		    (void) get_arg(argv[i]+5, argv[i+1], &i);
+	    } else if (argv[i][2] == 'P')
+		(void) get_arg(argv[i]+3, argv[i+1], &i);
+	    else
+		(void) get_arg(argv[i]+2, argv[i+1], &i);
 	    break;
 
 	case 's' : {
@@ -1334,8 +1707,10 @@ erl_start(int argc, char **argv)
 	    }
 	    else if (has_prefix("cl", sub_param)) {
 		arg = get_arg(sub_param+2, argv[i+1], &i);
-		if (sys_strcmp("true", arg) == 0)
+		if (sys_strcmp("true", arg) == 0) {
 		    erts_sched_compact_load = 1;
+		    erts_sched_balance_util = 0;
+		}
 		else if (sys_strcmp("false", arg) == 0)
 		    erts_sched_compact_load = 0;
 		else {
@@ -1388,6 +1763,22 @@ erl_start(int argc, char **argv)
 		    erts_usage();
 		}
 	    }
+	    else if (has_prefix("ecio", sub_param)) {
+		arg = get_arg(sub_param+4, argv[i+1], &i);
+#ifndef __OSE__
+		if (sys_strcmp("true", arg) == 0)
+		    erts_eager_check_io = 1;
+		else
+#endif
+		if (sys_strcmp("false", arg) == 0)
+		    erts_eager_check_io = 0;
+		else {
+		    erts_fprintf(stderr,
+				 "bad schedule eager check I/O value '%s'\n",
+				 arg);
+		    erts_usage();
+		}
+	    }
 	    else if (has_prefix("pp", sub_param)) {
 		arg = get_arg(sub_param+2, argv[i+1], &i);
 		if (sys_strcmp(arg, "true") == 0)
@@ -1413,7 +1804,37 @@ erl_start(int argc, char **argv)
 		    erts_usage();
 		}
 	    }
-	    else if (sys_strcmp("wt", sub_param) == 0) {
+	    else if (has_prefix("ub", sub_param)) {
+		arg = get_arg(sub_param+2, argv[i+1], &i);
+		if (sys_strcmp("true", arg) == 0) {
+#if ERTS_HAVE_SCHED_UTIL_BALANCING_SUPPORT_OPT
+		    erts_sched_balance_util = 1;
+#else
+		    erts_fprintf(stderr,
+				 "scheduler utilization balancing not "
+				 "supported on this system\n");
+		    erts_usage();
+#endif
+		}
+		else if (sys_strcmp("false", arg) == 0)
+		    erts_sched_balance_util = 0;
+		else {
+		    erts_fprintf(stderr, "bad scheduler utilization balancing "
+				 " value '%s'\n", arg);
+		    erts_usage();
+		}
+	    }
+	    else if (has_prefix("wct", sub_param)) {
+		arg = get_arg(sub_param+3, argv[i+1], &i);
+		if (erts_sched_set_wake_cleanup_threshold(arg) != 0) {
+		    erts_fprintf(stderr, "scheduler wake cleanup threshold: %s\n",
+				 arg);
+		    erts_usage();
+		}
+		VERBOSE(DEBUG_SYSTEM,
+			("scheduler wake cleanup threshold: %s\n", arg));
+	    }
+	    else if (has_prefix("wt", sub_param)) {
 		arg = get_arg(sub_param+2, argv[i+1], &i);
 		if (erts_sched_set_wakeup_other_thresold(arg) != 0) {
 		    erts_fprintf(stderr, "scheduler wakeup threshold: %s\n",
@@ -1423,7 +1844,7 @@ erl_start(int argc, char **argv)
 		VERBOSE(DEBUG_SYSTEM,
 			("scheduler wakeup threshold: %s\n", arg));
 	    }
-	    else if (sys_strcmp("ws", sub_param) == 0) {
+	    else if (has_prefix("ws", sub_param)) {
 		arg = get_arg(sub_param+2, argv[i+1], &i);
 		if (erts_sched_set_wakeup_other_type(arg) != 0) {
 		    erts_fprintf(stderr, "scheduler wakeup strategy: %s\n",
@@ -1449,6 +1870,22 @@ erl_start(int argc, char **argv)
 		VERBOSE(DEBUG_SYSTEM,
 			("suggested scheduler thread stack size %d kilo words\n",
 			 erts_sched_thread_suggested_stack_size));
+	    }
+	    else if (has_prefix("fwi", sub_param)) {
+		long val;
+		arg = get_arg(sub_param+3, argv[i+1], &i);
+		errno = 0;
+		val = strtol(arg, NULL, 10);
+		if (errno != 0 || val < 0) {
+		    erts_fprintf(stderr,
+				 "bad scheduler forced wakeup "
+				 "interval %s\n",
+				 arg);
+		    erts_usage();
+		}
+#ifdef ERTS_SMP
+		erts_runq_supervision_interval = val;
+#endif
 	    }
 	    else {
 		erts_fprintf(stderr, "bad scheduling option %s\n", argv[i]);
@@ -1546,15 +1983,51 @@ erl_start(int argc, char **argv)
 	    }
 	    break;
 	}
+	case 'C':
+	    arg = get_arg(argv[i]+2, argv[i+1], &i);
+	    if (sys_strcmp(arg, "no_time_warp") == 0)
+		time_warp_mode = ERTS_NO_TIME_WARP_MODE;
+	    else if (sys_strcmp(arg, "single_time_warp") == 0)
+		time_warp_mode = ERTS_SINGLE_TIME_WARP_MODE;
+	    else if (sys_strcmp(arg, "multi_time_warp") == 0)
+		time_warp_mode = ERTS_MULTI_TIME_WARP_MODE;
+	    else {
+		erts_fprintf(stderr,
+			     "Invalid time warp mode: %s\n", arg);
+		erts_usage();
+	    }
+	    break;
 	case 'c':
-	    if (argv[i][2] == 0) { /* -c: documented option */
-		erts_disable_tolerant_timeofday = 1;
+	    if (sys_strcmp(argv[i]+2, "false") == 0)
+		goto time_correction_false;
+	    else if (sys_strcmp(argv[i]+2, "true") == 0)
+		goto time_correction_true;
+	    else if (argv[i][2] == '\0') {
+		if (i + 1 >= argc)
+		    goto time_correction_false;
+		else {
+		    if (sys_strcmp(argv[i+1], "false") == 0) {
+			(void) get_arg(argv[i]+2, argv[i+1], &i);
+			goto time_correction_false;
+		    }
+		    else if (sys_strcmp(argv[i+1], "true") == 0) {
+			(void) get_arg(argv[i]+2, argv[i+1], &i);
+		    time_correction_true:
+			time_correction = 1;
+			break;
+		    }
+		    else {
+		    time_correction_false:
+			time_correction = 0;
+			break;
+		    }
+		}
 	    }
-#ifdef ERTS_OPCODE_COUNTER_SUPPORT
-	    else if (argv[i][2] == 'i') { /* -ci: undcoumented option*/
-		count_instructions = 1;
+	    else {
+		arg = get_arg(argv[i]+2, argv[i+1], &i);
+		erts_fprintf(stderr, "Invalid time correnction value: %s\n", arg);
+		erts_usage();
 	    }
-#endif
 	    break;
 	case 'W':
 	    arg = get_arg(argv[i]+2, argv[i+1], &i);
@@ -1562,22 +2035,49 @@ erl_start(int argc, char **argv)
 	    case 'i':
 		erts_error_logger_warnings = am_info;
 		break;
+	    case 'e':
+		erts_error_logger_warnings = am_error;
+		break;
 	    case 'w':
 		erts_error_logger_warnings = am_warning;
 		break;
-	    case 'e': /* The default */
-		erts_error_logger_warnings = am_error;
 	    default:
 		erts_fprintf(stderr, "unrecognized warning_map option %s\n", arg);
 		erts_usage();
 	    }
 	    break;
 
+	case 'x': {
+	    char *sub_param = argv[i]+2;
+	    if (has_prefix("mqd", sub_param)) {
+		arg = get_arg(sub_param+3, argv[i+1], &i);
+		if (sys_strcmp(arg, "mixed") == 0)
+		    erts_default_spo_flags &= ~(SPO_ON_HEAP_MSGQ|SPO_OFF_HEAP_MSGQ);
+		else if (sys_strcmp(arg, "on_heap") == 0) {
+		    erts_default_spo_flags &= ~SPO_OFF_HEAP_MSGQ;
+		    erts_default_spo_flags |= SPO_ON_HEAP_MSGQ;
+		}
+		else if (sys_strcmp(arg, "off_heap") == 0) {
+		    erts_default_spo_flags &= ~SPO_ON_HEAP_MSGQ;
+		    erts_default_spo_flags |= SPO_OFF_HEAP_MSGQ;
+		}
+		else {
+		    erts_fprintf(stderr,
+				 "Invalid message_queue_data flag: %s\n", arg);
+		    erts_usage();
+		}
+	    } else {
+		erts_fprintf(stderr, "bad -x option %s\n", argv[i]);
+		erts_usage();
+	    }
+	    break;
+        }
+
 	case 'z': {
 	    char *sub_param = argv[i]+2;
-	    int new_limit;
 
 	    if (has_prefix("dbbl", sub_param)) {
+		int new_limit;
 		arg = get_arg(sub_param+4, argv[i+1], &i);
 		new_limit = atoi(arg);
 		if (new_limit < 1 || INT_MAX/1024 < new_limit) {
@@ -1586,7 +2086,48 @@ erl_start(int argc, char **argv)
 		} else {
 		    erts_dist_buf_busy_limit = new_limit*1024;
 		}
-	    } else {
+	    }
+	    else if (has_prefix("dntgc", sub_param)) {
+		long secs;
+
+		arg = get_arg(sub_param+5, argv[i+1], &i);
+		if (sys_strcmp(arg, "infinity") == 0)
+		    secs = ERTS_NODE_TAB_DELAY_GC_INFINITY;
+		else {
+		    char *endptr;
+		    errno = 0;
+		    secs = strtol(arg, &endptr, 10);
+		    if (errno != 0 || *arg == '\0' || *endptr != '\0'
+			|| secs < 0 || ERTS_NODE_TAB_DELAY_GC_MAX < secs) {
+			erts_fprintf(stderr, "Invalid delayed node table gc: %s\n", arg);
+			erts_usage();
+		    }
+		}
+		node_tab_delete_delay = (int) secs;
+	    }
+	    else if (has_prefix("ebwt", sub_param)) {
+		arg = get_arg(sub_param+4, argv[i+1], &i);
+		if (sys_strcmp(arg, "none") == 0)
+		    db_spin_count = ERTS_DB_SPNCNT_NONE;
+		else if (sys_strcmp(arg, "very_short") == 0)
+		    db_spin_count = ERTS_DB_SPNCNT_VERY_LOW;
+		else if (sys_strcmp(arg, "short") == 0)
+		    db_spin_count = ERTS_DB_SPNCNT_LOW;
+		else if (sys_strcmp(arg, "medium") == 0)
+		    db_spin_count = ERTS_DB_SPNCNT_NORMAL;
+		else if (sys_strcmp(arg, "long") == 0)
+		    db_spin_count = ERTS_DB_SPNCNT_HIGH;
+		else if (sys_strcmp(arg, "very_long") == 0)
+		    db_spin_count = ERTS_DB_SPNCNT_VERY_HIGH;
+		else if (sys_strcmp(arg, "extremely_long") == 0)
+		    db_spin_count = ERTS_DB_SPNCNT_EXTREMELY_HIGH;
+		else {
+		    erts_fprintf(stderr,
+				 "Invalid ets busy wait threshold: %s\n", arg);
+		    erts_usage();
+		}
+	    }
+	    else {
 		erts_fprintf(stderr, "bad -z option %s\n", argv[i]);
 		erts_usage();
 	    }
@@ -1598,6 +2139,30 @@ erl_start(int argc, char **argv)
 	    erts_usage();
 	}
 	i++;
+    }
+
+    if (!erts_check_time_adj_support(time_correction, time_warp_mode)) {
+	char *time_correction_str = time_correction ? "Enabled" : "Disabled";
+	char *time_warp_str = "undefined";
+	switch (time_warp_mode) {
+	case ERTS_NO_TIME_WARP_MODE:
+	    time_warp_str = "no";
+	    break;
+	case ERTS_SINGLE_TIME_WARP_MODE:
+	    time_warp_str = "single";
+	    break;
+	case ERTS_MULTI_TIME_WARP_MODE:
+	    time_warp_str = "multi";
+	    break;
+	default:
+	    time_warp_str = "undefined";
+	    break;
+	}
+	erts_fprintf(stderr, "%s time correction with %s time warp mode "
+		     "is not supported on this platform\n",
+		     time_correction_str,
+		     time_warp_str);
+	erts_usage();
     }
 
 /* Output format on windows for sprintf defaults to three exponents.
@@ -1630,8 +2195,14 @@ erl_start(int argc, char **argv)
 
     erl_init(ncpu,
 	     proc_tab_sz,
+	     legacy_proc_tab,
 	     port_tab_sz,
-	     port_tab_sz_ignore_files);
+	     port_tab_sz_ignore_files,
+	     legacy_port_tab,
+	     time_correction,
+	     time_warp_mode,
+	     node_tab_delete_delay,
+	     db_spin_count);
 
     load_preloaded();
     erts_end_staging_code_ix();
@@ -1639,7 +2210,10 @@ erl_start(int argc, char **argv)
 
     erts_initialized = 1;
 
-    erl_first_process_otp("otp_ring0", NULL, 0, boot_argc, boot_argv);
+    otp_ring0_pid = erl_first_process_otp("otp_ring0", NULL, 0,
+					  boot_argc, boot_argv);
+
+    (void) erl_system_process_otp(otp_ring0_pid, "erts_code_purger");
 
 #ifdef ERTS_SMP
     erts_start_schedulers();
@@ -1647,13 +2221,18 @@ erl_start(int argc, char **argv)
 
     erts_sys_main_thread(); /* May or may not return! */
 #else
-    erts_thr_set_main_status(1, 1);
+    {
+	ErtsSchedulerData *esdp = erts_get_scheduler_data();
+        erts_msacc_init_thread("scheduler", 1, 1);
+	erts_thr_set_main_status(1, 1);
 #if ERTS_USE_ASYNC_READY_Q
-    erts_get_scheduler_data()->aux_work_data.async_ready.queue
-	= erts_get_async_ready_queue(1);
+	esdp->aux_work_data.async_ready.queue
+	    = erts_get_async_ready_queue(1);
 #endif
-    set_main_stack_size();
-    process_main();
+	set_main_stack_size();
+	erts_sched_init_time_sup(esdp);
+	process_main();
+    }
 #endif
 }
 
@@ -1710,7 +2289,7 @@ system_cleanup(int flush_async)
     if (!flush_async
 	|| !erts_initialized
 #if defined(USE_THREADS) && !defined(ERTS_SMP)
-	|| !erts_equal_tids(main_thread, erts_thr_self())
+	|| !erts_equal_tids(erts_main_thread, erts_thr_self())
 #endif
 	)
 	return;
@@ -1732,8 +2311,10 @@ erl_exit_vv(int n, int flush_async, char *fmt, va_list args1, va_list args2)
     system_cleanup(flush_async);
 
     save_statistics();
-
-    an = abs(n);
+    if (n < 0)
+        an = -(unsigned int)n;
+    else
+        an = n;
 
     if (erts_mtrace_enabled)
 	erts_mtrace_exit((Uint32) an);

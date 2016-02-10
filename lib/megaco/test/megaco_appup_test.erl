@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2002-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -309,6 +310,9 @@ instruction_module(Instr) ->
 %% Check that the modules handled in an instruction set for version X
 %% is a subset of the instruction set for version X-1.
 check_module_subset(Instructions) ->
+    %% io:format("check_module_subset -> "
+    %% 	      "~n   Instructions: ~p"
+    %% 	      "~n", [Instructions]),
     do_check_module_subset(modules_of(Instructions)).
  
 do_check_module_subset([]) ->
@@ -316,6 +320,11 @@ do_check_module_subset([]) ->
 do_check_module_subset([_]) ->
     ok;
 do_check_module_subset([{_V1, Mods1}|T]) ->
+    %% io:format("do_check_module_subset -> "
+    %% 	      "~n   V1:    ~p"
+    %% 	      "~n   Mods1: ~p"
+    %% 	      "~n   T:     ~p"
+    %% 	      "~n", [_V1, Mods1, T]),
     {V2, Mods2} = hd(T),
     %% Check that the modules in V1 is a subset of V2
     case do_check_module_subset2(Mods1, Mods2) of
@@ -347,8 +356,21 @@ modules_of(Instructions) ->
 modules_of([], Acc) ->
     lists:reverse(Acc);
 modules_of([{V,Instructions}|T], Acc) ->
-    Mods = modules_of2(Instructions, []),
-    modules_of(T, [{V, Mods}|Acc]).
+    %% io:format("modules_of -> "
+    %% 	      "~n   V:            ~p"
+    %% 	      "~n   Instructions: ~p"
+    %% 	      "~n", [V, Instructions]),
+    case modules_of2(Instructions, []) of
+	Mods when is_list(Mods) -> 
+	    %% io:format("modules_of -> "
+	    %% 	      "~n   Mods: ~p"
+	    %% 	      "~n", [Mods]),
+	    modules_of(T, [{V, Mods}|Acc]);
+	skip ->
+	    %% io:format("modules_of -> skip"
+	    %% 	      "~n", []),
+	    modules_of(T, Acc)
+    end.
  
 modules_of2([], Acc) ->
     lists:reverse(Acc);
@@ -356,6 +378,8 @@ modules_of2([Instr|Instructions], Acc) ->
     case module_of(Instr) of
         {value, Mod} ->
             modules_of2(Instructions, [Mod|Acc]);
+	skip ->
+	    skip;
         false ->
             modules_of2(Instructions, Acc)
     end.
@@ -368,6 +392,8 @@ module_of({load_module, Module, _Pre, _Post, _Depend}) ->
     {value, Module};
 module_of({update, Module, _Change, _Pre, _Post, _Depend}) ->
     {value, Module};
+module_of({restart_application, _App}) ->
+    skip;
 module_of(_) ->
     false.
  

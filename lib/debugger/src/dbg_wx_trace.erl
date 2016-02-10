@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -21,11 +22,13 @@
 -module(dbg_wx_trace).
 
 %% External exports
--export([start/1, start/3]).
+-export([start/1, start/3, start/4]).
 -export([title/1]).
 
 -define(TRACEWIN, ['Button Area', 'Evaluator Area', 'Bindings Area']).
 -define(BACKTRACE, 100).
+-define(STRNAME, 'Use range of +pc flag'). % See also erl(1)
+-define(STRINGS, [str_on]).
 
 -record(state, {win,           % term() Attach process window data
 		coords,        % {X,Y} Mouse point position
@@ -45,7 +48,8 @@
 
 		trace,         % boolean()
 		stack_trace,   % all | no_tail | false
-		backtrace      % integer() #call frames to fetch
+		backtrace,     % integer() #call frames to fetch
+                strings        % [str_on] Integer lists as strings
 	       }).
 
 %%====================================================================
@@ -62,35 +66,32 @@
 %%   Backtrace = integer()
 %%--------------------------------------------------------------------
 start(Pid) -> % Used by debugger:quick/3 (no monitor)    
-    start(Pid, ?TRACEWIN, ?BACKTRACE).
-start(Pid, TraceWin, BackTrace) ->    
-    case {whereis(dbg_wx_mon), whereis(dbg_ui_mon)} of
-	{undefined, undefined} ->
-	    case which_gui() of
-		gs ->
-		    dbg_ui_trace:start(Pid, TraceWin, BackTrace);
-		wx ->
-		    Parent = wx:new(),
-		    Env = wx:get_env(),
-		    start(Pid, Env, Parent, TraceWin, BackTrace)
-	    end;
-	{undefined, Monitor} when is_pid(Monitor) ->
-	    dbg_ui_trace:start(Pid, TraceWin, BackTrace);
-	{Monitor, _} when is_pid(Monitor) ->
+    start(Pid, ?TRACEWIN, ?BACKTRACE, ?STRINGS).
+
+start(Pid, TraceWin, BackTrace) ->
+    start(Pid, TraceWin, BackTrace, ?STRINGS).
+
+start(Pid, TraceWin, BackTrace, Strings) ->
+    case whereis(dbg_wx_mon) of
+        undefined ->
+            Parent = wx:new(),
+            Env = wx:get_env(),
+            start(Pid, Env, Parent, TraceWin, BackTrace, Strings);
+	Monitor when is_pid(Monitor) ->
 	    Monitor ! {?MODULE, self(), get_env},
-	    receive 
+	    receive
 		{env, Monitor, Env, Parent} ->
-		    start(Pid, Env, Parent, TraceWin, BackTrace)
+		    start(Pid, Env, Parent, TraceWin, BackTrace, Strings)
 	    end
     end.
     
-start(Pid, Env, Parent, TraceWin, BackTrace) ->
+start(Pid, Env, Parent, TraceWin, BackTrace, Strings) ->
     %% Inform int about my existence and get the meta pid back
     case int:attached(Pid) of
 	{ok, Meta} ->
 	    try
 		wx:set_env(Env),
-		init(Pid, Parent, Meta, TraceWin, BackTrace)
+		init(Pid, Parent, Meta, TraceWin, BackTrace, Strings)
 	    catch 
 		_:stop ->
 		    exit(stop);
@@ -101,15 +102,6 @@ start(Pid, Env, Parent, TraceWin, BackTrace) ->
 	    end;
 	error ->
 	    ignore
-    end.
-
-which_gui() ->
-    try
-	wx:new(),
-	wx:destroy(),
-	wx
-    catch _:_ ->
-	    gs
     end.
 
 %%--------------------------------------------------------------------
@@ -126,7 +118,7 @@ title(Pid) ->
 %% Main loop and message handling
 %%====================================================================
 
-init(Pid, Parent, Meta, TraceWin, BackTrace) ->
+init(Pid, Parent, Meta, TraceWin, BackTrace, Strings) ->
 
     %% Start necessary stuff
     dbg_wx_trace_win:init(),               % Graphics system
@@ -138,13 +130,14 @@ init(Pid, Parent, Meta, TraceWin, BackTrace) ->
     dbg_wx_winman:insert(Title, Window),
 
     %% Initial process state
-    State1 = #state{win=Win, coords={0,0}, pid=Pid, meta=Meta,
+    State1 = #state{win=Win, coords={-1,-1}, pid=Pid, meta=Meta,
 		    status={idle,null,null},
-		    stack={1,1}},
+		    stack={1,1}, strings=[str_on]},
 
     State2 = init_options(TraceWin,
 			  int:stack_trace(),    % Stack Trace
 			  BackTrace,            % Back trace size
+                          Strings,              % Strings
 			  State1),
 
     State3 = init_contents(int:all_breaks(),    % Breakpoints
@@ -152,13 +145,13 @@ init(Pid, Parent, Meta, TraceWin, BackTrace) ->
 
     int:meta(Meta, trace, State3#state.trace),
 
-    gui_enable_updown(stack_trace, {1,1}),
+    gui_enable_updown(State3#state.stack_trace, {1,1}),
     gui_enable_btrace(false, false),
     dbg_wx_trace_win:display(Win,idle),
 
     loop(State3).
 
-init_options(TraceWin, StackTrace, BackTrace, State) ->
+init_options(TraceWin, StackTrace, BackTrace, Strings, State) ->
     lists:foreach(fun(Area) -> dbg_wx_trace_win:select(Area, true) end,
 		  TraceWin),
 
@@ -166,9 +159,16 @@ init_options(TraceWin, StackTrace, BackTrace, State) ->
 
     dbg_wx_trace_win:select(map(StackTrace), true),
 
+    lists:foreach(fun(Flag) ->
+                          dbg_wx_trace_win:select(map(Flag), true)
+                  end,
+                  Strings),
+    dbg_wx_trace_win:update_strings(Strings),
+
     %% Backtrace size is (currently) not shown in window
 
-    State#state{trace=Trace,stack_trace=StackTrace,backtrace=BackTrace}.
+    State#state{trace=Trace,stack_trace=StackTrace,backtrace=BackTrace,
+                strings=Strings}.
 
 init_contents(Breaks, State) ->
     Win =
@@ -331,8 +331,9 @@ gui_cmd('Messages', State) ->
 	      fun(Msg, N) ->
 		      Str1 = io_lib:format(" ~w:", [N]),
 		      dbg_wx_trace_win:eval_output(State#state.win,Str1, bold),
-		      Str2 = io_lib:format(" ~ts~n",[io_lib:print(Msg)]),
-		      dbg_wx_trace_win:eval_output(State#state.win,Str2, normal),
+                      Str2 = pretty(Msg, State),
+		      Str3 = io_lib:format(" ~ts~n",[Str2]),
+		      dbg_wx_trace_win:eval_output(State#state.win,Str3, normal),
 		      N+1
 	      end,
 	      1,
@@ -341,13 +342,14 @@ gui_cmd('Messages', State) ->
     State;
 gui_cmd('Back Trace', State) ->
     dbg_wx_trace_win:trace_output(State#state.win,"\nBACK TRACE\n----------\n"),
+    P = p(State),
     lists:foreach(
       fun({Le, {Mod,Func,Args}}) ->
-	      Str = io_lib:format("~p > ~p:~p~p~n",
+	      Str = io_lib:format("~p > ~p:~p"++P++"~n",
 				  [Le, Mod, Func, Args]),
 	      dbg_wx_trace_win:trace_output(State#state.win,Str);
 	 ({Le, {Fun,Args}}) ->
-	      Str = io_lib:format("~p > ~p~p~n", [Le, Fun, Args]),
+	      Str = io_lib:format("~p > ~p"++P++"~n", [Le, Fun, Args]),
 	      dbg_wx_trace_win:trace_output(State#state.win,Str);
 	 (_) -> ignore
       end,
@@ -474,10 +476,15 @@ gui_cmd({'Stack Trace', [Name]}, State) ->
     State;
 gui_cmd('Back Trace Size...', State) ->
     Win = dbg_wx_trace_win:get_window(State#state.win),
-    case dbg_wx_win:entry(Win, "Backtrace",'Backtrace:', {integer, State#state.backtrace}) of
+    Val = integer_to_list(State#state.backtrace),
+    case dbg_wx_win:entry(Win, "Backtrace",'Backtrace:', {integer, Val}) of
 	cancel -> State;
 	{_, BackTrace} ->  State#state{backtrace=BackTrace}
     end;
+gui_cmd({'Strings', Flags}, State) ->
+    Names = [map(Flag) || Flag <- Flags],
+    dbg_wx_trace_win:update_strings(Names),
+    State#state{strings=Names};
 
 %% Help menu
 gui_cmd('Debugger', State) ->
@@ -507,8 +514,12 @@ gui_cmd({user_command, Cmd}, State) ->
     end,
     State;
 
-gui_cmd({edit, {Var, Val}}, State) ->
+gui_cmd({edit, {Var, Value}}, State) ->
     Window = dbg_wx_trace_win:get_window(State#state.win),
+    Val = case State#state.strings of
+              []        -> dbg_wx_win:to_string("~999999lp",[Value]);
+              [str_on]  -> dbg_wx_win:to_string("~999999tp",[Value])
+          end,
     case dbg_wx_win:entry(Window, "Edit variable", Var, {term, Val}) of
 	cancel ->
 	    State;
@@ -681,16 +692,23 @@ meta_cmd({stack_trace, Flag}, State) ->
     end,
     State#state{stack_trace=Flag};
 
-meta_cmd({trace_output, Str}, State) ->
-    dbg_wx_trace_win:trace_output(State#state.win, Str),
+meta_cmd({trace_output, StrFun}, State) ->
+    P = p(State),
+    dbg_wx_trace_win:trace_output(State#state.win, StrFun(P)),
     State;
 
 %% Reply on a user command
 meta_cmd({eval_rsp, Res}, State) ->
-    Str = io_lib_pretty:print(Res,[{encoding,unicode}]),
+    Str = pretty(Res, State),
     dbg_wx_trace_win:eval_output(State#state.win, [$<,Str,10], normal),
     State.
 
+pretty(Term, State) ->
+    Strings = case State#state.strings of
+                  [str_on] -> true;
+                  []       -> false
+              end,
+    io_lib_pretty:print(Term,[{encoding,unicode},{strings,Strings}]).
 
 %%====================================================================
 %% GUI auxiliary functions
@@ -734,6 +752,8 @@ menus() ->
 		   [{'Stack On, Tail', no, radio},
 		    {'Stack On, No Tail', no, radio},
 		    {'Stack Off', no, radio}]},
+		  {'Strings', no, cascade,
+		   [{?STRNAME, no, check}]},
 		  {'Back Trace Size...', no}]},
      {'Windows', []},
      {'Help', [{'Debugger', no}]}].
@@ -774,8 +794,12 @@ map('Stack Off')         -> false;
 map(all)                 -> 'Stack On, Tail';
 map(true)                -> 'Stack On, Tail';
 map(no_tail)             -> 'Stack On, No Tail';
-map(false)               -> 'Stack Off'.
+map(false)               -> 'Stack Off';
+map(?STRNAME)            -> str_on;            % Strings
+map(str_on)              -> ?STRNAME.
 
+p(#state{strings=[str_on]}) -> "~tp";
+p(#state{strings=[]}) ->       "~lp".
 
 %% gui_show_module(Win, Mod, Line, Cm, Pid, How) -> Win
 %% gui_show_module(Win, {Mod,Line}, _Reason, Cm, Pid, How) -> Win

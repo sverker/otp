@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
-      <year>1996</year><year>2012</year>
+      <year>1996</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -35,7 +36,7 @@
       used. The profiling is done using the Erlang trace BIFs. Tracing of
       local function calls for a specified set of processes is enabled when
       profiling is begun, and disabled when profiling is stopped.</p>
-    <p>When using Eprof expect a slowdown in program execution.</p>
+    <p>When using Eprof, expect a slowdown in program execution.</p>
   </description>
   <funcs>
     <func>
@@ -52,12 +53,14 @@
     <func>
       <name>start_profiling(Rootset) -> profiling | {error, Reason}</name>
       <name>start_profiling(Rootset,Pattern) -> profiling | {error, Reason}</name>
+      <name>start_profiling(Rootset,Pattern,Options) -> profiling | {error, Reason}</name>
       <fsummary>Start profiling.</fsummary>
       <type>
         <v>Rootset = [atom() | pid()]</v>
-	<v>Pattern = {Module, Function, Arity}</v>
-	<v>Module = Function = atom()</v>
-	<v>Arity = integer()</v>
+		<v>Pattern = {Module, Function, Arity}</v>
+		<v>Module = Function = atom()</v>
+		<v>Arity = integer()</v>
+		<v>Options = [set_on_spawn]</v>
         <v>Reason = term()</v>
       </type>
       <desc>
@@ -70,6 +73,9 @@
         <p>A pattern can be selected to narrow the profiling. For instance a
           specific module can be selected, and only the code executed in that
           module will be profiled.</p>
+	    <p>The <c>set_on_spawn</c> option will active call time tracing for
+			all processes spawned by processes in the rootset. This is
+			the default behaviour.</p>
       </desc>
     </func>
     <func>
@@ -82,19 +88,22 @@
     </func>
     <func>
       <name>profile(Fun) -> profiling | {error, Reason}</name>
+      <name>profile(Fun, Options) -> profiling | {error, Reason}</name>
       <name>profile(Rootset) -> profiling | {error, Reason}</name>
       <name>profile(Rootset,Fun) -> {ok, Value} | {error,Reason}</name>
       <name>profile(Rootset,Fun,Pattern) -> {ok, Value} | {error, Reason}</name>
       <name>profile(Rootset,Module,Function,Args) -> {ok, Value} | {error, Reason}</name>
       <name>profile(Rootset,Module,Function,Args,Pattern) -> {ok, Value} | {error, Reason}</name>
+      <name>profile(Rootset,Module,Function,Args,Pattern,Options) -> {ok, Value} | {error, Reason}</name>
       <fsummary>Start profiling.</fsummary>
       <type>
         <v>Rootset = [atom() | pid()]</v>
-        <v>Fun = fun() -> term()</v>
-	<v>Pattern = {Module, Function, Arity}</v>
+        <v>Fun = fun() -> term() end</v>
+		<v>Pattern = {Module, Function, Arity}</v>
         <v>Module = Function = atom()</v>
         <v>Args = [term()]</v>
-	<v>Arity = integer()</v>
+		<v>Arity = integer()</v>
+		<v>Options = [set_on_spawn]</v>
         <v>Value = Reason = term()</v>
       </type>
       <desc>
@@ -108,8 +117,11 @@
           <c>Rootset</c>, the function returns <c>{ok,Value}</c> when
           <c>Fun()</c>/<c>apply</c> returns with the value <c>Value</c>, or
           <c>{error,Reason}</c> if <c>Fun()</c>/<c>apply</c> fails with
-	  exit reason <c>Reason</c>. Otherwise it returns <c>{error, Reason}</c>
+		  exit reason <c>Reason</c>. Otherwise it returns <c>{error, Reason}</c>
           immediately.</p>
+	    <p>The <c>set_on_spawn</c> option will active call time tracing for
+			all processes spawned by processes in the rootset. This is
+			the default behaviour.</p>
         <p>The programmer must ensure that the function given as argument
           is truly synchronous and that no work continues after
           the function has returned a value.</p>
@@ -119,13 +131,13 @@
       <name>analyze() -> ok</name>
       <name>analyze(Type) -> ok</name>
       <name>analyze(Type,Options) -> ok</name>
+      <fsummary>Display profiling results per process.</fsummary>
       <type>
         <v>Type = procs | total</v>
 	<v>Options = [{filter, Filter} | {sort, Sort}</v>
 	<v>Filter = [{calls, integer()} | {time, float()}]</v>
 	<v>Sort = time | calls | mfa</v>
       </type>
-      <fsummary>Display profiling results per process.</fsummary>
       <desc>
         <p>Call this function when profiling has been stopped to display
           the results per process, that is:</p>

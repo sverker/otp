@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2011-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2011-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -35,13 +36,16 @@ all() ->
     [
      pbdkdf1,
      pbdkdf2,
-     encrypted_private_key_info].
+     old_enc,
+     pbes1,
+     pbes2].
 
 groups() -> 
     [].
 
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
+    application:stop(crypto),
     try crypto:start() of
 	ok ->
 	    Config
@@ -109,7 +113,7 @@ pbdkdf2(Config) when is_list(Config) ->
     
     <<16#0c, 16#60, 16#c8, 16#0f, 16#96, 16#1f, 16#0e, 16#71,
       16#f3, 16#a9, 16#b5, 16#24, 16#af, 16#60, 16#12, 16#06,
-      16#2f, 16#e0, 16#37, 16#a6>> = pubkey_pbe:pbdkdf2("password", "salt", 1, 20, fun crypto:sha_mac/3, 20),
+      16#2f, 16#e0, 16#37, 16#a6>> = pubkey_pbe:pbdkdf2("password", "salt", 1, 20, fun crypto:hmac/4, sha, 20),
     
     %% Input:
     %%   P = "password" (8 octets)
@@ -125,7 +129,7 @@ pbdkdf2(Config) when is_list(Config) ->
     <<16#ea, 16#6c, 16#01, 16#4d, 16#c7, 16#2d, 16#6f, 16#8c, 
       16#cd, 16#1e, 16#d9, 16#2a, 16#ce, 16#1d, 16#41, 16#f0,  
       16#d8,  16#de,  16#89, 16#57>>  =
-	pubkey_pbe:pbdkdf2("password", "salt", 2, 20, fun crypto:sha_mac/3, 20),
+	pubkey_pbe:pbdkdf2("password", "salt", 2, 20, fun crypto:hmac/4, sha, 20),
 
      %% Input:
      %%   P = "password" (8 octets)
@@ -140,7 +144,7 @@ pbdkdf2(Config) when is_list(Config) ->
 
     <<16#4b, 16#00, 16#79, 16#01, 16#b7, 16#65, 16#48, 16#9a,
       16#be, 16#ad, 16#49, 16#d9, 16#26, 16#f7, 16#21, 16#d0,
-      16#65, 16#a4, 16#29, 16#c1>> = pubkey_pbe:pbdkdf2("password", "salt", 4096, 20, fun crypto:sha_mac/3, 20),
+      16#65, 16#a4, 16#29, 16#c1>> = pubkey_pbe:pbdkdf2("password", "salt", 4096, 20, fun crypto:hmac/4, sha, 20),
 
     %% Input:
     %%    P = "password" (8 octets)
@@ -156,7 +160,7 @@ pbdkdf2(Config) when is_list(Config) ->
     
     <<16#ee, 16#fe, 16#3d, 16#61, 16#cd, 16#4d, 16#a4, 16#e4, 
       16#e9, 16#94, 16#5b, 16#3d, 16#6b, 16#a2, 16#15, 16#8c, 
-      16#26, 16#34, 16#e9, 16#84>> = pubkey_pbe:pbdkdf2("password", "salt", 16777216, 20, fun crypto:sha_mac/3, 20),
+      16#26, 16#34, 16#e9, 16#84>> = pubkey_pbe:pbdkdf2("password", "salt", 16777216, 20, fun crypto:hmac/4, sha, 20),
     
     %% Input:
     %%    P = "passwordPASSWORDpassword" (24 octets)
@@ -175,7 +179,7 @@ pbdkdf2(Config) when is_list(Config) ->
       16#8b, 16#29, 16#1a, 16#96, 16#4c, 16#f2, 16#f0, 16#70, 
       16#38>>
 	= pubkey_pbe:pbdkdf2("passwordPASSWORDpassword", 
-			     "saltSALTsaltSALTsaltSALTsaltSALTsalt", 4096, 25, fun crypto:sha_mac/3, 20),
+			     "saltSALTsaltSALTsaltSALTsaltSALTsalt", 4096, 25, fun crypto:hmac/4, sha, 20),
     
      %% Input:
      %%   P = "pass\0word" (9 octets)
@@ -190,37 +194,49 @@ pbdkdf2(Config) when is_list(Config) ->
     <<16#56, 16#fa, 16#6a, 16#a7, 16#55, 16#48, 16#09, 16#9d, 
       16#cc, 16#37, 16#d7, 16#f0, 16#34, 16#25, 16#e0, 16#c3>>
 	= pubkey_pbe:pbdkdf2("pass\0word", 
-			     "sa\0lt", 4096, 16, fun crypto:sha_mac/3, 20).
-    
-encrypted_private_key_info() ->
-    [{doc,"Tests reading a EncryptedPrivateKeyInfo file encrypted with different ciphers"}].
-encrypted_private_key_info(Config) when is_list(Config) ->
+			     "sa\0lt", 4096, 16, fun crypto:hmac/4, sha, 20).
+
+old_enc() ->
+    [{doc,"Tests encode/decode RSA key encrypted with different ciphers using old PEM encryption scheme"}].
+old_enc(Config) when is_list(Config) ->
     Datadir = ?config(data_dir, Config),
-    {ok, PemDes} = file:read_file(filename:join(Datadir, "des_cbc_enc_key.pem")),
+    %% key generated with ssh-keygen -N hello_aes -f old_aes_128_cbc_enc_key.pem
+    {ok, PemAesCbc} = file:read_file(filename:join(Datadir, "old_aes_128_cbc_enc_key.pem")),
     
-    PemDesEntry = public_key:pem_decode(PemDes),
-    ct:print("Pem entry: ~p" , [PemDesEntry]),
-    [{'PrivateKeyInfo', _, {"DES-CBC",_}} = PubEntry0] = PemDesEntry,
-    KeyInfo = public_key:pem_entry_decode(PubEntry0, "password"),
+    PemAesCbcEntry = public_key:pem_decode(PemAesCbc),
+    ct:print("Pem entry: ~p" , [PemAesCbcEntry]),
+    [{'RSAPrivateKey', _, {"AES-128-CBC",_}} = PubAesCbcEntry] = PemAesCbcEntry,
+    #'RSAPrivateKey'{} = public_key:pem_entry_decode(PubAesCbcEntry, "hello_aes").
+
+pbes1() ->
+    [{doc,"Tests encode/decode EncryptedPrivateKeyInfo encrypted with different ciphers using PBES1"}].
+pbes1(Config) when is_list(Config) ->
+    decode_encode_key_file("pbes1_des_cbc_md5_enc_key.pem", "password", "DES-CBC", Config).
     
-    {ok, Pem3Des} = file:read_file(filename:join(Datadir, "des_ede3_cbc_enc_key.pem")),
-
-    Pem3DesEntry = public_key:pem_decode(Pem3Des),
-    ct:print("Pem entry: ~p" , [Pem3DesEntry]),
-    [{'PrivateKeyInfo', _, {"DES-EDE3-CBC",_}} = PubEntry1] = Pem3DesEntry,
-    KeyInfo = public_key:pem_entry_decode(PubEntry1, "password"),
-
-    {ok, PemRc2} = file:read_file(filename:join(Datadir, "rc2_cbc_enc_key.pem")),
-
-    PemRc2Entry = public_key:pem_decode(PemRc2),
-    ct:print("Pem entry: ~p" , [PemRc2Entry]),
-    [{'PrivateKeyInfo', _, {"RC2-CBC",_}} = PubEntry2] = PemRc2Entry,
-    KeyInfo = public_key:pem_entry_decode(PubEntry2, "password"),
-
-    check_key_info(KeyInfo).
-
+pbes2() ->
+    [{doc,"Tests encode/decode EncryptedPrivateKeyInfo encrypted with different ciphers using PBES2"}].
+pbes2(Config) when is_list(Config) ->
+    decode_encode_key_file("pbes2_des_cbc_enc_key.pem", "password", "DES-CBC", Config),
+    decode_encode_key_file("pbes2_des_ede3_cbc_enc_key.pem", "password", "DES-EDE3-CBC", Config),   
+    decode_encode_key_file("pbes2_rc2_cbc_enc_key.pem", "password", "RC2-CBC", Config).
 
 check_key_info(#'PrivateKeyInfo'{privateKeyAlgorithm =
 				     #'PrivateKeyInfo_privateKeyAlgorithm'{algorithm = ?rsaEncryption},
 				 privateKey = Key}) ->
     #'RSAPrivateKey'{} = public_key:der_decode('RSAPrivateKey', iolist_to_binary(Key)).
+
+decode_encode_key_file(File, Password, Cipher, Config) ->
+    Datadir = ?config(data_dir, Config),
+    {ok, PemKey} = file:read_file(filename:join(Datadir, File)),
+    
+    PemEntry = public_key:pem_decode(PemKey),
+    ct:print("Pem entry: ~p" , [PemEntry]),
+    [{Asn1Type, _, {Cipher,_} = CipherInfo} = PubEntry] = PemEntry,
+    KeyInfo = public_key:pem_entry_decode(PubEntry, Password),
+    PemKey1 = public_key:pem_encode([public_key:pem_entry_encode(Asn1Type, KeyInfo, {CipherInfo, Password})]),
+    Pem = strip_ending_newlines(PemKey),
+    Pem = strip_ending_newlines(PemKey1),
+    check_key_info(KeyInfo).
+
+strip_ending_newlines(Bin) ->
+    string:strip(binary_to_list(Bin), right, 10).

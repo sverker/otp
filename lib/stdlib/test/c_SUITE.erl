@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -20,7 +21,7 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2]).
 -export([c_1/1, c_2/1, c_3/1, c_4/1, nc_1/1, nc_2/1, nc_3/1, nc_4/1,
-         memory/1]).
+	 ls/1, memory/1]).
 
 -include_lib("test_server/include/test_server.hrl").
 
@@ -29,7 +30,7 @@
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [c_1, c_2, c_3, c_4, nc_1, nc_2, nc_3, nc_4, memory].
+    [c_1, c_2, c_3, c_4, nc_1, nc_2, nc_3, nc_4, ls, memory].
 
 groups() -> 
     [].
@@ -146,6 +147,13 @@ nc_4(Config) when is_list(Config) ->
     ?line file:set_cwd(W),
     ?line Result = nc(R,[{outdir,W}]),
     ?line {ok, m} = Result.
+
+ls(Config) when is_list(Config) ->
+    Directory = ?config(data_dir, Config),
+    ok = c:ls(Directory),
+    File = filename:join(Directory, "m.erl"),
+    ok = c:ls(File),
+    ok = c:ls("no_such_file").
 
 memory(doc) ->
     ["Checks that c:memory/[0,1] returns consistent results."];

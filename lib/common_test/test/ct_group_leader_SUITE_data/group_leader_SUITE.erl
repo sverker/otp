@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2012. All Rights Reserved.
+%% Copyright Ericsson AB 2012-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -112,7 +113,8 @@ groups() ->
      {seq,[],[s1,s2,s3]},
      {seq2,[],[s4,s5]},
      {seq_in_par,[parallel],[p10,p11,{group,seq},p12,{group,seq2},p13]},
-     {capture_io,[parallel],[cap1,cap2]}].
+     {capture_io,[parallel],[cap1,cap2]},
+     {unexpected_io,[parallel],[unexp1,unexp2]}].
 
 %%--------------------------------------------------------------------
 %% @spec all() -> GroupsAndTestCases | {skip,Reason}
@@ -126,7 +128,8 @@ all() ->
     [tc1,{group,p},{group,p_restart},p3,
      {group,seq_in_par},
      cap1,cap2,
-     {group,capture_io}].
+     {group,capture_io},
+     {group,unexpected_io}].
 
 tc1(_C) ->
     ok.
@@ -250,3 +253,36 @@ gen_io(Label, N, Acc) ->
     S = lists:flatten(io_lib:format("~s: ~p\n", [Label,N])),
     io:put_chars(S),
     gen_io(Label, N-1, [S|Acc]).
+
+%% Test that unexpected I/O is sent to test_server's unexpeced_io log.
+%% To trigger this, run two test cases in parallel and send a printout
+%% (via ct logging functions) from an external process which has a
+%% different group leader than the test cases.
+unexp1(Config) ->
+    ct:sleep(1000),
+    gen_unexp_io(),
+    ct:sleep(1000),
+    check_unexp_io(Config),
+    ok.
+
+unexp2(_) ->
+    ct:sleep(2000),
+    ok.
+
+gen_unexp_io() ->
+    spawn(fun() ->
+		  group_leader(whereis(user),self()),
+		  ct:log("-x- Unexpected io ct:log -x-",[]),
+		  ct:pal("-x- Unexpected io ct:pal -x-",[]),
+		  ok
+	  end).
+
+check_unexp_io(Config) ->
+    SuiteLog = ?config(tc_logfile,Config),
+    Dir = filename:dirname(SuiteLog),
+    UnexpLog = filename:join(Dir,"unexpected_io.log.html"),
+    {ok,SuiteBin} = file:read_file(SuiteLog),
+    nomatch = re:run(SuiteBin,"-x- Unexpected io ",[global,{capture,none}]),
+    {ok,UnexpBin} = file:read_file(UnexpLog),
+    {match,[_,_]} = re:run(UnexpBin,"-x- Unexpected io ",[global]),
+    ok.

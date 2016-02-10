@@ -1,31 +1,31 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
       <year>2002</year>
-      <year>2011</year>
+      <year>2013</year>
       <holder>Ericsson AB, All Rights Reserved</holder>
     </copyright>
     <legalnotice>
-  The contents of this file are subject to the Erlang Public License,
-  Version 1.1, (the "License"); you may not use this file except in
-  compliance with the License. You should have received a copy of the
-  Erlang Public License along with this software. If not, it can be
-  retrieved online at http://www.erlang.org/.
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+ 
+      http://www.apache.org/licenses/LICENSE-2.0
 
-  Software distributed under the License is distributed on an "AS IS"
-  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-  the License for the specific language governing rights and limitations
-  under the License.
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 
   The Initial Developer of the Original Code is Ericsson AB.
     </legalnotice>
 
     <title>ttb</title>
-    <prepared>Siri hansen</prepared>
-    <prepared>Bartlomiej Puzon</prepared>
+    <prepared>Siri hansen, Bartlomiej Puzon</prepared>
     <responsible></responsible>
     <docno>1</docno>
     <approved></approved>
@@ -59,17 +59,16 @@
         <p>This function is a shortcut allowing to start a trace with one command. Each
           tuple in <c>Patterns</c> is converted to list which is in turn passed to
           <c>ttb:tpl</c>.
-          The call:<code type="none">
+          The call:</p><code type="none">
 ttb:start_trace([Node, OtherNode],
 [{mod, foo, []}, {mod, bar, 2}],
 {all, call},
 [{file, File}, {handler,{fun myhandler/4, S}}])</code>
-          is equivalent to <code type="none">
+          <p>is equivalent to</p> <code type="none">
 ttb:start_trace([Node, OtherNode], [{file, File}, {handler,{fun myhandler/4, S}}]),
 ttb:tpl(mod, foo, []),
 ttb:tpl(mod, bar, 2, []),
 ttb:p(all, call)</code>
-        </p>
       </desc>
     </func>
     <func>
@@ -105,8 +104,9 @@ ttb:p(all, call)</code>
         <v>Nodes   = atom() | [atom()] | all | existing | new</v>
         <v>Opts = Opt | [Opt]</v>
         <v>Opt = {file,Client} | {handler, FormatHandler} | {process_info,PI} |
-          shell | {shell, ShellSpec} | {timer, TimerSpec} | {overload, {MSec, Module, Function}}
-          | {flush, MSec} | resume | {resume, FetchTimeout}</v>
+          shell | {shell, ShellSpec} | {timer, TimerSpec} |
+	  {overload_check, {MSec, Module, Function}} |
+	{flush, MSec} | resume | {resume, FetchTimeout}</v>
         <v>TimerSpec = MSec | {MSec, StopOpts}</v>
         <v>MSec = FetchTimeout = integer()</v>
         <v>Module = Function = atom() </v>
@@ -158,7 +158,7 @@ ttb:p(all, call)</code>
           network communication are always present. The timer starts after
           <c>ttb:p/2</c> is issued, so you can set up your trace patterns before.
         </p>
-        <p>The <c>overload</c> option allows to enable overload
+        <p>The <c>overload_check</c> option allows to enable overload
           checking on the nodes under trace. <c>Module:Function(check)</c>
           is performed each <c>MSec</c> milliseconds. If the check returns
           <c>true</c>, the tracing is disabled on a given node.<br/>
@@ -191,7 +191,7 @@ ttb:p(all, call)</code>
           (i.e. on diskless nodes), a custom module to handle autostart
           information storage and retrieval can be provided by specifying
           <c>ttb_autostart_module</c> environment variable for the <c>runtime_tools</c>
-          application. The module has to respond to the following API:
+          application. The module has to respond to the following API:</p>
           <taglist>
             <tag><c>write_config(Data) -> ok</c></tag>
             <item>Store the provided data for further retrieval. It is
@@ -205,7 +205,6 @@ ttb:p(all, call)</code>
               must return <c>{error, Error}</c>.
             </item>
           </taglist>
-        </p>
         <p>The <c>resume</c> option implies the default <c>FetchTimeout</c>, which is
           10 seconds</p>
       </desc>
@@ -270,17 +269,19 @@ ttb:p(all, call)</code>
           <item>Clear trace pattern on global function calls</item>
         </taglist>
         <p>With <c>tp</c> and <c>tpl</c> one of match specification shortcuts
-          may be used (example: <c>ttb:tp(foo_module, caller)</c>). The shortcuts are:
+          may be used (example: <c>ttb:tp(foo_module, caller)</c>). The shortcuts are:</p>
           <taglist>
+	    <tag/>
             <item><c>return</c> - for <c>[{'_',[],[{return_trace}]}]</c>
               (report the return value)</item>
+	    <tag/>
             <item><c>caller</c> - for <c>[{'_',[],[{message,{caller}}]}]</c>
               (report the calling function)</item>
+	    <tag/>
             <item><c>{codestr, Str}</c> - for <c>dbg:fun2ms/1</c> arguments
               passed as strings (example: <c>"fun(_) -> return_trace() end"</c>)
             </item>
           </taglist>
-        </p>
       </desc>
     </func>
     <func>

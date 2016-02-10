@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2005-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -37,7 +38,8 @@
 	 init_per_group/2,end_per_group/2, 
 	 init_per_testcase/2, end_per_testcase/2]).
 
--export([process_count/1, system_version/1, misc_smoke_tests/1, heap_size/1, wordsize/1, memory/1]).
+-export([process_count/1, system_version/1, misc_smoke_tests/1, heap_size/1, wordsize/1, memory/1,
+         ets_limit/1]).
 
 -define(DEFAULT_TIMEOUT, ?t:minutes(2)).
 
@@ -45,7 +47,7 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [process_count, system_version, misc_smoke_tests,
-     heap_size, wordsize, memory].
+     heap_size, wordsize, memory, ets_limit].
 
 groups() -> 
     [].
@@ -154,6 +156,7 @@ misc_smoke_tests(Config) when is_list(Config) ->
     ?line true = is_binary(erlang:system_info(loaded)),
     ?line true = is_binary(erlang:system_info(dist)),
     ?line ok = try erlang:system_info({cpu_topology,erts_get_cpu_topology_error_case}), fail catch error:badarg -> ok end,
+    true = lists:member(erlang:system_info(tolerant_timeofday), [enabled, disabled]),
     ?line ok.
     
 
@@ -182,8 +185,6 @@ wordsize(Config) when is_list(Config) ->
 	    {comment, "True 32-bit emulator"};
 	{8,8} ->
 	    {comment, "True 64-bit emulator"};
-	{8,4} ->
-	    {comment, "Halfword 64-bit emulator"};
 	Other ->
 	    exit({unexpected_wordsizes,Other})
     end.
@@ -261,6 +262,37 @@ memory_test(_Config) ->
 		     end,
 		     []),
     cmp_memory(MWs, "unlink procs"),
+
+    mem_workers_call(MWs, 
+		     fun () ->
+			     lists:foreach(
+			       fun (P) ->
+				       Tmr = erlang:start_timer(1 bsl 34,
+								P,
+								hello),
+				       Tmrs = case get('BIF_TMRS') of
+						  undefined -> [];
+						  Rs -> Rs
+					      end,
+				       true = is_reference(Tmr),
+				       put('BIF_TMRS', [Tmr|Tmrs])
+			       end, Ps)
+		     end,
+		     []),
+    cmp_memory(MWs, "start BIF timer procs"),
+
+    mem_workers_call(MWs, 
+		     fun () ->
+			     lists:foreach(fun (Tmr) ->
+						   true = is_reference(Tmr),
+						   true = is_integer(erlang:cancel_timer(Tmr))
+					   end, get('BIF_TMRS')),
+			     put('BIF_TMRS', undefined),
+			     garbage_collect()
+		     end,
+		     []),
+    erts_debug:set_internal_state(wait, deallocations),
+    cmp_memory(MWs, "cancel BIF timer procs"),
 
     DMs = mem_workers_call(MWs,
 			   fun () ->
@@ -496,3 +528,49 @@ mapn(_Fun, 0) ->
     [];
 mapn(Fun, N) ->
     [Fun(N) | mapn(Fun, N-1)].
+
+ets_limit(doc) ->
+    "Verify system_info(ets_limit) reflects max ETS table settings.";
+ets_limit(suite) -> [];
+ets_limit(Config0) when is_list(Config0) ->
+    Config = [{testcase,ets_limit}|Config0],
+    true = is_integer(get_ets_limit(Config)),
+    12345 = get_ets_limit(Config, 12345),
+    ok.
+
+get_ets_limit(Config) ->
+    get_ets_limit(Config, 0).
+get_ets_limit(Config, EtsMax) ->
+    Envs = case EtsMax of
+               0 -> [];
+               _ -> [{"ERL_MAX_ETS_TABLES", integer_to_list(EtsMax)}]
+           end,
+    {ok, Node} = start_node(Config, Envs),
+    Me = self(),
+    Ref = make_ref(),
+    spawn_link(Node,
+               fun() ->
+                       Res = erlang:system_info(ets_limit),
+                       unlink(Me),
+                       Me ! {Ref, Res}
+               end),
+    receive
+        {Ref, Res} ->
+            Res
+    end,
+    stop_node(Node),
+    Res.
+
+start_node(Config, Envs) when is_list(Config) ->
+    Pa = filename:dirname(code:which(?MODULE)),
+    Name = list_to_atom(atom_to_list(?MODULE)
+                        ++ "-"
+                        ++ atom_to_list(?config(testcase, Config))
+                        ++ "-"
+                        ++ integer_to_list(erlang:system_time(seconds))
+                        ++ "-"
+                        ++ integer_to_list(erlang:unique_integer([positive]))),
+    ?t:start_node(Name, peer, [{args, "-pa "++Pa}, {env, Envs}]).
+
+stop_node(Node) ->
+    ?t:stop_node(Node).

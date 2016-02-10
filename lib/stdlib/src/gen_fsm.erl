@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -106,6 +107,7 @@
 
 -export([start/3, start/4,
 	 start_link/3, start_link/4,
+	 stop/1, stop/3,
 	 send_event/2, sync_send_event/2, sync_send_event/3,
 	 send_all_state_event/2,
 	 sync_send_all_state_event/2, sync_send_all_state_event/3,
@@ -118,6 +120,8 @@
 	 system_continue/3,
 	 system_terminate/4,
 	 system_code_change/4,
+	 system_get_state/1,
+	 system_replace_state/2,
 	 format_status/2]).
 
 -import(error_logger, [format/2]).
@@ -158,6 +162,14 @@
 -callback code_change(OldVsn :: term() | {down, term()}, StateName :: atom(),
 		      StateData :: term(), Extra :: term()) ->
     {ok, NextStateName :: atom(), NewStateData :: term()}.
+-callback format_status(Opt, StatusData) -> Status when
+      Opt :: 'normal' | 'terminate',
+      StatusData :: [PDict | State],
+      PDict :: [{Key :: term(), Value :: term()}],
+      State :: term(),
+      Status :: term().
+
+-optional_callbacks([format_status/2]).
 
 %%% ---------------------------------------------------
 %%% Starts a generic state machine.
@@ -187,6 +199,11 @@ start_link(Mod, Args, Options) ->
 start_link(Name, Mod, Args, Options) ->
     gen:start(?MODULE, link, Name, Mod, Args, Options).
 
+stop(Name) ->
+    gen:stop(Name).
+
+stop(Name, Reason, Timeout) ->
+    gen:stop(Name, Reason, Timeout).
 
 send_event({global, Name}, Event) ->
     catch global:send(Name, {'$gen_event', Event}),
@@ -456,6 +473,13 @@ system_code_change([Name, StateName, StateData, Mod, Time],
 	Else -> Else
     end.
 
+system_get_state([_Name, StateName, StateData, _Mod, _Time]) ->
+    {ok, {StateName, StateData}}.
+
+system_replace_state(StateFun, [Name, StateName, StateData, Mod, Time]) ->
+    Result = {NStateName, NStateData} = StateFun({StateName, StateData}),
+    {ok, Result, [Name, NStateName, NStateData, Mod, Time]}.
+
 %%-----------------------------------------------------------------
 %% Format debug messages.  Print them as the call-back module sees
 %% them, not as the real erlang messages.  Use trace for that.
@@ -538,7 +562,7 @@ handle_msg(Msg, Parent, Name, StateName, StateData, Mod, _Time, Debug) ->
 	{stop, Reason, Reply, NStateData} when From =/= undefined ->
 	    {'EXIT', R} = (catch terminate(Reason, Name, Msg, Mod,
 					   StateName, NStateData, Debug)),
-	    reply(Name, From, Reply, Debug, StateName),
+	    _ = reply(Name, From, Reply, Debug, StateName),
 	    exit(R);
 	{'EXIT', What} ->
 	    terminate(What, Name, Msg, Mod, StateName, StateData, Debug);
@@ -585,7 +609,8 @@ reply(Name, {To, Tag}, Reply, Debug, StateName) ->
 terminate(Reason, Name, Msg, Mod, StateName, StateData, Debug) ->
     case catch Mod:terminate(Reason, StateName, StateData) of
 	{'EXIT', R} ->
-	    error_info(R, Name, Msg, StateName, StateData, Debug),
+	    FmtStateData = format_status(terminate, Mod, get(), StateData),
+	    error_info(R, Name, Msg, StateName, FmtStateData, Debug),
 	    exit(R);
 	_ ->
 	    case Reason of
@@ -596,17 +621,7 @@ terminate(Reason, Name, Msg, Mod, StateName, StateData, Debug) ->
  		{shutdown,_}=Shutdown ->
  		    exit(Shutdown);
 		_ ->
-                    FmtStateData =
-                        case erlang:function_exported(Mod, format_status, 2) of
-                            true ->
-                                Args = [get(), StateData],
-                                case catch Mod:format_status(terminate, Args) of
-                                    {'EXIT', _} -> StateData;
-                                    Else -> Else
-                                end;
-                            _ ->
-                                StateData
-                        end,
+                    FmtStateData = format_status(terminate, Mod, get(), StateData),
 		    error_info(Reason,Name,Msg,StateName,FmtStateData,Debug),
 		    exit(Reason)
 	    end
@@ -671,21 +686,29 @@ format_status(Opt, StatusData) ->
     Header = gen:format_status_header("Status for state machine",
                                       Name),
     Log = sys:get_debug(log, Debug, []),
-    DefaultStatus = [{data, [{"StateData", StateData}]}],
-    Specfic =
-	case erlang:function_exported(Mod, format_status, 2) of
-	    true ->
-		case catch Mod:format_status(Opt,[PDict,StateData]) of
-		    {'EXIT', _} -> DefaultStatus;
-                    StatusList when is_list(StatusList) -> StatusList;
-		    Else -> [Else]
-		end;
-	    _ ->
-		DefaultStatus
-	end,
+    Specfic = format_status(Opt, Mod, PDict, StateData),
+    Specfic = case format_status(Opt, Mod, PDict, StateData) of
+		  S when is_list(S) -> S;
+		  S -> [S]
+	      end,
     [{header, Header},
      {data, [{"Status", SysState},
 	     {"Parent", Parent},
 	     {"Logged events", Log},
 	     {"StateName", StateName}]} |
      Specfic].
+
+format_status(Opt, Mod, PDict, State) ->
+    DefStatus = case Opt of
+		    terminate -> State;
+		    _ -> [{data, [{"StateData", State}]}]
+		end,
+    case erlang:function_exported(Mod, format_status, 2) of
+	true ->
+	    case catch Mod:format_status(Opt, [PDict, State]) of
+		{'EXIT', _} -> DefStatus;
+		Else -> Else
+	    end;
+	_ ->
+	    DefStatus
+    end.

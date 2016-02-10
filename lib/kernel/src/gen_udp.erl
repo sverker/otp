@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -26,7 +27,7 @@
 -include("inet_int.hrl").
 
 -type option() ::
-        {active,          true | false | once} |
+        {active,          true | false | once | -32768..32767} |
         {add_membership,  {inet:ip_address(), inet:ip_address()}} |
         {broadcast,       boolean()} |
         {buffer,          non_neg_integer()} |
@@ -34,6 +35,8 @@
         {dontroute,       boolean()} |
         {drop_membership, {inet:ip_address(), inet:ip_address()}} |
         {header,          non_neg_integer()} |
+        {high_msgq_watermark, pos_integer()} |
+        {low_msgq_watermark, pos_integer()} |
         {mode,            list | binary} | list | binary |
         {multicast_if,    inet:ip_address()} |
         {multicast_loop,  boolean()} |
@@ -56,6 +59,8 @@
         deliver |
         dontroute |
         header |
+        high_msgq_watermark |
+        low_msgq_watermark |
         mode |
         multicast_if |
         multicast_loop |
@@ -74,7 +79,7 @@
 	ipv6_v6only.
 -type socket() :: port().
 
--export_type([option/0, option_name/0]).
+-export_type([option/0, option_name/0, socket/0]).
 
 -spec open(Port) -> {ok, Socket} | {error, Reason} when
       Port :: inet:port_number(),

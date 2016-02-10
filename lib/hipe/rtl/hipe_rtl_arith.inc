@@ -1,20 +1,21 @@
 %% -*- Erlang -*-
-%% -*- coding: utf-8; erlang-indent-level: 2 -*-
+%% -*- erlang-indent-level: 2 -*-
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2004-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -29,13 +30,13 @@
 %% Returns a tuple
 %%  {Res, Sign, Zero, Overflow, Carry}
 %%  Res will be a number in the range 
-%%   MAX_SIGNED_INT >= Res >= MIN_SIGNED_INT
+%%   MAX_UNSIGNED_INT >= Res >= 0
 %% The other four values are flags that are either true or false
 %% 
 eval_alu(Op, Arg1, Arg2) 
-  when Arg1 =< ?MAX_SIGNED_INT, 
+  when Arg1 =< ?MAX_UNSIGNED_INT,
        Arg1 >= ?MIN_SIGNED_INT,
-       Arg2 =< ?MAX_SIGNED_INT, 
+       Arg2 =< ?MAX_UNSIGNED_INT,
        Arg2 >= ?MIN_SIGNED_INT ->
 
   Sign1 = sign_bit(Arg1),
@@ -110,7 +111,7 @@ eval_alu(Op, Arg1, Arg2)
       Res = N = Z = V = C = 0,
       ?EXIT({"unknown alu op", Op})
   end,
-  {two_comp_to_erl(Res), N, Z, V, C};
+  {Res, N, Z, V, C};
 eval_alu(Op, Arg1, Arg2) ->
   ?EXIT({argument_overflow,Op,Arg1,Arg2}).
 
@@ -161,16 +162,9 @@ eval_cond(Cond, Arg1, Arg2) ->
 sign_bit(Val) ->
   ((Val bsr ?SIGN_BIT) band 1) =:= 1.
 
-two_comp_to_erl(V) ->
-  if V > ?MAX_SIGNED_INT ->
-      - ((?MAX_UNSIGNED_INT + 1) - V);
-     true -> V
-  end.
-
 shiftmask(Arg) ->
   Setbits = ?BITS - Arg,
   (1 bsl Setbits) - 1.
 
 zero(Val) ->
   Val =:= 0.
-

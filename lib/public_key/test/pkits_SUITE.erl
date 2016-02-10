@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -111,14 +112,17 @@ groups() ->
 
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
+    application:stop(crypto),
     try crypto:start() of
 	ok ->
+	    application:start(asn1),
 	    crypto_support_check(Config)
     catch _:_ ->
 	    {skip, "Crypto did not start"}
     end.
 
 end_per_suite(_Config) ->
+    application:stop(asn1),
     application:stop(crypto).
 
 %%--------------------------------------------------------------------
@@ -758,11 +762,12 @@ warning(Format, Args, File0, Line) ->
     io:format("~s(~p): Warning "++Format, [File,Line|Args]).
 
 crypto_support_check(Config) ->
-    try crypto:sha256(<<"Test">>) of
-	_ ->
-	    Config
-    catch error:notsup ->
-	    crypto:stop(),
+    CryptoSupport = crypto:supports(),
+    Hashs = proplists:get_value(hashs, CryptoSupport),
+    case proplists:get_bool(sha256, Hashs) of
+	true ->
+	    Config;
+	false ->
 	    {skip, "To old version of openssl"}
     end.
 

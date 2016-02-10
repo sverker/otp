@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2015. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -292,20 +293,21 @@ word_char(C) when C >= $0, C =< $9 -> true;
 word_char($_) -> true;
 word_char(_) -> false.
 
-
+
 %%% Output routines
 
 %% Check the options `outfile' and `outdir'.
 open_out(Options) ->
+    Opts = [write, {encoding, unicode}],
     case lists:keysearch(outfile, 1, Options) of
 	{value, {outfile, File}} ->
-	    file:open(File, [write]);
+	    file:open(File, Opts);
 	_ ->
 	    case lists:keysearch(outdir, 1, Options) of
 		{value, {outdir, Dir}} ->
-		    file:open(filename:join(Dir, "TAGS"), [write]);
+		    file:open(filename:join(Dir, "TAGS"), Opts);
 		_ ->
-		    file:open("TAGS", [write])
+		    file:open("TAGS", Opts)
 	    end
     end.
 	    
@@ -323,7 +325,7 @@ genout(Os, Name, Entries) ->
     io:put_chars(Os, lists:reverse(Entries)).
 
 
-    
+    
 %%% help routines
 
 %% Flatten and reverse a nested list.

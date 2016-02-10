@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 2007-2012. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -112,13 +113,27 @@ runnable_procs(suite) ->
 runnable_procs(doc) ->
     ["Tests system_profiling with runnable_procs."];
 runnable_procs(Config) when is_list(Config) ->
+    lists:foreach(fun (TsType) ->
+			  Arg = case TsType of
+				    no_timestamp ->
+					{timestamp, []};
+				    _ ->
+					{TsType, [TsType]}
+				end,
+			  do_runnable_procs(Arg),
+			  receive after 1000 -> ok end
+		  end,
+		  [no_timestamp, timestamp, monotonic_timestamp,
+		   strict_monotonic_timestamp]).
+
+do_runnable_procs({TsType, TsTypeFlag}) ->
     Pid = start_profiler_process(),
     % start a ring of processes
     % FIXME: Set #laps and #nodes in config file
     Nodes = 10,
     Laps = 10,
     Master = ring(Nodes),
-    undefined = erlang:system_profile(Pid, [runnable_procs]),
+    undefined = erlang:system_profile(Pid, [runnable_procs]++TsTypeFlag),
     % loop a message
     ok = ring_message(Master, message, Laps),
     Events = get_profiler_events(),
@@ -126,9 +141,9 @@ runnable_procs(Config) when is_list(Config) ->
     erlang:system_profile(undefined, []),
     put(master, Master),
     put(laps, Laps),
-    true = has_runnable_event(Events),
+    true = has_runnable_event(TsType, Events),
     Pids = sort_events_by_pid(Events),
-    ok = check_events(Pids),
+    ok = check_events(TsType, Pids),
     erase(),
     exit(Pid,kill),
     ok.
@@ -138,8 +153,22 @@ runnable_ports(suite) ->
 runnable_ports(doc) ->
     ["Tests system_profiling with runnable_port."];
 runnable_ports(Config) when is_list(Config) ->
+    lists:foreach(fun (TsType) ->
+			  Arg = case TsType of
+				    no_timestamp ->
+					{timestamp, []};
+				    _ ->
+					{TsType, [TsType]}
+				end,
+			  do_runnable_ports(Arg, Config),
+			  receive after 1000 -> ok end
+		  end,
+		  [no_timestamp, timestamp, monotonic_timestamp,
+		   strict_monotonic_timestamp]).
+
+do_runnable_ports({TsType, TsTypeFlag}, Config) ->
     Pid = start_profiler_process(),
-    undefined = erlang:system_profile(Pid, [runnable_ports]),
+    undefined = erlang:system_profile(Pid, [runnable_ports]++TsTypeFlag),
     EchoPid = echo(Config),
     % FIXME: Set config to number_of_echos
     Laps = 10,
@@ -148,9 +177,9 @@ runnable_ports(Config) when is_list(Config) ->
     Events = get_profiler_events(),
     kill_em_all = kill_echo(EchoPid),
     erlang:system_profile(undefined, []),
-    true = has_runnable_event(Events),
+    true = has_runnable_event(TsType, Events),
     Pids = sort_events_by_pid(Events),
-    ok = check_events(Pids),
+    ok = check_events(TsType, Pids),
     erase(),
     exit(Pid,kill),
     ok.
@@ -165,8 +194,19 @@ scheduler(Config) when is_list(Config) ->
 	{_,    1} -> {skipped, "No need for scheduler test when only one scheduler online."};
 	_ ->
 	    Nodes = 10,
-	    ok = check_block_system(Nodes),
-	    ok = check_multi_scheduling_block(Nodes)
+	    lists:foreach(fun (TsType) ->
+				  Arg = case TsType of
+					    no_timestamp ->
+						{timestamp, []};
+					    _ ->
+						{TsType, [TsType]}
+					end,
+				  ok = check_block_system(Arg, Nodes),
+				  ok = check_multi_scheduling_block(Arg, Nodes),
+				  receive after 1000 -> ok end
+			      end,
+			  [no_timestamp, timestamp, monotonic_timestamp,
+			   strict_monotonic_timestamp])
     end.
 
 % the profiler pid should not be profiled
@@ -194,32 +234,33 @@ dont_profile_profiler(Config) when is_list(Config) ->
 
 %%% Check scheduler profiling
 
-check_multi_scheduling_block(Nodes) ->
+check_multi_scheduling_block({TsType, TsTypeFlag}, Nodes) ->
     Pid = start_profiler_process(),
-    undefined = erlang:system_profile(Pid, [scheduler]),
+    undefined = erlang:system_profile(Pid, [scheduler]++TsTypeFlag),
     {ok, Supervisor} = start_load(Nodes),
+    wait(600),
     erlang:system_flag(multi_scheduling, block),
+    wait(600),
     erlang:system_flag(multi_scheduling, unblock),
     {Pid, [scheduler]} = erlang:system_profile(undefined, []),
     Events = get_profiler_events(),
-    true = has_scheduler_event(Events),
+    true = has_scheduler_event(TsType, Events),
     stop_load(Supervisor),
     exit(Pid,kill),
     erase(),
     ok.
 
-check_block_system(Nodes) ->
+check_block_system({TsType, TsTypeFlag}, Nodes) ->
     Dummy = spawn(?MODULE, profiler_process, [[]]),
     Pid = start_profiler_process(),
-    undefined = erlang:system_profile(Pid, [scheduler]),
+    undefined = erlang:system_profile(Pid, [scheduler]++TsTypeFlag),
     {ok, Supervisor} = start_load(Nodes),
-    % FIXME: remove wait !!
     wait(300),
     undefined = erlang:system_monitor(Dummy, [busy_port]),
     {Dummy, [busy_port]} = erlang:system_monitor(undefined, []),
     {Pid, [scheduler]} = erlang:system_profile(undefined, []),
     Events = get_profiler_events(),
-    true = has_scheduler_event(Events),
+    true = has_scheduler_event(TsType, Events),
     stop_load(Supervisor),
     exit(Pid,kill),
     exit(Dummy,kill),
@@ -228,40 +269,49 @@ check_block_system(Nodes) ->
 
 %%% Check events
 
-check_events([]) -> ok;
-check_events([Pid | Pids]) ->
+check_events(_TsType, []) -> ok;
+check_events(TsType, [Pid | Pids]) ->
     Master = get(master),
     Laps = get(laps),
     CheckPids = get(pids),
     {Events, N} = get_pid_events(Pid),
     ok = check_event_flow(Events),
-    ok = check_event_ts(Events),
+    ok = check_event_ts(TsType, Events),
     IsMember = lists:member(Pid, CheckPids),
     case Pid of
     	Master ->
 	    io:format("Expected ~p and got ~p profile events from ~p: ok~n", [Laps*2+2, N, Pid]),
 	    N = Laps*2 + 2,
-    	    check_events(Pids);
+    	    check_events(TsType, Pids);
 	Pid when IsMember == true ->
 	    io:format("Expected ~p and got ~p profile events from ~p: ok~n", [Laps*2, N, Pid]),
 	    N = Laps*2,
-    	    check_events(Pids);
+    	    check_events(TsType, Pids);
 	Pid ->
-	    check_events(Pids)
+	    check_events(TsType, Pids)
     end.
 
 %% timestamp consistency check for descending timestamps
 
-check_event_ts(Events) ->
-    check_event_ts(Events, undefined).
-check_event_ts([], _) -> ok;
-check_event_ts([Event | Events], undefined) ->
-    check_event_ts(Events, Event);
-check_event_ts([{Pid, _, _, TS1}=Event | Events], {Pid,_,_,TS0}) ->
-    Time = timer:now_diff(TS1, TS0),
+check_event_ts(TsType, Events) ->
+    check_event_ts(TsType, Events, undefined).
+check_event_ts(_TsType, [], _) -> ok;
+check_event_ts(TsType, [Event | Events], undefined) ->
+    check_event_ts(TsType, Events, Event);
+check_event_ts(TsType, [{Pid, _, _, TS1}=Event | Events], {Pid,_,_,TS0}) ->
+    Time = case TsType of
+	       timestamp ->
+		   timer:now_diff(TS1, TS0);
+	       monotonic_timestamp ->
+		   TS1 - TS0;
+	       strict_monotonic_timestamp ->
+		   {MT1, _} = TS1,
+		   {MT0, _} = TS0,
+		   MT1 - MT0
+	   end,
     if 
     	Time < 0.0 -> timestamp_error;
-    	true -> check_event_ts(Events, Event)
+    	true -> check_event_ts(TsType, Events, Event)
     end.
 
 %% consistency check for active vs. inactive activity (runnable)
@@ -426,6 +476,44 @@ port_echo_loop(Port) ->
 %% Helpers
 %%%
 
+check_ts(no_timestamp, Ts) ->
+    try
+	no_timestamp = Ts
+    catch
+	_ : _ ->
+	    ?t:fail({unexpected_timestamp, Ts})
+    end,
+    ok;
+check_ts(timestamp, Ts) ->
+    try
+	{Ms,S,Us} = Ts,
+	true = is_integer(Ms),
+	true = is_integer(S),
+	true = is_integer(Us)
+    catch
+	_ : _ ->
+	    ?t:fail({unexpected_timestamp, Ts})
+    end,
+    ok;
+check_ts(monotonic_timestamp, Ts) ->
+    try
+	true = is_integer(Ts)
+    catch
+	_ : _ ->
+	    ?t:fail({unexpected_timestamp, Ts})
+    end,
+    ok;
+check_ts(strict_monotonic_timestamp, Ts) ->
+    try
+	{MT, UMI} = Ts,
+	true = is_integer(MT),
+	true = is_integer(UMI)
+    catch
+	_ : _ ->
+	    ?t:fail({unexpected_timestamp, Ts})
+    end,
+    ok.
+
 start_load(N) ->
    Pid = spawn_link(?MODULE, run_load, [N, []]),
    {ok, Pid}.
@@ -446,27 +534,30 @@ run_load(N, Pids) ->
     run_load(N - 1, [Pid | Pids]).
 
 list_load() -> 
-    ok = case math:sin(random:uniform(32451)) of
+    ok = case math:sin(rand:uniform(32451)) of
     	A when is_float(A) -> ok;
 	_ -> ok
     end,
     list_load().
 
-
-has_scheduler_event(Events) ->
+has_scheduler_event(TsType, Events) ->
     lists:any(
     	fun (Pred) ->
 	    case Pred of 
-	    	{profile, scheduler, _ID, _Activity, _NR, _TS} -> true;
+	    	{profile, scheduler, _ID, _Activity, _NR, TS} ->
+		    check_ts(TsType, TS),
+		    true;
 		_ -> false
 	    end
 	end, Events).
 
-has_runnable_event(Events) ->
+has_runnable_event(TsType, Events) ->
     lists:any(
     	fun (Pred) ->
 	    case Pred of
-	    	{profile, _Pid, _Activity, _MFA, _TS} -> true;
+	    	{profile, _Pid, _Activity, _MFA, TS} ->
+		    check_ts(TsType, TS),
+		    true;
 	    	_ -> false
 	    end
         end, Events).

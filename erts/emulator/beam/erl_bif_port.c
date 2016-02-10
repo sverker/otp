@@ -3,16 +3,17 @@
  *
  * Copyright Ericsson AB 2001-2013. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -40,6 +41,7 @@
 #include "external.h"
 #include "packet_parser.h"
 #include "erl_bits.h"
+#include "erl_bif_unique.h"
 #include "dtrace-wrapper.h"
 
 static Port *open_port(Process* p, Eterm name, Eterm settings, int *err_typep, int *err_nump);
@@ -49,10 +51,10 @@ static void free_args(char **);
 
 char *erts_default_arg0 = "default";
 
-BIF_RETTYPE open_port_2(BIF_ALIST_2)
+BIF_RETTYPE erts_internal_open_port_2(BIF_ALIST_2)
 {
     Port *port;
-    Eterm port_id;
+    Eterm res;
     char *str;
     int err_type, err_num;
 
@@ -60,31 +62,62 @@ BIF_RETTYPE open_port_2(BIF_ALIST_2)
     if (!port) {
 	if (err_type == -3) {
 	    ASSERT(err_num == BADARG || err_num == SYSTEM_LIMIT);
-	    BIF_ERROR(BIF_P, err_num);
+	    if (err_num == BADARG)
+                res = am_badarg;
+            else if (err_num == SYSTEM_LIMIT)
+                res = am_system_limit;
+            else
+                /* this is only here to silence gcc, it should not happen */
+                BIF_ERROR(BIF_P, EXC_INTERNAL_ERROR);
 	} else if (err_type == -2) {
 	    str = erl_errno_id(err_num);
+            res = erts_atom_put((byte *) str, strlen(str), ERTS_ATOM_ENC_LATIN1, 1);
 	} else {
-	    str = "einval";
+	    res = am_einval;
 	}
-	BIF_P->fvalue = erts_atom_put((byte *) str, strlen(str), ERTS_ATOM_ENC_LATIN1, 1);
-	BIF_ERROR(BIF_P, EXC_ERROR);
+        BIF_RET(res);
     }
 
-    erts_smp_proc_lock(BIF_P, ERTS_PROC_LOCK_LINK);
+    if (port->drv_ptr->flags & ERL_DRV_FLAG_USE_INIT_ACK) {
+        /* Copied from erl_port_task.c */
+        port->async_open_port = erts_alloc(ERTS_ALC_T_PRTSD,
+                                           sizeof(*port->async_open_port));
+        erts_make_ref_in_array(port->async_open_port->ref);
+        port->async_open_port->to = BIF_P->common.id;
 
-    port_id = port->common.id;
+        erts_smp_proc_lock(BIF_P, ERTS_PROC_LOCKS_MSG_RECEIVE | ERTS_PROC_LOCK_LINK);
+        if (ERTS_PROC_PENDING_EXIT(BIF_P)) {
+	    /* need to exit caller instead */
+	    erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCKS_MSG_RECEIVE | ERTS_PROC_LOCK_LINK);
+	    KILL_CATCHES(BIF_P);
+	    BIF_P->freason = EXC_EXIT;
+            erts_port_release(port);
+            BIF_RET(am_badarg);
+	}
+
+	ERTS_SMP_MSGQ_MV_INQ2PRIVQ(BIF_P);
+	BIF_P->msg.save = BIF_P->msg.last;
+
+	erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCKS_MSG_RECEIVE);
+
+        res = erts_proc_store_ref(BIF_P, port->async_open_port->ref);
+    } else {
+        res = port->common.id;
+        erts_smp_proc_lock(BIF_P, ERTS_PROC_LOCK_LINK);
+    }
+
     erts_add_link(&ERTS_P_LINKS(port), LINK_PID, BIF_P->common.id);
-    erts_add_link(&ERTS_P_LINKS(BIF_P), LINK_PID, port_id);
+    erts_add_link(&ERTS_P_LINKS(BIF_P), LINK_PID, port->common.id);
 
     erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_LINK);
 
     erts_port_release(port);
 
-    BIF_RET(port_id);
+    BIF_RET(res);
 }
 
 static ERTS_INLINE Port *
-lookup_port(Process *c_p, Eterm id_or_name)
+lookup_port(Process *c_p, Eterm id_or_name, Uint32 invalid_flags)
 {
     /* TODO: Implement nicer lookup in register... */
     Eterm id;
@@ -92,7 +125,19 @@ lookup_port(Process *c_p, Eterm id_or_name)
 	id = erts_whereis_name_to_id(c_p, id_or_name);
     else
 	id = id_or_name;
-    return erts_port_lookup(id, ERTS_PORT_SFLGS_INVALID_LOOKUP);
+    return erts_port_lookup(id, invalid_flags);
+}
+
+static ERTS_INLINE Port *
+sig_lookup_port(Process *c_p, Eterm id_or_name)
+{
+    return lookup_port(c_p, id_or_name, ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP);
+}
+
+static ERTS_INLINE Port *
+data_lookup_port(Process *c_p, Eterm id_or_name)
+{
+    return lookup_port(c_p, id_or_name, ERTS_PORT_SFLGS_INVALID_LOOKUP);
 }
 
 /*
@@ -125,7 +170,7 @@ BIF_RETTYPE erts_internal_port_command_3(BIF_ALIST_3)
 	    BIF_RET(am_badarg);
     }
 
-    prt = lookup_port(BIF_P, BIF_ARG_1);
+    prt = sig_lookup_port(BIF_P, BIF_ARG_1);
     if (!prt)
 	BIF_RET(am_badarg);
 
@@ -185,7 +230,7 @@ BIF_RETTYPE erts_internal_port_call_3(BIF_ALIST_3)
     unsigned int op;
     erts_aint32_t state;
 
-    prt = lookup_port(BIF_P, BIF_ARG_1);
+    prt = sig_lookup_port(BIF_P, BIF_ARG_1);
     if (!prt)
 	BIF_RET(am_badarg);
 
@@ -235,7 +280,7 @@ BIF_RETTYPE erts_internal_port_control_3(BIF_ALIST_3)
     unsigned int op;
     erts_aint32_t state;
 
-    prt = lookup_port(BIF_P, BIF_ARG_1);
+    prt = sig_lookup_port(BIF_P, BIF_ARG_1);
     if (!prt)
 	BIF_RET(am_badarg);
 
@@ -290,7 +335,7 @@ BIF_RETTYPE erts_internal_port_close_1(BIF_ALIST_1)
     ref = NIL;
 #endif
 
-    prt = lookup_port(BIF_P, BIF_ARG_1);
+    prt = sig_lookup_port(BIF_P, BIF_ARG_1);
     if (!prt)
 	BIF_RET(am_badarg);
 
@@ -320,7 +365,7 @@ BIF_RETTYPE erts_internal_port_connect_2(BIF_ALIST_2)
     Eterm ref;
     Port* prt;
 
-    prt = lookup_port(BIF_P, BIF_ARG_1);
+    prt = sig_lookup_port(BIF_P, BIF_ARG_1);
     if (!prt)
 	BIF_RET(am_badarg);
 
@@ -352,7 +397,7 @@ BIF_RETTYPE erts_internal_port_info_1(BIF_ALIST_1)
     Port* prt;
 
     if (is_internal_port(BIF_ARG_1) || is_atom(BIF_ARG_1)) {
-	prt = lookup_port(BIF_P, BIF_ARG_1);
+	prt = sig_lookup_port(BIF_P, BIF_ARG_1);
 	if (!prt)
 	    BIF_RET(am_undefined);
     }
@@ -391,7 +436,7 @@ BIF_RETTYPE erts_internal_port_info_2(BIF_ALIST_2)
     Port* prt;
 
     if (is_internal_port(BIF_ARG_1) || is_atom(BIF_ARG_1)) {
-	prt = lookup_port(BIF_P, BIF_ARG_1);
+	prt = sig_lookup_port(BIF_P, BIF_ARG_1);
 	if (!prt)
 	    BIF_RET(am_undefined);
     }
@@ -423,57 +468,173 @@ BIF_RETTYPE erts_internal_port_info_2(BIF_ALIST_2)
     }
 }
 
+/*
+ * The erlang:port_set_data()/erlang:port_get_data() operations should
+ * be viewed as operations on a table (inet_db) with data values
+ * associated with port identifier keys. That is, these operations are
+ * *not* signals to/from ports.
+ */
 
-BIF_RETTYPE erts_internal_port_set_data_2(BIF_ALIST_2)
+#if (TAG_PRIMARY_IMMED1 & 0x3) == 0
+# error "erlang:port_set_data()/erlang:port_get_data() needs to be rewritten!"
+#endif
+
+typedef struct {
+    ErtsThrPrgrLaterOp later_op;
+    Uint hsize;
+    Eterm data;
+    ErlOffHeap off_heap;
+    Eterm heap[1];
+} ErtsPortDataHeap;
+
+static void
+free_port_data_heap(void *vpdhp)
 {
-    Eterm ref;
-    Port* prt;
+    erts_cleanup_offheap(&((ErtsPortDataHeap *) vpdhp)->off_heap);
+    erts_free(ERTS_ALC_T_PORT_DATA_HEAP, vpdhp);
+}
 
-    prt = lookup_port(BIF_P, BIF_ARG_1);
-    if (!prt)
-	BIF_RET(am_badarg);
-
-    switch (erts_port_set_data(BIF_P, prt, BIF_ARG_2, &ref)) {
-    case ERTS_PORT_OP_CALLER_EXIT:
-    case ERTS_PORT_OP_BADARG:
-    case ERTS_PORT_OP_DROPPED:
-	BIF_RET(am_badarg);
-    case ERTS_PORT_OP_SCHEDULED:
-	ASSERT(is_internal_ref(ref));
-	BIF_RET(ref);
-    case ERTS_PORT_OP_DONE:
-	BIF_RET(am_true);
-    default:
-	ERTS_INTERNAL_ERROR("Unexpected erts_port_set_data() result");
-	BIF_RET(am_internal_error);
+static ERTS_INLINE void
+cleanup_old_port_data(erts_aint_t data)
+{
+    if ((data & 0x3) != 0) {
+	ASSERT(is_immed((Eterm) data));
+    }
+    else {
+#ifdef ERTS_SMP
+	ErtsPortDataHeap *pdhp = (ErtsPortDataHeap *) data;
+	size_t size;
+	ERTS_SMP_DATA_DEPENDENCY_READ_MEMORY_BARRIER;
+	size = sizeof(ErtsPortDataHeap) + (pdhp->hsize-1)*sizeof(Eterm);
+	erts_schedule_thr_prgr_later_cleanup_op(free_port_data_heap,
+						(void *) pdhp,
+						&pdhp->later_op,
+						size);
+#else
+	free_port_data_heap((void *) data);
+#endif
     }
 }
 
-
-BIF_RETTYPE erts_internal_port_get_data_1(BIF_ALIST_1)
+void
+erts_init_port_data(Port *prt)
 {
-    Eterm retval;
+    erts_smp_atomic_init_nob(&prt->data, (erts_aint_t) am_undefined);
+}
+
+void
+erts_cleanup_port_data(Port *prt)
+{
+    ASSERT(erts_atomic32_read_nob(&prt->state) & ERTS_PORT_SFLGS_INVALID_LOOKUP);
+    cleanup_old_port_data(erts_smp_atomic_xchg_nob(&prt->data,
+						   (erts_aint_t) NULL));
+}
+
+Uint
+erts_port_data_size(Port *prt)
+{
+    erts_aint_t data = erts_smp_atomic_read_ddrb(&prt->data);
+
+    if ((data & 0x3) != 0) {
+	ASSERT(is_immed((Eterm) (UWord) data));
+	return (Uint) 0;
+    }
+    else {
+	ErtsPortDataHeap *pdhp = (ErtsPortDataHeap *) data;
+	return (Uint) sizeof(ErtsPortDataHeap) + (pdhp->hsize-1)*sizeof(Eterm);
+    }
+}
+
+ErlOffHeap *
+erts_port_data_offheap(Port *prt)
+{
+    erts_aint_t data = erts_smp_atomic_read_ddrb(&prt->data);
+
+    if ((data & 0x3) != 0) {
+	ASSERT(is_immed((Eterm) (UWord) data));
+	return NULL;
+    }
+    else {
+	ErtsPortDataHeap *pdhp = (ErtsPortDataHeap *) data;
+	return &pdhp->off_heap;
+    }
+}
+
+BIF_RETTYPE port_set_data_2(BIF_ALIST_2)
+{
+    /*
+     * This is not a signal. See comment above.
+     */
+    erts_aint_t data;
     Port* prt;
 
-    prt = lookup_port(BIF_P, BIF_ARG_1);
+    prt = data_lookup_port(BIF_P, BIF_ARG_1);
     if (!prt)
-	BIF_RET(am_badarg);
+        BIF_ERROR(BIF_P, BADARG);
 
-    switch (erts_port_get_data(BIF_P, prt, &retval)) {
-    case ERTS_PORT_OP_CALLER_EXIT:
-    case ERTS_PORT_OP_BADARG:
-    case ERTS_PORT_OP_DROPPED:
-	BIF_RET(am_badarg);
-    case ERTS_PORT_OP_SCHEDULED:
-	ASSERT(is_internal_ref(retval));
-	BIF_RET(retval);
-    case ERTS_PORT_OP_DONE:
-	ASSERT(is_not_internal_ref(retval));
-	BIF_RET(retval);
-    default:
-	ERTS_INTERNAL_ERROR("Unexpected erts_port_get_data() result");
-	BIF_RET(am_internal_error);
+    if (is_immed(BIF_ARG_2)) {
+	data = (erts_aint_t) BIF_ARG_2;
+	ASSERT((data & 0x3) != 0);
     }
+    else {
+	ErtsPortDataHeap *pdhp;
+	Uint hsize;
+	Eterm *hp;
+
+	hsize = size_object(BIF_ARG_2);
+	pdhp = erts_alloc(ERTS_ALC_T_PORT_DATA_HEAP,
+			  sizeof(ErtsPortDataHeap) + (hsize-1)*sizeof(Eterm));
+	hp = &pdhp->heap[0];
+	pdhp->off_heap.first = NULL;
+	pdhp->off_heap.overhead = 0;
+	pdhp->hsize = hsize;
+	pdhp->data = copy_struct(BIF_ARG_2, hsize, &hp, &pdhp->off_heap);
+	data = (erts_aint_t) pdhp;
+	ASSERT((data & 0x3) == 0);
+    }
+
+    data = erts_smp_atomic_xchg_wb(&prt->data, data);
+
+    if (data == (erts_aint_t)NULL) {
+	/* Port terminated by racing thread */
+	data = erts_smp_atomic_xchg_wb(&prt->data, data);
+	ASSERT(data != (erts_aint_t)NULL);
+	cleanup_old_port_data(data);
+	BIF_ERROR(BIF_P, BADARG);
+    }
+    cleanup_old_port_data(data);
+    BIF_RET(am_true);
+}
+
+
+BIF_RETTYPE port_get_data_1(BIF_ALIST_1)
+{
+    /*
+     * This is not a signal. See comment above.
+     */
+    Eterm res;
+    erts_aint_t data;
+    Port* prt;
+
+    prt = data_lookup_port(BIF_P, BIF_ARG_1);
+    if (!prt)
+        BIF_ERROR(BIF_P, BADARG);
+
+    data = erts_smp_atomic_read_ddrb(&prt->data);
+    if (data == (erts_aint_t)NULL)
+        BIF_ERROR(BIF_P, BADARG);  /* Port terminated by racing thread */
+
+    if ((data & 0x3) != 0) {
+	res = (Eterm) (UWord) data;
+	ASSERT(is_immed(res));
+    }
+    else {
+	ErtsPortDataHeap *pdhp = (ErtsPortDataHeap *) data;
+	Eterm *hp = HAlloc(BIF_P, pdhp->hsize);
+	res = copy_struct(pdhp->data, pdhp->hsize, &hp, &MSO(BIF_P));
+    }
+
+    BIF_RET(res);
 }
 
 /* 
@@ -677,43 +838,29 @@ open_port(Process* p, Eterm name, Eterm settings, int *err_typep, int *err_nump)
 	    goto badarg;
 	}
     
-	if (*tp == am_spawn || *tp == am_spawn_driver) {	/* A process port */
+	if (*tp == am_spawn || *tp == am_spawn_driver || *tp == am_spawn_executable) {	/* A process port */
+	    int encoding;
 	    if (arity != make_arityval(2)) {
 		goto badarg;
 	    }
 	    name = tp[1];
-	    if (is_atom(name)) {
-		name_buf = (char *) erts_alloc(ERTS_ALC_T_TMP,
-					       atom_tab(atom_val(name))->len+1);
-		sys_memcpy((void *) name_buf,
-			   (void *) atom_tab(atom_val(name))->name, 
-			   atom_tab(atom_val(name))->len);
-		name_buf[atom_tab(atom_val(name))->len] = '\0';
-	    } else if ((i = is_string(name))) {
-		name_buf = (char *) erts_alloc(ERTS_ALC_T_TMP, i + 1);
-		if (intlist_to_buf(name, name_buf, i) != i)
-		    erl_exit(1, "%s:%d: Internal error\n", __FILE__, __LINE__);
-		name_buf[i] = '\0';
-	    } else {
+	    encoding = erts_get_native_filename_encoding();
+	    /* Do not convert the command to utf-16le yet, do that in win32 specific code */
+	    /* since the cmd is used for comparsion with drivers names and copied to port info */
+	    if (encoding == ERL_FILENAME_WIN_WCHAR) {
+		encoding = ERL_FILENAME_UTF8;
+	    }
+	    if ((name_buf = erts_convert_filename_to_encoding(name, NULL, 0, ERTS_ALC_T_TMP,0,1, encoding, NULL, 0))
+		== NULL) {
 		goto badarg;
 	    }
+
 	    if (*tp == am_spawn_driver) {
 		opts.spawn_type = ERTS_SPAWN_DRIVER;
+	    } else if (*tp == am_spawn_executable) {
+		opts.spawn_type = ERTS_SPAWN_EXECUTABLE;
 	    }
-	    driver = &spawn_driver;
-	} else if (*tp == am_spawn_executable) {	/* A program */
-	    /*
-	     * {spawn_executable,Progname}
-	     */
-	    
-	    if (arity != make_arityval(2)) {
-		goto badarg;
-	    }
-	    name = tp[1];
-	    if ((name_buf = erts_convert_filename_to_native(name, NULL, 0, ERTS_ALC_T_TMP,0,1, NULL)) == NULL) {
-		goto badarg;
-	    }
-	    opts.spawn_type = ERTS_SPAWN_EXECUTABLE;
+
 	    driver = &spawn_driver;
 	} else if (*tp == am_fd) { /* An fd port */
 	    int n;
@@ -754,29 +901,8 @@ open_port(Process* p, Eterm name, Eterm settings, int *err_typep, int *err_nump)
     }
 
     if (edir != NIL) {
-	/* A working directory is expressed differently if spawn_executable, i.e. Unicode is handles 
-	   for spawn_executable... */
-	if (opts.spawn_type != ERTS_SPAWN_EXECUTABLE) {
-	    Eterm iolist;
-	    DeclareTmpHeap(heap,4,p);
-	    int r;
-	    
-	    UseTmpHeap(4,p);
-	    heap[0] = edir;
-	    heap[1] = make_list(heap+2);
-	    heap[2] = make_small(0);
-	    heap[3] = NIL;
-	    iolist = make_list(heap);
-	    r = erts_iolist_to_buf(iolist, (char*) dir, MAXPATHLEN);
-	    UnUseTmpHeap(4,p);
-	    if (ERTS_IOLIST_TO_BUF_FAILED(r)) {
-		goto badarg;
-	    }
-	    opts.wd = (char *) dir;
-	} else {
-	    if ((opts.wd = erts_convert_filename_to_native(edir, NULL, 0, ERTS_ALC_T_TMP,0,1,NULL)) == NULL) {
-		goto badarg;
-	    }
+	if ((opts.wd = erts_convert_filename_to_native(edir, NULL, 0, ERTS_ALC_T_TMP,0,1,NULL)) == NULL) {
+	    goto badarg;
 	}
     }
 
@@ -798,7 +924,7 @@ open_port(Process* p, Eterm name, Eterm settings, int *err_typep, int *err_nump)
         DTRACE_CHARBUF(port_str, DTRACE_TERM_BUF_SIZE);
 
         dtrace_proc_str(p, process_str);
-        erts_snprintf(port_str, sizeof(port_str), "%T", port->common.id);
+        erts_snprintf(port_str, sizeof(DTRACE_CHARBUF_NAME(port_str)), "%T", port->common.id);
         DTRACE3(port_open, process_str, name_buf, port_str);
     }
 #endif
@@ -854,11 +980,12 @@ static char **convert_args(Eterm l)
     int n;
     int i = 0;
     Eterm str;
-    /* We require at least one element in list (argv[0]) */
     if (is_not_list(l) && is_not_nil(l)) {
 	return NULL;
     }
-    n = list_length(l);
+
+    n = erts_list_length(l);
+    /* We require at least one element in argv[0] + NULL at end */
     pp = erts_alloc(ERTS_ALC_T_TMP, (n + 2) * sizeof(char **));
     pp[i++] = erts_default_arg0;
     while (is_list(l)) {
@@ -902,7 +1029,7 @@ static byte* convert_environment(Process* p, Eterm env)
     byte* bytes;
     int encoding = erts_get_native_filename_encoding();
 
-    if ((n = list_length(env)) < 0) {
+    if ((n = erts_list_length(env)) < 0) {
 	return NULL;
     }
     heap_size = 2*(5*n+1);
@@ -1234,7 +1361,8 @@ BIF_RETTYPE decode_packet_3(BIF_ALIST_3)
     ErlSubBin* rest;
     Eterm res;
     Eterm options;
-    int code;
+    int   code;
+    char  delimiter = '\n';
 
     if (!is_binary(BIF_ARG_2) || 
         (!is_list(BIF_ARG_3) && !is_nil(BIF_ARG_3))) {
@@ -1275,6 +1403,11 @@ BIF_RETTYPE decode_packet_3(BIF_ALIST_3)
                 case am_line_length:
                     trunc_len = val;
                     goto next_option;
+                case am_line_delimiter:
+                    if (type == TCP_PB_LINE_LF && val >= 0 && val <= 255) {
+                        delimiter = (char)val;
+                        goto next_option;
+                    }
                 }
             }
         }
@@ -1295,7 +1428,7 @@ BIF_RETTYPE decode_packet_3(BIF_ALIST_3)
         pca.aligned_ptr = bin_ptr;
     }
     packet_sz = packet_get_length(type, (char*)pca.aligned_ptr, pca.bin_sz,
-                                  max_plen, trunc_len, &http_state);
+                                  max_plen, trunc_len, delimiter, &http_state);
     if (!(packet_sz > 0 && packet_sz <= pca.bin_sz)) {
         if (packet_sz < 0) {
 	    goto error;

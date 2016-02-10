@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2006-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2006-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -42,14 +43,14 @@
 -export([ func/1, call/1, recs/1, try_catch/1, if_then/1,
 	  receive_after/1, bits/1, head_tail/1,
 	  cond1/1, block/1, case1/1, ops/1, messages/1,
-	  old_mnemosyne_syntax/1,
-	  import_export/1, misc_attrs/1,
+	  import_export/1, misc_attrs/1, dialyzer_attrs/1,
 	  hook/1,
 	  neg_indent/1,
+	  maps_syntax/1,
 
 	  otp_6321/1, otp_6911/1, otp_6914/1, otp_8150/1, otp_8238/1,
 	  otp_8473/1, otp_8522/1, otp_8567/1, otp_8664/1, otp_9147/1,
-          otp_10302/1, otp_10820/1]).
+          otp_10302/1, otp_10820/1, otp_11100/1, otp_11861/1]).
 
 %% Internal export.
 -export([ehook/6]).
@@ -76,12 +77,13 @@ groups() ->
     [{expr, [],
       [func, call, recs, try_catch, if_then, receive_after,
        bits, head_tail, cond1, block, case1, ops,
-       messages, old_mnemosyne_syntax]},
-     {attributes, [], [misc_attrs, import_export]},
+       messages, maps_syntax
+    ]},
+     {attributes, [], [misc_attrs, import_export, dialyzer_attrs]},
      {tickets, [],
       [otp_6321, otp_6911, otp_6914, otp_8150, otp_8238,
        otp_8473, otp_8522, otp_8567, otp_8664, otp_9147,
-       otp_10302, otp_10820]}].
+       otp_10302, otp_10820, otp_11100, otp_11861]}].
 
 init_per_suite(Config) ->
     Config.
@@ -130,7 +132,27 @@ func(Config) when is_list(Config) ->
                            true
                    end)().">>},
 	  {func_7,
-           <<"t(M, F, A) -> fun M:F/A.">>}
+           <<"t(M, F, A) -> fun M:F/A.">>},
+          {func_8,
+           <<"-record(r1, {a,b}).
+              -record(r3, {a = fun Id(_) -> #r1{} end(1), b}).
+
+              t() ->
+                  fun Id(A) when record(A#r3.a, r1) -> 7 end(#r3{}).
+             ">>},
+          {func_9,
+           <<"-record(r1, {a,b}).
+              -record(r3, {a = fun Id(_) -> #r1{} end(1), b}).
+
+              t() ->
+                  fsdfsdfjsdfjkljf:sdlfjdsfjlf(
+                      fun Id(sdfsd) -> {sdkjsdf,sdfjsdkljfsdl,sdfkjdklf} end).
+             ">>},
+          {func_10,
+           <<"t() ->
+                  (fun True() ->
+                           true
+                   end)().">>}
           ],
     ?line compile(Config, Ts),
     ok.
@@ -158,6 +180,7 @@ recs(Config) when is_list(Config) ->
               -record(r1, {a,b}).
               -record(r2, {a = #r1{},b,c=length([1,2,3])}).
               -record(r3, {a = fun(_) -> #r1{} end(1), b}).
+              -record(r4, {a = fun R1(_) -> #r1{} end(1), b}).
 
               t() ->
                   foo = fun(A) when A#r1.a > A#r1.b -> foo end(#r1{b = 2}),
@@ -468,7 +491,7 @@ cond1(Config) when is_list(Config) ->
                     [{cons,3,{atom,3,a},{cons,3,{atom,3,b},{nil,3}}}]},
                    {clause,4,[],[[{atom,4,true}]],
                     [{tuple,5,[{atom,5,x},{atom,5,y}]}]}]},
-    ?line CChars = lists:flatten(erl_pp:expr(C)),
+    CChars = flat_expr1(C),
 %    ?line "cond {foo,bar} -> [a,b]; true -> {x,y} end" = CChars,
     ?line "cond\n"
           "    {foo,bar} ->\n"
@@ -535,29 +558,8 @@ messages(Config) when is_list(Config) ->
         lists:flatten(erl_pp:form({error,{some,"error"}})),
     ?line true = "{warning,{some,\"warning\"}}\n" =:=
         lists:flatten(erl_pp:form({warning,{some,"warning"}})),
-    ?line true = "\n" =:= lists:flatten(erl_pp:form({eof,0})),
+    "\n" = flat_form({eof,0}),
     ok.
-
-old_mnemosyne_syntax(Config) when is_list(Config) ->
-    %% Since we have kept the ':-' token,
-    %% better test that we can pretty print it.
-    R = {rule,12,sales,2,
-         [{clause,12,
-           [{var,12,'E'},{atom,12,employee}],
-           [],
-           [{generate,13,
-             {var,13,'E'},
-             {call,13,{atom,13,table},[{atom,13,employee}]}},
-            {match,14,
-             {record_field,14,{var,14,'E'},{atom,14,salary}},
-             {atom,14,sales}}]}]},
-    ?line "sales(E, employee) :-\n"
-          "    E <- table(employee),\n"
-          "    E.salary = sales.\n" =
-        lists:flatten(erl_pp:form(R)),
-    ok.
-
-
 
 import_export(suite) ->
     [];
@@ -581,20 +583,29 @@ import_export(Config) when is_list(Config) ->
 misc_attrs(suite) ->
     [];
 misc_attrs(Config) when is_list(Config) ->
-    ?line ok = pp_forms(<<"-module(m). ">>),
-    ?line ok = pp_forms(<<"-module(m, [Aafjlksfjdlsjflsdfjlsdjflkdsfjlk,"
-                          "Blsjfdlslfjsdf]). ">>),
-    ?line ok = pp_forms(<<"-export([]). ">>),
-    ?line ok = pp_forms(<<"-export([foo/2, bar/0]). ">>),
-    ?line ok = pp_forms(<<"-export([bar/0]). ">>),
-    ?line ok = pp_forms(<<"-import(lists, []). ">>),
-    ?line ok = pp_forms(<<"-import(lists, [map/2]). ">>),
-    ?line ok = pp_forms(<<"-import(lists, [map/2, foreach/2]). ">>),
-    ?line ok = pp_forms(<<"-'wild '({attr2,3}). ">>),
-    ?line ok = pp_forms(<<"-record(a, {b,c}). ">>),
-    ?line ok = pp_forms(<<"-record(' a ', {}). ">>),
-    ?line ok = pp_forms(<<"-record(' a ', {foo = foo:bar()}). ">>),
+    ok = pp_forms(<<"-module(m). ">>),
+    ok = pp_forms(<<"-module(m, [Aafjlksfjdlsjflsdfjlsdjflkdsfjlk,"
+                    "Blsjfdlslfjsdf]). ">>),
+    ok = pp_forms(<<"-export([]). ">>),
+    ok = pp_forms(<<"-export([foo/2, bar/0]). ">>),
+    ok = pp_forms(<<"-export([bar/0]). ">>),
+    ok = pp_forms(<<"-import(lists, []). ">>),
+    ok = pp_forms(<<"-import(lists, [map/2]). ">>),
+    ok = pp_forms(<<"-import(lists, [map/2, foreach/2]). ">>),
+    ok = pp_forms(<<"-'wild '({attr2,3}). ">>),
+    ok = pp_forms(<<"-record(a, {b,c}). ">>),
+    ok = pp_forms(<<"-record(' a ', {}). ">>),
+    ok = pp_forms(<<"-record(' a ', {foo = foo:bar()}). ">>),
+    ok = pp_forms(<<"-custom1(#{test1 => init/2, test2 => [val/1, val/2]}). ">>),
+    ok.
 
+dialyzer_attrs(suite) ->
+    [];
+dialyzer_attrs(Config) when is_list(Config) ->
+    ok = pp_forms(<<"-type foo() :: #bar{}. ">>),
+    ok = pp_forms(<<"-opaque foo() :: {bar, fun((X, [42,...]) -> X)}. ">>),
+    ok = pp_forms(<<"-spec foo(bar(), qux()) -> [T | baz(T)]. ">>),
+    ok = pp_forms(<<"-callback foo(<<_:32,_:_*4>>, T) -> T. ">>),
     ok.
 
 hook(suite) ->
@@ -606,59 +617,41 @@ hook(Config) when is_list(Config) ->
 do_hook(HookFun) ->
     Lc = parse_expr(binary_to_list(<<"[X || X <- [1,2,3]].">>)),
     H = HookFun(fun hook/4),
-    Expr = {call,0,{atom,0,fff},[{foo,Lc},{foo,Lc},{foo,Lc}]},
+    A0 = erl_anno:new(0),
+    Expr = {call,A0,{atom,A0,fff},[{foo,Lc},{foo,Lc},{foo,Lc}]},
     EChars = lists:flatten(erl_pp:expr(Expr, 0, H)),
-    Call = {call,0,{atom,0,foo},[Lc]},
-    Expr2 = {call,0,{atom,0,fff},[Call,Call,Call]},
+    Call = {call,A0,{atom,A0,foo},[Lc]},
+    Expr2 = {call,A0,{atom,A0,fff},[Call,Call,Call]},
     EChars2 = erl_pp:exprs([Expr2]),
     ?line true = EChars =:= lists:flatten(EChars2),
 
     EsChars = erl_pp:exprs([Expr], H),
     ?line true = EChars =:= lists:flatten(EsChars),
 
-    F = {function,1,ffff,0,[{clause,1,[],[],[Expr]}]},
+    A1 = erl_anno:new(1),
+    F = {function,A1,ffff,0,[{clause,A1,[],[],[Expr]}]},
     FuncChars = lists:flatten(erl_pp:function(F, H)),
-    F2 = {function,1,ffff,0,[{clause,1,[],[],[Expr2]}]},
+    F2 = {function,A1,ffff,0,[{clause,A1,[],[],[Expr2]}]},
     FuncChars2 = erl_pp:function(F2),
     ?line true = FuncChars =:= lists:flatten(FuncChars2),
     FFormChars = erl_pp:form(F, H),
     ?line true = FuncChars =:= lists:flatten(FFormChars),
 
-    A = {attribute,1,record,{r,[{record_field,1,{atom,1,a},Expr}]}},
+    A = {attribute,A1,record,{r,[{record_field,A1,{atom,A1,a},Expr}]}},
     AChars = lists:flatten(erl_pp:attribute(A, H)),
-    A2 = {attribute,1,record,{r,[{record_field,1,{atom,1,a},Expr2}]}},
+    A2 = {attribute,A1,record,{r,[{record_field,A1,{atom,A1,a},Expr2}]}},
     AChars2 = erl_pp:attribute(A2),
     ?line true = AChars =:= lists:flatten(AChars2),
     AFormChars = erl_pp:form(A, H),
     ?line true = AChars =:= lists:flatten(AFormChars),
 
-    R = {rule,0,sales,0,
-         [{clause,0,[{var,0,'E'},{atom,0,employee}],[],
-           [{generate,2,{var,2,'E'},
-             {call,2,{atom,2,table},[{atom,2,employee}]}},
-            {match,3,
-             {record_field,3,{var,3,'E'},{atom,3,salary}},
-             {foo,Expr}}]}]},
-    RChars = lists:flatten(erl_pp:rule(R, H)),
-    R2 = {rule,0,sales,0,
-          [{clause,0,[{var,0,'E'},{atom,0,employee}],[],
-            [{generate,2,{var,2,'E'},
-              {call,2,{atom,2,table},[{atom,2,employee}]}},
-             {match,3,
-              {record_field,3,{var,3,'E'},{atom,3,salary}},
-              {call,0,{atom,0,foo},[Expr2]}}]}]},
-    RChars2 = erl_pp:rule(R2),
-    ?line true = RChars =:= lists:flatten(RChars2),
-    ARChars = erl_pp:form(R, H),
-    ?line true = RChars =:= lists:flatten(ARChars),
-
     ?line "INVALID-FORM:{foo,bar}:" = lists:flatten(erl_pp:expr({foo,bar})),
 
     %% A list (as before R6), not a list of lists.
-    G = [{op,1,'>',{atom,1,a},{foo,{atom,1,b}}}], % not a proper guard
+    G = [{op,A1,'>',{atom,A1,a},{foo,{atom,A1,b}}}], % not a proper guard
     GChars = lists:flatten(erl_pp:guard(G, H)),
-    G2 = [{op,1,'>',{atom,1,a},
-           {call,0,{atom,0,foo},[{atom,1,b}]}}], % not a proper guard
+    G2 = [{op,A1,'>',{atom,A1,a},
+           {call,A0,{atom,A0,foo},[{atom,A1,b}]}}], % not a proper guard
     GChars2 = erl_pp:guard(G2),
     ?line true = GChars =:= lists:flatten(GChars2),
 
@@ -669,14 +662,14 @@ do_hook(HookFun) ->
     ?line true = EChars =:= lists:flatten(XEChars2),
 
     %% Note: no leading spaces before "begin".
-    Block = {block,0,[{match,0,{var,0,'A'},{integer,0,3}},
-                      {atom,0,true}]},
+    Block = {block,A0,[{match,A0,{var,A0,'A'},{integer,A0,3}},
+                      {atom,A0,true}]},
     ?line "begin\n                     A =" ++ _ =
                lists:flatten(erl_pp:expr(Block, 17, none)),
 
     %% Special...
     ?line true =
-        "{some,value}" =:= lists:flatten(erl_pp:expr({value,0,{some,value}})),
+        "{some,value}" =:= lists:flatten(erl_pp:expr({value,A0,{some,value}})),
 
     %% Silly...
     ?line true =
@@ -684,8 +677,8 @@ do_hook(HookFun) ->
               flat_expr({'if',0,[{clause,0,[],[],[{atom,0,0}]}]}),
 
     %% More compatibility: before R6
-    OldIf = {'if',0,[{clause,0,[],[{atom,0,true}],[{atom,0,b}]}]},
-    NewIf = {'if',0,[{clause,0,[],[[{atom,0,true}]],[{atom,0,b}]}]},
+    OldIf = {'if',A0,[{clause,A0,[],[{atom,A0,true}],[{atom,A0,b}]}]},
+    NewIf = {'if',A0,[{clause,A0,[],[[{atom,A0,true}]],[{atom,A0,b}]}]},
     OldIfChars = lists:flatten(erl_pp:expr(OldIf)),
     NewIfChars = lists:flatten(erl_pp:expr(NewIf)),
     ?line true = OldIfChars =:= NewIfChars,
@@ -701,7 +694,8 @@ ehook(HE, I, P, H, foo, bar) ->
     hook(HE, I, P, H).
 
 hook({foo,E}, I, P, H) ->
-    erl_pp:expr({call,0,{atom,0,foo},[E]}, I, P, H).
+    A = erl_anno:new(0),
+    erl_pp:expr({call,A,{atom,A,foo},[E]}, I, P, H).
 
 neg_indent(suite) ->
     [];
@@ -732,6 +726,7 @@ neg_indent(Config) when is_list(Config) ->
     ?line ok = pp_expr(<<"{[a,b,c],[d,e|f]}">>),
     ?line ok = pp_expr(<<"f(a,b,c)">>),
     ?line ok = pp_expr(<<"fun() when a,b;c,d -> a end">>),
+    ?line ok = pp_expr(<<"fun A() when a,b;c,d -> a end">>),
     ?line ok = pp_expr(<<"<<34:32,17:32>>">>),
     ?line ok = pp_expr(<<"if a,b,c -> d; e,f,g -> h,i end">>),
     ?line ok = pp_expr(<<"if a -> d; c -> d end">>),
@@ -754,6 +749,9 @@ neg_indent(Config) when is_list(Config) ->
     Fun2 = {'fun',2,{clauses,[{clause,2,[],[],[{atom,3,true}]}]},
             {0,108059557,'-t/0-fun-0-'}},
     ?line "fun() -> true end" = flat_expr(Fun2),
+    Fun3 = {named_fun,3,'True',[{clause,3,[],[],[{atom,3,true}]}],
+            {0,424242424,'-t/0-True-0-'}},
+    ?line "fun True() -> true end" = flat_expr(Fun3),
 
     ok.
 
@@ -780,7 +778,7 @@ otp_6911(Config) when is_list(Config) ->
              {var,6,'X'},
              [{clause,7,[{atom,7,true}],[],[{integer,7,12}]},
               {clause,8,[{atom,8,false}],[],[{integer,8,14}]}]}]}]},
-    ?line Chars = lists:flatten(erl_pp:form(F)),
+    Chars = flat_form(F),
     ?line "thomas(X) ->\n"
           "    case X of\n"
           "        true ->\n"
@@ -838,6 +836,7 @@ type_examples() ->
      {ex3,<<"-type paren() :: (ann2()). ">>},
      {ex4,<<"-type t1() :: atom(). ">>},
      {ex5,<<"-type t2() :: [t1()]. ">>},
+     {ex56,<<"-type integer(A) :: A. ">>},
      {ex6,<<"-type t3(Atom) :: integer(Atom). ">>},
      {ex7,<<"-type '\\'t::4'() :: t3('\\'foobar'). ">>},
      {ex8,<<"-type t5() :: {t1(), t3(foo)}. ">>},
@@ -877,6 +876,9 @@ type_examples() ->
      {ex30,<<"-type t99() ::"
        "{t2(),'\\'t::4'(),t5(),t6(),t7(),t8(),t10(),t14(),"
        "t15(),t20(),t21(), t22(),t25()}. ">>},
+     %% Writing constraints as is_subtype(V, T) is not supported since
+     %% Erlang/OTP 19.0, but as long as the parser recognizes the
+     %% is_subtype(V, T) syntax, we need a few examples of the syntax.
      {ex31,<<"-spec t1(FooBar :: t99()) -> t99();"
                           "(t2()) -> t2();"
                           "('\\'t::4'()) -> '\\'t::4'() when is_subtype('\\'t::4'(), t24);"
@@ -929,7 +931,9 @@ otp_8522(Config) when is_list(Config) ->
     ?line {ok, _} = compile:file(FileName, [{outdir,?privdir},debug_info]),
     BF = filename("otp_8522", Config),
     ?line {ok, A} = beam_lib:chunks(BF, [abstract_code]),
-    ?line 5 = count_atom(A, undefined),
+    %% OTP-12719: Since 'undefined' is no longer added by the Erlang
+    %% Parser, the number of 'undefined' is 4. It used to be 5.
+    ?line 4 = count_atom(A, undefined),
     ok.
 
 count_atom(A, A) ->
@@ -940,6 +944,38 @@ count_atom(L, A) when is_list(L) ->
     lists:sum([count_atom(T, A) || T <- L]);
 count_atom(_, _) ->
     0.
+
+maps_syntax(doc) -> "Maps syntax";
+maps_syntax(suite) -> [];
+maps_syntax(Config) when is_list(Config) ->
+    Ts = [{map_fun_1,
+            <<"t() ->\n"
+              "    M0 = #{ 1 => hi, hi => 42, 1.0 => {hi,world}},\n"
+              "    M1 = M0#{ 1 := hello, new_val => 1337 },\n"
+              "    map_fun_2:val(M1).\n">>},
+          {map_fun_2,
+            <<"val(#{ 1 := V1, hi := V2, new_val := V3}) -> {V1,V2,V3}.\n">>}],
+    compile(Config, Ts),
+
+    ok = pp_expr(<<"#{}">>),
+    ok = pp_expr(<<"#{ a => 1, <<\"hi\">> => \"world\", 33 => 1.0 }">>),
+    ok = pp_expr(<<"#{ a := V1, <<\"hi\">> := V2 } = M">>),
+    ok = pp_expr(<<"M#{ a => V1, <<\"hi\">> := V2 }">>),
+    F = <<"-module(maps_type_syntax).\n"
+          "-compile(export_all).\n"
+          "-type t1() :: map().\n"
+          "-type t2() :: #{ atom() => integer(), atom() => float() }.\n"
+          "-type u() :: #{a => (I :: integer()) | (A :: atom()),\n"
+          "               (X :: atom()) | (Y :: atom()) =>\n"
+          "                   (I :: integer()) | (A :: atom())}.\n"
+          "-spec f1(t1()) -> 'true'.\n"
+          "f1(M) when is_map(M) -> true.\n"
+          "-spec f2(t2()) -> integer().\n"
+          "f2(#{a := V1,b := V2}) -> V1 + V2.\n"
+          "\n">>,
+    ok = pp_forms(F),
+    ok.
+
 
 otp_8567(doc) ->
     "OTP_8567. Avoid duplicated 'undefined' in record field types.";
@@ -967,16 +1003,8 @@ otp_8567(Config) when is_list(Config) ->
           "t() ->\n"
           "    3.\n"
           "\n"
-          "-spec(t1/1 :: (ot()) -> ot1()).\n"
-          "t1(A) ->\n"
-          "    A.\n"
-          "\n"
           "-spec(t2 (ot()) -> ot1()).\n"
           "t2(A) ->\n"
-          "    A.\n"
-          "\n"
-          "-spec(otp_8567:t3/1 :: (ot()) -> ot1()).\n"
-          "t3(A) ->\n"
           "    A.\n"
           "\n"
           "-spec(otp_8567:t4 (ot()) -> ot1()).\n"
@@ -1034,7 +1062,7 @@ otp_9147(Config) when is_list(Config) ->
     ?line {ok, Bin} = file:read_file(PFileName),
     %% The parentheses around "F1 :: a | b" are new (bugfix).
     ?line true = 
-        lists:member("-record(undef,{f1 :: undefined | (F1 :: a | b)}).",
+        lists:member("-record(undef,{f1 :: F1 :: a | b}).",
                      string:tokens(binary_to_list(Bin), "\n")),
     ok.
 
@@ -1060,10 +1088,11 @@ otp_10302(Config) when is_list(Config) ->
 
     Opts = [{hook, fun unicode_hook/4},{encoding,unicode}],
     Lc = parse_expr("[X || X <- [\"\x{400}\",\"\xFF\"]]."),
-    Expr = {call,0,{atom,0,fff},[{foo,{foo,Lc}},{foo,{foo,Lc}}]},
+    A0 = erl_anno:new(0),
+    Expr = {call,A0,{atom,A0,fff},[{foo,{foo,Lc}},{foo,{foo,Lc}}]},
     EChars = lists:flatten(erl_pp:expr(Expr, 0, Opts)),
-    Call = {call,0,{atom,0,foo},[{call,0,{atom,0,foo},[Lc]}]},
-    Expr2 = {call,0,{atom,0,fff},[Call,Call]},
+    Call = {call,A0,{atom,A0,foo},[{call,A0,{atom,A0,foo},[Lc]}]},
+    Expr2 = {call,A0,{atom,A0,fff},[Call,Call]},
     EChars2 = erl_pp:exprs([Expr2], U),
     EChars = lists:flatten(EChars2),
     [$\x{400},$\x{400}] = [C || C <- EChars, C > 255],
@@ -1073,7 +1102,8 @@ otp_10302(Config) when is_list(Config) ->
     ok.
 
 unicode_hook({foo,E}, I, P, H) ->
-    erl_pp:expr({call,0,{atom,0,foo},[E]}, I, P, H).
+    A = erl_anno:new(0),
+    erl_pp:expr({call,A,{atom,A,foo},[E]}, I, P, H).
 
 otp_10820(doc) ->
     "OTP-10820. Unicode filenames.";
@@ -1082,7 +1112,7 @@ otp_10820(Config) when is_list(Config) ->
     C1 = <<"%% coding: utf-8\n -module(any).">>,
     ok = do_otp_10820(Config, C1, "+pc latin1"),
     ok = do_otp_10820(Config, C1, "+pc unicode"),
-    C2 = <<"-module(any).">>,
+    C2 = <<"%% coding: latin-1\n -module(any).">>,
     ok = do_otp_10820(Config, C2, "+pc latin1"),
     ok = do_otp_10820(Config, C2, "+pc unicode").
 
@@ -1102,6 +1132,56 @@ do_otp_10820(Config, C, PC) ->
 file_attr_is_string("-file(\"" ++ _) -> true;
 file_attr_is_string([_ | L]) ->
     file_attr_is_string(L).
+
+otp_11100(doc) ->
+    "OTP-11100. Fix printing of invalid forms.";
+otp_11100(suite) -> [];
+otp_11100(Config) when is_list(Config) ->
+    %% There are a few places where the added code ("options(none)")
+    %% doesn't make a difference (pp:bit_elem_type/1 is an example).
+
+    %% Cannot trigger the use of the hook function with export/import.
+    "-export([{fy,a}/b]).\n" =
+        pf({attribute,1,export,[{{fy,a},b}]}),
+    A1 = erl_anno:new(1),
+    "-type foo() :: integer(INVALID-FORM:{foo,bar}:).\n" =
+        pf({attribute,A1,type,{foo,{type,A1,integer,[{foo,bar}]},[]}}),
+    pf({attribute,A1,type,
+        {a,{type,A1,range,[{integer,A1,1},{foo,bar}]},[]}}),
+    "-type foo(INVALID-FORM:{foo,bar}:) :: A.\n" =
+        pf({attribute,A1,type,{foo,{var,A1,'A'},[{foo,bar}]}}),
+    "-type foo() :: INVALID-FORM:{foo,bar}: :: [].\n" =
+        pf({attribute,A1,type,
+            {foo,{paren_type,A1,
+                  [{ann_type,A1,[{foo,bar},{type,A1,nil,[]}]}]},
+             []}}),
+    "-type foo() :: <<_:INVALID-FORM:{foo,bar}:>>.\n" =
+        pf({attribute,A1,type,
+            {foo,{type,A1,binary,[{foo,bar},{integer,A1,0}]},[]}}),
+    "-type foo() :: <<_:10, _:_*INVALID-FORM:{foo,bar}:>>.\n" =
+        pf({attribute,A1,type,
+            {foo,{type,A1,binary,[{integer,A1,10},{foo,bar}]},[]}}),
+    "-type foo() :: #r{INVALID-FORM:{foo,bar}: :: integer()}.\n" =
+        pf({attribute,A1,type,
+            {foo,{type,A1,record,
+                  [{atom,A1,r},
+                   {type,A1,field_type,
+                    [{foo,bar},{type,A1,integer,[]}]}]},
+             []}}),
+    ok.
+
+otp_11861(doc) ->
+    "OTP-11861. behaviour_info() and -callback.";
+otp_11861(suite) -> [];
+otp_11861(Config) when is_list(Config) ->
+    "-optional_callbacks([bar/0]).\n" =
+        pf({attribute,3,optional_callbacks,[{bar,0}]}),
+    "-optional_callbacks([{bar,1,bad}]).\n" =
+        pf({attribute,4,optional_callbacks,[{bar,1,bad}]}),
+    ok.
+
+pf(Form) ->
+    lists:flatten(erl_pp:form(Form, none)).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1166,8 +1246,17 @@ strip_module_info(Bin) ->
     <<R:Start/binary,_/binary>> = Bin,
     R.
 
-flat_expr(Expr) ->
+flat_expr1(Expr0) ->
+    Expr = erl_parse:new_anno(Expr0),
+    lists:flatten(erl_pp:expr(Expr)).
+
+flat_expr(Expr0) ->
+    Expr = erl_parse:new_anno(Expr0),
     lists:flatten(erl_pp:expr(Expr, -1, none)).
+
+flat_form(Form0) ->
+    Form = erl_parse:new_anno(Form0),
+    lists:flatten(erl_pp:form(Form)).
 
 pp_forms(Bin) ->
     pp_forms(Bin, none).

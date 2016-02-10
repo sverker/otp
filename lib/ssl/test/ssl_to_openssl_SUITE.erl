@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -25,8 +26,6 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--define(TIMEOUT, 120000).
--define(LONG_TIMEOUT, 600000).
 -define(SLEEP, 1000).
 -define(OPENSSL_RENEGOTIATE, "R\n").
 -define(OPENSSL_QUIT, "Q\n").
@@ -36,8 +35,6 @@
 %%--------------------------------------------------------------------
 %% Common Test interface functions -----------------------------------
 %%--------------------------------------------------------------------
-
-suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [
@@ -50,9 +47,9 @@ all() ->
 
 groups() ->
     [{basic, [], basic_tests()},
-     {'tlsv1.2', [], all_versions_tests() ++ npn_tests()},
-     {'tlsv1.1', [], all_versions_tests() ++ npn_tests()},
-     {'tlsv1', [], all_versions_tests()++ npn_tests()},
+     {'tlsv1.2', [], all_versions_tests() ++ alpn_tests() ++ npn_tests() ++ sni_server_tests()},
+     {'tlsv1.1', [], all_versions_tests() ++ alpn_tests() ++ npn_tests() ++ sni_server_tests()},
+     {'tlsv1', [], all_versions_tests()++ alpn_tests() ++ npn_tests() ++ sni_server_tests()},
      {'sslv3', [], all_versions_tests()}].
 
 basic_tests() ->
@@ -79,6 +76,18 @@ all_versions_tests() ->
      expired_session,
      ssl2_erlang_server_openssl_client].
 
+alpn_tests() ->
+    [erlang_client_alpn_openssl_server_alpn,
+     erlang_server_alpn_openssl_client_alpn,
+     erlang_client_alpn_openssl_server,
+     erlang_client_openssl_server_alpn,
+     erlang_server_alpn_openssl_client,
+     erlang_server_openssl_client_alpn,
+     erlang_client_alpn_openssl_server_alpn_renegotiate,
+     erlang_server_alpn_openssl_client_alpn_renegotiate,
+     erlang_client_alpn_npn_openssl_server_alpn_npn,
+     erlang_server_alpn_npn_openssl_client_alpn_npn].
+
 npn_tests() ->
     [erlang_client_openssl_server_npn,
      erlang_server_openssl_client_npn,
@@ -89,25 +98,30 @@ npn_tests() ->
      erlang_client_openssl_server_npn_only_client,
      erlang_client_openssl_server_npn_only_server].
 
+sni_server_tests() ->
+    [erlang_server_openssl_client_sni_match,
+     erlang_server_openssl_client_sni_match_fun,
+     erlang_server_openssl_client_sni_no_match,
+     erlang_server_openssl_client_sni_no_match_fun,
+     erlang_server_openssl_client_sni_no_header,
+     erlang_server_openssl_client_sni_no_header_fun].
+
 
 init_per_suite(Config0) ->
-    Dog = ct:timetrap(?LONG_TIMEOUT *2),
     case os:find_executable("openssl") of
 	false ->
 	    {skip, "Openssl not found"};
 	_ ->
+	    ct:pal("Version: ~p", [os:cmd("openssl version")]),
 	    catch crypto:stop(),
 	    try crypto:start() of
 		ok ->
-		    application:start(public_key),
 		    ssl:start(),
-		    Result =
-			(catch make_certs:all(?config(data_dir, Config0),
-					      ?config(priv_dir, Config0))),
-		    ct:print("Make certs  ~p~n", [Result]),
+		    {ok,  _} = make_certs:all(?config(data_dir, Config0),
+					      ?config(priv_dir, Config0)),
 		    Config1 = ssl_test_lib:make_dsa_cert(Config0),
 		    Config = ssl_test_lib:cert_options(Config1),
-		    [{watchdog, Dog} | Config]
+		    ssl_test_lib:cipher_restriction(Config)
 		catch _:_  ->
 		    {skip, "Crypto did not start"}
 	    end
@@ -120,7 +134,7 @@ end_per_suite(_Config) ->
 init_per_group(GroupName, Config) ->
     case ssl_test_lib:is_tls_version(GroupName) of
 	true ->
-	    case check_sane_openssl_version(GroupName) of
+	    case ssl_test_lib:check_sane_openssl_version(GroupName) of
 		true ->
 		    ssl_test_lib:init_tls_version(GroupName),
 		    Config;
@@ -135,40 +149,97 @@ init_per_group(GroupName, Config) ->
 end_per_group(_GroupName, Config) ->
     Config.
 
-init_per_testcase(expired_session, Config0) ->
-    Config = lists:keydelete(watchdog, 1, Config0),
-    Dog = ct:timetrap(?EXPIRE * 1000 * 5),
+init_per_testcase(expired_session, Config) ->
+    ct:timetrap(?EXPIRE * 1000 * 5),
     ssl:stop(),
     application:load(ssl),
     application:set_env(ssl, session_lifetime, ?EXPIRE),
     ssl:start(),
-    [{watchdog, Dog} | Config];
+    Config;
 
-init_per_testcase(TestCase, Config0) ->
-    Config = lists:keydelete(watchdog, 1, Config0),
-    Dog = ct:timetrap(?TIMEOUT),
-    special_init(TestCase, [{watchdog, Dog} | Config]).
+init_per_testcase(TestCase, Config) when TestCase == ciphers_rsa_signed_certs;
+					 TestCase == ciphers_dsa_signed_certs ->
+    ct:timetrap({seconds, 45}),
+    special_init(TestCase, Config);
+
+init_per_testcase(TestCase, Config) ->
+    ct:timetrap({seconds, 10}),
+    special_init(TestCase, Config).
 
 special_init(TestCase, Config)
   when TestCase == erlang_client_openssl_server_renegotiate;
        TestCase == erlang_client_openssl_server_nowrap_seqnum;
        TestCase == erlang_server_openssl_client_nowrap_seqnum
        ->
-    check_sane_openssl_renegotaite(Config);
+    {ok, Version} = application:get_env(ssl, protocol_version),
+    check_sane_openssl_renegotaite(Config, Version);
 
 special_init(ssl2_erlang_server_openssl_client, Config) ->
-    check_sane_openssl_sslv2(Config);
+    case ssl_test_lib:supports_ssl_tls_version(sslv2) of
+	true ->
+	     Config;
+	false ->
+	     {skip, "sslv2 not supported by openssl"}
+    end;
+
+special_init(TestCase, Config)
+    when TestCase == erlang_client_alpn_openssl_server_alpn;
+         TestCase == erlang_server_alpn_openssl_client_alpn;
+         TestCase == erlang_client_alpn_openssl_server;
+         TestCase == erlang_client_openssl_server_alpn;
+         TestCase == erlang_server_alpn_openssl_client;
+         TestCase == erlang_server_openssl_client_alpn ->
+    check_openssl_alpn_support(Config);
+
+special_init(TestCase, Config)
+    when TestCase == erlang_client_alpn_openssl_server_alpn_renegotiate;
+         TestCase == erlang_server_alpn_openssl_client_alpn_renegotiate ->
+    {ok, Version} = application:get_env(ssl, protocol_version),
+    case check_sane_openssl_renegotaite(Config, Version) of
+	{skip, _} = Skip ->
+	    Skip;
+	_ ->
+	    check_openssl_alpn_support(Config)
+    end;
+
+special_init(TestCase, Config)
+    when TestCase == erlang_client_alpn_npn_openssl_server_alpn_npn;
+         TestCase == erlang_server_alpn_npn_openssl_client_alpn_npn ->
+    case check_openssl_alpn_support(Config) of
+        {skip, _} = Skip ->
+            Skip;
+        _ ->
+            check_openssl_npn_support(Config)
+    end;
 
 special_init(TestCase, Config)
     when TestCase == erlang_client_openssl_server_npn;
-         TestCase == erlang_server_openssl_client_npn;
-         TestCase == erlang_server_openssl_client_npn_renegotiate;
-         TestCase == erlang_client_openssl_server_npn_renegotiate;
+         TestCase == erlang_server_openssl_client_npn;        
          TestCase == erlang_server_openssl_client_npn_only_server;
          TestCase == erlang_server_openssl_client_npn_only_client;
          TestCase == erlang_client_openssl_server_npn_only_client;
          TestCase == erlang_client_openssl_server_npn_only_server ->
     check_openssl_npn_support(Config);
+
+special_init(TestCase, Config)
+  when TestCase == erlang_server_openssl_client_npn_renegotiate;
+       TestCase == erlang_client_openssl_server_npn_renegotiate ->
+    {ok, Version} = application:get_env(ssl, protocol_version),
+    case check_sane_openssl_renegotaite(Config, Version) of
+	{skip, _} = Skip ->
+	    Skip;
+	_ -> 
+	    check_openssl_npn_support(Config)
+    end;
+
+special_init(TestCase, Config)
+  when TestCase == erlang_server_openssl_client_sni_match;
+       TestCase == erlang_server_openssl_client_sni_no_match;
+       TestCase == erlang_server_openssl_client_sni_no_header;
+       TestCase == erlang_server_openssl_client_sni_match_fun;
+       TestCase == erlang_server_openssl_client_sni_no_match_fun;
+       TestCase == erlang_server_openssl_client_sni_no_header_fun ->
+    check_openssl_sni_support(Config);
 
 special_init(_, Config) ->
     Config.
@@ -197,14 +268,13 @@ basic_erlang_client_openssl_server(Config) when is_list(Config) ->
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
 
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++
-	" -cert " ++ CertFile  ++ " -key " ++ KeyFile, 
-    
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port), 
+	    "-cert", CertFile, "-key", KeyFile], 
 
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args), 
 
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
@@ -212,12 +282,12 @@ basic_erlang_client_openssl_server(Config) when is_list(Config) ->
 					{mfa, {?MODULE, 
 					       erlang_ssl_receive, [Data]}},
 					{options, ClientOpts}]),
-    port_command(OpensslPort, Data),
+    true = port_command(OpensslPort, Data),
     
     ssl_test_lib:check_result(Client, ok),
   
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
     ssl_test_lib:close(Client),
     process_flag(trap_exit, false).
 
@@ -237,20 +307,18 @@ basic_erlang_server_openssl_client(Config) when is_list(Config) ->
 			   {mfa, {?MODULE, erlang_ssl_receive, [Data]}},
 			   {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
-
-    Cmd = "openssl s_client -port " ++ integer_to_list(Port) ++
-	" -host localhost",
-
-    ct:print("openssl cmd: ~p~n", [Cmd]),
     
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-    port_command(OpenSslPort, Data),
+    Exe = "openssl",
+    Args = ["s_client", "-connect", "localhost:" ++ integer_to_list(Port) | workaround_openssl_s_clinent()],
+    
+    OpenSslPort = ssl_test_lib:portable_open_port(Exe, Args), 
+    true = port_command(OpenSslPort, Data),
     
     ssl_test_lib:check_result(Server, ok),
 
     %% Clean close down!   Server needs to be closed first !!
     ssl_test_lib:close(Server),
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     process_flag(trap_exit, false),
     ok.
 %%--------------------------------------------------------------------
@@ -268,15 +336,15 @@ erlang_client_openssl_server(Config) when is_list(Config) ->
     Port = ssl_test_lib:inet_port(node()),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++  version_flag(Version) ++
-	" -cert " ++ CertFile  ++ " -key " ++ KeyFile,
-    
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version), 
+	    "-cert", CertFile, "-key", KeyFile],
+	
+    OpensslPort =  ssl_test_lib:portable_open_port(Exe, Args), 
 
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
@@ -284,12 +352,12 @@ erlang_client_openssl_server(Config) when is_list(Config) ->
 					{mfa, {?MODULE, 
 					       erlang_ssl_receive, [Data]}},
 					{options, ClientOpts}]),
-    port_command(OpensslPort, Data),
+    true = port_command(OpensslPort, Data),
     
     ssl_test_lib:check_result(Client, ok),
 
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
     ssl_test_lib:close(Client),
     process_flag(trap_exit, false).
 
@@ -309,24 +377,22 @@ erlang_server_openssl_client(Config) when is_list(Config) ->
 			   {mfa, {?MODULE, erlang_ssl_receive, [Data]}},
 			   {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
 
-    Cmd = "openssl s_client -port " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-	" -host localhost",
+    Exe = "openssl",
+    Args = ["s_client", "-connect", "localhost: " ++ integer_to_list(Port), 
+	    ssl_test_lib:version_flag(Version)],
 
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    OpenSslPort =  ssl_test_lib:portable_open_port(Exe, Args), 
     
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-    port_command(OpenSslPort, Data),
+    true = port_command(OpenSslPort, Data),
     
     ssl_test_lib:check_result(Server, ok),
 
     %% Clean close down!   Server needs to be closed first !!
     ssl_test_lib:close(Server),
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     process_flag(trap_exit, false).
-
-%%-------------------------------------------------------------------- 
 
 erlang_client_openssl_server_dsa_cert() ->
     [{doc,"Test erlang server with openssl client"}].
@@ -343,17 +409,16 @@ erlang_client_openssl_server_dsa_cert(Config) when is_list(Config) ->
     CaCertFile =  proplists:get_value(cacertfile, ServerOpts),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile, "-CAfile", CaCertFile,  
+	    "-key", KeyFile, "-Verify", "2", "-msg"],
 
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++  version_flag(Version) ++
-	" -cert " ++ CertFile ++ " -CAfile " ++ CaCertFile  
-	++ " -key " ++ KeyFile ++ " -Verify 2 -msg",
-    
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    OpensslPort =  ssl_test_lib:portable_open_port(Exe, Args), 
 
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
@@ -362,12 +427,12 @@ erlang_client_openssl_server_dsa_cert(Config) when is_list(Config) ->
 					       erlang_ssl_receive, [Data]}},
 					{options, ClientOpts}]),
 
-    port_command(OpensslPort, Data),
+    true = port_command(OpensslPort, Data),
     
     ssl_test_lib:check_result(Client, ok), 
    
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
     ssl_test_lib:close(Client),
     process_flag(trap_exit, false),
     ok.
@@ -391,21 +456,22 @@ erlang_server_openssl_client_dsa_cert(Config) when is_list(Config) ->
                           {mfa, {?MODULE, erlang_ssl_receive, [Data]}},
                           {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_client -port " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-       " -host localhost " ++  " -cert " ++ CertFile ++ " -CAfile " ++ CaCertFile
-       ++ " -key " ++ KeyFile ++ " -msg",
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_client", "-connect", "localhost: " ++ integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile,
+	    "-CAfile", CaCertFile,
+	    "-key", KeyFile, "-msg"],
 
-    ct:print("openssl cmd: ~p~n", [Cmd]),
-
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]),
-    port_command(OpenSslPort, Data),
+    OpenSslPort = ssl_test_lib:portable_open_port(Exe, Args), 
+    true = port_command(OpenSslPort, Data),
 
     ssl_test_lib:check_result(Server, ok),
 
     %% Clean close down!   Server needs to be closed first !!
     ssl_test_lib:close(Server),
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     process_flag(trap_exit, false).
 
 %%-------------------------------------------------------------------- 
@@ -427,21 +493,22 @@ erlang_server_openssl_client_reuse_session(Config) when is_list(Config) ->
 			   {reconnect_times, 5},		
 			   {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_client -port " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-	" -host localhost -reconnect",
-
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
     
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
+    Exe = "openssl",
+    Args = ["s_client", "-connect",  "localhost:" ++ integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version),
+	    "-reconnect"],
+    
+    OpenSslPort =  ssl_test_lib:portable_open_port(Exe, Args),
 
-    port_command(OpenSslPort, Data),
+    true = port_command(OpenSslPort, Data),
     
     ssl_test_lib:check_result(Server, ok),
     
     %% Clean close down!   Server needs to be closed first !!
     ssl_test_lib:close(Server),
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     process_flag(trap_exit, false),
     ok.
 
@@ -462,16 +529,16 @@ erlang_client_openssl_server_renegotiate(Config) when is_list(Config) ->
     Port = ssl_test_lib:inet_port(node()),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
 
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-	" -cert " ++ CertFile ++ " -key " ++ KeyFile ++ " -msg", 
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port),  
+	    ssl_test_lib:version_flag(Version), 
+	    "-cert", CertFile, "-key", KeyFile, "-msg"], 
     
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    OpensslPort =  ssl_test_lib:portable_open_port(Exe, Args), 
 
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
@@ -480,14 +547,14 @@ erlang_client_openssl_server_renegotiate(Config) when is_list(Config) ->
 					       delayed_send, [[ErlData, OpenSslData]]}},
 					{options, ClientOpts}]),
 
-    port_command(OpensslPort, ?OPENSSL_RENEGOTIATE),
+    true = port_command(OpensslPort, ?OPENSSL_RENEGOTIATE),
     ct:sleep(?SLEEP),
-    port_command(OpensslPort, OpenSslData),
+    true = port_command(OpensslPort, OpenSslData),
     
     ssl_test_lib:check_result(Client, ok), 
    
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
     ssl_test_lib:close(Client),
     process_flag(trap_exit, false),
     ok.
@@ -512,15 +579,15 @@ erlang_client_openssl_server_nowrap_seqnum(Config) when is_list(Config) ->
     Port = ssl_test_lib:inet_port(node()),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-	" -cert " ++ CertFile ++ " -key " ++ KeyFile ++ " -msg", 
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile, "-key", KeyFile, "-msg"], 
     
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args),
 
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
@@ -533,7 +600,7 @@ erlang_client_openssl_server_nowrap_seqnum(Config) when is_list(Config) ->
     ssl_test_lib:check_result(Client, ok), 
 
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
     ssl_test_lib:close(Client),
     process_flag(trap_exit, false).
 %%--------------------------------------------------------------------
@@ -558,21 +625,21 @@ erlang_server_openssl_client_nowrap_seqnum(Config) when is_list(Config) ->
 					       trigger_renegotiate, [[Data, N+2]]}},
 					{options, [{renegotiate_at, N}, {reuse_sessions, false} | ServerOpts]}]),
     Port = ssl_test_lib:inet_port(Server),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_client -port " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-	" -host localhost -msg",
-
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl", 
+    Args = ["s_client","-connect", "localhost: " ++ integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version),
+	    "-msg"],
     
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
+    OpenSslPort = ssl_test_lib:portable_open_port(Exe, Args), 
 
-    port_command(OpenSslPort, Data),
+    true = port_command(OpenSslPort, Data),
     
     ssl_test_lib:check_result(Server, ok),
     
     %% Clean close down!   Server needs to be closed first !!
     ssl_test_lib:close(Server),
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     process_flag(trap_exit, false).
 
 %%--------------------------------------------------------------------
@@ -593,15 +660,15 @@ erlang_client_openssl_server_no_server_ca_cert(Config) when is_list(Config) ->
     Port = ssl_test_lib:inet_port(node()),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-	" -cert " ++ CertFile ++ " -key " ++ KeyFile ++ " -msg", 
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port), 
+	    ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile, "-key", KeyFile, "-msg"], 
     
-    ct:print("openssl cmd: ~p~n", [Cmd]),
-
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-
-    wait_for_openssl_server(),
+    OpensslPort =  ssl_test_lib:portable_open_port(Exe, Args), 
+ 
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
@@ -610,12 +677,12 @@ erlang_client_openssl_server_no_server_ca_cert(Config) when is_list(Config) ->
 					       erlang_ssl_receive, [Data]}},
 					{options, ClientOpts}]),
 
-    port_command(OpensslPort, Data),
+    true = port_command(OpensslPort, Data),
     
     ssl_test_lib:check_result(Client, ok), 
 
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
     ssl_test_lib:close(Client),
     process_flag(trap_exit, false).
 
@@ -635,16 +702,16 @@ erlang_client_openssl_server_client_cert(Config) when is_list(Config) ->
     CertFile = proplists:get_value(certfile, ServerOpts),
     CaCertFile = proplists:get_value(cacertfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-	" -cert " ++ CertFile ++ " -CAfile " ++ CaCertFile 
-	++ " -key " ++ KeyFile ++ " -Verify 2",
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile, "-CAfile", CaCertFile, 
+	    "-key", KeyFile, "-Verify", "2"],
     
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args),   
 
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					{host, Hostname},
@@ -652,12 +719,12 @@ erlang_client_openssl_server_client_cert(Config) when is_list(Config) ->
 					{mfa, {?MODULE, 
 					       erlang_ssl_receive, [Data]}},
 					{options, ClientOpts}]),
-    port_command(OpensslPort, Data),
+    true = port_command(OpensslPort, Data),
     
     ssl_test_lib:check_result(Client, ok),
   
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort), 
+    ssl_test_lib:close_port(OpensslPort), 
     ssl_test_lib:close(Client),
     process_flag(trap_exit, false).
 
@@ -686,20 +753,19 @@ erlang_server_openssl_client_client_cert(Config) when is_list(Config) ->
     CaCertFile = proplists:get_value(cacertfile, ClientOpts),
     CertFile = proplists:get_value(certfile, ClientOpts),
     KeyFile = proplists:get_value(keyfile, ClientOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_client -cert " ++ CertFile  ++ " -CAfile " ++ CaCertFile 
-	++ " -key " ++ KeyFile ++ " -port " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-	" -host localhost",
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_client", "-cert", CertFile,
+	   "-CAfile", CaCertFile, 
+	   "-key", KeyFile,"-connect", "localhost:" ++ integer_to_list(Port),
+	   ssl_test_lib:version_flag(Version)],
+    OpenSslPort = ssl_test_lib:portable_open_port(Exe, Args), 
 
-    ct:print("openssl cmd: ~p~n", [Cmd]),
-    
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-    port_command(OpenSslPort, Data),
-    
+    true = port_command(OpenSslPort, Data),    
     ssl_test_lib:check_result(Server, ok),
     
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     ssl_test_lib:close(Server),
     process_flag(trap_exit, false).
 
@@ -711,7 +777,7 @@ erlang_server_erlang_client_client_cert(Config) when is_list(Config) ->
     process_flag(trap_exit, true),
     ServerOpts = ?config(server_verification_opts, Config),  
     ClientOpts = ?config(client_verification_opts, Config),  
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     
     Data = "From erlang to erlang",
@@ -747,9 +813,9 @@ ciphers_rsa_signed_certs() ->
     [{doc,"Test cipher suites that uses rsa certs"}].
 ciphers_rsa_signed_certs(Config) when is_list(Config) ->
     Version = 
-	ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
+	tls_record:protocol_version(tls_record:highest_protocol_version([])),
 
-    Ciphers = ssl_test_lib:rsa_suites(),
+    Ciphers = ssl_test_lib:rsa_suites(openssl),
     run_suites(Ciphers, Version, Config, rsa).
 %%--------------------------------------------------------------------
 
@@ -757,7 +823,7 @@ ciphers_dsa_signed_certs() ->
     [{doc,"Test cipher suites that uses dsa certs"}].
 ciphers_dsa_signed_certs(Config) when is_list(Config) ->
     Version = 
-	ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
+	tls_record:protocol_version(tls_record:highest_protocol_version([])),
 
     Ciphers = ssl_test_lib:dsa_suites(),
     run_suites(Ciphers, Version, Config, dsa).
@@ -775,15 +841,13 @@ erlang_client_bad_openssl_server(Config) when is_list(Config) ->
     Port = ssl_test_lib:inet_port(node()),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++  version_flag(Version) ++
- 	" -cert " ++ CertFile ++ " -key " ++ KeyFile ++ "",
-
-    ct:print("openssl cmd: ~p~n", [Cmd]),
-
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port), ssl_test_lib:version_flag(Version),
+ 	"-cert", CertFile, "-key", KeyFile],
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args), 
     
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
     
     Client0 = ssl_test_lib:start_client([{node, ClientNode}, {port, Port}, 
 					 {host, Hostname},
@@ -793,7 +857,7 @@ erlang_client_bad_openssl_server(Config) when is_list(Config) ->
 					  [{versions, [Version]} | ClientOpts]}]),
     
     %% Send garbage
-    port_command(OpensslPort, ?OPENSSL_GARBAGE),
+    true = port_command(OpensslPort, ?OPENSSL_GARBAGE),
 
     ct:sleep(?SLEEP),
 
@@ -812,7 +876,7 @@ erlang_client_bad_openssl_server(Config) when is_list(Config) ->
 					  [{versions, [Version]} | ClientOpts]}]),
 
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
     ssl_test_lib:close(Client1),
     process_flag(trap_exit, false),
     ok.
@@ -832,14 +896,13 @@ expired_session(Config) when is_list(Config) ->
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
 
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++
-	" -cert " ++ CertFile ++ " -key " ++ KeyFile ++ "", 
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port),
+	"-cert", CertFile,"-key", KeyFile], 
     
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args), 
 
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
     
     Client0 =
 	ssl_test_lib:start_client([{node, ClientNode}, 
@@ -869,7 +932,7 @@ expired_session(Config) when is_list(Config) ->
 				   {from, self()},  {options, ClientOpts}]),  
 
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
     ssl_test_lib:close(Client2),
     process_flag(trap_exit, false).
 
@@ -890,20 +953,152 @@ ssl2_erlang_server_openssl_client(Config) when is_list(Config) ->
 			   {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
     
-    Cmd = "openssl s_client -port " ++ integer_to_list(Port)  ++ 
-	" -host localhost -ssl2 -msg",
-
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    Exe = "openssl",
+    Args = ["s_client", "-connect", "localhost:" ++ integer_to_list(Port), 
+	"-ssl2", "-msg"],
     
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]), 
-    port_command(OpenSslPort, Data),
+    OpenSslPort = ssl_test_lib:portable_open_port(Exe, Args),  
+    true = port_command(OpenSslPort, Data),
+    
+    ct:log("Ports ~p~n", [[erlang:port_info(P) || P <- erlang:ports()]]), 
     receive
-	{'EXIT', OpenSslPort, _} ->
+	{'EXIT', OpenSslPort, _} = Exit ->
+	    ct:log("Received: ~p ~n", [Exit]),
 	    ok
-
     end,
+    receive 
+	{'EXIT', _, _} = UnkownExit ->
+	    Msg = lists:flatten(io_lib:format("Received: ~p ~n", [UnkownExit])),
+	    ct:log(Msg),
+	    ct:comment(Msg),
+	    ok
+    after 0 ->
+	    ok
+    end,		
     ssl_test_lib:check_result(Server, {error, {tls_alert, "protocol version"}}),
     process_flag(trap_exit, false).
+
+%%--------------------------------------------------------------------
+
+erlang_client_alpn_openssl_server_alpn(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_client_and_openssl_server_for_alpn_negotiation(Config, Data, fun(Client, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
+
+        ssl_test_lib:check_result(Client, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------
+
+erlang_server_alpn_openssl_client_alpn(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_server_and_openssl_client_for_alpn_negotiation(Config, Data, fun(Client, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
+
+        ssl_test_lib:check_result(Client, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------------
+
+erlang_client_alpn_openssl_server(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_client_and_openssl_server_with_opts(Config,
+						     [{alpn_advertised_protocols, [<<"spdy/2">>]}],
+                                                     [],
+						     Data, fun(Server, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
+        ssl_test_lib:check_result(Server, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------------
+
+erlang_client_openssl_server_alpn(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_client_and_openssl_server_with_opts(Config,
+						     [],
+                                                     ["-alpn", "spdy/2"],
+						     Data, fun(Server, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
+        ssl_test_lib:check_result(Server, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------------
+
+erlang_server_alpn_openssl_client(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_server_and_openssl_client_with_opts(Config,
+						     [{alpn_preferred_protocols, [<<"spdy/2">>]}],
+                                                     [],
+						     Data, fun(Server, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
+        ssl_test_lib:check_result(Server, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------------
+
+erlang_server_openssl_client_alpn(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_server_and_openssl_client_with_opts(Config,
+						     [],
+                                                     ["-alpn", "spdy/2"],
+						     Data, fun(Server, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
+        ssl_test_lib:check_result(Server, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------
+
+erlang_client_alpn_openssl_server_alpn_renegotiate(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_client_and_openssl_server_for_alpn_negotiation(Config, Data, fun(Client, OpensslPort) ->
+        true = port_command(OpensslPort, ?OPENSSL_RENEGOTIATE),
+        ct:sleep(?SLEEP),
+        true = port_command(OpensslPort, Data),
+
+        ssl_test_lib:check_result(Client, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------
+
+erlang_server_alpn_openssl_client_alpn_renegotiate(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_server_and_openssl_client_for_alpn_negotiation(Config, Data, fun(Client, OpensslPort) ->
+        true = port_command(OpensslPort, ?OPENSSL_RENEGOTIATE),
+        ct:sleep(?SLEEP),
+        true = port_command(OpensslPort, Data),
+
+        ssl_test_lib:check_result(Client, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------
+
+erlang_client_alpn_npn_openssl_server_alpn_npn(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_client_and_openssl_server_for_alpn_npn_negotiation(Config, Data, fun(Client, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
+
+        ssl_test_lib:check_result(Client, ok)
+    end),
+    ok.
+
+%%--------------------------------------------------------------------
+
+erlang_server_alpn_npn_openssl_client_alpn_npn(Config) when is_list(Config) ->
+    Data = "From openssl to erlang",
+    start_erlang_server_and_openssl_client_for_alpn_npn_negotiation(Config, Data, fun(Client, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
+
+        ssl_test_lib:check_result(Client, ok)
+    end),
+    ok.
 
 %%--------------------------------------------------------------------
 erlang_client_openssl_server_npn() ->
@@ -912,7 +1107,7 @@ erlang_client_openssl_server_npn() ->
 erlang_client_openssl_server_npn(Config) when is_list(Config) ->
     Data = "From openssl to erlang",
     start_erlang_client_and_openssl_server_for_npn_negotiation(Config, Data, fun(Client, OpensslPort) ->
-        port_command(OpensslPort, Data),
+        true = port_command(OpensslPort, Data),
 
         ssl_test_lib:check_result(Client, ok)
     end),
@@ -925,9 +1120,9 @@ erlang_client_openssl_server_npn_renegotiate() ->
 erlang_client_openssl_server_npn_renegotiate(Config) when is_list(Config) ->
     Data = "From openssl to erlang",
     start_erlang_client_and_openssl_server_for_npn_negotiation(Config, Data, fun(Client, OpensslPort) ->
-        port_command(OpensslPort, ?OPENSSL_RENEGOTIATE),
+        true = port_command(OpensslPort, ?OPENSSL_RENEGOTIATE),
         ct:sleep(?SLEEP),
-        port_command(OpensslPort, Data),
+        true = port_command(OpensslPort, Data),
         ssl_test_lib:check_result(Client, ok)
     end),
     ok.
@@ -939,7 +1134,7 @@ erlang_server_openssl_client_npn(Config) when is_list(Config) ->
 
     Data = "From openssl to erlang",
     start_erlang_server_and_openssl_client_for_npn_negotiation(Config, Data, fun(Server, OpensslPort) ->
-        port_command(OpensslPort, Data),
+        true = port_command(OpensslPort, Data),
         ssl_test_lib:check_result(Server, ok)
     end),
     ok.
@@ -951,9 +1146,9 @@ erlang_server_openssl_client_npn_renegotiate() ->
 erlang_server_openssl_client_npn_renegotiate(Config) when is_list(Config) ->
     Data = "From openssl to erlang",
     start_erlang_server_and_openssl_client_for_npn_negotiation(Config, Data, fun(Server, OpensslPort) ->
-        port_command(OpensslPort, ?OPENSSL_RENEGOTIATE),
+        true = port_command(OpensslPort, ?OPENSSL_RENEGOTIATE),
         ct:sleep(?SLEEP),
-        port_command(OpensslPort, Data),
+        true = port_command(OpensslPort, Data),
         ssl_test_lib:check_result(Server, ok)
     end),
     ok.
@@ -961,8 +1156,8 @@ erlang_server_openssl_client_npn_renegotiate(Config) when is_list(Config) ->
 erlang_client_openssl_server_npn_only_server(Config) when is_list(Config) ->
     Data = "From openssl to erlang",
     start_erlang_client_and_openssl_server_with_opts(Config, [],
-						     "-nextprotoneg spdy/2", Data, fun(Server, OpensslPort) ->
-        port_command(OpensslPort, Data),
+						     ["-nextprotoneg", "spdy/2"], Data, fun(Server, OpensslPort) ->
+        true = port_command(OpensslPort, Data),
         ssl_test_lib:check_result(Server, ok)
     end),
     ok.
@@ -973,9 +1168,9 @@ erlang_client_openssl_server_npn_only_client(Config) when is_list(Config) ->
     Data = "From openssl to erlang",
     start_erlang_client_and_openssl_server_with_opts(Config,
 						     [{client_preferred_next_protocols,
-						       {client, [<<"spdy/2">>], <<"http/1.1">>}}], "",
+						       {client, [<<"spdy/2">>], <<"http/1.1">>}}], [],
 						     Data, fun(Server, OpensslPort) ->
-        port_command(OpensslPort, Data),
+        true = port_command(OpensslPort, Data),
         ssl_test_lib:check_result(Server, ok)
     end),
     ok.
@@ -983,21 +1178,40 @@ erlang_client_openssl_server_npn_only_client(Config) when is_list(Config) ->
 %%--------------------------------------------------------------------------
 erlang_server_openssl_client_npn_only_server(Config) when is_list(Config) ->
     Data = "From openssl to erlang",
-    start_erlang_server_and_openssl_client_with_opts(Config, [{next_protocols_advertised, [<<"spdy/2">>]}], "",
+    start_erlang_server_and_openssl_client_with_opts(Config, [{next_protocols_advertised, [<<"spdy/2">>]}], [],
 						     Data, fun(Server, OpensslPort) ->
-        port_command(OpensslPort, Data),
+        true = port_command(OpensslPort, Data),
         ssl_test_lib:check_result(Server, ok)
     end),
     ok.
 
 erlang_server_openssl_client_npn_only_client(Config) when is_list(Config) ->
     Data = "From openssl to erlang",
-    start_erlang_server_and_openssl_client_with_opts(Config, [], "-nextprotoneg spdy/2",
+    start_erlang_server_and_openssl_client_with_opts(Config, [], ["-nextprotoneg", "spdy/2"],
 						     Data, fun(Server, OpensslPort) ->
-        port_command(OpensslPort, Data),
+        true = port_command(OpensslPort, Data),
         ssl_test_lib:check_result(Server, ok)
     end),
     ok.
+%--------------------------------------------------------------------------
+erlang_server_openssl_client_sni_no_header(Config) when is_list(Config) ->
+    erlang_server_openssl_client_sni_test(Config, undefined, undefined, "server").
+
+erlang_server_openssl_client_sni_no_header_fun(Config) when is_list(Config) ->
+    erlang_server_openssl_client_sni_test_sni_fun(Config, undefined, undefined, "server").
+
+erlang_server_openssl_client_sni_match(Config) when is_list(Config) ->
+    erlang_server_openssl_client_sni_test(Config, "a.server", "a.server", "a.server").
+
+erlang_server_openssl_client_sni_match_fun(Config) when is_list(Config) ->
+    erlang_server_openssl_client_sni_test_sni_fun(Config, "a.server", "a.server", "a.server").
+
+erlang_server_openssl_client_sni_no_match(Config) when is_list(Config) ->
+    erlang_server_openssl_client_sni_test(Config, "c.server", undefined, "server").
+
+erlang_server_openssl_client_sni_no_match_fun(Config) when is_list(Config) ->
+    erlang_server_openssl_client_sni_test_sni_fun(Config, "c.server", undefined, "server").
+
 
 %%--------------------------------------------------------------------
 %% Internal functions ------------------------------------------------
@@ -1020,27 +1234,114 @@ run_suites(Ciphers, Version, Config, Type) ->
 	[] ->
 	    ok;
 	Error ->
-	    ct:print("Cipher suite errors: ~p~n", [Error]),
+	    ct:log("Cipher suite errors: ~p~n", [Error]),
 	    ct:fail(cipher_suite_failed_see_test_case_log)
     end.
 
+client_read_check([], _Data) -> 
+    ok;
+client_read_check([Hd | T], Data) ->
+    case binary:match(Data, list_to_binary(Hd)) of
+        nomatch ->
+            nomatch;
+        _ ->
+            client_read_check(T, Data)
+    end.
+client_check_result(Port, DataExpected, DataReceived) ->
+    receive
+        {Port, {data, TheData}} ->
+            Data = list_to_binary(TheData),
+            NewData = <<DataReceived/binary, Data/binary>>,
+            ct:log("New Data: ~p", [NewData]),
+            case client_read_check(DataExpected, NewData) of
+                ok ->
+                    ok;
+                _ ->
+                    client_check_result(Port, DataExpected, NewData)
+            end
+    after 3000 ->
+	    ct:fail({"Time out on openSSL Client", {expected, DataExpected},
+		     {got, DataReceived}})   
+    end.
+client_check_result(Port, DataExpected) ->
+    client_check_result(Port, DataExpected, <<"">>).
+
+send_and_hostname(SSLSocket) ->
+    ssl:send(SSLSocket, "OK"),
+    {ok, [{sni_hostname, Hostname}]} = ssl:connection_information(SSLSocket, [sni_hostname]),
+    Hostname.
+
+erlang_server_openssl_client_sni_test(Config, SNIHostname, ExpectedSNIHostname, ExpectedCN) ->
+    ct:log("Start running handshake, Config: ~p, SNIHostname: ~p, ExpectedSNIHostname: ~p, ExpectedCN: ~p", [Config, SNIHostname, ExpectedSNIHostname, ExpectedCN]),
+    ServerOptions = ?config(sni_server_opts, Config) ++ ?config(server_opts, Config),
+    {_, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+    Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
+                                        {from, self()}, {mfa, {?MODULE, send_and_hostname, []}},
+                                        {options, ServerOptions}]),
+    Port = ssl_test_lib:inet_port(Server),
+    Exe = "openssl",
+    ClientArgs = case SNIHostname of
+                        undefined ->
+                            ["s_client", "-connect", Hostname ++ ":" ++ integer_to_list(Port)];
+                        _ ->
+                            ["s_client", "-connect", Hostname ++ ":" ++ integer_to_list(Port), "-servername", SNIHostname]
+                    end,       
+    ClientPort = ssl_test_lib:portable_open_port(Exe, ClientArgs),  
+
+    %% Client check needs to be done befor server check,
+    %% or server check might consume client messages
+    ExpectedClientOutput = ["OK", "/CN=" ++ ExpectedCN ++ "/"],
+    client_check_result(ClientPort, ExpectedClientOutput),
+    ssl_test_lib:check_result(Server, ExpectedSNIHostname),
+    ssl_test_lib:close_port(ClientPort),
+    ssl_test_lib:close(Server),
+    ok.
+
+
+erlang_server_openssl_client_sni_test_sni_fun(Config, SNIHostname, ExpectedSNIHostname, ExpectedCN) ->
+    ct:log("Start running handshake for sni_fun, Config: ~p, SNIHostname: ~p, ExpectedSNIHostname: ~p, ExpectedCN: ~p", [Config, SNIHostname, ExpectedSNIHostname, ExpectedCN]),
+    [{sni_hosts, ServerSNIConf}] = ?config(sni_server_opts, Config),
+    SNIFun = fun(Domain) -> proplists:get_value(Domain, ServerSNIConf, undefined) end,
+    ServerOptions = ?config(server_opts, Config) ++ [{sni_fun, SNIFun}],
+    {_, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+    Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
+                                        {from, self()}, {mfa, {?MODULE, send_and_hostname, []}},
+                                        {options, ServerOptions}]),
+    Port = ssl_test_lib:inet_port(Server),
+    Exe = "openssl",
+    ClientArgs = case SNIHostname of
+                        undefined ->
+                            ["s_client", "-connect", Hostname ++ ":" ++ integer_to_list(Port)];
+                        _ ->
+                            ["s_client", "-connect", Hostname ++ ":" ++ integer_to_list(Port), "-servername", SNIHostname]
+                    end,
+    ClientPort = ssl_test_lib:portable_open_port(Exe, ClientArgs), 
+     
+    %% Client check needs to be done befor server check,
+    %% or server check might consume client messages
+    ExpectedClientOutput = ["OK", "/CN=" ++ ExpectedCN ++ "/"],
+    client_check_result(ClientPort, ExpectedClientOutput),
+    ssl_test_lib:check_result(Server, ExpectedSNIHostname),
+    ssl_test_lib:close_port(ClientPort),
+    ssl_test_lib:close(Server).
+
+
 cipher(CipherSuite, Version, Config, ClientOpts, ServerOpts) ->
     process_flag(trap_exit, true),
-    ct:print("Testing CipherSuite ~p~n", [CipherSuite]),
+    ct:log("Testing CipherSuite ~p~n", [CipherSuite]),
     {ClientNode, _ServerNode, Hostname} = ssl_test_lib:run_where(Config),
 
     Port = ssl_test_lib:inet_port(node()),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
 
-    Cmd = "openssl s_server -accept " ++ integer_to_list(Port)  ++  version_flag(Version) ++
-	" -cert " ++ CertFile ++ " -key " ++ KeyFile ++ "",
+    Exe = "openssl",
+    Args = ["s_server", "-accept", integer_to_list(Port), ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile, "-key", KeyFile],
 
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    OpenSslPort =  ssl_test_lib:portable_open_port(Exe, Args), 
 
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]),
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     ConnectionInfo = {ok, {Version, CipherSuite}},
 
@@ -1052,24 +1353,24 @@ cipher(CipherSuite, Version, Config, ClientOpts, ServerOpts) ->
 					 [{ciphers,[CipherSuite]} |
 			     ClientOpts]}]),
 
-    port_command(OpenSslPort, "Hello\n"),
+    true = port_command(OpenSslPort, "Hello\n"),
 
     receive
 	{Port, {data, _}} when is_port(Port) ->
 	    ok
     after 500 ->
-	    ct:print("Time out on openssl port, check that"
+	    ct:log("Time out on openssl port, check that"
 			       " the messages Hello and world are received"
 			       " during close of port" , []),
 	    ok
     end,
 
-    port_command(OpenSslPort, " world\n"),
+    true = port_command(OpenSslPort, " world\n"),
 
     Result = ssl_test_lib:wait_for_result(Client, ok),
 
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     ssl_test_lib:close(Client),
 
     Return = case Result of
@@ -1094,17 +1395,23 @@ start_erlang_client_and_openssl_server_with_opts(Config, ErlangClientOpts, Opens
     Port = ssl_test_lib:inet_port(node()),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
 
-    Cmd = "openssl s_server " ++ OpensslServerOpts ++ "  -accept " ++ 
-	integer_to_list(Port) ++  version_flag(Version) ++
-	" -cert " ++ CertFile  ++ " -key " ++ KeyFile,
+    Exe = "openssl",
+    Args = case OpensslServerOpts of
+	       [] -> 
+		   ["s_server", "-accept", 
+		    integer_to_list(Port), ssl_test_lib:version_flag(Version),
+		    "-cert", CertFile,"-key", KeyFile];
+	       [Opt, Value] ->
+		   ["s_server", Opt, Value, "-accept", 
+		    integer_to_list(Port), ssl_test_lib:version_flag(Version),
+		    "-cert", CertFile,"-key", KeyFile]
+	   end,
+		   
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args),  
 
-    ct:print("openssl cmd: ~p~n", [Cmd]),
-
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]),
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port},
                     {host, Hostname},
@@ -1116,9 +1423,141 @@ start_erlang_client_and_openssl_server_with_opts(Config, ErlangClientOpts, Opens
     Callback(Client, OpensslPort),
 
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
 
     ssl_test_lib:close(Client),
+    process_flag(trap_exit, false).
+
+start_erlang_client_and_openssl_server_for_alpn_negotiation(Config, Data, Callback) ->
+    process_flag(trap_exit, true),
+    ServerOpts = ?config(server_opts, Config),
+    ClientOpts0 = ?config(client_opts, Config),
+    ClientOpts = [{alpn_advertised_protocols, [<<"spdy/2">>]} | ClientOpts0],
+
+    {ClientNode, _, Hostname} = ssl_test_lib:run_where(Config),
+
+    Data = "From openssl to erlang",
+
+    Port = ssl_test_lib:inet_port(node()),
+    CertFile = proplists:get_value(certfile, ServerOpts),
+    KeyFile = proplists:get_value(keyfile, ServerOpts),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+
+    Exe = "openssl",
+    Args = ["s_server", "-msg", "-alpn", "http/1.1,spdy/2", "-accept", integer_to_list(Port), ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile, "-key", KeyFile],
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args),  
+    ssl_test_lib:wait_for_openssl_server(Port),
+
+    Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port},
+                    {host, Hostname},
+                    {from, self()},
+                    {mfa, {?MODULE,
+                           erlang_ssl_receive_and_assert_negotiated_protocol, [<<"spdy/2">>, Data]}},
+                    {options, ClientOpts}]),
+
+    Callback(Client, OpensslPort),
+
+    %% Clean close down!   Server needs to be closed first !!
+    ssl_test_lib:close_port(OpensslPort),
+
+    ssl_test_lib:close(Client),
+    process_flag(trap_exit, false).
+
+start_erlang_server_and_openssl_client_for_alpn_negotiation(Config, Data, Callback) ->
+    process_flag(trap_exit, true),
+    ServerOpts0 = ?config(server_opts, Config),
+    ServerOpts = [{alpn_preferred_protocols, [<<"spdy/2">>]} | ServerOpts0],
+
+    {_, ServerNode, _} = ssl_test_lib:run_where(Config),
+
+
+    Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
+                    {from, self()},
+                    {mfa, {?MODULE, erlang_ssl_receive_and_assert_negotiated_protocol, [<<"spdy/2">>, Data]}},
+                    {options, ServerOpts}]),
+    Port = ssl_test_lib:inet_port(Server),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+
+    Exe = "openssl",
+    Args = ["s_client", "-alpn", "http/1.0,spdy/2", "-msg", "-port", 
+	    integer_to_list(Port), ssl_test_lib:version_flag(Version),
+	    "-host", "localhost"],
+
+    OpenSslPort = ssl_test_lib:portable_open_port(Exe, Args),  
+
+    Callback(Server, OpenSslPort),
+
+    ssl_test_lib:close(Server),
+
+    ssl_test_lib:close_port(OpenSslPort),
+    process_flag(trap_exit, false).
+
+start_erlang_client_and_openssl_server_for_alpn_npn_negotiation(Config, Data, Callback) ->
+    process_flag(trap_exit, true),
+    ServerOpts = ?config(server_opts, Config),
+    ClientOpts0 = ?config(client_opts, Config),
+    ClientOpts = [{alpn_advertised_protocols, [<<"spdy/2">>]},
+        {client_preferred_next_protocols, {client, [<<"spdy/3">>, <<"http/1.1">>]}} | ClientOpts0],
+
+    {ClientNode, _, Hostname} = ssl_test_lib:run_where(Config),
+
+    Data = "From openssl to erlang",
+
+    Port = ssl_test_lib:inet_port(node()),
+    CertFile = proplists:get_value(certfile, ServerOpts),
+    KeyFile = proplists:get_value(keyfile, ServerOpts),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+
+    Exe = "openssl",
+    Args = ["s_server", "-msg", "-alpn", "http/1.1,spdy/2", "-nextprotoneg", 
+	    "spdy/3", "-accept", integer_to_list(Port), ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile, "-key",  KeyFile],
+
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args),  
+
+    ssl_test_lib:wait_for_openssl_server(Port),
+
+    Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port},
+                    {host, Hostname},
+                    {from, self()},
+                    {mfa, {?MODULE,
+                           erlang_ssl_receive_and_assert_negotiated_protocol, [<<"spdy/2">>, Data]}},
+                    {options, ClientOpts}]),
+
+    Callback(Client, OpensslPort),
+
+    %% Clean close down!   Server needs to be closed first !!
+    ssl_test_lib:close_port(OpensslPort),
+
+    ssl_test_lib:close(Client),
+    process_flag(trap_exit, false).
+
+start_erlang_server_and_openssl_client_for_alpn_npn_negotiation(Config, Data, Callback) ->
+    process_flag(trap_exit, true),
+    ServerOpts0 = ?config(server_opts, Config),
+    ServerOpts = [{alpn_preferred_protocols, [<<"spdy/2">>]},
+        {next_protocols_advertised, [<<"spdy/3">>, <<"http/1.1">>]} | ServerOpts0],
+
+    {_, ServerNode, _} = ssl_test_lib:run_where(Config),
+
+
+    Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
+                    {from, self()},
+                    {mfa, {?MODULE, erlang_ssl_receive_and_assert_negotiated_protocol, [<<"spdy/2">>, Data]}},
+                    {options, ServerOpts}]),
+    Port = ssl_test_lib:inet_port(Server),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    Exe = "openssl",
+    Args = ["s_client", "-alpn", "http/1.1,spdy/2", "-nextprotoneg", "spdy/3", 
+	    "-msg", "-port", integer_to_list(Port), ssl_test_lib:version_flag(Version),
+	    "-host", "localhost"],
+    OpenSslPort =  ssl_test_lib:portable_open_port(Exe, Args),  
+
+    Callback(Server, OpenSslPort),
+
+    ssl_test_lib:close(Server),
+    ssl_test_lib:close_port(OpenSslPort),
     process_flag(trap_exit, false).
 
 start_erlang_client_and_openssl_server_for_npn_negotiation(Config, Data, Callback) ->
@@ -1134,28 +1573,27 @@ start_erlang_client_and_openssl_server_for_npn_negotiation(Config, Data, Callbac
     Port = ssl_test_lib:inet_port(node()),
     CertFile = proplists:get_value(certfile, ServerOpts),
     KeyFile = proplists:get_value(keyfile, ServerOpts),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+    
+    Exe = "openssl",
+    Args = ["s_server", "-msg", "-nextprotoneg", "http/1.1,spdy/2", "-accept", integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version),
+	    "-cert", CertFile, "-key", KeyFile],
+    OpensslPort = ssl_test_lib:portable_open_port(Exe, Args),  
 
-    Cmd = "openssl s_server -msg -nextprotoneg http/1.1,spdy/2  -accept " ++ integer_to_list(Port)  ++  version_flag(Version) ++
-    " -cert " ++ CertFile  ++ " -key " ++ KeyFile,
-
-    ct:print("openssl cmd: ~p~n", [Cmd]),
-
-    OpensslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]),
-
-    wait_for_openssl_server(),
+    ssl_test_lib:wait_for_openssl_server(Port),
 
     Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port},
                     {host, Hostname},
                     {from, self()},
                     {mfa, {?MODULE,
-                           erlang_ssl_receive_and_assert_npn, [<<"spdy/2">>, Data]}},
+                           erlang_ssl_receive_and_assert_negotiated_protocol, [<<"spdy/2">>, Data]}},
                     {options, ClientOpts}]),
 
     Callback(Client, OpensslPort),
 
     %% Clean close down!   Server needs to be closed first !!
-    close_port(OpensslPort),
+    ssl_test_lib:close_port(OpensslPort),
 
     ssl_test_lib:close(Client),
     process_flag(trap_exit, false).
@@ -1170,22 +1608,22 @@ start_erlang_server_and_openssl_client_for_npn_negotiation(Config, Data, Callbac
 
     Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
                     {from, self()},
-                    {mfa, {?MODULE, erlang_ssl_receive_and_assert_npn, [<<"spdy/2">>, Data]}},
+                    {mfa, {?MODULE, erlang_ssl_receive_and_assert_negotiated_protocol, [<<"spdy/2">>, Data]}},
                     {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
-    Version = ssl_record:protocol_version(ssl_record:highest_protocol_version([])),
-    Cmd = "openssl s_client -nextprotoneg http/1.0,spdy/2 -msg -port " ++ integer_to_list(Port)  ++ version_flag(Version) ++
-    " -host localhost",
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
 
-    ct:print("openssl cmd: ~p~n", [Cmd]),
+    Exe = "openssl",
+    Args = ["s_client", "-nextprotoneg", "http/1.0,spdy/2", "-msg", "-connect", "localhost:" 
+	    ++ integer_to_list(Port), ssl_test_lib:version_flag(Version)],
 
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]),
+    OpenSslPort = ssl_test_lib:portable_open_port(Exe, Args),  
 
     Callback(Server, OpenSslPort),
 
     ssl_test_lib:close(Server),
 
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     process_flag(trap_exit, false).
 
 
@@ -1202,31 +1640,31 @@ start_erlang_server_and_openssl_client_with_opts(Config, ErlangServerOpts, OpenS
                     {mfa, {?MODULE, erlang_ssl_receive, [Data]}},
                     {options, ServerOpts}]),
     Port = ssl_test_lib:inet_port(Server),
+    Version = tls_record:protocol_version(tls_record:highest_protocol_version([])),
+   
+    Exe = "openssl",
+    Args = ["s_client"] ++ OpenSSLClientOpts ++ ["-msg",  "-connect", "localhost:" ++ integer_to_list(Port),
+	    ssl_test_lib:version_flag(Version)],
 
-    Cmd = "openssl s_client " ++ OpenSSLClientOpts ++ " -msg -port " ++ integer_to_list(Port)  ++
-    " -host localhost",
-
-    ct:print("openssl cmd: ~p~n", [Cmd]),
-
-    OpenSslPort =  open_port({spawn, Cmd}, [stderr_to_stdout]),
+    OpenSslPort = ssl_test_lib:portable_open_port(Exe, Args),
 
     Callback(Server, OpenSslPort),
 
     ssl_test_lib:close(Server),
 
-    close_port(OpenSslPort),
+    ssl_test_lib:close_port(OpenSslPort),
     process_flag(trap_exit, false).
 
 
-erlang_ssl_receive_and_assert_npn(Socket, Protocol, Data) ->
-    {ok, Protocol} = ssl:negotiated_next_protocol(Socket),
+erlang_ssl_receive_and_assert_negotiated_protocol(Socket, Protocol, Data) ->
+    {ok, Protocol} = ssl:negotiated_protocol(Socket),
     erlang_ssl_receive(Socket, Data),
-    {ok, Protocol} = ssl:negotiated_next_protocol(Socket),
+    {ok, Protocol} = ssl:negotiated_protocol(Socket),
     ok.
 
 erlang_ssl_receive(Socket, Data) ->
-    ct:print("Connection info: ~p~n",
-		       [ssl:connection_info(Socket)]),
+    ct:log("Connection info: ~p~n",
+		       [ssl:connection_information(Socket)]),
     receive
 	{ssl, Socket, Data} ->
 	    io:format("Received ~p~n",[Data]),
@@ -1240,60 +1678,25 @@ erlang_ssl_receive(Socket, Data) ->
 	    erlang_ssl_receive(Socket,Data);
 	Other ->
 	    ct:fail({unexpected_message, Other})
-    after 4000 ->
-	    ct:fail({did_not_get, Data})
     end.
  
 connection_info(Socket, Version) ->
-    case ssl:connection_info(Socket) of
-	{ok, {Version, _} = Info} ->
-	    ct:print("Connection info: ~p~n", [Info]),
+    case ssl:connection_information(Socket, [version]) of
+	{ok, [{version, Version}] = Info} ->
+	    ct:log("Connection info: ~p~n", [Info]),
 	    ok;
-	{ok, {OtherVersion, _}} ->
+	{ok,  [{version, OtherVersion}]} ->
 	    {wrong_version, OtherVersion}
     end.
 
 connection_info_result(Socket) ->                                            
-    ssl:connection_info(Socket).
+    ssl:connection_information(Socket).
 
 
 delayed_send(Socket, [ErlData, OpenSslData]) ->
     ct:sleep(?SLEEP),
     ssl:send(Socket, ErlData),
     erlang_ssl_receive(Socket, OpenSslData).
-
-close_port(Port) ->
-    catch port_command(Port, ?OPENSSL_QUIT),
-    close_loop(Port, 500, false).
-
-close_loop(Port, Time, SentClose) ->
-    receive 
-	{Port, {data,Debug}} when is_port(Port) ->
-	    io:format("openssl ~s~n",[Debug]),
-	    close_loop(Port, Time, SentClose);	
-	{ssl,_,Msg} ->
-	    io:format("ssl Msg ~s~n",[Msg]),
-	    close_loop(Port, Time, SentClose);	
-	{Port, closed} -> 
-	    io:format("Port Closed~n",[]),
-	    ok;
-	{'EXIT', Port, Reason} ->
-	    io:format("Port Closed ~p~n",[Reason]),
-	    ok;
-	Msg ->
-	    io:format("Port Msg ~p~n",[Msg]),
-	    close_loop(Port, Time, SentClose)
-    after Time ->
-	    case SentClose of
-		false -> 
-		    io:format("Closing port ~n",[]),
-		    catch erlang:port_close(Port),
-		    close_loop(Port, Time, true);
-		true ->
-		    io:format("Timeout~n",[])
-	    end
-    end.
-
 
 server_sent_garbage(Socket) ->
     receive 
@@ -1302,25 +1705,14 @@ server_sent_garbage(Socket) ->
 	    
     end.
     
-wait_for_openssl_server() ->
-    receive
-     	{Port, {data, Debug}} when is_port(Port) ->
- 	    io:format("openssl ~s~n",[Debug]),
-	    %% openssl has started make sure
-	    %% it will be in accept. Parsing
-	    %% output is too error prone. (Even 
-	    %% more so than sleep!)
-	    ct:sleep(?SLEEP)
+check_openssl_sni_support(Config) ->
+    HelpText = os:cmd("openssl s_client --help"),
+    case string:str(HelpText, "-servername") of
+        0 ->
+            {skip, "Current openssl doesn't support SNI"};
+        _ ->
+            Config
     end.
-
-version_flag(tlsv1) ->
-    " -tls1 ";
-version_flag('tlsv1.1') ->
-    " -tls1_1 ";
-version_flag('tlsv1.2') ->
-    " -tls1_2 ";
-version_flag(sslv3) ->
-    " -ssl3 ".
 
 check_openssl_npn_support(Config) ->
     HelpText = os:cmd("openssl s_client --help"),
@@ -1331,8 +1723,36 @@ check_openssl_npn_support(Config) ->
             Config
     end.
 
+check_openssl_alpn_support(Config) ->
+    HelpText = os:cmd("openssl s_client --help"),
+    case string:str(HelpText, "alpn") of
+        0 ->
+            {skip, "Openssl not compiled with alpn support"};
+        _ ->
+            Config
+    end.
+
+check_sane_openssl_renegotaite(Config, Version) when Version == 'tlsv1.1';
+						     Version == 'tlsv1.2' ->
+    case os:cmd("openssl version") of     
+	"OpenSSL 1.0.1c" ++ _ ->
+	    {skip, "Known renegotiation bug in OpenSSL"};
+	"OpenSSL 1.0.1b" ++ _ ->
+	    {skip, "Known renegotiation bug in OpenSSL"};
+	"OpenSSL 1.0.1a" ++ _ ->
+	    {skip, "Known renegotiation bug in OpenSSL"};
+	"OpenSSL 1.0.1 " ++ _ ->
+	    {skip, "Known renegotiation bug in OpenSSL"};
+	_ ->
+	    check_sane_openssl_renegotaite(Config)
+    end;
+check_sane_openssl_renegotaite(Config, _) ->
+    check_sane_openssl_renegotaite(Config).
+	
 check_sane_openssl_renegotaite(Config) ->
-    case os:cmd("openssl version") of
+    case os:cmd("openssl version") of  
+	"OpenSSL 1.0.0" ++ _ ->
+	    {skip, "Known renegotiation bug in OpenSSL"};
 	"OpenSSL 0.9.8" ++ _ ->
 	    {skip, "Known renegotiation bug in OpenSSL"};
 	"OpenSSL 0.9.7" ++ _ ->
@@ -1341,42 +1761,20 @@ check_sane_openssl_renegotaite(Config) ->
 	    Config
     end.
 
-check_sane_openssl_sslv2(Config) ->
-    Port = open_port({spawn, "openssl s_client  -ssl2 "}, [stderr_to_stdout]),
-    case supports_sslv2(Port) of
-	true ->
-	    Config;
-	false ->
-	    {skip, "sslv2 not supported by openssl"}
-    end.
-
-supports_sslv2(Port) ->
-    receive 
-	{Port, {data, "unknown option -ssl2" ++ _}} -> 
-	    false;
-	{Port, {data, Data}} ->
-	    case lists:member("error", string:tokens(Data, ":")) of
-		true ->
-		    false;
-		false ->
-		    supports_sslv2(Port)
-	    end
-    after 500 ->
-	    true
-    end.
-
-check_sane_openssl_version(Version) ->
-    case {Version, os:cmd("openssl version")} of
-	{_, "OpenSSL 1.0.1" ++ _} ->
-	    true;
-	{'tlsv1.2', "OpenSSL 1.0" ++ _} ->
-	    false;
-	{'tlsv1.1', "OpenSSL 1.0" ++ _} ->
-	    false;
-	{'tlsv1.2', "OpenSSL 0" ++ _} ->
-	    false;
-	{'tlsv1.1', "OpenSSL 0" ++ _} ->
-	    false;
-	{_, _} ->
-	    true
+workaround_openssl_s_clinent() ->
+    %% http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=683159
+    %% https://bugs.archlinux.org/task/33919
+    %% Bug seems to manifests it self if TLS version is not
+    %% explicitly specified 
+    case os:cmd("openssl version") of 
+	"OpenSSL 1.0.1c" ++ _ ->
+	    ["-no_tls1_2"];
+	"OpenSSL 1.0.1d" ++ _ ->
+	    ["-no_tls1_2"];
+	"OpenSSL 1.0.1e" ++ _ ->
+	    ["-no_tls1_2"];
+	"OpenSSL 1.0.1f" ++ _ ->
+	    ["-no_tls1_2"];
+	_  ->
+	    []
     end.

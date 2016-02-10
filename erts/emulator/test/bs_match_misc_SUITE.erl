@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 2000-2011. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -23,7 +24,8 @@
 	 bound_var/1,bound_tail/1,t_float/1,little_float/1,sean/1,
 	 kenneth/1,encode_binary/1,native/1,happi/1,
 	 size_var/1,wiger/1,x0_context/1,huge_float_field/1,
-	 writable_binary_matched/1,otp_7198/1,unordered_bindings/1]).
+	 writable_binary_matched/1,otp_7198/1,unordered_bindings/1,
+	 float_middle_endian/1]).
 
 -include_lib("test_server/include/test_server.hrl").
 
@@ -33,7 +35,7 @@ all() ->
     [bound_var, bound_tail, t_float, little_float, sean,
      kenneth, encode_binary, native, happi, size_var, wiger,
      x0_context, huge_float_field, writable_binary_matched,
-     otp_7198, unordered_bindings].
+     otp_7198, unordered_bindings, float_middle_endian].
 
 groups() -> 
     [].
@@ -90,6 +92,13 @@ t_float(Config) when is_list(Config) ->
     ?line {'EXIT',{{badmatch,_},_}} = (catch match_float(<<0,0>>, 16, 0)),
     ?line {'EXIT',{{badmatch,_},_}} = (catch match_float(<<0,0>>, 16#7fffffff, 0)),
 
+    ok.
+
+float_middle_endian(Config) when is_list(Config) ->
+    F = 9007199254740990.0, % turns to -NaN when word-swapped
+    ?line fcmp(F, match_float(<<F:64/float>>, 64, 0)),
+    ?line fcmp(F, match_float(<<1:1,F:64/float,127:7>>, 64, 1)),
+    ?line fcmp(F, match_float(<<1:13,F:64/float,127:3>>, 64, 13)),
     ok.
 
 

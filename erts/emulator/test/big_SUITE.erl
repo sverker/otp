@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 1997-2011. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -23,7 +24,7 @@
 	 init_per_group/2,end_per_group/2]).
 -export([t_div/1, eq_28/1, eq_32/1, eq_big/1, eq_math/1, big_literals/1,
 	 borders/1, negative/1, big_float_1/1, big_float_2/1,
-	 shift_limit_1/1, powmod/1, system_limit/1, otp_6692/1]).
+	 shift_limit_1/1, powmod/1, system_limit/1, toobig/1, otp_6692/1]).
 
 %% Internal exports.
 -export([eval/1]).
@@ -40,7 +41,7 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 all() -> 
     [t_div, eq_28, eq_32, eq_big, eq_math, big_literals,
      borders, negative, {group, big_float}, shift_limit_1,
-     powmod, system_limit, otp_6692].
+     powmod, system_limit, toobig, otp_6692].
 
 groups() -> 
     [{big_float, [], [big_float_1, big_float_2]}].
@@ -369,6 +370,16 @@ maxbig() ->
     (((1 bsl ((16777184 * (Ws div 4))-1)) - 1) bsl 1) + 1.
 
 id(I) -> I.
+
+toobig(Config) when is_list(Config) ->
+    ?line {'EXIT',{{badmatch,_},_}} = (catch toobig()),
+    ok.
+
+toobig() ->
+    A = erlang:term_to_binary(lists:seq(1000000, 2200000)),
+    ASize = erlang:bit_size(A),
+    <<ANr:ASize>> = A, % should fail
+    ANr band ANr.
 
 otp_6692(suite) ->
     [];

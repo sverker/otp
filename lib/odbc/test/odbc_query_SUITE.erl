@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2002-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -43,7 +44,7 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 all() -> 
     case odbc_test_lib:odbc_check() of
 	ok ->
-	    [sql_query, next, {group, scrollable_cursors}, select_count,
+	    [stored_proc, sql_query, next, {group, scrollable_cursors}, select_count,
 	     select_next, select_relative, select_absolute,
 	     create_table_twice, delete_table_twice, duplicate_key,
 	     not_connection_owner, no_result_set, query_error,
@@ -172,6 +173,26 @@ end_per_testcase(_Case, Config) ->
 %%-------------------------------------------------------------------------
 %% Test cases starts here.
 %%-------------------------------------------------------------------------
+stored_proc(doc)->
+    ["Test stored proc with OUT param"];
+stored_proc(suite) -> [];
+stored_proc(Config) when is_list(Config) ->
+    case ?RDBMS of
+        X when X == oracle; X == postgres->
+            Ref = ?config(connection_ref, Config),
+            {updated, _} =
+                odbc:sql_query(Ref,
+                               ?RDBMS:stored_proc_integer_out()),
+            Result = ?RDBMS:query_result(),
+            Result =
+                ?RDBMS:param_query(Ref),
+            {updated, _} =
+                odbc:sql_query(Ref, ?RDBMS:drop_proc()),
+            ok;
+        _ ->
+	    {skip, "stored proc not yet supported"}
+    end.
+
 sql_query(doc)->
     ["Test the common cases"];
 sql_query(suite) -> [];

@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2009-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2009-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 
@@ -973,7 +974,8 @@ refresh_app(#app{name = AppName,
                  is_escript = IsEscript,
                  active_dir = ActiveDir,
                  label = OptLabel,
-                 mods = Mods} = App,
+                 mods = Mods,
+                 status = AppStatus} = App,
             Force,
             Status) ->
     if
@@ -993,6 +995,8 @@ refresh_app(#app{name = AppName,
 			    read_app_info(AppFile,
 					  AppFile,
 					  AppName,
+                                          ActiveDir,
+                                          AppStatus,
 					  DefaultVsn,
 					  Status),
 
@@ -1064,9 +1068,11 @@ refresh_app(#app{name = AppName,
 missing_app_info(Vsn) ->
     #app_info{vsn = Vsn}.
 
-read_app_info(_AppFileOrBin, _AppFile, erts, DefaultVsn, Status) ->
+read_app_info(_AppFileOrBin, _AppFile, erts, _ActiveDir, _AppStatus, DefaultVsn, Status) ->
     {missing_app_info(DefaultVsn), Status};
-read_app_info(AppFileOrBin, AppFile, AppName, DefaultVsn, Status) ->
+read_app_info(_AppFileOrBin, _AppFile, _AppName, undefined, missing, DefaultVsn, Status) ->
+    {missing_app_info(DefaultVsn), Status};
+read_app_info(AppFileOrBin, AppFile, AppName, _ActiveDir, _AppStatus, DefaultVsn, Status) ->
     EnoentText = file:format_error(enoent),
     case reltool_utils:prim_consult(AppFileOrBin) of
         {ok,  [{application, AppName, Info}]} ->
@@ -1080,9 +1086,9 @@ read_app_info(AppFileOrBin, AppFile, AppName, DefaultVsn, Status) ->
 				       Status)};
         {error, Text} when Text =:= EnoentText ->
 	    {missing_app_info(DefaultVsn),
-	     reltool_utils:add_warning("~w: Missing app file ~tp.",
-				       [AppName,AppFile],
-				       Status)};
+             reltool_utils:add_warning("~w: Missing app file ~tp.",
+                                       [AppName,AppFile],
+                                       Status)};
         {error, Text} ->
             {missing_app_info(DefaultVsn),
 	     reltool_utils:add_warning("~w: Cannot parse app file ~tp (~tp).",
@@ -1119,6 +1125,9 @@ parse_app_info(File, [{Key, Val} | KeyVals], AI, Status) ->
 	    parse_app_info(File, KeyVals, AI#app_info{mod = Val}, Status);
         start_phases ->
 	    parse_app_info(File, KeyVals, AI#app_info{start_phases = Val},
+			   Status);
+	runtime_dependencies ->
+	    parse_app_info(File, KeyVals, AI#app_info{runtime_dependencies = Val},
 			   Status);
         _ ->
 	    Status2 =
@@ -1773,13 +1782,15 @@ escripts_to_apps([Escript | Escripts], Apps, Status) ->
 				      get_vsn_from_dir(AppName,AppLabel),
                                   AppFileName =
 				      filename:join([Escript, FullName]),
+                                  Dir = filename:join([Escript, AppName]),
                                   {Info, StatusAcc2} =
                                       read_app_info(GetBin(),
 						    AppFileName,
 						    AppName,
+                                                    Dir,
+                                                    ok,
 						    DefaultVsn,
 						    Status),
-                                  Dir = filename:join([Escript, AppName]),
                                   {[{AppName, app, Dir, Info} | FileAcc],
 				   StatusAcc2};
                               E when E =:= Ext ->
@@ -1979,20 +1990,27 @@ refresh_apps(ConfigApps, [New | NewApps], Acc, Force, Status) ->
 refresh_apps(_ConfigApps, [], Acc, _Force, Status) ->
     {lists:reverse(Acc), Status}.
 
-
 ensure_app_info(#app{is_escript = IsEscript, active_dir = Dir, info = Info},
 		Status)
   when IsEscript=/=false ->
     %% Escript or application which is inlined in an escript
     {Info, Dir, Status};
-ensure_app_info(#app{name = Name, sorted_dirs = []}, _Status) ->
-    reltool_utils:throw_error("~w: : Missing application directory.",[Name]);
+ensure_app_info(#app{name = Name, sorted_dirs = []} = App, Status) ->
+    Reason = "~w: Missing application directory.",
+    case App of
+        #app{incl_cond = exclude, status = missing, active_dir = Dir} ->
+            Status2 = reltool_utils:add_warning(Reason, [Name], Status),
+            {missing_app_info(""), Dir, Status2};
+        _ ->
+            reltool_utils:throw_error(Reason, [Name])
+    end;
 ensure_app_info(#app{name = Name,
 		     vsn = Vsn,
 		     use_selected_vsn = UseSelectedVsn,
 		     active_dir = ActiveDir,
 		     sorted_dirs = Dirs,
-		     info = undefined},
+                     info = undefined,
+                     status = AppStatus},
 		Status) ->
     ReadInfo =
         fun(Dir, StatusAcc) ->
@@ -2000,7 +2018,8 @@ ensure_app_info(#app{name = Name,
                 Ebin = filename:join([Dir, "ebin"]),
                 DefaultVsn = get_vsn_from_dir(Name,Base),
                 AppFile = filename:join([Ebin, atom_to_list(Name) ++ ".app"]),
-                read_app_info(AppFile, AppFile, Name, DefaultVsn, StatusAcc)
+                read_app_info(AppFile, AppFile, Name, ActiveDir,
+                              AppStatus, DefaultVsn, StatusAcc)
         end,
     {AllInfo, Status2} = lists:mapfoldl(ReadInfo, Status, Dirs),
     AllVsns = [I#app_info.vsn || I <- AllInfo],
@@ -2012,7 +2031,7 @@ ensure_app_info(#app{name = Name,
             [BadVsn | _] ->
 		reltool_utils:throw_error(
 		  "~w: Application version clash. "
-		  "Multiple directories contains version ~tp.",
+		  "Multiple directories contain version ~tp.",
 		  [Name,BadVsn])
         end,
     FirstInfo = hd(AllInfo),

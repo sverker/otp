@@ -2,18 +2,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -72,8 +73,8 @@
 -type final_fun() :: fun((mfa(), [range()]) -> 'ok').
 -type data() :: {mfa(), args_fun(), call_fun(), final_fun()}.
 -type label() :: non_neg_integer().
--type info() :: gb_tree().
--type work_list() :: {[label()], [label()], set()}.
+-type info() :: gb_trees:tree().
+-type work_list() :: {[label()], [label()], sets:set()}.
 -type variable() :: #icode_variable{}.
 -type annotated_variable() :: #icode_variable{}.
 -type argument() :: #icode_const{} | variable().
@@ -82,9 +83,9 @@
 -type last_instr_return() :: {instr_split_info(), range()}.
 
 -record(state, {info_map = gb_trees:empty()	:: info(), 
-		counter  = dict:new()		:: dict(), 
+		counter  = dict:new()		:: dict:dict(),
 		cfg				:: cfg(), 
-		liveness = gb_trees:empty()	:: gb_tree(), 
+		liveness = gb_trees:empty()	:: gb_trees:tree(),
 		ret_type			:: range(),
 		lookup_fun			:: call_fun(),
 		result_action			:: final_fun()}).
@@ -1201,11 +1202,11 @@ basic_type(#unsafe_update_element{}) -> not_analysed.
 analyse_bs_get_integer(Size, Flags, true) ->
   Signed = Flags band 4,
   if Signed =:= 0 ->
-      Max = 1 bsl Size - 1,
+      Max = inf_add(inf_bsl(1, Size), -1),
       Min = 0;
      true ->
-      Max = 1 bsl (Size-1) - 1,
-      Min = -(1 bsl (Size-1))
+      Max = inf_add(inf_bsl(1, Size-1), -1),
+      Min = inf_inv(inf_bsl(1, Size-1))
   end,
   {Min, Max};
 analyse_bs_get_integer(Size, Flags, false) when is_integer(Size),

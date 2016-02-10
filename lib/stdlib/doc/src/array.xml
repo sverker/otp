@@ -1,22 +1,23 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 <erlref>
 <header>
     <copyright>
-      <year>2007</year><year>2011</year>
+      <year>2007</year><year>2014</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
-    
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
+
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
     
     </legalnotice>
 
@@ -84,12 +85,15 @@ the default value cannot be confused with the values of set entries.</p>
   {'EXIT',{badarg,_}} = (catch array:get(18, A3)).</pre></description>
 <datatypes>
   <datatype>
-    <name><marker id="type-array">array()</marker></name>
+    <name name="array" n_vars="1"/>
     <desc>
       <p>A functional, extendible array. The representation is
         not documented and is subject to change without notice. Note that
         arrays cannot be directly compared for equality.</p>
     </desc>
+  </datatype>
+  <datatype>
+    <name name="array" n_vars="0"/>
   </datatype>
   <datatype>
     <name name="array_indx"/>
@@ -160,7 +164,7 @@ the default value cannot be confused with the values of set entries.</p>
 </fsummary>
 
 <desc><marker id="from_list-1"/>
-<p>Equivalent to <seealso marker="#from_list-2">from_list(<anno>List</anno>, undefined)</seealso>.</p>
+<p>Equivalent to <seealso marker="#from_list-2">from_list(<c><anno>List</anno></c>, undefined)</seealso>.</p>
 </desc></func>
 <func>
 <name name="from_list" arity="2"/>
@@ -180,7 +184,7 @@ the default value cannot be confused with the values of set entries.</p>
 </fsummary>
 
 <desc><marker id="from_orddict-1"/>
-<p>Equivalent to <seealso marker="#from_orddict-2">from_orddict(<anno>Orddict</anno>, undefined)</seealso>.</p>
+<p>Equivalent to <seealso marker="#from_orddict-2">from_orddict(<c><anno>Orddict</anno></c>, undefined)</seealso>.</p>
 </desc></func>
 <func>
 <name name="from_orddict" arity="2"/>
@@ -189,7 +193,7 @@ the default value cannot be confused with the values of set entries.</p>
 
 <desc><marker id="from_orddict-2"/>
 
-<p>Convert an ordered list of pairs <c>{Index, Value}</c> to a
+<p>Convert an ordered list of pairs <c>{Index, <anno>Value</anno>}</c> to a
   corresponding extendible array. <c><anno>Default</anno></c> is used as the value for
   uninitialized entries of the array. If <c><anno>Orddict</anno></c> is not a proper,
   ordered list of pairs whose first elements are nonnegative
@@ -455,7 +459,7 @@ cannot be changed once the array has been created.</p>
 
 <desc><marker id="sparse_to_orddict-1"/>
 
-<p>Convert the array to an ordered list of pairs <c>{Index, Value}</c>,
+<p>Convert the array to an ordered list of pairs <c>{Index, <anno>Value</anno>}</c>,
   skipping default-valued entries.
  </p>
 <p><em>See also:</em> <seealso marker="#to_orddict-1">to_orddict/1</seealso>.</p>
@@ -476,7 +480,7 @@ cannot be changed once the array has been created.</p>
 
 <desc><marker id="to_orddict-1"/>
 
-<p>Convert the array to an ordered list of pairs <c>{Index, Value}</c>.
+<p>Convert the array to an ordered list of pairs <c>{Index, <anno>Value</anno>}</c>.
  </p>
 <p><em>See also:</em> <seealso marker="#from_orddict-2">from_orddict/2</seealso>, <seealso marker="#sparse_to_orddict-1">sparse_to_orddict/1</seealso>.</p>
 </desc></func></funcs>

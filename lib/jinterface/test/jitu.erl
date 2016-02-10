@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -27,7 +28,10 @@
 	 java/4,
 	 java/5,
 	 init_all/1,
-	 finish_all/1]).
+	 finish_all/1,
+	 kill_all_jnodes/0]).
+
+-include("ct.hrl").
 
 %%
 %% Lots of stuff here are originating from java_client_erl_server_SUITE.erl
@@ -48,13 +52,36 @@ java(Java, Dir, Class, Args, Props) ->
 
 
 
-init_all(Config) when list(Config) ->
+init_all(Config) when is_list(Config) ->
     case find_executable(["java"]) of
 	false -> {skip,"Found no Java VM"};
-	Path -> [{java,Path}|Config]
+	Path ->
+	    Pid = spawn(fun() ->
+				ets:new(jitu_tab,[set,named_table,public]),
+				receive stop -> ets:delete(jitu_tab) end
+			end),
+	    [{java,Path},{tab_proc,Pid}|Config]
     end.
 
-finish_all(Config) -> Config.
+finish_all(Config) ->
+    kill_all_jnodes(),
+    ?config(tab_proc,Config) ! stop,
+    Config.
+
+kill_all_jnodes() ->
+    Jnodes = ets:tab2list(jitu_tab),
+    [begin
+%	 ct:pal("Killing OsPid=~w started with ~p",[OsPid,_Cmd]),
+	 kill_os_process(os:type(),integer_to_list(OsPid))
+     end || {OsPid,_Cmd} <- Jnodes],
+    ets:delete_all_objects(jitu_tab),
+    ok.
+
+kill_os_process({win32,_},OsPid) ->
+    os:cmd("taskkill /PID " ++ OsPid);
+kill_os_process(_,OsPid) ->
+    os:cmd("kill " ++ OsPid).
+
 
 %%
 %% Internal stuff...
@@ -69,13 +96,13 @@ find_executable([E|T]) ->
 	Path -> Path
     end.
 
-to_string([H|T]) when integer(H) ->
+to_string([H|T]) when is_integer(H) ->
     integer_to_list(H)++" "++to_string(T);
-to_string([H|T]) when atom(H) ->
+to_string([H|T]) when is_atom(H) ->
     atom_to_list(H)++" "++to_string(T);
-to_string([H|T]) when pid(H) ->
+to_string([H|T]) when is_pid(H) ->
     pid_to_list(H)++" "++to_string(T);
-to_string([H|T]) when list(H) ->
+to_string([H|T]) when is_list(H) ->
     lists:flatten(H)++" "++to_string(T);
 to_string([]) -> [].
 
@@ -84,35 +111,40 @@ to_string([]) -> [].
 % 	filename:join(Dir, File)).
 
 classpath(Dir) ->
-    PS =
+    {PS,Quote,EscSpace} =
 	case os:type() of
-	    {win32, _} -> ";";
-	    _          -> ":"
+	    {win32, _} -> {";","\"",""};
+	    _          -> {":","","\\"}
 	end,
     es(Dir++PS++
 	filename:join([code:lib_dir(jinterface),"priv","OtpErlang.jar"])++PS++
-	case os:getenv("CLASSPATH") of
-	    false -> "";
-	    Classpath -> Classpath
-	end).
+	os:getenv("CLASSPATH", ""),
+       Quote,
+       EscSpace).
 
-es(L) ->
-    lists:flatmap(fun($ ) ->
-			  "\\ ";
-		     (C) ->
-			  [C]
-		  end,lists:flatten(L)).
+es(L,Quote,EscSpace) ->
+    Quote++lists:flatmap(fun($ ) ->
+				EscSpace++" ";
+			   (C) ->
+				[C]
+			end,lists:flatten(L)) ++ Quote.
 
 cmd(Cmd) ->
     PortOpts = [{line,80},eof,exit_status,stderr_to_stdout],
-    io:format("cmd: ~s~n", [Cmd]),
+    io:format("cmd: ~ts~n", [Cmd]),
     case catch open_port({spawn,Cmd}, PortOpts) of
-	Port when port(Port) ->
+	Port when is_port(Port) ->
+	    case erlang:port_info(Port,os_pid) of
+		{os_pid,OsPid} ->
+		    ets:insert(jitu_tab,{OsPid,Cmd});
+		_ ->
+		    ok
+	    end,
 	    Result = cmd_loop(Port, []),
 	    io:format("cmd res: ~w~n", [Result]),
 	    case Result of
 		0 -> ok;
-		ExitCode when integer(ExitCode) -> {error,ExitCode};
+		ExitCode when is_integer(ExitCode) -> {error,ExitCode};
 		Error -> Error
 	    end;
 	{'EXIT',Reason} ->

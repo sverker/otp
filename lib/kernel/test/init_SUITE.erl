@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1996-2012. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -306,8 +307,8 @@ create_boot(Config) ->
 
 is_real_system(KernelVsn, StdlibVsn) ->
     LibDir = code:lib_dir(),
-    filelib:is_dir(filename:join(LibDir, "kernel"++KernelVsn)) andalso
-	filelib:is_dir(filename:join(LibDir, "stdlib"++StdlibVsn)).
+    filelib:is_dir(filename:join(LibDir, "kernel-"++KernelVsn)) andalso
+	filelib:is_dir(filename:join(LibDir, "stdlib-"++StdlibVsn)).
     
 %% ------------------------------------------------
 %% Slave executes erlang:halt() on master nodedown.
@@ -400,6 +401,7 @@ restart(Config) when is_list(Config) ->
     %% Ok, the node is up, now the real test test begins.
     ?line erlang:monitor_node(Node, true),
     ?line InitPid = rpc:call(Node, erlang, whereis, [init]),
+    ?line PurgerPid = rpc:call(Node, erlang, whereis, [erts_code_purger]),
     ?line Procs = rpc:call(Node, erlang, processes, []),
     ?line MaxPid = lists:last(Procs),
     ?line ok = rpc:call(Node, init, restart, []),
@@ -417,8 +419,13 @@ restart(Config) when is_list(Config) ->
     InitP = pid_to_list(InitPid),
     ?line InitP = pid_to_list(InitPid1),
 
+    %% and same purger process!
+    ?line PurgerPid1 = rpc:call(Node, erlang, whereis, [erts_code_purger]),
+    PurgerP = pid_to_list(PurgerPid),
+    ?line PurgerP = pid_to_list(PurgerPid1),
+
     ?line NewProcs0 = rpc:call(Node, erlang, processes, []),
-    NewProcs = lists:delete(InitPid1, NewProcs0),
+    NewProcs = NewProcs0 -- [InitPid1, PurgerPid1],
     ?line case check_processes(NewProcs, MaxPid) of
 	      true ->
 		  ok;

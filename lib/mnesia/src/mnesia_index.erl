@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -45,16 +46,10 @@
 	 del_transient/3,
 	 del_index_table/3]).
 
--import(mnesia_lib, [verbose/2]).
+-import(mnesia_lib, [val/1, verbose/2]).
 -include("mnesia.hrl").
 
 -record(index, {setorbag, pos_list}).
-
-val(Var) ->
-    case ?catch_val(Var) of
-	{'EXIT', _ReASoN_} -> mnesia_lib:other_val(Var, _ReASoN_); 
-	_VaLuE_ -> _VaLuE_ 
-    end.
 
 %% read an object list throuh its index table
 %% we assume that table Tab has index on attribute number Pos
@@ -75,17 +70,24 @@ add_index(Index, Tab, Key, Obj, Old) ->
 add_index2([{Pos, Ixt} |Tail], bag, Tab, K, Obj, OldRecs) ->
     db_put(Ixt, {element(Pos, Obj), K}),
     add_index2(Tail, bag, Tab, K, Obj, OldRecs);
-add_index2([{Pos, Ixt} |Tail], Type, Tab, K, Obj, OldRecs) ->
+add_index2([{Pos, Ixt} |Tail], Type, Tab, K, Obj, OldRecs0) ->
     %% Remove old tuples in index if Tab is updated
-    case OldRecs of 
-	undefined -> 
-	    Old = mnesia_lib:db_get(Tab, K),
-	    del_ixes(Ixt, Old, Pos, K);
-	Old -> 
-	    del_ixes(Ixt, Old, Pos, K)
-    end,
-    db_put(Ixt, {element(Pos, Obj), K}),
-    add_index2(Tail, Type, Tab, K, Obj, OldRecs);
+    OldRecs1 = case OldRecs0 of
+		   undefined -> mnesia_lib:db_get(Tab, K);
+		   _ -> OldRecs0
+	       end,
+    IdxVal = element(Pos, Obj),
+    case [Old || Old <- OldRecs1, element(Pos, Old) =/= IdxVal] of
+	[] when OldRecs1 =:= [] ->  %% Write
+	    db_put(Ixt, {element(Pos, Obj), K}),
+	    add_index2(Tail, Type, Tab, K, Obj, OldRecs0);
+	[] -> %% when OldRecs1 =/= [] Update without modifying index field
+	    add_index2(Tail, Type, Tab, K, Obj, OldRecs0);
+	OldRecs -> %% Update
+	    db_put(Ixt, {element(Pos, Obj), K}),
+	    del_ixes(Ixt, OldRecs, Pos, K),
+	    add_index2(Tail, Type, Tab, K, Obj, OldRecs0)
+    end;
 add_index2([], _, _Tab, _K, _Obj, _) -> ok.
 
 delete_index(Index, Tab, K) ->
@@ -229,7 +231,7 @@ del_transient(Tab, Storage) ->
     PosList = val({Tab, index}),
     del_transient(Tab, PosList, Storage).
 
-del_transient(_, [], _) -> done;
+del_transient(_, [], _) -> ok;
 del_transient(Tab, [Pos | Tail], Storage) ->
     delete_transient_index(Tab, Pos, Storage),
     del_transient(Tab, Tail, Storage).
@@ -237,7 +239,7 @@ del_transient(Tab, [Pos | Tail], Storage) ->
 delete_transient_index(Tab, Pos, disc_only_copies) ->
     Tag = {Tab, index, Pos},
     mnesia_monitor:unsafe_close_dets(Tag),
-    file:delete(tab2filename(Tab, Pos)),
+    _ = file:delete(tab2filename(Tab, Pos)),
     del_index_info(Tab, Pos), %% Uses val(..)
     mnesia_lib:unset({Tab, {index, Pos}});
 
@@ -255,7 +257,7 @@ init_disc_index(_Tab, []) ->
 init_disc_index(Tab, [Pos | Tail]) when is_integer(Pos) ->
     Fn = tab2filename(Tab, Pos),
     IxTag = {Tab, index, Pos},
-    file:delete(Fn),
+    _ = file:delete(Fn),
     Args = [{file, Fn}, {keypos, 1}, {type, bag}],
     mnesia_monitor:open_dets(IxTag, Args),
     Storage = disc_only_copies,
@@ -301,7 +303,13 @@ make_ram_index(Tab, [Pos | Tail]) ->
 
 add_ram_index(Tab, Pos) when is_integer(Pos) ->
     verbose("Creating index for ~w ~n", [Tab]),
-    Index = mnesia_monitor:mktab(mnesia_index, [bag, public]),
+    SetOrBag = val({Tab, setorbag}),
+    IndexType = case SetOrBag of
+        set -> duplicate_bag;
+        ordered_set -> duplicate_bag;
+        bag -> bag
+    end,
+    Index = mnesia_monitor:mktab(mnesia_index, [IndexType, public]),
     Insert = fun(Rec, _Acc) ->
 		     true = ?ets_insert(Index, {element(Pos, Rec), element(2, Rec)})
 	     end,
@@ -309,7 +317,7 @@ add_ram_index(Tab, Pos) when is_integer(Pos) ->
     true = ets:foldl(Insert, true, Tab),
     mnesia_lib:db_fixtable(ram_copies, Tab, false),
     mnesia_lib:set({Tab, {index, Pos}}, Index),
-    add_index_info(Tab, val({Tab, setorbag}), {Pos, {ram, Index}});
+    add_index_info(Tab, SetOrBag, {Pos, {ram, Index}});
 add_ram_index(_Tab, snmp) ->
     ok.
 

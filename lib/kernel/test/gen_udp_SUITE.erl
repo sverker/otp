@@ -1,19 +1,19 @@
-%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -34,7 +34,7 @@
 	 init_per_group/2,end_per_group/2]).
 -export([init_per_testcase/2, end_per_testcase/2]).
 
--export([send_to_closed/1, 
+-export([send_to_closed/1, active_n/1,
 	 buffer_size/1, binary_passive_recv/1, bad_address/1,
 	 read_packets/1, open_fd/1, connect/1, implicit_inet6/1]).
 
@@ -43,7 +43,7 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 all() -> 
     [send_to_closed, buffer_size, binary_passive_recv,
      bad_address, read_packets, open_fd, connect,
-     implicit_inet6].
+     implicit_inet6, active_n].
 
 groups() -> 
     [].
@@ -448,8 +448,8 @@ open_fd(Config) when is_list(Config) ->
     {ok,S1}   = gen_udp:open(0),
     {ok,P2} = inet:port(S1),
     {ok,FD}   = prim_inet:getfd(S1),
-    {error,einval} = gen_udp:open(P2, [inet6, {fd,FD}]),
-    {ok,S2}   = gen_udp:open(P2, [{fd,FD}]),
+    {error,einval} = gen_udp:open(0, [inet6, {fd,FD}]),
+    {ok,S2}   = gen_udp:open(0, [{fd,FD}]),
     {ok,S3}   = gen_udp:open(0),
     {ok,P3} = inet:port(S3),
     ok = gen_udp:send(S3, Addr, P2, Msg),
@@ -466,6 +466,108 @@ open_fd(Config) when is_list(Config) ->
 	    ?t:fail(io_lib:format("~w", [flush()]))
     end.
 
+active_n(Config) when is_list(Config) ->
+    N = 3,
+    S1 = ok(gen_udp:open(0, [{active,N}])),
+    [{active,N}] = ok(inet:getopts(S1, [active])),
+    ok = inet:setopts(S1, [{active,-N}]),
+    receive
+        {udp_passive, S1} -> ok
+    after
+        5000 ->
+            exit({error,udp_passive_failure})
+    end,
+    [{active,false}] = ok(inet:getopts(S1, [active])),
+    ok = inet:setopts(S1, [{active,0}]),
+    receive
+        {udp_passive, S1} -> ok
+    after
+        5000 ->
+            exit({error,udp_passive_failure})
+    end,
+    ok = inet:setopts(S1, [{active,32767}]),
+    {error,einval} = inet:setopts(S1, [{active,1}]),
+    {error,einval} = inet:setopts(S1, [{active,-32769}]),
+    ok = inet:setopts(S1, [{active,-32768}]),
+    receive
+        {udp_passive, S1} -> ok
+    after
+        5000 ->
+            exit({error,udp_passive_failure})
+    end,
+    [{active,false}] = ok(inet:getopts(S1, [active])),
+    ok = inet:setopts(S1, [{active,N}]),
+    ok = inet:setopts(S1, [{active,true}]),
+    [{active,true}] = ok(inet:getopts(S1, [active])),
+    receive
+        _ -> exit({error,active_n})
+    after
+        0 ->
+            ok
+    end,
+    ok = inet:setopts(S1, [{active,N}]),
+    ok = inet:setopts(S1, [{active,once}]),
+    [{active,once}] = ok(inet:getopts(S1, [active])),
+    receive
+        _ -> exit({error,active_n})
+    after
+        0 ->
+            ok
+    end,
+    {error,einval} = inet:setopts(S1, [{active,32768}]),
+    ok = inet:setopts(S1, [{active,false}]),
+    [{active,false}] = ok(inet:getopts(S1, [active])),
+    S1Port = ok(inet:port(S1)),
+    S2 = ok(gen_udp:open(0, [{active,N}])),
+    S2Port = ok(inet:port(S2)),
+    [{active,N}] = ok(inet:getopts(S2, [active])),
+    ok = inet:setopts(S1, [{active,N}]),
+    [{active,N}] = ok(inet:getopts(S1, [active])),
+    lists:foreach(
+      fun(I) ->
+              Msg = "message "++integer_to_list(I),
+              ok = gen_udp:send(S2, "localhost", S1Port, Msg),
+              receive
+                  {udp,S1,_,S2Port,Msg} ->
+                      ok = gen_udp:send(S1, "localhost", S2Port, Msg)
+              after
+                  5000 ->
+                      exit({error,timeout})
+              end,
+              receive
+                  {udp,S2,_,S1Port,Msg} ->
+                      ok
+              after
+                  5000 ->
+                      exit({error,timeout})
+              end
+      end, lists:seq(1,N)),
+    receive
+        {udp_passive,S1} ->
+            [{active,false}] = ok(inet:getopts(S1, [active]))
+    after
+        5000 ->
+            exit({error,udp_passive})
+    end,
+    receive
+        {udp_passive,S2} ->
+            [{active,false}] = ok(inet:getopts(S2, [active]))
+    after
+        5000 ->
+            exit({error,udp_passive})
+    end,
+    S3 = ok(gen_udp:open(0, [{active,0}])),
+    receive
+        {udp_passive,S3} ->
+            [{active,false}] = ok(inet:getopts(S3, [active]))
+    after
+        5000 ->
+            exit({error,udp_passive})
+    end,
+    ok = gen_udp:close(S3),
+    ok = gen_udp:close(S2),
+    ok = gen_udp:close(S1),
+    ok.
 
 %
 % Utils

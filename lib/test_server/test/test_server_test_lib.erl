@@ -3,20 +3,22 @@
 %%
 %% Copyright Ericsson AB 2009-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
 -module(test_server_test_lib).
+
 -export([parse_suite/1]).
 -export([init/2, pre_init_per_testcase/3, post_end_per_testcase/4]).
 
@@ -185,7 +187,9 @@ parse_case("=result" ++ Result, _, Tc) ->
 	"failed" ++ _ ->
 	    {ok, Tc#tc{ result = failed } };
 	"skipped" ++ _ ->
-	    {ok, Tc#tc{ result = skip } }
+	    {ok, Tc#tc{ result = skip } };
+	"auto_skipped" ++ _ ->
+	    {ok, Tc#tc{ result = auto_skip } }
     end;
 parse_case("=finished" ++ _ , _Fd, #tc{ name = undefined }) ->
     finished;

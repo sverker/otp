@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxpanel.html">wxPanel</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxpanel.html">wxPanel</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxWindow}
 %% <br />{@link wxEvtHandler}
@@ -28,7 +29,7 @@
 
 -module(wxPanel).
 -include("wxe.hrl").
--export([destroy/1,initDialog/1,new/0,new/1,new/2,new/5,new/6]).
+-export([destroy/1,initDialog/1,new/0,new/1,new/2,new/5,new/6,setFocusIgnoringChildren/1]).
 
 %% inherited exports
 -export([cacheBestSize/2,captureMouse/1,center/1,center/2,centerOnParent/1,
@@ -75,7 +76,7 @@ parent_class(wxEvtHandler) -> true;
 parent_class(_Class) -> erlang:error({badtype, ?MODULE}).
 
 -type wxPanel() :: wx:wx_object().
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxpanel.html#wxpanelwxpanel">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxpanel.html#wxpanelwxpanel">external documentation</a>.
 -spec new() -> wxPanel().
 new() ->
   wxe_util:construct(?wxPanel_new_0,
@@ -89,7 +90,7 @@ new(Parent)
  when is_record(Parent, wx_ref) ->
   new(Parent, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxpanel.html#wxpanelwxpanel">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxpanel.html#wxpanelwxpanel">external documentation</a>.
 -spec new(Parent, [Option]) -> wxPanel() when
 	Parent::wxWindow:wxWindow(),
 	Option :: {winid, integer()}
@@ -116,7 +117,7 @@ new(Parent,X,Y,Width,Height)
  when is_record(Parent, wx_ref),is_integer(X),is_integer(Y),is_integer(Width),is_integer(Height) ->
   new(Parent,X,Y,Width,Height, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxpanel.html#wxpanelwxpanel">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxpanel.html#wxpanelwxpanel">external documentation</a>.
 -spec new(Parent, X, Y, Width, Height, [Option]) -> wxPanel() when
 	Parent::wxWindow:wxWindow(), X::integer(), Y::integer(), Width::integer(), Height::integer(),
 	Option :: {style, integer()}.
@@ -129,12 +130,20 @@ new(#wx_ref{type=ParentT,ref=ParentRef},X,Y,Width,Height, Options)
   wxe_util:construct(?wxPanel_new_6,
   <<ParentRef:32/?UI,X:32/?UI,Y:32/?UI,Width:32/?UI,Height:32/?UI, 0:32,BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxpanel.html#wxpanelinitdialog">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxpanel.html#wxpanelinitdialog">external documentation</a>.
 -spec initDialog(This) -> ok when
 	This::wxPanel().
 initDialog(#wx_ref{type=ThisT,ref=ThisRef}) ->
   ?CLASS(ThisT,wxPanel),
   wxe_util:cast(?wxPanel_InitDialog,
+  <<ThisRef:32/?UI>>).
+
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxpanel.html#wxpanelsetfocusignoringchildren">external documentation</a>.
+-spec setFocusIgnoringChildren(This) -> ok when
+	This::wxPanel().
+setFocusIgnoringChildren(#wx_ref{type=ThisT,ref=ThisRef}) ->
+  ?CLASS(ThisT,wxPanel),
+  wxe_util:cast(?wxPanel_SetFocusIgnoringChildren,
   <<ThisRef:32/?UI>>).
 
 %% @doc Destroys this object, do not use object again

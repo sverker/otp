@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2011-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2011-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 -module(observer_sys_wx).
@@ -49,15 +50,17 @@ init([Notebook, Parent]) ->
     SysInfo = observer_backend:sys_info(),
     {Info, Stat} = info_fields(),
     Panel = wxPanel:new(Notebook),
-    Sizer = wxBoxSizer:new(?wxHORIZONTAL),
+    Sizer = wxBoxSizer:new(?wxVERTICAL),
+    TopSizer = wxBoxSizer:new(?wxHORIZONTAL),
     {FPanel0, _FSizer0, Fields0} =
 	observer_lib:display_info(Panel, observer_lib:fill_info(Info, SysInfo)),
     {FPanel1, _FSizer1, Fields1} =
 	observer_lib:display_info(Panel, observer_lib:fill_info(Stat, SysInfo)),
-    wxSizer:add(Sizer, FPanel0, [{flag, ?wxEXPAND bor ?wxTOP bor ?wxBOTTOM bor ?wxLEFT},
-				 {proportion, 1}, {border, 5}]),
-    wxSizer:add(Sizer, FPanel1, [{flag, ?wxEXPAND bor ?wxTOP bor ?wxBOTTOM bor ?wxRIGHT},
-				 {proportion, 1}, {border, 5}]),
+    wxSizer:add(TopSizer, FPanel0, [{flag, ?wxEXPAND}, {proportion, 1}]),
+    wxSizer:add(TopSizer, FPanel1, [{flag, ?wxEXPAND}, {proportion, 1}]),
+    BorderFlags = ?wxLEFT bor ?wxRIGHT,
+    wxSizer:add(Sizer, TopSizer, [{flag, ?wxEXPAND bor BorderFlags bor ?wxTOP},
+				  {proportion, 0}, {border, 5}]),
     wxPanel:setSizer(Panel, Sizer),
     Timer = observer_lib:start_timer(10),
     {Panel, #sys_wx_state{parent=Parent,
@@ -80,18 +83,21 @@ update_syspage(#sys_wx_state{node = Node, fields=Fields, sizer=Sizer}) ->
 info_fields() ->
     Info = [{"System and Architecture",
 	     [{"System Version", otp_release},
-	      {"Erts Version", version},
+	      {"ERTS Version", version},
 	      {"Compiled for", system_architecture},
 	      {"Emulator Wordsize", wordsize_external},
 	      {"Process Wordsize", wordsize_internal},
-	      {"Smp Support",  smp_support},
+	      {"SMP Support",  smp_support},
 	      {"Thread Support",  threads},
 	      {"Async thread pool size",  thread_pool_size}
 	     ]},
 	    {"CPU's and Threads",
-	     [{"System Logical CPU's", logical_processors},
-	      {"Erlang Logical CPU's", logical_processors_online},
-	      {"Used Logical CPU's", logical_processors_available}
+	     [{"Logical CPU's", logical_processors},
+	      {"Online Logical CPU's", logical_processors_online},
+	      {"Available Logical CPU's", logical_processors_available},
+	      {"Schedulers", schedulers},
+	      {"Online schedulers", schedulers_online},
+	      {"Available schedulers", schedulers_available}
 	     ]}
 	   ],
     Stat = [{"Memory Usage", right,
@@ -100,7 +106,7 @@ info_fields() ->
 	      {"Atoms", {bytes, atom}},
 	      {"Binaries", {bytes, binary}},
 	      {"Code", {bytes, code}},
-	      {"Ets", {bytes, ets}}
+	      {"ETS", {bytes, ets}}
 	     ]},
 	    {"Statistics", right,
 	     [{"Up time", {time_ms, uptime}},

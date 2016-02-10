@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html">wxGauge</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html">wxGauge</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxControl}
 %% <br />{@link wxWindow}
@@ -79,7 +80,7 @@ parent_class(wxEvtHandler) -> true;
 parent_class(_Class) -> erlang:error({badtype, ?MODULE}).
 
 -type wxGauge() :: wx:wx_object().
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugewxgauge">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugewxgauge">external documentation</a>.
 -spec new() -> wxGauge().
 new() ->
   wxe_util:construct(?wxGauge_new_0,
@@ -93,7 +94,7 @@ new(Parent,Id,Range)
  when is_record(Parent, wx_ref),is_integer(Id),is_integer(Range) ->
   new(Parent,Id,Range, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugewxgauge">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugewxgauge">external documentation</a>.
 -spec new(Parent, Id, Range, [Option]) -> wxGauge() when
 	Parent::wxWindow:wxWindow(), Id::integer(), Range::integer(),
 	Option :: {pos, {X::integer(), Y::integer()}}
@@ -120,7 +121,7 @@ create(This,Parent,Id,Range)
  when is_record(This, wx_ref),is_record(Parent, wx_ref),is_integer(Id),is_integer(Range) ->
   create(This,Parent,Id,Range, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugecreate">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugecreate">external documentation</a>.
 -spec create(This, Parent, Id, Range, [Option]) -> boolean() when
 	This::wxGauge(), Parent::wxWindow:wxWindow(), Id::integer(), Range::integer(),
 	Option :: {pos, {X::integer(), Y::integer()}}
@@ -140,7 +141,7 @@ create(#wx_ref{type=ThisT,ref=ThisRef},#wx_ref{type=ParentT,ref=ParentRef},Id,Ra
   wxe_util:call(?wxGauge_Create,
   <<ThisRef:32/?UI,ParentRef:32/?UI,Id:32/?UI,Range:32/?UI, BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugegetbezelface">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugegetbezelface">external documentation</a>.
 -spec getBezelFace(This) -> integer() when
 	This::wxGauge().
 getBezelFace(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -148,7 +149,7 @@ getBezelFace(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxGauge_GetBezelFace,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugegetrange">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugegetrange">external documentation</a>.
 -spec getRange(This) -> integer() when
 	This::wxGauge().
 getRange(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -156,7 +157,7 @@ getRange(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxGauge_GetRange,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugegetshadowwidth">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugegetshadowwidth">external documentation</a>.
 -spec getShadowWidth(This) -> integer() when
 	This::wxGauge().
 getShadowWidth(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -164,7 +165,7 @@ getShadowWidth(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxGauge_GetShadowWidth,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugegetvalue">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugegetvalue">external documentation</a>.
 -spec getValue(This) -> integer() when
 	This::wxGauge().
 getValue(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -172,7 +173,7 @@ getValue(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxGauge_GetValue,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugeisvertical">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugeisvertical">external documentation</a>.
 -spec isVertical(This) -> boolean() when
 	This::wxGauge().
 isVertical(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -180,7 +181,7 @@ isVertical(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxGauge_IsVertical,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugesetbezelface">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugesetbezelface">external documentation</a>.
 -spec setBezelFace(This, W) -> ok when
 	This::wxGauge(), W::integer().
 setBezelFace(#wx_ref{type=ThisT,ref=ThisRef},W)
@@ -189,7 +190,7 @@ setBezelFace(#wx_ref{type=ThisT,ref=ThisRef},W)
   wxe_util:cast(?wxGauge_SetBezelFace,
   <<ThisRef:32/?UI,W:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugesetrange">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugesetrange">external documentation</a>.
 -spec setRange(This, R) -> ok when
 	This::wxGauge(), R::integer().
 setRange(#wx_ref{type=ThisT,ref=ThisRef},R)
@@ -198,7 +199,7 @@ setRange(#wx_ref{type=ThisT,ref=ThisRef},R)
   wxe_util:cast(?wxGauge_SetRange,
   <<ThisRef:32/?UI,R:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugesetshadowwidth">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugesetshadowwidth">external documentation</a>.
 -spec setShadowWidth(This, W) -> ok when
 	This::wxGauge(), W::integer().
 setShadowWidth(#wx_ref{type=ThisT,ref=ThisRef},W)
@@ -207,7 +208,7 @@ setShadowWidth(#wx_ref{type=ThisT,ref=ThisRef},W)
   wxe_util:cast(?wxGauge_SetShadowWidth,
   <<ThisRef:32/?UI,W:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugesetvalue">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugesetvalue">external documentation</a>.
 -spec setValue(This, Pos) -> ok when
 	This::wxGauge(), Pos::integer().
 setValue(#wx_ref{type=ThisT,ref=ThisRef},Pos)
@@ -216,7 +217,7 @@ setValue(#wx_ref{type=ThisT,ref=ThisRef},Pos)
   wxe_util:cast(?wxGauge_SetValue,
   <<ThisRef:32/?UI,Pos:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxgauge.html#wxgaugepulse">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxgauge.html#wxgaugepulse">external documentation</a>.
 -spec pulse(This) -> ok when
 	This::wxGauge().
 pulse(#wx_ref{type=ThisT,ref=ThisRef}) ->

@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 2005-2012. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -38,7 +39,7 @@
 -export([attributes/1, expr/1, guard/1,
          init/1, pattern/1, strict/1, update/1,
 	 otp_5915/1, otp_7931/1, otp_5990/1,
-	 otp_7078/1, otp_7101/1]).
+	 otp_7078/1, otp_7101/1, maps/1]).
 
 % Default timetrap timeout (set in init_per_testcase).
 -define(default_timeout, ?t:minutes(1)).
@@ -56,7 +57,7 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [attributes, expr, guard, init,
-     pattern, strict, update, {group, tickets}].
+     pattern, strict, update, maps, {group, tickets}].
 
 groups() -> 
     [{tickets, [],
@@ -402,7 +403,22 @@ update(Config) when is_list(Config) ->
       ],
     ?line run(Config, Ts),
     ok.
-    
+
+maps(Config) when is_list(Config) ->
+    Ts = [<<"-record(rr, {a,b,c}).
+             t() ->
+                 R0 = id(#rr{a=1,b=2,c=3}),
+                 R1 = id(#rr{a=4,b=5,c=6}),
+                 [{R0,R1}] =
+                     maps:to_list(#{#rr{a=1,b=2,c=3} => #rr{a=4,b=5,c=6}}),
+                 #{#rr{a=1,b=2,c=3} := #rr{a=1,b=2,c=3}} =
+                     #{#rr{a=1,b=2,c=3} => R1}#{#rr{a=1,b=2,c=3} := R0},
+                 ok.
+
+             id(X) -> X.
+            ">>],
+    run(Config, Ts, [strict_record_tests]),
+    ok.
 
 otp_5915(doc) ->
     "Strict record tests in guards.";

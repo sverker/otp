@@ -11,9 +11,11 @@
 		  'OTP-PUB-KEY',
 		  'PKCS-FRAME'
             ]},
-   {applications, [crypto, kernel, stdlib]},
+   {applications, [asn1, crypto, kernel, stdlib]},
    {registered, []},
-   {env, []}  
+   {env, []},
+   {runtime_dependencies, ["stdlib-2.0","kernel-3.0","erts-6.0","crypto-3.3",
+			   "asn1-3.0"]}
    ]
 }.
 

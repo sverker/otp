@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 2006-2011. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -68,6 +69,9 @@ pollset_size(doc) ->
 pollset_size(suite) ->
     [];
 pollset_size(Config) when is_list(Config) ->
+    %% Ensure inet_gethost_native port program started, in order to
+    %% allow other suites to use it...
+    inet_gethost_native:gethostbyname("localhost"),
     ?line Parent = self(),
     ?line Go = make_ref(),
     ?line spawn(fun () ->
@@ -94,23 +98,13 @@ display_check_io(ChkIo) ->
     catch erlang:display('--- CHECK IO INFO ---'),
     catch erlang:display(ChkIo),
     catch erts_debug:set_internal_state(available_internal_state, true),
-    NoOfErrorFds = (catch erts_debug:get_internal_state(check_io_debug)),
+    NoOfErrorFds = (catch element(1, erts_debug:get_internal_state(check_io_debug))),
     catch erlang:display({'NoOfErrorFds', NoOfErrorFds}),
     catch erts_debug:set_internal_state(available_internal_state, false),
     catch erlang:display('--- CHECK IO INFO ---'),
     ok.
 
 get_check_io_info() ->
-    ChkIo = erlang:system_info(check_io),
-    case lists:keysearch(pending_updates, 1, ChkIo) of
-	{value, {pending_updates, 0}} ->
-	    display_check_io(ChkIo),
-	    ChkIo;
-	false ->
-	    ChkIo;
-	_ ->
-	    receive after 10 -> ok end,
-	    get_check_io_info()
-    end.
+    z_SUITE:get_check_io_info().
 
 

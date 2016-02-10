@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2015. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -51,6 +52,7 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2, 
 	 simple/1, loop_all/1, simple_raw/1, simple_raw_getbin/1, 
+	 multiple_raw/1, multiple_raw_getbin/1,
 	 doc_examples_raw/1,doc_examples_raw_getbin/1,
 	 large_raw/1,large_raw_getbin/1,combined/1,combined_getbin/1,
 	 ipv6_v6only_udp/1, ipv6_v6only_tcp/1, ipv6_v6only_sctp/1,
@@ -64,6 +66,7 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [simple, loop_all, simple_raw, simple_raw_getbin,
+     multiple_raw, multiple_raw_getbin,
      doc_examples_raw, doc_examples_raw_getbin, large_raw,
      large_raw_getbin, combined, combined_getbin,
      ipv6_v6only_udp, ipv6_v6only_tcp, ipv6_v6only_sctp,
@@ -183,6 +186,84 @@ nintbin2int(<<Int:24/native>>) -> Int;
 nintbin2int(<<Int:16/native>>) -> Int;
 nintbin2int(<<Int:8/native>>) -> Int;
 nintbin2int(<<>>) -> 0.
+
+
+
+multiple_raw(suite) -> [];
+multiple_raw(doc) -> "Test setopt/getopt of multiple raw options.";
+multiple_raw(Config) when is_list(Config) ->
+    do_multiple_raw(Config,false).
+multiple_raw_getbin(suite) -> [];
+multiple_raw_getbin(doc) -> "Test setopt/getopt of multiple raw options, "
+			      "with binaries in getopt.";
+multiple_raw_getbin(Config) when is_list(Config) ->
+    do_multiple_raw(Config,true).
+
+do_multiple_raw(Config, Binary) ->
+    Port = start_helper(Config),
+    SolSocket = ask_helper(Port, ?C_GET_SOL_SOCKET),
+    SoKeepalive = ask_helper(Port, ?C_GET_SO_KEEPALIVE),
+    SoKeepaliveTrue = {raw,SolSocket,SoKeepalive,<<1:32/native>>},
+    SoKeepaliveFalse = {raw,SolSocket,SoKeepalive,<<0:32/native>>},
+    SoReuseaddr = ask_helper(Port, ?C_GET_SO_REUSEADDR),
+    SoReuseaddrTrue = {raw,SolSocket,SoReuseaddr,<<1:32/native>>},
+    SoReuseaddrFalse = {raw,SolSocket,SoReuseaddr,<<0:32/native>>},
+    {S1,S2} =
+	create_socketpair(
+	  [SoReuseaddrFalse,SoKeepaliveTrue],
+	  [SoKeepaliveFalse,SoReuseaddrTrue]),
+    {ok,[{reuseaddr,false},{keepalive,true}]} =
+	inet:getopts(S1, [reuseaddr,keepalive]),
+    {ok,
+     [{raw,SolSocket,SoReuseaddr,S1R1},
+      {raw,SolSocket,SoKeepalive,S1K1}]} =
+	inet:getopts(
+	  S1,
+	  [{raw,SolSocket,SoReuseaddr,binarify(4, Binary)},
+	   {raw,SolSocket,SoKeepalive,binarify(4, Binary)}]),
+    true = nintbin2int(S1R1) =:= 0,
+    true = nintbin2int(S1K1) =/= 0,
+    {ok,[{keepalive,false},{reuseaddr,true}]} =
+	inet:getopts(S2, [keepalive,reuseaddr]),
+    {ok,
+     [{raw,SolSocket,SoKeepalive,S2K1},
+      {raw,SolSocket,SoReuseaddr,S2R1}]} =
+	inet:getopts(
+	  S2,
+	  [{raw,SolSocket,SoKeepalive,binarify(4, Binary)},
+	   {raw,SolSocket,SoReuseaddr,binarify(4, Binary)}]),
+    true = nintbin2int(S2K1) =:= 0,
+    true = nintbin2int(S2R1) =/= 0,
+    %%
+    ok = inet:setopts(
+	   S1, [SoReuseaddrTrue,SoKeepaliveFalse]),
+    ok = inet:setopts(
+	   S2, [SoKeepaliveTrue,SoReuseaddrFalse]),
+    {ok,
+     [{raw,SolSocket,SoReuseaddr,S1R2},
+      {raw,SolSocket,SoKeepalive,S1K2}]} =
+	inet:getopts(
+	  S1,
+	  [{raw,SolSocket,SoReuseaddr,binarify(4, Binary)},
+	   {raw,SolSocket,SoKeepalive,binarify(4, Binary)}]),
+    true = nintbin2int(S1R2) =/= 0,
+    true = nintbin2int(S1K2) =:= 0,
+    {ok,
+     [{raw,SolSocket,SoKeepalive,S2K2},
+      {raw,SolSocket,SoReuseaddr,S2R2}]} =
+	inet:getopts(
+	  S2,
+	  [{raw,SolSocket,SoKeepalive,binarify(4, Binary)},
+	   {raw,SolSocket,SoReuseaddr,binarify(4, Binary)}]),
+    true = nintbin2int(S2K2) =/= 0,
+    true = nintbin2int(S2R2) =:= 0,
+    %%
+    gen_tcp:close(S1),
+    gen_tcp:close(S2),
+    stop_helper(Port),
+    ok.
+
+
 
 doc_examples_raw(suite) -> [];
 doc_examples_raw(doc) -> "Test that the example code from the documentation "
@@ -772,8 +853,10 @@ all_listen_options() ->
      {mode,list,binary,true,true}, 
      {deliver,term,port,true,true}, 
      {exit_on_close, true, false, true, true},
-     %{high_watermark,4096,8192,true,true}, 
-     %{low_watermark,2048,4096,true,true}, 
+     {high_watermark,4096,8192,true,true}, 
+     {low_watermark,2048,4096,true,true}, 
+     {high_msgq_watermark,4096,8192,true,true}, 
+     {low_msgq_watermark,2048,4096,true,true}, 
      {send_timeout,infinity,1000,true,true},
      {send_timeout_close,false,true,true,true},
      {delay_send,false,true,true,true}, 
@@ -797,6 +880,8 @@ all_connect_options() ->
      {exit_on_close, true, false, true, true},
      {high_watermark,4096,8192,false,true}, 
      {low_watermark,2048,4096,false,true}, 
+     {high_msgq_watermark,4096,8192,true,true}, 
+     {low_msgq_watermark,2048,4096,true,true}, 
      {send_timeout,infinity,1000,true,true},
      {send_timeout_close,false,true,true,true},
      {delay_send,false,true,true,true}, 

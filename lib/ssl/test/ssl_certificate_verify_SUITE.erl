@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2012-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2012-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.2
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -29,17 +30,14 @@
 -include("ssl_internal.hrl").
 -include("ssl_alert.hrl").
 -include("ssl_internal.hrl").
--include("ssl_record.hrl").
--include("ssl_handshake.hrl").
+-include("tls_record.hrl").
+-include("tls_handshake.hrl").
 
 -define(LONG_TIMEOUT, 600000).
 
 %%--------------------------------------------------------------------
 %% Common Test interface functions -----------------------------------
 %%--------------------------------------------------------------------
-
-suite() -> [{ct_hooks,[ts_install_cth]}].
-
 all() ->
     [{group, active},
      {group, passive},
@@ -58,6 +56,10 @@ tests() ->
      server_verify_none,
      server_require_peer_cert_ok,
      server_require_peer_cert_fail,
+     server_require_peer_cert_partial_chain,
+     server_require_peer_cert_allow_partial_chain,
+     server_require_peer_cert_do_not_allow_partial_chain,
+     server_require_peer_cert_partial_chain_fun_fail,
      verify_fun_always_run_client,
      verify_fun_always_run_server,
      cert_expired,
@@ -76,21 +78,15 @@ error_handling_tests()->
      no_authority_key_identifier].
 
 init_per_suite(Config0) ->
-    Dog = ct:timetrap(?LONG_TIMEOUT *2),
     catch crypto:stop(),
     try crypto:start() of
 	ok ->
-	    application:start(public_key),
-	    application:start(ssl),
+	    ssl:start(),
 	    %% make rsa certs using oppenssl
-	    Result =
-		(catch make_certs:all(?config(data_dir, Config0),
-				      ?config(priv_dir, Config0))),
-	    ct:print("Make certs  ~p~n", [Result]),
-
-	    Config1 = ssl_test_lib:make_dsa_cert(Config0),
-	    Config = ssl_test_lib:cert_options(Config1),
-	    [{watchdog, Dog} | Config]
+	    {ok, _} = make_certs:all(?config(data_dir, Config0),
+				     ?config(priv_dir, Config0)),
+	    Config = ssl_test_lib:make_dsa_cert(Config0),
+	    ssl_test_lib:cert_options(Config)
     catch _:_ ->
 	    {skip, "Crypto did not start"}
     end.
@@ -109,6 +105,14 @@ init_per_group(_, Config) ->
     Config.
 
 end_per_group(_GroupName, Config) ->
+    Config.
+
+init_per_testcase(_TestCase, Config) ->
+    ct:log("TLS/SSL version ~p~n ", [tls_record:supported_protocol_versions()]),
+    ct:timetrap({seconds, 5}),
+    Config.
+
+end_per_testcase(_TestCase, Config) ->     
     Config.
 
 %%--------------------------------------------------------------------
@@ -144,8 +148,8 @@ server_verify_none() ->
     [{doc,"Test server option verify_none"}].
 
 server_verify_none(Config) when is_list(Config) ->
-    ClientOpts =  ?config(client_opts, Config),
-    ServerOpts =  ?config(server_opts, Config),
+    ClientOpts =  ?config(client_verification_opts, Config),
+    ServerOpts =  ?config(server_verification_opts, Config),
     Active = ?config(active, Config),
     ReceiveFunction =  ?config(receive_function, Config),
 
@@ -251,10 +255,172 @@ server_require_peer_cert_fail(Config) when is_list(Config) ->
 					      {host, Hostname},
 					      {from, self()},
 					      {options, [{active, false} | BadClientOpts]}]),
+    receive
+	{Server, {error, {tls_alert, "handshake failure"}}} ->
+	    receive
+		{Client, {error, {tls_alert, "handshake failure"}}} ->
+		    ok;
+		{Client, {error, closed}} ->
+		    ok
+	    end
+    end.
 
-    ssl_test_lib:check_result(Server, {error, {tls_alert, "handshake failure"}},
-			      Client, {error, {tls_alert, "handshake failure"}}).
+%%--------------------------------------------------------------------
 
+server_require_peer_cert_partial_chain() ->
+    [{doc, "Client sends an incompleate chain, by default not acceptable."}].
+
+server_require_peer_cert_partial_chain(Config) when is_list(Config) ->
+    ServerOpts = [{verify, verify_peer}, {fail_if_no_peer_cert, true}
+		  | ?config(server_verification_opts, Config)],
+    ClientOpts = ?config(client_verification_opts, Config),
+    {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+
+    {ok, ClientCAs} = file:read_file(proplists:get_value(cacertfile, ClientOpts)),
+    [{_,RootCA,_}, {_, _, _}] = public_key:pem_decode(ClientCAs),
+
+
+    Server = ssl_test_lib:start_server_error([{node, ServerNode}, {port, 0},
+					      {from, self()},
+					      {mfa, {ssl_test_lib, no_result, []}},
+					      {options, [{active, false} | ServerOpts]}]),
+    Port = ssl_test_lib:inet_port(Server),
+    Client = ssl_test_lib:start_client_error([{node, ClientNode}, {port, Port},
+					      {host, Hostname},
+					      {from, self()},
+					      {mfa, {ssl_test_lib, no_result, []}},
+					      {options, [{active, false},
+							 {cacerts, [RootCA]} |
+							 proplists:delete(cacertfile, ClientOpts)]}]),
+    receive
+	{Server, {error, {tls_alert, "unknown ca"}}} ->
+	    receive
+		{Client, {error, {tls_alert, "unknown ca"}}} ->
+		    ok;
+		{Client, {error, closed}} ->
+		    ok
+	    end
+    end.
+%%--------------------------------------------------------------------
+server_require_peer_cert_allow_partial_chain() ->
+    [{doc, "Server trusts intermediat CA and accepts a partial chain. (partial_chain option)"}].
+
+server_require_peer_cert_allow_partial_chain(Config) when is_list(Config) ->
+    ServerOpts = [{verify, verify_peer}, {fail_if_no_peer_cert, true}
+		  | ?config(server_verification_opts, Config)],
+    ClientOpts = ?config(client_verification_opts, Config),
+    {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+
+    {ok, ServerCAs} = file:read_file(proplists:get_value(cacertfile, ServerOpts)),
+    [{_,_,_}, {_, IntermidiateCA, _}] = public_key:pem_decode(ServerCAs),
+
+    PartialChain =  fun(CertChain) ->
+			    case lists:member(IntermidiateCA, CertChain) of
+				true ->
+				    {trusted_ca, IntermidiateCA};
+				false ->
+				    unknown_ca
+			    end
+		    end,
+
+    Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
+					{from, self()},
+					{mfa, {ssl_test_lib, send_recv_result_active, []}},
+					{options, [{cacerts, [IntermidiateCA]},
+						   {partial_chain, PartialChain} |
+						   proplists:delete(cacertfile, ServerOpts)]}]),
+    Port = ssl_test_lib:inet_port(Server),
+    Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port},
+					{host, Hostname},
+					{from, self()},
+					{mfa, {ssl_test_lib, send_recv_result_active, []}},
+					{options, ClientOpts}]),
+    ssl_test_lib:check_result(Server, ok, Client, ok),
+    ssl_test_lib:close(Server),
+    ssl_test_lib:close(Client).
+
+ %%--------------------------------------------------------------------
+server_require_peer_cert_do_not_allow_partial_chain() ->
+    [{doc, "Server does not accept the chain sent by the client as ROOT CA is unkown, "
+      "and we do not choose to trust the intermediate CA. (partial_chain option)"}].
+
+server_require_peer_cert_do_not_allow_partial_chain(Config) when is_list(Config) ->
+    ServerOpts = [{verify, verify_peer}, {fail_if_no_peer_cert, true}
+		  | ?config(server_verification_opts, Config)],
+    ClientOpts = ?config(client_verification_opts, Config),
+    {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+
+    {ok, ServerCAs} = file:read_file(proplists:get_value(cacertfile, ServerOpts)),
+    [{_,_,_}, {_, IntermidiateCA, _}] = public_key:pem_decode(ServerCAs),
+
+    PartialChain =  fun(_CertChain) ->
+			    unknown_ca
+		    end,
+
+    Server = ssl_test_lib:start_server_error([{node, ServerNode}, {port, 0},
+					       {from, self()},
+					       {mfa, {ssl_test_lib, no_result, []}},
+					      {options, [{cacerts, [IntermidiateCA]},
+							 {partial_chain, PartialChain} |
+							 proplists:delete(cacertfile, ServerOpts)]}]),
+
+    Port = ssl_test_lib:inet_port(Server),
+    Client = ssl_test_lib:start_client_error([{node, ClientNode}, {port, Port},
+					      {host, Hostname},
+					      {from, self()},
+					      {mfa, {ssl_test_lib, no_result, []}},
+					      {options, ClientOpts}]),
+
+    receive
+	 {Server, {error, {tls_alert, "unknown ca"}}} ->
+	    receive
+		{Client, {error, {tls_alert, "unknown ca"}}} ->
+		    ok;
+		{Client, {error, closed}} ->
+		    ok
+	    end
+    end.
+
+ %%--------------------------------------------------------------------
+server_require_peer_cert_partial_chain_fun_fail() ->
+    [{doc, "If parial_chain fun crashes, treat it as if it returned unkown_ca"}].
+
+server_require_peer_cert_partial_chain_fun_fail(Config) when is_list(Config) ->
+    ServerOpts = [{verify, verify_peer}, {fail_if_no_peer_cert, true}
+		  | ?config(server_verification_opts, Config)],
+    ClientOpts = ?config(client_verification_opts, Config),
+    {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+
+    {ok, ServerCAs} = file:read_file(proplists:get_value(cacertfile, ServerOpts)),
+    [{_,_,_}, {_, IntermidiateCA, _}] = public_key:pem_decode(ServerCAs),
+
+    PartialChain =  fun(_CertChain) ->
+			   ture = false %% crash on purpose
+		    end,
+
+    Server = ssl_test_lib:start_server_error([{node, ServerNode}, {port, 0},
+					       {from, self()},
+					       {mfa, {ssl_test_lib, no_result, []}},
+					      {options, [{cacerts, [IntermidiateCA]},
+							 {partial_chain, PartialChain} |
+							 proplists:delete(cacertfile, ServerOpts)]}]),
+
+    Port = ssl_test_lib:inet_port(Server),
+    Client = ssl_test_lib:start_client_error([{node, ClientNode}, {port, Port},
+					      {host, Hostname},
+					      {from, self()},
+					      {mfa, {ssl_test_lib, no_result, []}},
+					      {options, ClientOpts}]),
+
+    receive
+	 {Server, {error, {tls_alert, "unknown ca"}}} ->
+	    receive
+		{Client, {error, {tls_alert, "unknown ca"}}} ->
+		    ok;
+		{Client, {error, closed}} ->
+		    ok
+	    end
+    end.
 
 %%--------------------------------------------------------------------
 verify_fun_always_run_client() ->
@@ -278,7 +444,7 @@ verify_fun_always_run_client(Config) when is_list(Config) ->
 			    {unknown, UserState};
 		       (_, valid, [ChainLen]) ->
 			    {valid, [ChainLen + 1]};
-		       (_, valid_peer, [2]) ->
+		       (_, valid_peer, [1]) ->
 			    {fail, "verify_fun_was_always_run"};
 		       (_, valid_peer, UserState) ->
 			    {valid, UserState}
@@ -297,7 +463,7 @@ verify_fun_always_run_client(Config) when is_list(Config) ->
     %% this is not a bug it is a circumstance of how tcp works!
     receive
 	{Server, ServerError} ->
-	    ct:print("Server Error ~p~n", [ServerError])
+	    ct:log("Server Error ~p~n", [ServerError])
     end,
 
     ssl_test_lib:check_result(Client, {error, {tls_alert, "handshake failure"}}).
@@ -317,7 +483,7 @@ verify_fun_always_run_server(Config) when is_list(Config) ->
 			    {unknown, UserState};
 		       (_, valid, [ChainLen]) ->
 			    {valid, [ChainLen + 1]};
-		       (_, valid_peer, [2]) ->
+		       (_, valid_peer, [1]) ->
 			    {fail, "verify_fun_was_always_run"};
 		       (_, valid_peer, UserState) ->
 			    {valid, UserState}
@@ -346,7 +512,7 @@ verify_fun_always_run_server(Config) when is_list(Config) ->
     %% this is not a bug it is a circumstance of how tcp works!
     receive
 	{Client, ClientError} ->
-	    ct:print("Client Error ~p~n", [ClientError])
+	    ct:log("Client Error ~p~n", [ClientError])
     end,
 
     ssl_test_lib:check_result(Server, {error, {tls_alert, "handshake failure"}}).
@@ -413,7 +579,7 @@ cert_expired(Config) when is_list(Config) ->
 							       two_digits_str(Sec)])),
     NewValidity = {'Validity', {generalTime, NotBeforeStr}, {generalTime, NotAfterStr}},
 
-    ct:print("Validity: ~p ~n NewValidity: ~p ~n",
+    ct:log("Validity: ~p ~n NewValidity: ~p ~n",
 		       [OTPTbsCert#'OTPTBSCertificate'.validity, NewValidity]),
 
     NewOTPTbsCert =  OTPTbsCert#'OTPTBSCertificate'{validity = NewValidity},
@@ -430,10 +596,16 @@ cert_expired(Config) when is_list(Config) ->
     Client = ssl_test_lib:start_client_error([{node, ClientNode}, {port, Port},
 					      {host, Hostname},
 					      {from, self()},
-					      {options, [{verify, verify_peer} | ClientOpts]}]),
-
-    ssl_test_lib:check_result(Server, {error, {tls_alert, "certificate expired"}},
-			      Client, {error, {tls_alert, "certificate expired"}}).
+					      {options, [{verify, verify_peer} | ClientOpts]}]),    
+     receive
+	{Client, {error, {tls_alert, "certificate expired"}}} ->
+	    receive
+		{Server, {error, {tls_alert, "certificate expired"}}} ->
+		    ok;
+		{Server, {error, closed}} ->
+		    ok
+	    end
+    end.
 
 two_digits_str(N) when N < 10 ->
     lists:flatten(io_lib:format("0~p", [N]));
@@ -628,7 +800,7 @@ no_authority_key_identifier() ->
 
 no_authority_key_identifier(Config) when is_list(Config) ->
     ClientOpts = ?config(client_verification_opts, Config),
-    ServerOpts = ?config(server_opts, Config),
+    ServerOpts = ?config(server_verification_opts, Config),
     PrivDir = ?config(priv_dir, Config),
 
     KeyFile = filename:join(PrivDir, "otpCA/private/key.pem"),
@@ -644,7 +816,7 @@ no_authority_key_identifier(Config) when is_list(Config) ->
     NewExtensions =  delete_authority_key_extension(Extensions, []),
     NewOTPTbsCert =  OTPTbsCert#'OTPTBSCertificate'{extensions = NewExtensions},
 
-    ct:print("Extensions ~p~n, NewExtensions: ~p~n", [Extensions, NewExtensions]),
+    ct:log("Extensions ~p~n, NewExtensions: ~p~n", [Extensions, NewExtensions]),
 
     NewDerCert = public_key:pkix_sign(NewOTPTbsCert, Key),
     ssl_test_lib:der_to_pem(NewCertFile, [{'Certificate', NewDerCert, not_encrypted}]),
@@ -800,7 +972,7 @@ unknown_server_ca_fail() ->
     [{doc,"Test that the client fails if the ca is unknown in verify_peer mode"}].
 unknown_server_ca_fail(Config) when is_list(Config) ->
     ClientOpts =  ?config(client_opts, Config),
-    ServerOpts =  ?config(server_opts, Config),
+    ServerOpts =  ?config(server_verification_opts, Config),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     Server = ssl_test_lib:start_server_error([{node, ServerNode}, {port, 0},
 					      {from, self()},
@@ -828,16 +1000,23 @@ unknown_server_ca_fail(Config) when is_list(Config) ->
 					       [{verify, verify_peer},
 						{verify_fun, FunAndState}
 						| ClientOpts]}]),
+    receive
+	{Client, {error, {tls_alert, "unknown ca"}}} ->
+	    receive
+		{Server, {error, {tls_alert, "unknown ca"}}} ->
+		    ok;
+		{Server, {error, closed}} ->
+		    ok
+	    end
+    end.
 
-    ssl_test_lib:check_result(Server, {error, {tls_alert, "unknown ca"}},
-			      Client, {error, {tls_alert, "unknown ca"}}).
 
 %%--------------------------------------------------------------------
 unknown_server_ca_accept_verify_none() ->
     [{doc,"Test that the client succeds if the ca is unknown in verify_none mode"}].
 unknown_server_ca_accept_verify_none(Config) when is_list(Config) ->
     ClientOpts =  ?config(client_opts, Config),
-    ServerOpts =  ?config(server_opts, Config),
+    ServerOpts =  ?config(server_verification_opts, Config),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
 					{from, self()},
@@ -862,7 +1041,7 @@ unknown_server_ca_accept_verify_peer() ->
      " with a verify_fun that accepts the unknown ca error"}].
 unknown_server_ca_accept_verify_peer(Config) when is_list(Config) ->
     ClientOpts =  ?config(client_opts, Config),
-    ServerOpts =  ?config(server_opts, Config),
+    ServerOpts =  ?config(server_verification_opts, Config),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
 					{from, self()},
@@ -901,7 +1080,7 @@ unknown_server_ca_accept_backwardscompatibility() ->
     [{doc,"Test that old style verify_funs will work"}].
 unknown_server_ca_accept_backwardscompatibility(Config) when is_list(Config) ->
     ClientOpts =  ?config(client_opts, Config),
-    ServerOpts =  ?config(server_opts, Config),
+    ServerOpts =  ?config(server_verification_opts, Config),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
 					{from, self()},
@@ -955,10 +1134,10 @@ client_msg(Client, ClientMsg) ->
 	{Client, ClientMsg} ->
 	    ok;
 	{Client, {error,closed}} ->
-	    ct:print("client got close"),
+	    ct:log("client got close"),
 	    ok;
 	{Client, {error, Reason}} ->
-	    ct:print("client got econnaborted: ~p", [Reason]),
+	    ct:log("client got econnaborted: ~p", [Reason]),
 	    ok;
 	Unexpected ->
 	    ct:fail(Unexpected)
@@ -968,10 +1147,10 @@ server_msg(Server, ServerMsg) ->
 	{Server, ServerMsg} ->
 	    ok;
 	{Server, {error,closed}} ->
-	    ct:print("server got close"),
+	    ct:log("server got close"),
 	    ok;
 	{Server, {error, Reason}} ->
-	    ct:print("server got econnaborted: ~p", [Reason]),
+	    ct:log("server got econnaborted: ~p", [Reason]),
 	    ok;
 	Unexpected ->
 	    ct:fail(Unexpected)

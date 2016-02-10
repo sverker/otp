@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -24,11 +25,10 @@
 -compile(export_all).
 -include_lib("common_test/include/ct.hrl").
 
+-define(SLEEP, 500).
 %%--------------------------------------------------------------------
 %% Common Test interface functions -----------------------------------
 %%--------------------------------------------------------------------
-
-suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() ->
     [{group, 'tlsv1.2'},
@@ -55,7 +55,8 @@ next_protocol_tests() ->
      fallback_npn_handshake_server_preference,
      client_negotiate_server_does_not_support,
      no_client_negotiate_but_server_supports_npn,
-     renegotiate_from_client_after_npn_handshake
+     renegotiate_from_client_after_npn_handshake,
+     npn_handshake_session_reused
     ].
 
 next_protocol_not_supported() ->
@@ -67,12 +68,9 @@ init_per_suite(Config) ->
     catch crypto:stop(),
     try crypto:start() of
 	ok ->
-	    application:start(public_key),
 	    ssl:start(),
-	    Result =
-		(catch make_certs:all(?config(data_dir, Config),
-				      ?config(priv_dir, Config))),
-	    ct:print("Make certs  ~p~n", [Result]),
+	    {ok, _} = make_certs:all(?config(data_dir, Config),
+				      ?config(priv_dir, Config)),
 	    ssl_test_lib:cert_options(Config)
     catch _:_ ->
 	    {skip, "Crypto did not start"}
@@ -99,6 +97,15 @@ init_per_group(GroupName, Config) ->
     end.
 
 end_per_group(_GroupName, Config) ->
+    Config.
+
+init_per_testcase(_TestCase, Config) ->
+    ct:log("TLS/SSL version ~p~n ", [tls_record:supported_protocol_versions()]),
+    ct:log("Ciphers: ~p~n ", [ ssl:cipher_suites()]),
+    ct:timetrap({seconds, 10}),
+    Config.
+
+end_per_testcase(_TestCase, Config) ->     
     Config.
 
 %%--------------------------------------------------------------------
@@ -171,7 +178,7 @@ no_client_negotiate_but_server_supports_npn(Config) when is_list(Config) ->
     run_npn_handshake(Config,
 			   [],
 			   [{next_protocols_advertised, [<<"spdy/1">>, <<"http/1.1">>, <<"http/1.0">>]}],
-			   {error, next_protocol_not_negotiated}).
+			   {error, protocol_not_negotiated}).
 %--------------------------------------------------------------------------------
 
 
@@ -179,7 +186,7 @@ client_negotiate_server_does_not_support(Config) when is_list(Config) ->
     run_npn_handshake(Config,
 			   [{client_preferred_next_protocols, {client, [<<"spdy/2">>], <<"http/1.1">>}}],
 			   [],
-			   {error, next_protocol_not_negotiated}).
+			   {error, protocol_not_negotiated}).
 
 %--------------------------------------------------------------------------------
 renegotiate_from_client_after_npn_handshake(Config) when is_list(Config) ->
@@ -231,6 +238,56 @@ npn_not_supported_server(Config) when is_list(Config)->
   
     {error, {options, {not_supported_in_sslv3, AdvProtocols}}} = ssl:listen(0, ServerOpts).
 
+%--------------------------------------------------------------------------------
+npn_handshake_session_reused(Config) when  is_list(Config)->
+    ClientOpts0 = ?config(client_opts, Config),
+    ClientOpts = [{client_preferred_next_protocols,
+		   {client, [<<"http/1.0">>], <<"http/1.1">>}}] ++ ClientOpts0,
+    ServerOpts0 = ?config(server_opts, Config),
+    ServerOpts =[{next_protocols_advertised,
+		   [<<"spdy/2">>, <<"http/1.1">>, <<"http/1.0">>]}]  ++ ServerOpts0,
+
+    {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
+    Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0},
+                    {from, self()},
+                    {mfa, {ssl_test_lib, session_info_result, []}},
+					{options, ServerOpts}]),
+
+    Port = ssl_test_lib:inet_port(Server),
+    Client = ssl_test_lib:start_client([{node, ClientNode}, {port, Port},
+               {host, Hostname},
+               {from, self()},
+               {mfa, {ssl_test_lib, no_result_msg, []}},
+               {options, ClientOpts}]),
+
+    SessionInfo = 
+	receive
+	    {Server, Info} ->
+		Info
+	end,
+        
+    Server ! {listen, {mfa, {ssl_test_lib, no_result, []}}},
+    
+    %% Make sure session is registered
+    ct:sleep(?SLEEP),
+
+    Client1 =
+	ssl_test_lib:start_client([{node, ClientNode},
+				   {port, Port}, {host, Hostname},
+				   {mfa, {ssl_test_lib, session_info_result, []}},
+				   {from, self()},  {options, ClientOpts}]),
+
+      receive
+	{Client1, SessionInfo} ->
+	    ok;
+	{Client1, Other} ->
+	    ct:fail(Other)
+      end,
+    
+    ssl_test_lib:close(Server), 
+    ssl_test_lib:close(Client),
+    ssl_test_lib:close(Client1).
+
 %%--------------------------------------------------------------------
 %% Internal functions ------------------------------------------------
 %%--------------------------------------------------------------------
@@ -259,13 +316,13 @@ run_npn_handshake(Config, ClientExtraOpts, ServerExtraOpts, ExpectedProtocol) ->
 
 
 assert_npn(Socket, Protocol) ->
-    ct:print("Negotiated Protocol ~p, Expecting: ~p ~n",
-		       [ssl:negotiated_next_protocol(Socket), Protocol]),
-    Protocol = ssl:negotiated_next_protocol(Socket).
+    ct:log("Negotiated Protocol ~p, Expecting: ~p ~n",
+		       [ssl:negotiated_protocol(Socket), Protocol]),
+    Protocol = ssl:negotiated_protocol(Socket).
 
 assert_npn_and_renegotiate_and_send_data(Socket, Protocol, Data) ->
     assert_npn(Socket, Protocol),
-    ct:print("Renegotiating ~n", []),
+    ct:log("Renegotiating ~n", []),
     ok = ssl:renegotiate(Socket),
     ssl:send(Socket, Data),
     assert_npn(Socket, Protocol),
@@ -280,19 +337,19 @@ ssl_receive_and_assert_npn(Socket, Protocol, Data) ->
     ssl_receive(Socket, Data).
 
 ssl_send(Socket, Data) ->
-    ct:print("Connection info: ~p~n",
-               [ssl:connection_info(Socket)]),
+    ct:log("Connection info: ~p~n",
+               [ssl:connection_information(Socket)]),
     ssl:send(Socket, Data).
 
 ssl_receive(Socket, Data) ->
     ssl_receive(Socket, Data, []).
 
 ssl_receive(Socket, Data, Buffer) ->
-    ct:print("Connection info: ~p~n",
-               [ssl:connection_info(Socket)]),
+    ct:log("Connection info: ~p~n",
+               [ssl:connection_information(Socket)]),
     receive
     {ssl, Socket, MoreData} ->
-        ct:print("Received ~p~n",[MoreData]),
+        ct:log("Received ~p~n",[MoreData]),
         NewBuffer = Buffer ++ MoreData,
         case NewBuffer of
             Data ->
@@ -309,4 +366,4 @@ ssl_receive(Socket, Data, Buffer) ->
 
 
 connection_info_result(Socket) ->
-    ssl:connection_info(Socket).
+    ssl:connection_information(Socket).

@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -29,8 +30,6 @@
 %%--------------------------------------------------------------------
 %% Common Test interface functions -----------------------------------
 %%--------------------------------------------------------------------
-suite() -> [{ct_hooks,[ts_install_cth]}].
-
 all() -> 
     [
      {group, 'tlsv1.2'},
@@ -71,9 +70,8 @@ init_per_suite(Config) ->
     catch crypto:stop(),
     try crypto:start() of
 	ok ->
-	    application:start(public_key),
 	    ssl:start(),
-	    make_certs:all(?config(data_dir, Config), ?config(priv_dir, Config)),
+	    {ok, _} = make_certs:all(?config(data_dir, Config), ?config(priv_dir, Config)),
 	    ssl_test_lib:cert_options(Config)
     catch _:_  ->
 	    {skip, "Crypto did not start"}
@@ -101,10 +99,27 @@ init_per_group(GroupName, Config) ->
 end_per_group(_GroupName, Config) ->
     Config.
 
-init_per_testcase(_TestCase, Config0) ->
-    Config = lists:keydelete(watchdog, 1, Config0),
-    Dog = ct:timetrap(?TIMEOUT),
-    [{watchdog, Dog} | Config].
+init_per_testcase(TestCase, Config) when TestCase == server_echos_passive_huge;
+					 TestCase == server_echos_active_once_huge;
+					 TestCase == server_echos_active_huge;
+					 TestCase == client_echos_passive_huge;
+					 TestCase == client_echos_active_once_huge;
+					 TestCase == client_echos_active_huge ->
+    ct:timetrap({seconds, 90}),
+    Config;
+
+init_per_testcase(TestCase, Config) when TestCase == server_echos_passive_big;
+					 TestCase == server_echos_active_once_big;
+					 TestCase == server_echos_active_big;
+					 TestCase == client_echos_passive_big;
+					 TestCase == client_echos_active_once_big;
+					 TestCase == client_echos_active_big ->
+    ct:timetrap({seconds, 60}),
+    Config;
+
+init_per_testcase(_TestCase, Config) ->
+    ct:timetrap({seconds, 15}),
+    Config.
 
 end_per_testcase(_TestCase, Config) ->
     Config.
@@ -556,33 +571,33 @@ send(Socket, Data, Size, Repeate,F) ->
  
 sender(Socket, Data, Size) ->
     ok = send(Socket, Data, Size, 100, fun() -> do_recv(Socket, Data, Size, <<>>, false) end),
-    ct:print("Sender recv: ~p~n", [ssl:getopts(Socket, [active])]),
+    ct:log("Sender recv: ~p~n", [ssl:getopts(Socket, [active])]),
     ok.
 
 sender_once(Socket, Data, Size) ->
     send(Socket, Data, Size, 100, 
 	 fun() -> do_active_once(Socket, Data, Size, <<>>, false) end),
-    ct:print("Sender active once: ~p~n",
+    ct:log("Sender active once: ~p~n",
 		       [ssl:getopts(Socket, [active])]),
     ok.
 
 sender_active(Socket, Data, Size) ->
     F = fun() -> do_active(Socket, Data, Size, <<>>, false) end,
     send(Socket, Data, Size, 100, F),
-    ct:print("Sender active: ~p~n", [ssl:getopts(Socket, [active])]),
+    ct:log("Sender active: ~p~n", [ssl:getopts(Socket, [active])]),
     ok.
 
 echoer(Socket, Data, Size) ->
-    ct:print("Echoer recv: ~p~n", [ssl:getopts(Socket, [active])]),
+    ct:log("Echoer recv: ~p~n", [ssl:getopts(Socket, [active])]),
     echo(fun() -> do_recv(Socket, Data, Size, <<>>, true) end, 100).
 
 echoer_once(Socket, Data, Size) ->
-    ct:print("Echoer active once: ~p ~n",
+    ct:log("Echoer active once: ~p ~n",
 		       [ssl:getopts(Socket, [active])]),
     echo(fun() -> do_active_once(Socket, Data, Size, <<>>, true) end, 100).
 
 echoer_active(Socket, Data, Size) ->
-    ct:print("Echoer active: ~p~n", [ssl:getopts(Socket, [active])]),
+    ct:log("Echoer active: ~p~n", [ssl:getopts(Socket, [active])]),
     echo(fun() -> do_active(Socket, Data, Size, <<>>, true) end, 100).
 
 echo(_Fun, 0) -> ok;

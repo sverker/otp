@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1999-2012. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -30,7 +31,7 @@
 	 fun_to_port/1,t_hash/1,t_phash/1,t_phash2/1,md5/1,
 	 refc/1,refc_ets/1,refc_dist/1,
 	 const_propagation/1,t_arity/1,t_is_function2/1,
-	 t_fun_info/1]).
+	 t_fun_info/1,t_fun_info_mfa/1]).
 
 -export([nothing/0]).
 
@@ -42,7 +43,8 @@ all() ->
     [bad_apply, bad_fun_call, badarity, ext_badarity,
      equality, ordering, fun_to_port, t_hash, t_phash,
      t_phash2, md5, refc, refc_ets, refc_dist,
-     const_propagation, t_arity, t_is_function2, t_fun_info].
+     const_propagation, t_arity, t_is_function2, t_fun_info,
+     t_fun_info_mfa].
 
 groups() -> 
     [].
@@ -261,6 +263,16 @@ equality(Config) when is_list(Config) ->
     ?line false = eq(FF2, FF3),
     ?line false = eq(FF2, FF4),
     ?line false = eq(FF3, FF4),
+
+    %% EEP37
+    H1 = fun Fact(N) when N > 0 -> N * Fact(N - 1); Fact(0) -> 1 end,
+    H2 = fun Pow(N, M) when M > 0 -> N * Pow(N, M - 1); Pow(_, 0) -> 1 end,
+    H1_copy = copy_term(H1),
+
+    true = eq(H1, H1),
+    true = eq(H1, H1_copy),
+    true = eq(H2, H2),
+    false = eq(H1, H2),
 
     ok.
 
@@ -813,6 +825,24 @@ t_fun_info(Config) when is_list(Config) ->
     ?line bad_info(<<>>),
     ?line bad_info(<<1,2>>),
     ok.
+
+t_fun_info_mfa(Config) when is_list(Config) ->
+    Fun1 = fun spawn_call/2,
+    {module,M1}  = erlang:fun_info(Fun1, module),
+    {name,F1}    = erlang:fun_info(Fun1, name),
+    {arity,A1}   = erlang:fun_info(Fun1, arity),
+    {M1,F1,A1=2} = erlang:fun_info_mfa(Fun1),
+    %% Module fun.
+    Fun2 = fun ?MODULE:t_fun_info/1,
+    {module,M2}  = erlang:fun_info(Fun2, module),
+    {name,F2}    = erlang:fun_info(Fun2, name),
+    {arity,A2}   = erlang:fun_info(Fun2, arity),
+    {M2,F2,A2=1} = erlang:fun_info_mfa(Fun2),
+
+    %% Not fun.
+    {'EXIT',_} = (catch erlang:fun_info_mfa(id(d))),
+    ok.
+
 
 bad_info(Term) ->
     try	erlang:fun_info(Term, module) of

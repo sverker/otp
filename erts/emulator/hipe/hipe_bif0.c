@@ -3,16 +3,17 @@
  *
  * Copyright Ericsson AB 2001-2013. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -104,25 +105,6 @@ static Eterm address_to_term(const void *address, Process *p)
 /*
  * BIFs for reading and writing memory. Used internally by HiPE.
  */
-#if 0 /* XXX: unused */
-BIF_RETTYPE hipe_bifs_read_u8_1(BIF_ALIST_1)
-{
-    unsigned char *address = term_to_address(BIF_ARG_1);
-    if (!address)
-	BIF_ERROR(BIF_P, BADARG);
-    BIF_RET(make_small(*address));
-}
-#endif
-
-#if 0 /* XXX: unused */
-BIF_RETTYPE hipe_bifs_read_u32_1(BIF_ALIST_1)
-{
-    Uint32 *address = term_to_address(BIF_ARG_1);
-    if (!address || !hipe_word32_address_ok(address))
-	BIF_ERROR(BIF_P, BADARG);
-    BIF_RET(Uint_to_term(*address, BIF_P));
-}
-#endif
 
 BIF_RETTYPE hipe_bifs_write_u8_2(BIF_ALIST_2)
 {
@@ -134,22 +116,6 @@ BIF_RETTYPE hipe_bifs_write_u8_2(BIF_ALIST_2)
     *address = unsigned_val(BIF_ARG_2);
     BIF_RET(NIL);
 }
-
-#if 0 /* XXX: unused */
-BIF_RETTYPE hipe_bifs_write_s32_2(BIF_ALIST_2)
-{
-    Sint32 *address;
-    Sint value;
-
-    address = term_to_address(BIF_ARG_1);
-    if (!address || !hipe_word32_address_ok(address))
-	BIF_ERROR(BIF_P, BADARG);
-    if (!term_to_Sint32(BIF_ARG_2, &value))
-	BIF_ERROR(BIF_P, BADARG);
-    *address = value;
-    BIF_RET(NIL);
-}
-#endif
 
 BIF_RETTYPE hipe_bifs_write_u32_2(BIF_ALIST_2)
 {
@@ -447,15 +413,17 @@ BIF_RETTYPE hipe_bifs_enter_code_2(BIF_ALIST_2)
     ASSERT(bitoffs == 0);
     ASSERT(bitsize == 0);
     trampolines = NIL;
-#ifdef HIPE_ALLOC_CODE
-    address = HIPE_ALLOC_CODE(nrbytes, BIF_ARG_2, &trampolines, BIF_P);
-    if (!address)
-	BIF_ERROR(BIF_P, BADARG);
-#else
-    if (is_not_nil(BIF_ARG_2))
-	BIF_ERROR(BIF_P, BADARG);
-    address = erts_alloc(ERTS_ALC_T_HIPE, nrbytes);
-#endif
+    address = hipe_alloc_code(nrbytes, BIF_ARG_2, &trampolines, BIF_P);
+    if (!address) {
+	Uint nrcallees;
+
+	if (is_tuple(BIF_ARG_2))
+	    nrcallees = arityval(tuple_val(BIF_ARG_2)[0]);
+	else
+	    nrcallees = 0;
+	erl_exit(1, "%s: failed to allocate %lu bytes and %lu trampolines\r\n",
+		 __func__, (unsigned long)nrbytes, (unsigned long)nrcallees);
+    }
     memcpy(address, bytes, nrbytes);
     hipe_flush_icache_range(address, nrbytes);
     hp = HAlloc(BIF_P, 3);
@@ -535,7 +503,7 @@ static void *const_term_alloc(void *tmpl)
     alloc_size = size + (offsetof(struct const_term, mem)/sizeof(Eterm));
     hipe_constants_size += alloc_size;
 
-    p = (struct const_term*)erts_alloc(ERTS_ALC_T_HIPE, alloc_size * sizeof(Eterm));
+    p = (struct const_term*)erts_alloc(ERTS_ALC_T_LITERAL, alloc_size * sizeof(Eterm));
 
     /* I have absolutely no idea if having a private 'off_heap'
        works or not. _Some_ off_heap object is required for
@@ -543,6 +511,8 @@ static void *const_term_alloc(void *tmpl)
        a complete mystery to me. */
     hp = &p->mem[0];
     p->val = copy_struct(obj, size, &hp, &const_term_table_off_heap);
+
+    erts_set_literal_tag(&p->val, &p->mem[0], size);
 
     return &p->bucket;
 }
@@ -554,6 +524,9 @@ static void init_const_term_table(void)
     f.cmp = (HCMP_FUN) const_term_cmp;
     f.alloc = (HALLOC_FUN) const_term_alloc;
     f.free = (HFREE_FUN) NULL;
+    f.meta_alloc = (HMALLOC_FUN) erts_alloc;
+    f.meta_free = (HMFREE_FUN) erts_free;
+    f.meta_print = (HMPRINT_FUN) erts_print;
     hash_init(ERTS_ALC_T_HIPE, &const_term_table, "const_term_table", 97, f);
 }
 
@@ -621,15 +594,15 @@ static void print_mfa(Eterm mod, Eterm fun, unsigned int ari)
 static Uint *hipe_find_emu_address(Eterm mod, Eterm name, unsigned int arity)
 {
     Module *modp;
-    Uint *code_base;
+    BeamCodeHeader* code_hdr;
     int i, n;
 
     modp = erts_get_module(mod, erts_active_code_ix());
-    if (modp == NULL || (code_base = modp->curr.code) == NULL)
+    if (modp == NULL || (code_hdr = modp->curr.code_hdr) == NULL)
 	return NULL;
-    n = code_base[MI_NUM_FUNCTIONS];
+    n = code_hdr->num_functions;
     for (i = 0; i < n; ++i) {
-	Uint *code_ptr = (Uint*)code_base[MI_FUNCTIONS+i];
+	Uint *code_ptr = (Uint*)code_hdr->functions[i];
 	ASSERT(code_ptr[0] == BeamOpCode(op_i_func_info_IaaI));
 	if (code_ptr[3] == name && code_ptr[4] == arity)
 	    return code_ptr+5;
@@ -653,7 +626,6 @@ BIF_RETTYPE hipe_bifs_fun_to_address_1(BIF_ALIST_1)
 	BIF_ERROR(BIF_P, BADARG);
     BIF_RET(address_to_term(pc, BIF_P));
 }
-
 
 BIF_RETTYPE hipe_bifs_set_native_address_3(BIF_ALIST_3)
 {
@@ -690,7 +662,6 @@ BIF_RETTYPE hipe_bifs_set_native_address_3(BIF_ALIST_3)
     DBG_TRACE_MFA(mfa.mod,mfa.fun,mfa.ari, "failed set call trap to %p, no beam code found", address);
     BIF_RET(am_false);
 }
-
 
 BIF_RETTYPE hipe_bifs_enter_sdesc_1(BIF_ALIST_1)
 {
@@ -753,6 +724,9 @@ static void init_nbif_table(void)
     f.cmp = (HCMP_FUN) nbif_cmp;
     f.alloc = (HALLOC_FUN) nbif_alloc;
     f.free = NULL;
+    f.meta_alloc = (HMALLOC_FUN) erts_alloc;
+    f.meta_free = (HMFREE_FUN) erts_free;
+    f.meta_print = (HMPRINT_FUN) erts_print;
 
     hash_init(ERTS_ALC_T_NBIF_TABLE, &nbif_table, "nbif_table", 500, f);
 
@@ -846,6 +820,9 @@ static void init_primop_table(void)
     f.cmp = (HCMP_FUN) primop_cmp;
     f.alloc = (HALLOC_FUN) primop_alloc;
     f.free = NULL;
+    f.meta_alloc = (HMALLOC_FUN) erts_alloc;
+    f.meta_free = (HMFREE_FUN) erts_free;
+    f.meta_print = (HMPRINT_FUN) erts_print;
 
     hash_init(ERTS_ALC_T_HIPE, &primop_table, "primop_table", 50, f);
 
@@ -943,17 +920,24 @@ BIF_RETTYPE hipe_conv_big_to_float(BIF_ALIST_1)
 */
 void hipe_emulate_fpe(Process* p)
 {
-    if (!finite(p->hipe.float_result)) {
+    if (!isfinite(p->hipe.float_result)) {
 	p->fp_exception = 1;
     }
 }
 #endif
 
+void hipe_emasculate_binary(Eterm bin)
+{
+    ProcBin* pb = (ProcBin *) boxed_val(bin);
+    ASSERT(pb->thing_word == HEADER_PROC_BIN);
+    ASSERT(pb->flags != 0);
+    erts_emasculate_writable_binary(pb);
+}
 
 /*
- * args: Nativecodeaddress, Module, {Uniq, Index, BeamAddress}
+ * args: Module, {Uniq, Index, BeamAddress}
  */
-BIF_RETTYPE hipe_bifs_make_fe_3(BIF_ALIST_3)
+BIF_RETTYPE hipe_bifs_get_fe_2(BIF_ALIST_2)
 {
     Eterm mod;
     Uint index;
@@ -961,20 +945,15 @@ BIF_RETTYPE hipe_bifs_make_fe_3(BIF_ALIST_3)
     void *beam_address;
     ErlFunEntry *fe;
     Eterm *tp;
-    void *native_address;
 
-    native_address = term_to_address(BIF_ARG_1);
-    if (!native_address)
+    if (is_not_atom(BIF_ARG_1))
 	BIF_ERROR(BIF_P, BADARG);
+    mod = BIF_ARG_1;
 
-    if (is_not_atom(BIF_ARG_2))
+    if (is_not_tuple(BIF_ARG_2) ||
+	(arityval(*tuple_val(BIF_ARG_2)) != 3))
 	BIF_ERROR(BIF_P, BADARG);
-    mod = BIF_ARG_2;
-
-    if (is_not_tuple(BIF_ARG_3) ||
-	(arityval(*tuple_val(BIF_ARG_3)) != 3))
-	BIF_ERROR(BIF_P, BADARG);
-    tp = tuple_val(BIF_ARG_3);
+    tp = tuple_val(BIF_ARG_2);
     if (term_to_Uint(tp[1], &uniq) == 0)
 	BIF_ERROR(BIF_P, BADARG);
     if (term_to_Uint(tp[2], &index) == 0)
@@ -994,12 +973,29 @@ BIF_RETTYPE hipe_bifs_make_fe_3(BIF_ALIST_3)
 	printf("no fun entry for %s %ld:%ld\n", atom_buf, uniq, index);
 	BIF_ERROR(BIF_P, BADARG);
     }
-    fe->native_address = native_address;
-    if (erts_refc_dectest(&fe->refc, 0) == 0)
-	erts_erase_fun_entry(fe);
     BIF_RET(address_to_term((void *)fe, BIF_P));
 }
 
+/*
+ * args: FE, Nativecodeaddress
+ */
+BIF_RETTYPE hipe_bifs_set_native_address_in_fe_2(BIF_ALIST_2)
+{
+    ErlFunEntry *fe;
+    void *native_address;
+
+    fe = (ErlFunEntry *)term_to_address(BIF_ARG_1);
+    if (!fe)
+	BIF_ERROR(BIF_P, BADARG);
+    native_address = term_to_address(BIF_ARG_2);
+    if (!native_address)
+	BIF_ERROR(BIF_P, BADARG);
+
+    fe->native_address = native_address;
+    if (erts_refc_dectest(&fe->refc, 0) == 0)
+	erts_erase_fun_entry(fe);
+    BIF_RET(am_true);
+}
 
 /*
  * MFA info hash table:
@@ -1038,7 +1034,7 @@ static struct {
      * they create a new stub for the mfa, which forces locking.
      * XXX: Redesign apply et al to avoid those updates.
      */
-    erts_smp_mtx_t lock;
+    erts_smp_rwmtx_t lock;
 } hipe_mfa_info_table;
 
 
@@ -1064,17 +1060,27 @@ struct hipe_ref {
 
 static inline void hipe_mfa_info_table_init_lock(void)
 {
-    erts_smp_mtx_init(&hipe_mfa_info_table.lock, "hipe_mfait_lock");
+    erts_smp_rwmtx_init(&hipe_mfa_info_table.lock, "hipe_mfait_lock");
 }
 
-static inline void hipe_mfa_info_table_lock(void)
+static inline void hipe_mfa_info_table_rlock(void)
 {
-    erts_smp_mtx_lock(&hipe_mfa_info_table.lock);
+    erts_smp_rwmtx_rlock(&hipe_mfa_info_table.lock);
 }
 
-static inline void hipe_mfa_info_table_unlock(void)
+static inline void hipe_mfa_info_table_runlock(void)
 {
-    erts_smp_mtx_unlock(&hipe_mfa_info_table.lock);
+    erts_smp_rwmtx_runlock(&hipe_mfa_info_table.lock);
+}
+
+static inline void hipe_mfa_info_table_rwlock(void)
+{
+    erts_smp_rwmtx_rwlock(&hipe_mfa_info_table.lock);
+}
+
+static inline void hipe_mfa_info_table_rwunlock(void)
+{
+    erts_smp_rwmtx_rwunlock(&hipe_mfa_info_table.lock);
 }
 
 #define HIPE_MFA_HASH(M,F,A)	((M) * (F) + (A))
@@ -1164,7 +1170,7 @@ static inline struct hipe_mfa_info *hipe_mfa_info_table_get_locked(Eterm m, Eter
     return NULL;
 }
 
-static struct hipe_mfa_info *hipe_mfa_info_table_put_locked(Eterm m, Eterm f, unsigned int arity)
+static struct hipe_mfa_info *hipe_mfa_info_table_put_rwlocked(Eterm m, Eterm f, unsigned int arity)
 {
     unsigned long h;
     unsigned int i;
@@ -1205,16 +1211,15 @@ static void hipe_mfa_set_na(Eterm m, Eterm f, unsigned int arity, void *address,
 
     ASSERT(is_exported);  // SVERK
 
-    hipe_mfa_info_table_lock();
-    p = hipe_mfa_info_table_put_locked(m, f, arity);
+    hipe_mfa_info_table_rwlock();
+    p = hipe_mfa_info_table_put_rwlocked(m, f, arity);
     DBG_TRACE_MFA(m,f,arity,"set native address in hipe_mfa_info at %p is_exported=%d",
 		  p, is_exported);
     ASSERT(!p->local_address);
     p->local_address = address;
     p->remote_address = is_exported ? address : NULL;
 	
-    hipe_mfa_info_table_unlock();
-
+    hipe_mfa_info_table_rwunlock();
 }
 
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
@@ -1223,10 +1228,10 @@ void *hipe_mfa_get_trampoline(Eterm m, Eterm f, unsigned int arity)
     struct hipe_mfa_info *p;
     void *trampoline;
 
-    hipe_mfa_info_table_lock();
-    p = hipe_mfa_info_table_put_locked(m, f, arity);
-    trampoline = p->trampoline;
-    hipe_mfa_info_table_unlock();
+    hipe_mfa_info_table_rlock();
+    p = hipe_mfa_info_table_get_locked(m, f, arity);
+    trampoline = p ? p->trampoline : NULL;
+    hipe_mfa_info_table_runlock();
     return trampoline;
 }
 
@@ -1234,10 +1239,10 @@ void hipe_mfa_set_trampoline(Eterm m, Eterm f, unsigned int arity, void *trampol
 {
     struct hipe_mfa_info *p;
 
-    hipe_mfa_info_table_lock();
-    p = hipe_mfa_info_table_put_locked(m, f, arity);
+    hipe_mfa_info_table_rwlock();
+    p = hipe_mfa_info_table_put_rwlocked(m, f, arity);
     p->trampoline = trampoline;
-    hipe_mfa_info_table_unlock();
+    hipe_mfa_info_table_rwunlock();
 }
 #endif
 
@@ -1296,43 +1301,19 @@ void hipe_delete_code(Module* modp)
 
 static void *hipe_make_stub(Eterm m, Eterm f, unsigned int arity, int is_remote)
 {
-    BeamInstr* BEAMAddress;
+    Export *export_entry;
     void *StubAddress;
-    Export* ep = NULL;
 
-    ASSERT(is_remote);  // SVERK or?
+    ASSERT(is_remote);
 
-    BEAMAddress = NULL;
-    if (!is_remote)
-	BEAMAddress = (BeamInstr*) hipe_find_emu_address(m, f, arity);
-    if (!BEAMAddress) {
-	/* if not found, stub it via the export entry */
-	/* no lock needed around erts_export_get_or_make_stub() */
-	ep = erts_export_get_or_make_stub(m, f, arity);
-	BEAMAddress = (BeamInstr*) ep->addressv[erts_active_code_ix()];
-    }
-    StubAddress = hipe_make_native_stub(BEAMAddress, arity);
-
-#if defined(DEBUG) || defined(ENABLE_DBG_TRACE_MFA)
-    if (BEAMAddress != &ep->code[3]) {
-	ASSERT(*BEAMAddress != (BeamInstr)em_call_error_handler);
-	DBG_TRACE_MFA(m,f,arity,"hipe_make_stub to beam=%p hipe=%p is_remote=%d",
-	BEAMAddress, StubAddress, is_remote);
-    }
-    else if (*BEAMAddress == (BeamInstr)em_call_error_handler) {
-	DBG_TRACE_MFA(m,f,arity,"hipe_make_stub to error_handler hipe=%p is_remote=%d",
-		      StubAddress, is_remote);
-    }
-    else if (*BEAMAddress == (BeamInstr)em_apply_bif) {
-	DBG_TRACE_MFA(m,f,arity,"hipe_make_stub to BIF hipe=%p is_remote=%d",
-	       StubAddress, is_remote);
-    }
-    else ASSERT(!"strange beam instruction in export entry");
-#endif
+    export_entry = erts_export_get_or_make_stub(m, f, arity);
+    StubAddress = hipe_make_native_stub(export_entry, arity);
+    if (!StubAddress)
+	erl_exit(1, "hipe_make_stub: code allocation failed\r\n");
     return StubAddress;
 }
 
-static void *hipe_get_na_nofail_locked(Eterm m, Eterm f, unsigned int a, int is_remote)
+static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, int is_remote, struct hipe_mfa_info **pp)
 {
     struct hipe_mfa_info *p;
     void *address;
@@ -1350,22 +1331,53 @@ static void *hipe_get_na_nofail_locked(Eterm m, Eterm f, unsigned int a, int is_
 	    abort();
 	    return address;
 	}
-    } else
-	p = hipe_mfa_info_table_put_locked(m, f, a);
+    }
+    /* Caller must take the slow path with the write lock held, but allow
+       it to avoid some work if it already holds the write lock.  */
+    if (pp)
+	*pp = p;
+    return NULL;
+}
+
+static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a, int is_remote, struct hipe_mfa_info *p)
+{
+    void *address;
+
+    if (!p)
+	p = hipe_mfa_info_table_put_rwlocked(m, f, a);
     address = hipe_make_stub(m, f, a, is_remote);
     /* XXX: how to tell if a BEAM MFA is exported or not? */
     p->remote_address = address;
     return address;
 }
 
+static void *hipe_get_na_nofail_rwlocked(Eterm m, Eterm f, unsigned int a, int is_remote)
+{
+    struct hipe_mfa_info *p;
+    void *address;
+
+    address = hipe_get_na_try_locked(m, f, a, is_remote, &p);
+    if (address)
+	return address;
+
+    address = hipe_get_na_slow_rwlocked(m, f, a, is_remote, p);
+    return address;
+}
+
 static void *hipe_get_na_nofail(Eterm m, Eterm f, unsigned int a, int is_remote)
 {
-    void *p;
+    void *address;
 
-    hipe_mfa_info_table_lock();
-    p = hipe_get_na_nofail_locked(m, f, a, is_remote);
-    hipe_mfa_info_table_unlock();
-    return p;
+    hipe_mfa_info_table_rlock();
+    address = hipe_get_na_try_locked(m, f, a, is_remote, NULL);
+    hipe_mfa_info_table_runlock();
+    if (address)
+	return address;
+
+    hipe_mfa_info_table_rwlock();
+    address = hipe_get_na_slow_rwlocked(m, f, a, is_remote, NULL);
+    hipe_mfa_info_table_rwunlock();
+    return address;
 }
 
 /* used for apply/3 in hipe_mode_switch */
@@ -1444,7 +1456,7 @@ int hipe_find_mfa_from_ra(const void *ra, Eterm *m, Eterm *f, unsigned int *a)
     /* Note about locking: the table is only updated from the
        loader, which runs with the rest of the system suspended. */
     /* XXX: alas not true; see comment at hipe_mfa_info_table.lock */
-    hipe_mfa_info_table_lock();
+    hipe_mfa_info_table_rlock();
     bucket = hipe_mfa_info_table.bucket;
     nrbuckets = 1 << hipe_mfa_info_table.log2size;
     mfa = NULL;
@@ -1470,7 +1482,7 @@ int hipe_find_mfa_from_ra(const void *ra, Eterm *m, Eterm *f, unsigned int *a)
 	*f = mfa->f;
 	*a = mfa->a;
     }
-    hipe_mfa_info_table_unlock();
+    hipe_mfa_info_table_runlock();
     return mfa ? 1 : 0;
 }
 
@@ -1530,8 +1542,8 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
       default:
 	goto badarg;
     }
-    hipe_mfa_info_table_lock();
-    callee_mfa = hipe_mfa_info_table_put_locked(callee.mod, callee.fun, callee.ari);
+    hipe_mfa_info_table_rwlock();
+    callee_mfa = hipe_mfa_info_table_put_rwlocked(callee.mod, callee.fun, callee.ari);
 
     ref = erts_alloc(ERTS_ALC_T_HIPE, sizeof(struct hipe_ref));
     ref->address = address;
@@ -1558,7 +1570,7 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
     ref->caller_f = caller.fun;
     ref->caller_a = caller.ari;
 #endif
-    hipe_mfa_info_table_unlock();
+    hipe_mfa_info_table_rwunlock();
 
     DBG_TRACE_MFA(caller.mod, caller.fun, caller.ari, "add_ref at %p TO %T:%T/%u (from %p)",
 		  ref, callee.mod, callee.fun, callee.ari, ref->address);
@@ -1591,7 +1603,7 @@ static void hipe_purge_all_refs(void)
     struct hipe_mfa_info **bucket;
     unsigned int i, nrbuckets;
 
-    hipe_mfa_info_table_lock();
+    hipe_mfa_info_table_rwlock();
 
     bucket = hipe_mfa_info_table.bucket;
     nrbuckets = 1 << hipe_mfa_info_table.log2size;
@@ -1605,7 +1617,7 @@ static void hipe_purge_all_refs(void)
 	    erts_free(ERTS_ALC_T_HIPE, mfa);
 	}
     }
-    hipe_mfa_info_table_unlock();
+    hipe_mfa_info_table_rwunlock();
 }
 
 BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
@@ -1665,20 +1677,20 @@ void hipe_purge_module(Module* modp)
      */
 }
 
-void hipe_export_beam(Eterm m, Eterm f, Uint a, BeamInstr* BeamAddress)
+void hipe_export_beam(Eterm m, Eterm f, Uint a, Export* ep)
 {
     struct hipe_mfa_info *p;
-    hipe_mfa_info_table_lock();
+    hipe_mfa_info_table_rwlock();
     p = hipe_mfa_info_table_get_locked(m, f, a);
     if (p) {
-	void* StubAddress = hipe_make_native_stub(BeamAddress, a);
+	void* StubAddress = hipe_make_native_stub(ep, a);
 
-	DBG_TRACE_MFA(m,f,a, "hipe_export_beam at beam=%p, hipe stub=%p",
-		      BeamAddress, StubAddress);
+	DBG_TRACE_MFA(m,f,a, "hipe_export_beam at export=%p, hipe stub=%p",
+		      ep, StubAddress);
 	ASSERT(!p->local_address);
 	p->remote_address = StubAddress;
     }
-    hipe_mfa_info_table_unlock();
+    hipe_mfa_info_table_rwunlock();
 }
 
 
@@ -1701,7 +1713,7 @@ void hipe_redirect_to_module(Module* modp)
 	    void *new_address;
 	    int res;
 	    
-	    new_address = hipe_get_na_nofail_locked(p->m, p->f, p->a, 1);
+	    new_address = hipe_get_na_nofail_rwlocked(p->m, p->f, p->a, 1);
 	    	    
 	    DBG_TRACE_MFA(p->m,p->f,p->a, "  REDIRECT ref at %p FROM %T:%T/%u (%p -> %p)",
 			  ref, ref->caller_m, ref->caller_f, ref->caller_a,
@@ -1728,18 +1740,16 @@ BIF_RETTYPE hipe_bifs_check_crc_1(BIF_ALIST_1)
 
     if (!term_to_Uint(BIF_ARG_1, &crc))
 	BIF_ERROR(BIF_P, BADARG);
-    if (crc == HIPE_SYSTEM_CRC)
+    if (crc == HIPE_ERTS_CHECKSUM)
 	BIF_RET(am_true);
     BIF_RET(am_false);
 }
 
-BIF_RETTYPE hipe_bifs_system_crc_1(BIF_ALIST_1)
+BIF_RETTYPE hipe_bifs_system_crc_0(BIF_ALIST_0)
 {
     Uint crc;
 
-    if (!term_to_Uint(BIF_ARG_1, &crc))
-	BIF_ERROR(BIF_P, BADARG);
-    crc ^= (HIPE_SYSTEM_CRC ^ HIPE_LITERALS_CRC);
+    crc = HIPE_SYSTEM_CRC;
     BIF_RET(Uint_to_term(crc, BIF_P));
 }
 
@@ -1815,6 +1825,9 @@ static void init_modinfo_table(void)
     f.cmp = (HCMP_FUN) modinfo_cmp;
     f.alloc = (HALLOC_FUN) modinfo_alloc;
     f.free = (HFREE_FUN) NULL;
+    f.meta_alloc = (HMALLOC_FUN) erts_alloc;
+    f.meta_free = (HMFREE_FUN) erts_free;
+    f.meta_print = (HMPRINT_FUN) erts_print;
     hash_init(ERTS_ALC_T_HIPE, &modinfo_table, "modinfo_table", 11, f);
 }
 

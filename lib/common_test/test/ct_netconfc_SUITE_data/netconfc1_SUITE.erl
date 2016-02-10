@@ -1,18 +1,19 @@
 %%--------------------------------------------------------------------
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2012. All Rights Reserved.
+%% Copyright Ericsson AB 2013-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -30,27 +31,13 @@
 -module(netconfc1_SUITE).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("common_test/src/ct_netconfc.hrl").
--include_lib("public_key/include/public_key.hrl").
+-include("netconfc_test_lib.hrl").
 
 -compile(export_all).
 
-%% Default timetrap timeout (set in init_per_testcase).
--define(default_timeout, ?t:minutes(1)).
-
--define(NS,ns).
--define(LOCALHOST, "127.0.0.1").
--define(SSH_PORT, 2060).
-
--define(DEFAULT_SSH_OPTS,[{ssh,?LOCALHOST},
-			  {port,?SSH_PORT},
-			  {user,"xxx"},
-			  {password,"xxx"}]).
--define(DEFAULT_SSH_OPTS(Dir), ?DEFAULT_SSH_OPTS++[{user_dir,Dir}]).
-
--define(ok,ok).
-
 suite() ->
-    [{ct_hooks, [{cth_conn_log,
+    [{timetrap,?default_timeout},
+     {ct_hooks, [{cth_conn_log,
 		  [{ct_netconfc,[{log_type,html}, %will be overwritten by config
 				 {hosts,[my_named_connection,netconf1]}]
 		   }]
@@ -84,11 +71,16 @@ all() ->
 	     no_host,
 	     no_port,
 	     invalid_opt,
+	     timeout_close_session,
 	     get,
+	     get_a_lot,
+	     timeout_get,
+	     flush_timeout_get,
 	     get_xpath,
 	     get_config,
 	     get_config_xpath,
 	     edit_config,
+	     edit_config_opt_params,
 	     copy_config,
 	     delete_config,
 	     lock,
@@ -123,19 +115,16 @@ end_per_group(_GroupName, Config) ->
 
 init_per_testcase(_Case, Config) ->
     ets:delete_all_objects(ns_tab),
-    Dog = test_server:timetrap(?default_timeout),
-    [{watchdog, Dog}|Config].
+    Config.
 
-end_per_testcase(_Case, Config) ->
-    Dog=?config(watchdog, Config),
-    test_server:timetrap_cancel(Dog),
+end_per_testcase(_Case, _Config) ->
     ok.
 
 init_per_suite(Config) ->
     case catch {crypto:start(), ssh:start()} of
 	{ok, ok} ->
-	    {ok, _} =  get_id_keys(Config),
-	    make_dsa_files(Config),
+	    {ok, _} =  netconfc_test_lib:get_id_keys(Config),
+	    netconfc_test_lib:make_dsa_files(Config),
 	    Server = ?NS:start(?config(data_dir,Config)),
 	    [{server,Server}|Config];
 	_ ->
@@ -143,11 +132,10 @@ init_per_suite(Config) ->
     end.
 
 end_per_suite(Config) ->
-    PrivDir = ?config(priv_dir, Config),
     ?NS:stop(?config(server,Config)),
     ssh:stop(),
     crypto:stop(),
-    remove_id_keys(PrivDir),
+    netconfc_test_lib:remove_id_keys(Config),
     Config.
 
 hello(Config) ->
@@ -163,7 +151,7 @@ hello_from_server_first(Config) ->
     {ok,Client} = ct_netconfc:only_open(?DEFAULT_SSH_OPTS(DataDir)),
     ct:sleep(500),
     ?NS:expect(hello),
-    ?ok = ct_netconfc:hello(Client),
+    ?ok = ct_netconfc:hello(Client, [{capability, ["urn:com:ericsson:ebase:1.1.0"]}], infinity),
     ?NS:expect_do_reply('close-session',close,ok),
     ?ok = ct_netconfc:close_session(Client),
     ok.
@@ -217,7 +205,7 @@ hello_required_exists(Config) ->
 
     ?NS:expect_do_reply('close-session',close,ok),
     ?ok = ct_netconfc:close_session(my_named_connection),
-    timer:sleep(500),
+    ct:sleep(500),
 
     %% Then check that it can be used again after the first is closed
     {ok,_Client2} = open_configured_success(my_named_connection,DataDir),
@@ -344,12 +332,65 @@ invalid_opt(Config) ->
     {error,{invalid_option,{some_other_opt,true}}} = ct_netconfc:open(Opts2),
     ok.
 
+timeout_close_session(Config) ->
+    DataDir = ?config(data_dir,Config),
+    {ok,Client} = open_success(DataDir),
+    ?NS:expect('close-session'),
+    true = erlang:is_process_alive(Client),
+    {error,timeout} = ct_netconfc:close_session(Client,1000),
+    false = erlang:is_process_alive(Client),
+    ok.
+
 get(Config) ->
     DataDir = ?config(data_dir,Config),
     {ok,Client} = open_success(DataDir),
     Data = [{server,[{xmlns,"myns"}],[{name,[],["myserver"]}]}],
     ?NS:expect_reply('get',{data,Data}),
     {ok,Data} = ct_netconfc:get(Client,{server,[{xmlns,"myns"}],[]}),
+    ?NS:expect_do_reply('close-session',close,ok),
+    ?ok = ct_netconfc:close_session(Client),
+    ok.
+
+get_a_lot(Config) ->
+    DataDir = ?config(data_dir,Config),
+    {ok,Client} = open_success(DataDir),
+    Descr = lists:append(lists:duplicate(100,"Description of myserver! ")),
+    Server = {server,[{xmlns,"myns"}],[{name,[],["myserver"]},
+				       {description,[],[Descr]}]},
+    Data = lists:duplicate(100,Server),
+    ?NS:expect_reply('get',{fragmented,{data,Data}}),
+    {ok,Data} = ct_netconfc:get(Client,{server,[{xmlns,"myns"}],[]}),
+    ?NS:expect_do_reply('close-session',close,ok),
+    ?ok = ct_netconfc:close_session(Client),
+    ok.
+
+timeout_get(Config) ->
+    DataDir = ?config(data_dir,Config),
+    {ok,Client} = open_success(DataDir),
+    ?NS:expect('get'),
+    {error,timeout} = ct_netconfc:get(Client,{server,[{xmlns,"myns"}],[]},1000),
+    ?NS:expect_do_reply('close-session',close,ok),
+    ?ok = ct_netconfc:close_session(Client),
+    ok.
+
+%% Test OTP-13008 "ct_netconfc crash when receiving unknown timeout"
+%% If the timer expires "at the same time" as the rpc reply is
+%% received, the timeout message might already be sent when the timer
+%% is cancelled. This test checks that the timeout message is flushed
+%% from the message queue. If it isn't, the client crashes and the
+%% session can not be closed afterwards.
+%% Note that we can only hope that the test case triggers the problem
+%% every now and then, as it is very timing dependent...
+flush_timeout_get(Config) ->
+    DataDir = ?config(data_dir,Config),
+    {ok,Client} = open_success(DataDir),
+    Data = [{server,[{xmlns,"myns"}],[{name,[],["myserver"]}]}],
+    ?NS:expect_reply('get',{data,Data}),
+    timer:sleep(1000),
+    case ct_netconfc:get(Client,{server,[{xmlns,"myns"}],[]},1) of
+	{error,timeout} -> ok; % problem not triggered
+	{ok,Data} -> ok % problem possibly triggered
+    end,
     ?NS:expect_do_reply('close-session',close,ok),
     ?ok = ct_netconfc:close_session(Client),
     ok.
@@ -392,6 +433,18 @@ edit_config(Config) ->
     ?ok = ct_netconfc:edit_config(Client,running,
 				  {server,[{xmlns,"myns"}],
 				   [{name,["myserver"]}]}),
+    ?NS:expect_do_reply('close-session',close,ok),
+    ?ok = ct_netconfc:close_session(Client),
+    ok.
+
+edit_config_opt_params(Config) ->
+    DataDir = ?config(data_dir,Config),
+    {ok,Client} = open_success(DataDir),
+    ?NS:expect_reply({'edit-config',{'default-operation',"none"}},ok),
+    ?ok = ct_netconfc:edit_config(Client,running,
+				  {server,[{xmlns,"myns"}],
+				   [{name,["myserver"]}]},
+				  [{'default-operation',["none"]}]),
     ?NS:expect_do_reply('close-session',close,ok),
     ?ok = ct_netconfc:close_session(Client),
     ok.
@@ -469,8 +522,18 @@ action(Config) ->
     DataDir = ?config(data_dir,Config),
     {ok,Client} = open_success(DataDir),
     Data = [{myactionreturn,[{xmlns,"myns"}],["value"]}],
-    ?NS:expect_reply(action,{data,Data}),
-    {ok,Data} = ct_netconfc:action(Client,{myaction,[{xmlns,"myns"}],[]}),
+    %% test either to receive {data,Data} or {ok,Data},
+    %% both need to be handled
+    ct:log("Client will receive {~w,~p}", [data,Data]),
+    ct:log("Expecting ~p", [{ok, Data}]),
+    ?NS:expect_reply(action,{data, Data}),
+    {ok, Data} = ct_netconfc:action(Client,{myaction,[{xmlns,"myns"}],[]}),
+
+    ct:log("Client will receive {~w,~p}", [ok,Data]),
+    ct:log("Expecting ~p", [ok]),
+    ?NS:expect_reply(action,{ok, Data}),
+    ok = ct_netconfc:action(Client,{myaction,[{xmlns,"myns"}],[]}),
+
     ?NS:expect_do_reply('close-session',close,ok),
     ?ok = ct_netconfc:close_session(Client),
     ok.
@@ -637,10 +700,10 @@ receive_chunked_data(Config) ->
     %% Spawn a process which will wait a bit for the client to send
     %% the request (below), then order the server to the chunks of the
     %% rpc-reply one by one.
-    spawn(fun() -> timer:sleep(500),?NS:hupp(send,Part1),
-		   timer:sleep(100),?NS:hupp(send,Part2),
-		   timer:sleep(100),?NS:hupp(send,Part3),
-		   timer:sleep(100),?NS:hupp(send,Part4)
+    spawn(fun() -> ct:sleep(500),?NS:hupp(send,Part1),
+		   ct:sleep(100),?NS:hupp(send,Part2),
+		   ct:sleep(100),?NS:hupp(send,Part3),
+		   ct:sleep(100),?NS:hupp(send,Part4)
 	  end),
 
     %% Order server to expect a get - then the process above will make
@@ -685,8 +748,8 @@ timeout_receive_chunked_data(Config) ->
     %% Spawn a process which will wait a bit for the client to send
     %% the request (below), then order the server to the chunks of the
     %% rpc-reply one by one.
-    spawn(fun() -> timer:sleep(500),?NS:hupp(send,Part1),
-		   timer:sleep(100),?NS:hupp(send,Part2)
+    spawn(fun() -> ct:sleep(500),?NS:hupp(send,Part1),
+		   ct:sleep(100),?NS:hupp(send,Part2)
 	  end),
 
     %% Order server to expect a get - then the process above will make
@@ -698,7 +761,7 @@ timeout_receive_chunked_data(Config) ->
     ?ok = ct_netconfc:close_session(Client),
     ok.
 
-%% Same as receive_chunked_data, but timeout waiting for last part.
+%% Same as receive_chunked_data, but close while waiting for last part.
 close_while_waiting_for_chunked_data(Config) ->
     DataDir = ?config(data_dir,Config),
     {ok,Client} = open_success(DataDir),
@@ -731,9 +794,9 @@ close_while_waiting_for_chunked_data(Config) ->
     %% Spawn a process which will wait a bit for the client to send
     %% the request (below), then order the server to the chunks of the
     %% rpc-reply one by one.
-    spawn(fun() -> timer:sleep(500),?NS:hupp(send,Part1),
-		   timer:sleep(100),?NS:hupp(send,Part2),
-		   timer:sleep(100),?NS:hupp(kill)
+    spawn(fun() -> ct:sleep(500),?NS:hupp(send,Part1),
+		   ct:sleep(100),?NS:hupp(send,Part2),
+		   ct:sleep(100),?NS:hupp(kill)
 	  end),
 
     %% Order server to expect a get - then the process above will make
@@ -749,7 +812,7 @@ connection_crash(Config) ->
     %% Test that if the test survives killing the connection
     %% process. Earlier this caused ct_util_server to terminate, and
     %% this aborting the complete test run.
-    spawn(fun() -> timer:sleep(500),exit(Client,kill) end),
+    spawn(fun() -> ct:sleep(500),exit(Client,kill) end),
     ?NS:expect(get),
     {error,{closed,killed}}=ct_netconfc:get(Client,{server,[{xmlns,"myns"}],[]}),
     ok.
@@ -886,6 +949,19 @@ create_subscription(Config) ->
     ?NS:expect_do_reply('close-session',close,ok),
     ?ok = ct_netconfc:close_session(Client8),
 
+    %% Multiple filters
+    {ok,Client9} = open_success(DataDir),
+    ?NS:expect_reply({'create-subscription',[stream,filter]},ok),
+    MultiFilters = [{event,[{xmlns,"http://my.namespaces.com/event"}],
+		     [{eventClass,["fault"]},
+		      {severity,["critical"]}]},
+		    {event,[{xmlns,"http://my.namespaces.com/event"}],
+		     [{eventClass,["fault"]},
+		      {severity,["major"]}]}],
+    ?ok = ct_netconfc:create_subscription(Client9,MultiFilters),
+    ?NS:expect_do_reply('close-session',close,ok),
+    ?ok = ct_netconfc:close_session(Client9),
+
     ok.
 
 receive_event(Config) ->
@@ -969,161 +1045,3 @@ pad(I) when I<10 ->
     "0"++integer_to_list(I);
 pad(I) ->
     integer_to_list(I).
-
-
-%%%-----------------------------------------------------------------
-%%% BEGIN SSH key management
-%% copy private keys to given dir from ~/.ssh
-get_id_keys(Config) ->
-    DstDir = ?config(priv_dir, Config),
-    SrcDir = filename:join(os:getenv("HOME"), ".ssh"),
-    RsaOk = copyfile(SrcDir, DstDir, "id_rsa"),
-    DsaOk = copyfile(SrcDir, DstDir, "id_dsa"),
-    case {RsaOk, DsaOk} of
-	{{ok, _}, {ok, _}} -> {ok, both};
-	{{ok, _}, _} -> {ok, rsa};
-	{_, {ok, _}} -> {ok, dsa};
-	{Error, _} -> Error
-    end.
-
-%% Remove later on. Use make_dsa_files instead.
-remove_id_keys(Config) ->
-    Dir = ?config(priv_dir, Config),
-    file:delete(filename:join(Dir, "id_rsa")),
-    file:delete(filename:join(Dir, "id_dsa")).
-
-
-make_dsa_files(Config) ->
-    make_dsa_files(Config, rfc4716_public_key).
-make_dsa_files(Config, Type) ->
-    {DSA, EncodedKey} = gen_dsa(128, 20),
-    PKey = DSA#'DSAPrivateKey'.y,
-    P = DSA#'DSAPrivateKey'.p,
-    Q = DSA#'DSAPrivateKey'.q,
-    G = DSA#'DSAPrivateKey'.g,
-    Dss = #'Dss-Parms'{p=P, q=Q, g=G},
-    {ok, Hostname} = inet:gethostname(),
-    {ok, {A, B, C, D}} = inet:getaddr(Hostname, inet),
-    IP = lists:concat([A, ".", B, ".", C, ".", D]),
-    Attributes = [], % Could be [{comment,"user@" ++ Hostname}],
-    HostNames = [{hostnames,[IP, IP]}],
-    PublicKey = [{{PKey, Dss}, Attributes}],
-    KnownHosts = [{{PKey, Dss}, HostNames}],
-
-    KnownHostsEnc = public_key:ssh_encode(KnownHosts, known_hosts),
-    KnownHosts = public_key:ssh_decode(KnownHostsEnc, known_hosts),
-
-    PublicKeyEnc = public_key:ssh_encode(PublicKey, Type),
-
-    SystemTmpDir = ?config(data_dir, Config),
-    filelib:ensure_dir(SystemTmpDir),
-    file:make_dir(SystemTmpDir),
-
-    DSAFile = filename:join(SystemTmpDir, "ssh_host_dsa_key.pub"),
-    file:delete(DSAFile),
-
-    DSAPrivateFile  = filename:join(SystemTmpDir, "ssh_host_dsa_key"),
-    file:delete(DSAPrivateFile),
-
-    KHFile = filename:join(SystemTmpDir, "known_hosts"),
-    file:delete(KHFile),
-
-    PemBin = public_key:pem_encode([EncodedKey]),
-
-    file:write_file(DSAFile, PublicKeyEnc),
-    file:write_file(KHFile, KnownHostsEnc),
-    file:write_file(DSAPrivateFile, PemBin),
-    ok.
-
-%%--------------------------------------------------------------------
-%% Creates a dsa key (OBS: for testing only)
-%%   the sizes are in bytes
-%% gen_dsa(::integer()) -> {::atom(), ::binary(), ::opaque()}
-%%--------------------------------------------------------------------
-gen_dsa(LSize,NSize) when is_integer(LSize), is_integer(NSize) ->
-    Key = gen_dsa2(LSize, NSize),
-    {Key, encode_key(Key)}.
-
-encode_key(Key = #'DSAPrivateKey'{}) ->
-    Der = public_key:der_encode('DSAPrivateKey', Key),
-    {'DSAPrivateKey', Der, not_encrypted}.
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% DSA key generation  (OBS: for testing only)
-%% See http://en.wikipedia.org/wiki/Digital_Signature_Algorithm
-%% and the fips_186-3.pdf
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-gen_dsa2(LSize, NSize) ->
-    Q  = prime(NSize),  %% Choose N-bit prime Q
-    X0 = prime(LSize),
-    P0 = prime((LSize div 2) +1),
-
-    %% Choose L-bit prime modulus P such that p-1 is a multiple of q.
-    case dsa_search(X0 div (2*Q*P0), P0, Q, 1000) of
-	error ->
-	    gen_dsa2(LSize, NSize);
-	P ->
-	    G = crypto:mod_exp(2, (P-1) div Q, P), % Choose G a number whose multiplicative order modulo p is q.
-	    %%                 such that This may be done by setting g = h^(p-1)/q mod p, commonly h=2 is used.
-
-	    X = prime(20),               %% Choose x by some random method, where 0 < x < q.
-	    Y = crypto:mod_exp(G, X, P), %% Calculate y = g^x mod p.
-
-	    #'DSAPrivateKey'{version=0, p=P, q=Q, g=G, y=Y, x=X}
-    end.
-
-%% See fips_186-3.pdf
-dsa_search(T, P0, Q, Iter) when Iter > 0 ->
-    P = 2*T*Q*P0 + 1,
-    case is_prime(crypto:mpint(P), 50) of
-	true -> P;
-	false -> dsa_search(T+1, P0, Q, Iter-1)
-    end;
-dsa_search(_,_,_,_) ->
-    error.
-
-
-%%%%%%% Crypto Math %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-prime(ByteSize) ->
-    Rand = odd_rand(ByteSize),
-    crypto:erlint(prime_odd(Rand, 0)).
-
-prime_odd(Rand, N) ->
-    case is_prime(Rand, 50) of
-	true ->
-	    Rand;
-	false ->
-	    NotPrime = crypto:erlint(Rand),
-	    prime_odd(crypto:mpint(NotPrime+2), N+1)
-    end.
-
-%% see http://en.wikipedia.org/wiki/Fermat_primality_test
-is_prime(_, 0) -> true;
-is_prime(Candidate, Test) ->
-    CoPrime = odd_rand(<<0,0,0,4, 10000:32>>, Candidate),
-    case crypto:mod_exp(CoPrime, Candidate, Candidate) of
-	CoPrime -> is_prime(Candidate, Test-1);
-	_       -> false
-    end.
-
-odd_rand(Size) ->
-    Min = 1 bsl (Size*8-1),
-    Max = (1 bsl (Size*8))-1,
-    odd_rand(crypto:mpint(Min), crypto:mpint(Max)).
-
-odd_rand(Min,Max) ->
-    Rand = <<Sz:32, _/binary>> = crypto:rand_uniform(Min,Max),
-    BitSkip = (Sz+4)*8-1,
-    case Rand of
-	Odd  = <<_:BitSkip,  1:1>> -> Odd;
-	Even = <<_:BitSkip,  0:1>> ->
-	    crypto:mpint(crypto:erlint(Even)+1)
-    end.
-
-copyfile(SrcDir, DstDir, Fn) ->
-    file:copy(filename:join(SrcDir, Fn),
-	      filename:join(DstDir, Fn)).
-
-%%% END SSH key management
-%%%-----------------------------------------------------------------

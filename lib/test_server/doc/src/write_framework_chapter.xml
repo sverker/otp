@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE chapter SYSTEM "chapter.dtd">
 
 <chapter>
   <header>
     <copyright>
-      <year>2002</year><year>2009</year>
+      <year>2002</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
-    
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
+
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
     
     </legalnotice>
 
@@ -46,15 +47,8 @@
     <title>Interfacing the test server controller from Erlang</title>
     <p>Using the test server from Erlang means that you have to start
       the test server and then add test jobs. Use
-      <c>test_server_ctrl:start/0</c> to start a local target or
-      <c>test_server_ctrl:start/1</c> to start a remote target. The test
-      server is stopped by <c>test_server_ctrl:stop/0</c>.
-      </p>
-    <p>The argument to <c>test_server_ctrl:start/1</c> is the name of a
-      parameter file. The parameter file specifies what type of target
-      to start and where to start it, as well as some additional
-      parameters needed for different target types. See the reference
-      manual for a detailed description of all valid parameters.
+      <c>test_server_ctrl:start/0</c> to start the test server, and
+      <c>test_server_ctrl:stop/0</c> to stop it.
       </p>
 
     <section>

@@ -2,18 +2,19 @@
  * %CopyrightBegin%
 
  *
- * Copyright Ericsson AB 2001-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2001-2014. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -183,6 +184,7 @@ static void do_init(void)
 #include <dlfcn.h>
 static int (*__next_sigaction)(int, const struct sigaction*, struct sigaction*);
 #define init_done()	(__next_sigaction != 0)
+extern int _sigaction(int, const struct sigaction*, struct sigaction*);
 #define __SIGACTION _sigaction
 static void do_init(void)
 {
@@ -196,7 +198,7 @@ static void do_init(void)
 #define INIT()	do { if (!init_done()) do_init(); } while (0)
 #endif /* __DARWIN__ */
 
-#if !defined(__GLIBC__) && !defined(__DARWIN__) && !defined(__NetBSD__)
+#if defined(__sun__)
 /*
  * Assume Solaris/x86 2.8.
  * There is a number of sigaction() procedures in libc:
@@ -230,7 +232,56 @@ static void do_init(void)
 }
 #define _NSIG NSIG
 #define INIT()	do { if (!init_done()) do_init(); } while (0)
-#endif	/* not glibc or darwin */
+#endif /* __sun__ */
+
+#if defined(__FreeBSD__)
+/*
+ * This is a copy of Darwin code for FreeBSD.
+ * CAVEAT: detailed semantics are not verified yet.
+ */
+#include <dlfcn.h>
+static int (*__next_sigaction)(int, const struct sigaction*, struct sigaction*);
+#define init_done()	(__next_sigaction != 0)
+extern int _sigaction(int, const struct sigaction*, struct sigaction*);
+#define __SIGACTION _sigaction
+static void do_init(void)
+{
+    __next_sigaction = dlsym(RTLD_NEXT, "sigaction");
+    if (__next_sigaction != 0)
+	return;
+    perror("dlsym_freebsd");
+    abort();
+}
+#define _NSIG NSIG
+#define INIT()	do { if (!init_done()) do_init(); } while (0)
+#endif /* __FreeBSD__ */
+
+#if !(defined(__GLIBC__) || defined(__DARWIN__) || defined(__NetBSD__) || defined(__FreeBSD__) || defined(__sun__))
+/*
+ * Unknown libc -- assume musl.  Note: musl deliberately does not provide a musl-specific
+ * feature test macro, so we cannot check for it.
+ *
+ * sigaction is a weak alias for __sigaction, which is a wrapper for __libc_sigaction.
+ * There are libc-internal calls to __libc_sigaction which install handlers, so we must
+ * override __libc_sigaction rather than __sigaction.
+ */
+#include <dlfcn.h>
+static int (*__next_sigaction)(int, const struct sigaction*, struct sigaction*);
+#define init_done()	(__next_sigaction != 0)
+#define __SIGACTION __libc_sigaction
+static void do_init(void)
+{
+    __next_sigaction = dlsym(RTLD_NEXT, "__libc_sigaction");
+    if (__next_sigaction != 0)
+	return;
+    perror("dlsym");
+    abort();
+}
+#ifndef _NSIG
+#define _NSIG NSIG
+#endif
+#define INIT()	do { if (!init_done()) do_init(); } while (0)
+#endif	/* !(__GLIBC__ || __DARWIN__ || __NetBSD__ || __FreeBSD__ || __sun__) */
 
 #if !defined(__NetBSD__)
 /*
@@ -270,7 +321,7 @@ int __SIGACTION(int signum, const struct sigaction *act, struct sigaction *oldac
 /*
  * This catches the application's own sigaction() calls.
  */
-#if !defined(__DARWIN__) && !defined(__NetBSD__)
+#if !defined(__DARWIN__) && !defined(__NetBSD__) && !defined(__FreeBSD__)
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
 {
     return my_sigaction(signum, act, oldact);
@@ -303,7 +354,9 @@ static void hipe_sigaltstack(void *ss_sp)
  */
 void hipe_thread_signal_init(void)
 {
-    hipe_sigaltstack(erts_alloc(ERTS_ALC_T_HIPE, SIGSTKSZ));
+    /* Stack don't really need to be cache aligned.
+       We use it to suppress false leak report from valgrind */
+    hipe_sigaltstack(erts_alloc_permanent_cache_aligned(ERTS_ALC_T_HIPE, SIGSTKSZ));
 }
 #endif
 

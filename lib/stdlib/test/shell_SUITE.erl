@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -54,7 +55,7 @@ config(priv_dir,_) ->
 -include_lib("test_server/include/test_server.hrl").
 -export([init_per_testcase/2, end_per_testcase/2]).
 % Default timetrap timeout (set in init_per_testcase).
--define(default_timeout, ?t:minutes(2)).
+-define(default_timeout, ?t:minutes(10)).
 init_per_testcase(_Case, Config) ->
     ?line Dog = ?t:timetrap(?default_timeout),
     ?line OrigPath = code:get_path(),
@@ -122,7 +123,7 @@ start_restricted_from_shell(Config) when is_list(Config) ->
 			       "test_restricted.erl"),
     Contents = <<"-module(test_restricted).
                   -export([local_allowed/3, non_local_allowed/3]).
-                  local_allowed(i,[],State) ->
+                  local_allowed(m,[],State) ->
                       {true,State};
                   local_allowed(ugly,[],_State) ->
                       non_conforming_reply;
@@ -146,7 +147,7 @@ start_restricted_from_shell(Config) when is_list(Config) ->
 			 "test_restricted) end.">>),
     ?line {ok, test_restricted} = 
 	application:get_env(stdlib, restricted_shell),
-    ?line "Pid" ++ _ = t(<<"begin i() end.">>),
+    ?line "Module" ++ _ = t({<<"begin m() end.">>, utf8}),
     ?line "exception exit: restricted shell does not allow c(foo)" = 
 	comm_err(<<"begin c(foo) end.">>),
     ?line "exception exit: restricted shell does not allow init:stop()" = 
@@ -199,9 +200,9 @@ start_restricted_on_command_line(Config) when is_list(Config) ->
 				 "-pa "++?config(priv_dir,Config)++ 
 				 " -stdlib restricted_shell foo"),
     ?line "Warning! Restricted shell module foo not found: nofile"++_ = 
-	t({Node, <<"begin i() end.">>}),
-    ?line "exception exit: restricted shell does not allow i()" = 
-	comm_err({Node, <<"begin i() end.">>}),
+	t({Node, <<"begin m() end.">>}),
+    ?line "exception exit: restricted shell does not allow m()" =
+	comm_err({Node, <<"begin m() end.">>}),
     ?line [ok] = 
 	(catch scan({Node, <<"begin q() end.">>})),
     ?line test_server:stop_node(Node),
@@ -209,7 +210,7 @@ start_restricted_on_command_line(Config) when is_list(Config) ->
 			       "test_restricted2.erl"),
     Contents = <<"-module(test_restricted2).
                   -export([local_allowed/3, non_local_allowed/3]).
-                  local_allowed(i,[],State) ->
+                  local_allowed(m,[],State) ->
                       {true,State};
                   local_allowed(_,_,State) ->
                       {false,State}.
@@ -225,7 +226,7 @@ start_restricted_on_command_line(Config) when is_list(Config) ->
     ?line {ok,Node2} = start_node(shell_suite_helper_2,
 				 "-pa "++?config(priv_dir,Config)++ 
 				 " -stdlib restricted_shell test_restricted2"),
-    ?line "Pid" ++ _ = t({Node2,<<"begin i() end.">>}),
+    ?line "Module" ++ _ = t({Node2,<<"begin m() end.">>, utf8}),
     ?line "exception exit: restricted shell does not allow c(foo)" = 
 	comm_err({Node2,<<"begin c(foo) end.">>}),
     ?line "exception exit: restricted shell does not allow init:stop()" = 
@@ -254,7 +255,7 @@ restricted_local(Config) when is_list(Config) ->
 			       "test_restricted_local.erl"),
     Contents = <<"-module(test_restricted_local).
                   -export([local_allowed/3, non_local_allowed/3]).
-                  local_allowed(i,[],State) ->
+                  local_allowed(m,[],State) ->
                       {true,State};
                   local_allowed(banan,_,State) ->
                       {true,State};
@@ -404,13 +405,14 @@ records(Config) when is_list(Config) ->
     ?line ok = file:write_file(Test, Contents),
 
     RR5 = "rr(\"" ++ Test ++ "\", '_', {d,test1}), rl([test1,test2]).",
-    ?line [{attribute,1,record,{test1,_}},ok] = scan(RR5),
+    A1 = erl_anno:new(1),
+    [{attribute,A1,record,{test1,_}},ok] = scan(RR5),
     RR6 = "rr(\"" ++ Test ++ "\", '_', {d,test2}), rl([test1,test2]).",
-    ?line [{attribute,1,record,{test2,_}},ok] = scan(RR6),
+    [{attribute,A1,record,{test2,_}},ok] = scan(RR6),
     RR7 = "rr(\"" ++ Test ++ 
            "\", '_', [{d,test1},{d,test2,17}]), rl([test1,test2]).",
-    ?line [{attribute,1,record,{test1,_}},{attribute,1,record,{test2,_}},
-           ok] = scan(RR7),
+    [{attribute,A1,record,{test1,_}},{attribute,A1,record,{test2,_}},ok] =
+        scan(RR7),
     ?line PreReply = scan(<<"rr(prim_file).">>), % preloaded...
     ?line true = is_list(PreReply),
     ?line Dir = filename:join(?config(priv_dir, Config), "*.erl"),
@@ -2532,6 +2534,11 @@ otp_6554(Config) when is_list(Config) ->
           "\n    end.\nok.\n" = 
         t(<<"begin F = fun() -> foo end, 1 end. B = F(). C = 17. b().">>),
 
+    ?line "3: command not found" = comm_err(<<"#{v(3) => v}.">>),
+    ?line "3: command not found" = comm_err(<<"#{k => v(3)}.">>),
+    ?line "3: command not found" = comm_err(<<"#{v(3) := v}.">>),
+    ?line "3: command not found" = comm_err(<<"#{k := v(3)}.">>),
+    ?line "3: command not found" = comm_err(<<"(v(3))#{}.">>),
     %% Tests I'd like to do: (you should try them manually)
     %% "catch spawn_link(fun() -> timer:sleep(1000), exit(foo) end)."
     %%   "** exception error: foo" should be output after 1 second
@@ -2600,9 +2607,9 @@ otp_7232(doc) ->
     "OTP-7232. qlc:info() bug.";
 otp_7232(suite) -> [];
 otp_7232(Config) when is_list(Config) ->
-    Info = <<"qlc:info(qlc:sort(qlc:q([X || X <- [1000,2000]]), "
+    Info = <<"qlc:info(qlc:sort(qlc:q([X || X <- [55296,56296]]), "
              "{order, fun(A,B)-> A>B end})).">>,
-    "qlc:sort([1000,2000],\n"
+    "qlc:sort([55296,56296],\n"
     "         [{order,\n"
     "           fun(A, B) ->\n"
     "                  A > B\n"
@@ -2820,7 +2827,7 @@ otp_10302(Config) when is_list(Config) ->
     
     "ok.\n** exception error: an error occurred when evaluating"
         " an arithmetic expression\n     in operator  '/'/2\n"
-        "        called as <<\"ª\">> / <<\"ª\">>.\n" = t({Node,Test7}),
+        "        called as <<\"Âª\">> / <<\"Âª\">>.\n" = t({Node,Test7}),
     Test8 =
         <<"begin
                A = [1089],
@@ -2927,14 +2934,14 @@ t1(Parent, {Bin,Enc}, F) ->
         server_loop(S)
     catch exit:R -> Parent ! {self(), R};
           throw:{?MODULE,LoopReply,latin1} ->
-                   L0 = binary_to_list(list_to_binary(LoopReply)),
-                   [$\n | L1] = lists:dropwhile(fun(X) -> X =/= $\n end, L0),
-                   Parent ! {self(), dotify(L1)};
+	    L0 = binary_to_list(list_to_binary(LoopReply)),
+	    [$\n | L1] = lists:dropwhile(fun(X) -> X =/= $\n end, L0),
+	    Parent ! {self(), dotify(L1)};
           throw:{?MODULE,LoopReply,_Uni} ->
-                   Tmp = unicode:characters_to_binary(LoopReply),
-                   L0 = unicode:characters_to_list(Tmp),
-                   [$\n | L1] = lists:dropwhile(fun(X) -> X =/= $\n end, L0),
-                   Parent ! {self(), dotify(L1)}
+	    Tmp = unicode:characters_to_binary(LoopReply),
+	    L0 = unicode:characters_to_list(Tmp),
+	    [$\n | L1] = lists:dropwhile(fun(X) -> X =/= $\n end, L0),
+	    Parent ! {self(), dotify(L1)}
     after group_leader(S#state.leader, self())
     end.
 

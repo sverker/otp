@@ -3,21 +3,21 @@
 %%
 %% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
 -module(ts_install).
-
 
 -export([install/2, platform_id/1]).
 
@@ -112,6 +112,12 @@ get_vars([], name, [], Result) ->
 get_vars(_, _, _, _) ->
     {error, fatal_bad_conf_vars}.
 
+config_flags() ->
+    case os:getenv("CONFIG_FLAGS") of
+	false -> [];
+	CF -> string:tokens(CF, " \t\n")
+    end.
+
 unix_autoconf(XConf) ->
     Configure = filename:absname("configure"),
     Flags = proplists:get_value(crossflags,XConf,[]),
@@ -122,19 +128,69 @@ unix_autoconf(XConf) ->
 		  erlang:system_info(threads) /= false],
     Debug = [" --enable-debug-mode" ||
 		string:str(erlang:system_info(system_version),"debug") > 0],
-    Args = Host ++ Build ++ Threads ++ Debug,
+    MXX_Build = [Y || Y <- config_flags(),
+		      Y == "--enable-m64-build"
+			  orelse Y == "--enable-m32-build"],
+    Args = Host ++ Build ++ Threads ++ Debug ++ " " ++ MXX_Build,
     case filelib:is_file(Configure) of
 	true ->
 	    OSXEnv = macosx_cflags(),
-	    io:format("Running ~sEnv: ~p~n",
-		      [lists:flatten(Configure ++ Args),Env++OSXEnv]),
+	    UnQuotedEnv = assign_vars(unquote(Env++OSXEnv)),
+	    io:format("Running ~s~nEnv: ~p~n",
+		      [lists:flatten(Configure ++ Args),UnQuotedEnv]),
 	    Port = open_port({spawn, lists:flatten(["\"",Configure,"\"",Args])},
-			     [stream, eof, {env,Env++OSXEnv}]),
+			     [stream, eof, {env,UnQuotedEnv}]),
 	    ts_lib:print_data(Port);
 	false ->
 	    {error, no_configure_script}
     end.
 
+unquote([{Var,Val}|T]) ->
+    [{Var,unquote(Val)}|unquote(T)];
+unquote([]) ->
+    [];
+unquote("\""++Rest) ->
+    lists:reverse(tl(lists:reverse(Rest)));
+unquote(String) ->
+    String.
+
+assign_vars([]) ->
+    [];
+assign_vars([{VAR,FlagsStr} | VARs]) ->
+    [{VAR,assign_vars(FlagsStr)} | assign_vars(VARs)];
+assign_vars(FlagsStr) ->
+    Flags = [assign_all_vars(Str,[]) || Str <- string:tokens(FlagsStr, [$ ])],
+    string:strip(lists:flatten(lists:map(fun(Flag) ->
+						 Flag ++ " "
+					 end, Flags)), right).
+
+assign_all_vars([$$ | Rest], FlagSoFar) ->
+    {VarName,Rest1} = get_var_name(Rest, []),
+    assign_all_vars(Rest1, FlagSoFar ++ assign_var(VarName));
+assign_all_vars([Char | Rest], FlagSoFar) ->
+    assign_all_vars(Rest, FlagSoFar ++ [Char]);
+assign_all_vars([], Flag) ->
+    Flag.
+
+get_var_name([Ch | Rest] = Str, VarR) ->
+    case valid_char(Ch) of
+	true  -> get_var_name(Rest, [Ch | VarR]);
+	false -> {lists:reverse(VarR),Str}
+    end;
+get_var_name([], VarR) ->
+    {lists:reverse(VarR),[]}.
+	    
+assign_var(VarName) ->
+    case os:getenv(VarName) of
+	false -> "";
+	Val   -> Val
+    end.
+
+valid_char(Ch) when Ch >= $a, Ch =< $z -> true;
+valid_char(Ch) when Ch >= $A, Ch =< $Z -> true;
+valid_char(Ch) when Ch >= $0, Ch =< $9 -> true;
+valid_char($_)                         -> true;
+valid_char(_)                          -> false.
 
 get_xcomp_flag(Flag, Flags) ->
     get_xcomp_flag(Flag, Flag, Flags).

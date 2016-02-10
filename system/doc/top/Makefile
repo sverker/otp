@@ -3,16 +3,17 @@
 #
 # Copyright Ericsson AB 1999-2013. All Rights Reserved.
 #
-# The contents of this file are subject to the Erlang Public License,
-# Version 1.1, (the "License"); you may not use this file except in
-# compliance with the License. You should have received a copy of the
-# Erlang Public License along with this software. If not, it can be
-# retrieved online at http://www.erlang.org/.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Software distributed under the License is distributed on an "AS IS"
-# basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-# the License for the specific language governing rights and limitations
-# under the License.
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 #
 # %CopyrightEnd%
 #
@@ -37,13 +38,6 @@ GIF_FILES =
 INFO_FILES = ../../README ../../COPYRIGHT PR.template
 
 TOPDOCDIR=.
-
-TOP_HTML_GEN_FILES = \
-	$(HTMLDIR)/incompatible.html \
-	$(HTMLDIR)/highlights.html
-
-TOP_HTML_FILES = \
-	$(TOP_HTML_GEN_FILES)
 
 include ../installation_guide/xmlfiles.mk
 include ../system_principles/xmlfiles.mk
@@ -121,7 +115,7 @@ $(INDEX_SCRIPT): $(INDEX_SRC)
 	$(ERLC) -o$(EBIN) +warn_unused_vars $<
 
 # We don't list toc_*.html as targets because we don't know
-$(HTMLDIR)/index.html + $(HTMLDIR)/applications.html: $(INDEX_SCRIPT)
+$(HTMLDIR)/index.html + $(HTMLDIR)/applications.html: $(INDEX_SCRIPT) $(TEMPLATES)
 	echo "Generating index $@"
 # Check if we are building the index from source or an installed release
 	if test "$$RELEASE_ROOT" = "" ; then \
@@ -205,7 +199,7 @@ $(GLOSSARY): $(GLOSSARY_SCRIPT)
 
 #--------------------------------------------------------------------------
 
-PR.template: PR.template.src $(ERL_TOP)/erts/vsn.mk
+PR.template: PR.template.src $(ERL_TOP)/make/$(TARGET)/otp.mk
 	sed -e 's;%VSN%;$(VSN);' \
 	    -e 's;%SYSTEM_VSN%;$(SYSTEM_VSN);' \
 	    $< > $@
@@ -229,7 +223,7 @@ $(TOP_PDF_FILE): $(XML_FILES)
 
 pdf: $(TOP_PDF_FILE)
 
-html:   $(INDEX_FILES) $(TOP_HTML_FILES) \
+html:   $(INDEX_FILES) \
 	$(MAN_INDEX) $(JAVASCRIPT)
 
 debug opt: 
@@ -237,7 +231,7 @@ debug opt:
 clean:
 	rm -rf 	../html/js
 	rm -f PR.template 
-	rm -f  $(INDEX_FILES) $(TOP_HTML_FILES) $(MAN_INDEX) 
+	rm -f  $(INDEX_FILES) $(MAN_INDEX)
 	rm -f  $(TOP_PDF_FILE) $(TOP_PDF_FILE:%.pdf=%.fo)
 	rm -f $(INDEX_SCRIPT) $(GLOSSARY_SCRIPT) \
 		$(JAVASCRIPT_BUILD_SCRIPT) 
@@ -256,11 +250,10 @@ release_docs_spec: docs
 	$(INSTALL_DIR)  $(RELSYSDIR)/pdf
 	$(INSTALL_DATA)  \
 		$(TOP_PDF_FILE) $(RELSYSDIR)/pdf
-	$(INSTALL_DATA) $(TOP_HTML_FILES) $(RELSYSDIR) 
 	$(INSTALL_DIR)  $(RELSYSDIR)/js
 	$(INSTALL_DATA)  \
 		$(JAVASCRIPT) $(RELSYSDIR)/js
-	$(INSTALL_DATA) $(INDEX_FILES) $(MAN_INDEX) $(TOP_HTML_FILES) $(RELSYSDIR)
+	$(INSTALL_DATA) $(INDEX_FILES) $(MAN_INDEX) $(RELSYSDIR)
 	$(INSTALL_DIR)  $(RELSYSDIR)/docbuild
 	$(INSTALL_DATA) $(INDEX_SCRIPT) $(MAN_INDEX_SCRIPT) $(JAVASCRIPT_BUILD_SCRIPT) \
 		$(INDEX_SRC) $(MAN_INDEX_SRC) $(JAVASCRIPT_BUILD_SCRIPT_SRC) \

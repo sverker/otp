@@ -3,19 +3,19 @@
 %%
 %% Copyright Ericsson AB 1998-2012. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
-%%
 -module(error_SUITE).
 
 -include_lib("test_server/include/test_server.hrl").
@@ -23,7 +23,7 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2,
 	 head_mismatch_line/1,warnings_as_errors/1, bif_clashes/1,
-	 transforms/1]).
+	 transforms/1,maps_warnings/1,bad_utf8/1]).
 
 %% Used by transforms/1 test case.
 -export([parse_transform/2]).
@@ -36,7 +36,8 @@ all() ->
 
 groups() -> 
     [{p,test_lib:parallel(),
-      [head_mismatch_line,warnings_as_errors,bif_clashes,transforms]}].
+      [head_mismatch_line,warnings_as_errors,bif_clashes,
+       transforms,maps_warnings,bad_utf8]}].
 
 init_per_suite(Config) ->
     Config.
@@ -234,10 +235,63 @@ transforms(Config) ->
              ">>,
     {error,[{none,compile,{parse_transform,?MODULE,{too_bad,_}}}],[]} =
 	run_test(Ts2, test_filename(Config), [], dont_write_beam),
+    Ts3 = <<"
+              -compile({parse_transform,",?MODULE_STRING,"}).
+             ">>,
+    {error,[{none,compile,{parse_transform,?MODULE,{undef,_}}}],[]} =
+        run_test(Ts3, test_filename(Config), [call_undef], dont_write_beam),
     ok.
 
-parse_transform(_, _) ->
-    error(too_bad).
+parse_transform(_, Opts) ->
+    case lists:member(call_undef, Opts) of
+        false -> error(too_bad);
+        true -> camembert:délicieux()
+    end.
+
+
+maps_warnings(Config) when is_list(Config) ->
+    Ts1 = [{map_ok_use_of_pattern,
+	   <<"
+              -export([t/1]).
+              t(K) ->
+                 #{K := 1 = V} = id(#{<<\"hi all\">> => 1}),
+		 V.
+              id(I) -> I.
+             ">>,
+	    [return],
+	    []},
+	{map_illegal_use_of_pattern,
+	   <<"
+              -export([t/0,t/2]).
+	      t(K,#{ K := V }) -> V.
+              t() ->
+                 V = 32,
+                 #{<<\"hi\",V,\"all\">> := 1} = id(#{<<\"hi all\">> => 1}).
+              id(I) -> I.
+             ">>,
+	    [return],
+	    {error,[{3,erl_lint,{unbound_var,'K'}},
+		    {6,erl_lint,illegal_map_key}],[]}}
+    ],
+    [] = run2(Config, Ts1),
+    ok.
+
+bad_utf8(Config) ->
+    Ts = [{bad_utf8,
+	   %% If coding is specified explicitly as utf-8, there should be
+	   %% a compilation error; we must not fallback to parsing the
+	   %% file in latin-1 mode.
+	   <<"%% coding: utf-8
+              %% Bj",246,"rn
+              t() -> \"",246,"\".
+             ">>,
+	   [],
+	   {error,[{2,epp,cannot_parse},
+		   {2,file_io_server,invalid_unicode}],
+	    []}
+	  }],
+    [] = run2(Config, Ts),
+    ok.
 
 
 run(Config, Tests) ->
@@ -303,6 +357,7 @@ run_test(Test0, File, Warnings, WriteBeam) ->
     ?line compile:file(File, [binary,report|Warnings]),
 
     %% Test result of compilation.
+    io:format("~p\n", [Opts]),
     ?line Res = case compile:file(File, Opts) of
 		    {ok,Mod,_,[{_File,Ws}]} ->
 			%io:format("compile:file(~s,~p) ->~n~p~n",
@@ -320,6 +375,11 @@ run_test(Test0, File, Warnings, WriteBeam) ->
 			%io:format("compile:file(~s,~p) ->~n~p~n",
 			%	  [File,Opts,_ZZ]),
 			{error,Es,Ws};
+		    {error,[{XFile,Es1},{XFile,Es2}],Ws} = _ZZ
+		      when is_list(XFile) ->
+			%io:format("compile:file(~s,~p) ->~n~p~n",
+			%	  [File,Opts,_ZZ]),
+			{error,Es1++Es2,Ws};
 		    {error,Es,[{_File,Ws}]} = _ZZ->
 			%io:format("compile:file(~s,~p) ->~n~p~n",
 			%	  [File,Opts,_ZZ]),

@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2005-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2005-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -82,7 +83,7 @@ groups() ->
        api_deflateSetDictionary, api_deflateReset,
        api_deflateParams, api_deflate, api_deflateEnd,
        api_inflateInit, api_inflateSetDictionary,
-       api_inflateSync, api_inflateReset, api_inflate,
+       api_inflateSync, api_inflateReset, api_inflate, api_inflateChunk,
        api_inflateEnd, api_setBufsz, api_getBufsz, api_crc32,
        api_adler32, api_getQSize, api_un_compress, api_un_zip,
        api_g_un_zip]},
@@ -146,8 +147,6 @@ api_deflateInit(Config) when is_list(Config) ->
     ?m(?BARG, zlib:deflateInit(Z1,default,deflated,-20,8,default)),
     ?m(?BARG, zlib:deflateInit(Z1,default,deflated,-7,8,default)),
     ?m(?BARG, zlib:deflateInit(Z1,default,deflated,7,8,default)),
-    ?m(?BARG, zlib:deflateInit(Z1,default,deflated,-8,8,default)),
-    ?m(?BARG, zlib:deflateInit(Z1,default,deflated,8,8,default)),
     
     ?m(?BARG, zlib:deflateInit(Z1,default,deflated,-15,0,default)),
     ?m(?BARG, zlib:deflateInit(Z1,default,deflated,-15,10,default)),    
@@ -169,7 +168,7 @@ api_deflateInit(Config) when is_list(Config) ->
 			  ?m(ok, zlib:deflateInit(Z12,default,deflated,-Wbits,8,default)),
 			  ?m(ok,zlib:close(Z11)),
 			  ?m(ok,zlib:close(Z12))
-		  end, lists:seq(9, 15)),
+		  end, lists:seq(8, 15)),
     
     lists:foreach(fun(MemLevel) ->
 			  ?line Z = zlib:open(),
@@ -178,7 +177,7 @@ api_deflateInit(Config) when is_list(Config) ->
 			  ?m(ok,zlib:close(Z))
 		  end, lists:seq(1,8)),
     
-    Strategies = [filtered,huffman_only,default],
+    Strategies = [filtered,huffman_only,rle,default],
     lists:foreach(fun(Strategy) ->
 			  ?line Z = zlib:open(),
 			  ?m(ok, zlib:deflateInit(Z,best_speed,deflated,-15,8,Strategy)),
@@ -220,7 +219,6 @@ api_deflateParams(Config) when is_list(Config) ->
     ?m(_, zlib:deflate(Z1, <<1,1,1,1,1,1,1,1,1>>, none)),
     ?m(ok, zlib:deflateParams(Z1, best_compression, huffman_only)),
     ?m(_, zlib:deflate(Z1, <<1,1,1,1,1,1,1,1,1>>, sync)),
-    ?m({'EXIT',_}, zlib:deflateParams(Z1,best_speed, filtered)),
     ?m(ok, zlib:close(Z1)).
 
 api_deflate(doc) -> "Test deflate";
@@ -278,7 +276,7 @@ api_inflateInit(Config) when is_list(Config) ->
 			  ?m(ok, zlib:inflateInit(Z12,-Wbits)),
 			  ?m(ok,zlib:close(Z11)),
 			  ?m(ok,zlib:close(Z12))
-		  end, lists:seq(9,15)),
+		  end, lists:seq(8,15)),
     ?m(?BARG, zlib:inflateInit(gurka, -15)),
     ?m(?BARG, zlib:inflateInit(Z1, 7)),
     ?m(?BARG, zlib:inflateInit(Z1, -7)),
@@ -356,6 +354,39 @@ api_inflate(Config) when is_list(Config) ->
     ?m(ok, zlib:inflateEnd(Z1)),
     ?m(ok, zlib:inflateInit(Z1)),
     ?m({'EXIT',{data_error,_}}, zlib:inflate(Z1, <<2,1,2,1,2>>)), 
+    ?m(ok, zlib:close(Z1)).
+
+api_inflateChunk(doc) -> "Test inflateChunk";
+api_inflateChunk(suite) -> [];
+api_inflateChunk(Config) when is_list(Config) ->
+    ChunkSize = 1024,
+    Data = << <<(I rem 150)>> || I <- lists:seq(1, 3 * ChunkSize) >>,
+    Part1 = binary:part(Data, 0, ChunkSize),
+    Part2 = binary:part(Data, ChunkSize, ChunkSize),
+    Part3 = binary:part(Data, ChunkSize * 2, ChunkSize),
+    ?line Compressed = zlib:compress(Data),
+    ?line Z1 = zlib:open(),
+    ?line zlib:setBufSize(Z1, ChunkSize),
+    ?m(ok, zlib:inflateInit(Z1)),
+    ?m([], zlib:inflateChunk(Z1, <<>>)),
+    ?m({more, Part1}, zlib:inflateChunk(Z1, Compressed)),
+    ?m({more, Part2}, zlib:inflateChunk(Z1)),
+    ?m(Part3, zlib:inflateChunk(Z1)),
+    ?m(ok, zlib:inflateEnd(Z1)),
+
+    ?m(ok, zlib:inflateInit(Z1)),
+    ?m({more, Part1}, zlib:inflateChunk(Z1, Compressed)),
+
+    ?m(ok, zlib:inflateReset(Z1)),
+
+    ?line zlib:setBufSize(Z1, size(Data)),
+    ?m(Data, zlib:inflateChunk(Z1, Compressed)),
+    ?m(ok, zlib:inflateEnd(Z1)),
+
+    ?m(ok, zlib:inflateInit(Z1)),
+    ?m(?BARG, zlib:inflateChunk(gurka, Compressed)),
+    ?m(?BARG, zlib:inflateChunk(Z1, 4384)),
+    ?m({'EXIT',{data_error,_}}, zlib:inflateEnd(Z1)),
     ?m(ok, zlib:close(Z1)).
 
 api_inflateEnd(doc) -> "Test inflateEnd";
@@ -565,8 +596,8 @@ intro(Config) when is_list(Config) ->
 large_deflate(doc) -> "Test deflate large file, which had a bug reported on erlang-bugs";
 large_deflate(suite) -> [];
 large_deflate(Config) when is_list(Config) ->
-    large_deflate().
-large_deflate() ->
+    large_deflate_do().
+large_deflate_do() ->
     ?line Z = zlib:open(),
     ?line Plain = rand_bytes(zlib:getBufSize(Z)*5),
     ?line ok = zlib:deflateInit(Z),
@@ -881,7 +912,7 @@ smp(Config) ->
 	    FnAList = lists:map(fun(F) -> {F,?MODULE:F({get_arg,Config})}
 				end, Funcs),	    
 
-	    Pids = [spawn_link(?MODULE, worker, [random:uniform(9999),
+	    Pids = [spawn_link(?MODULE, worker, [rand:uniform(9999),
 						 list_to_tuple(FnAList),
 						 self()])
 		    || _ <- lists:seq(1,NumOfProcs)],
@@ -894,15 +925,15 @@ smp(Config) ->
 
 worker(Seed, FnATpl, Parent) ->
     io:format("smp worker ~p, seed=~p~n",[self(),Seed]),
-    random:seed(Seed,Seed,Seed),
+    rand:seed(exsplus, {Seed,Seed,Seed}),
     worker_loop(100, FnATpl),
     Parent ! self().
 
 worker_loop(0, _FnATpl) ->
-    large_deflate(), % the time consuming one as finale
+    large_deflate_do(), % the time consuming one as finale
     ok;
 worker_loop(N, FnATpl) ->
-    {F,A} = element(random:uniform(size(FnATpl)),FnATpl),
+    {F,A} = element(rand:uniform(tuple_size(FnATpl)), FnATpl),
     ?MODULE:F(A),
     worker_loop(N-1, FnATpl).
     

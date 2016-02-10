@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -96,12 +97,11 @@ absname(Config) when is_list(Config) ->
 	    
 	    ?line file:set_cwd(Cwd),
 	    ok;
-	{unix, _} ->  
-	    ?line ok = file:set_cwd("/usr"),
-	    ?line "/usr/foo" = filename:absname(foo),
-	    ?line "/usr/foo" = filename:absname("foo"),
-	    ?line "/usr/../ebin" = filename:absname("../ebin"),
-	    
+	{unix, _} ->
+            ?line ok = file:set_cwd("/usr"),
+            ?line "/usr/foo" = filename:absname(foo),
+            ?line "/usr/foo" = filename:absname("foo"),
+            ?line "/usr/../ebin" = filename:absname("../ebin"),
 	    ?line file:set_cwd("/"),
 	    ?line "/foo" = filename:absname(foo),
 	    ?line "/foo" = filename:absname("foo"),
@@ -155,7 +155,7 @@ absname_2(Config) when is_list(Config) ->
 	    ?line "a:/erlang" = filename:absname("a:erlang", [Drive|":/"]),
 	    
 	    ok;
-	{unix, _} ->
+	_ ->
 	    ?line "/usr/foo" = filename:absname(foo, "/usr"),
 	    ?line "/usr/foo" = filename:absname("foo", "/usr"),
 	    ?line "/usr/../ebin" = filename:absname("../ebin", "/usr"),
@@ -189,7 +189,7 @@ basename_1(Config) when is_list(Config) ->
 		  ?line "foo" = filename:basename(["usr\\foo\\"]),
 		  ?line "foo" = filename:basename("A:\\usr\\foo"),
 		  ?line "foo" = filename:basename("A:foo");
-	      {unix, _} ->
+	      _ ->
 		  ?line "strange\\but\\true" =
 		      filename:basename("strange\\but\\true")
 	  end,
@@ -219,7 +219,7 @@ basename_2(Config) when is_list(Config) ->
 		  ?line "foo.erl" = filename:basename("c:\\usr.hrl\\foo.erl",
 						      ".hrl"),
 		  ?line "foo" = filename:basename("A:\\usr\\foo", ".hrl");
-	      {unix, _} ->
+	      _ ->
 		  ?line "strange\\but\\true" =
 		      filename:basename("strange\\but\\true.erl", ".erl"),
 		  ?line "strange\\but\\true" =
@@ -279,47 +279,80 @@ extension(Config) when is_list(Config) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
 join(Config) when is_list(Config) ->
+    %% Whenever joining two elements, test the equivalence between
+    %% join/1 and join/2 (OTP-12158) by using help function
+    %% filename_join/2.
     ?line "/" = filename:join(["/"]),
     ?line "/" = filename:join(["//"]),
-    ?line "usr/foo.erl" = filename:join("usr","foo.erl"),
-    ?line "/src/foo.erl" = filename:join(usr, "/src/foo.erl"),
-    ?line "/src/foo.erl" = filename:join(["/src/",'foo.erl']),
-    ?line "/src/foo.erl" = filename:join(usr, ["/sr", 'c/foo.erl']),
-    ?line "/src/foo.erl" = filename:join("usr", "/src/foo.erl"),
+    "usr/foo.erl" = filename_join("usr","foo.erl"),
+    "/src/foo.erl" = filename_join(usr, "/src/foo.erl"),
+    "/src/foo.erl" = filename_join("/src/",'foo.erl'),
+    "/src/foo.erl" = filename_join(usr, ["/sr", 'c/foo.erl']),
+    "/src/foo.erl" = filename_join("usr", "/src/foo.erl"),
 
     %% Make sure that redundant slashes work too.
     ?line "a/b/c/d/e/f/g" = filename:join(["a//b/c/////d//e/f/g"]),
-    ?line "a/b/c/d/e/f/g" = filename:join(["a//b/c/", "d//e/f/g"]),
-    ?line "a/b/c/d/e/f/g" = filename:join(["a//b/c", "d//e/f/g"]),
-    ?line "/d/e/f/g" = filename:join(["a//b/c", "/d//e/f/g"]),
-    ?line "/d/e/f/g" = filename:join(["a//b/c", "//d//e/f/g"]),
+    "a/b/c/d/e/f/g" = filename_join("a//b/c/", "d//e/f/g"),
+    "a/b/c/d/e/f/g" = filename_join("a//b/c", "d//e/f/g"),
+    "/d/e/f/g" = filename_join("a//b/c", "/d//e/f/g"),
+    "/d/e/f/g" = filename:join("a//b/c", "//d//e/f/g"),
 
-    ?line "foo/bar" = filename:join([$f,$o,$o,$/,[]], "bar"),
+    "foo/bar" = filename_join([$f,$o,$o,$/,[]], "bar"),
+
+    %% Single dots - should be removed if in the middle of the path,
+    %% but not at the end of the path.
+    "/." = filename:join(["/."]),
+    "/" = filename:join(["/./"]),
+    "/." = filename:join(["/./."]),
+    "./." = filename:join(["./."]),
+
+    "/a/b" = filename_join("/a/.","b"),
+    "/a/b/." = filename_join("/a/.","b/."),
+    "/a/." = filename_join("/a/.","."),
+    "/a/." = filename_join("/a","."),
+    "/a/." = filename_join("/a/.",""),
+    "./." = filename_join("./.","."),
+    "./." = filename_join("./","."),
+    "./." = filename_join("./.",""),
+    "." = filename_join(".",""),
+    "./." = filename_join(".","."),
+
+    %% Trailing slash shall be removed - except the root
+    "/" = filename:join(["/"]),
+    "/" = filename:join(["/./"]),
+    "/a" = filename:join(["/a/"]),
+    "/b" = filename_join("/a/","/b/"),
+    "/a/b" = filename_join("/a/","b/"),
 
     ?line case os:type() of
 	      {win32, _} ->
 		  ?line "d:/" = filename:join(["D:/"]),
 		  ?line "d:/" = filename:join(["D:\\"]),
-		  ?line "d:/abc" = filename:join(["D:/", "abc"]),
-		  ?line "d:abc" = filename:join(["D:", "abc"]),
+		  "d:/abc" = filename_join("D:/", "abc"),
+		  "d:abc" = filename_join("D:", "abc"),
 		  ?line "a/b/c/d/e/f/g" =
 		      filename:join(["a//b\\c//\\/\\d/\\e/f\\g"]),
 		  ?line "a:usr/foo.erl" =
 		      filename:join(["A:","usr","foo.erl"]),
 		  ?line "/usr/foo.erl" =
 		      filename:join(["A:","/usr","foo.erl"]),
-		  ?line "c:usr" = filename:join("A:","C:usr"),
-		  ?line "a:usr" = filename:join("A:","usr"),
-		  ?line "c:/usr" = filename:join("A:", "C:/usr"),
+		  "c:usr" = filename_join("A:","C:usr"),
+		  "a:usr" = filename_join("A:","usr"),
+		  "c:/usr" = filename_join("A:", "C:/usr"),
 		  ?line "c:/usr/foo.erl" =
 		      filename:join(["A:","C:/usr","foo.erl"]),
 		  ?line "c:usr/foo.erl" =
 		      filename:join(["A:","C:usr","foo.erl"]),
 		  ?line "d:/foo" = filename:join([$D, $:, $/, []], "foo"),
 		  ok;
-	      {unix, _} ->
+	      _ ->
 		  ok
 	  end.
+
+%% Make sure join([A,B]) is equivalent to join(A,B) (OTP-12158)
+filename_join(A,B) ->
+    Res = filename:join(A,B),
+    Res = filename:join([A,B]).
 
 pathtype(Config) when is_list(Config) ->
     ?line relative = filename:pathtype(".."),
@@ -332,7 +365,7 @@ pathtype(Config) when is_list(Config) ->
 	    ?line volumerelative = filename:pathtype("/usr/local/bin"),
 	    ?line volumerelative = filename:pathtype("A:usr/local/bin"),
 	    ok;
-	{unix, _} ->
+	_ ->
 	    ?line absolute = filename:pathtype("/"),
 	    ?line absolute = filename:pathtype("/usr/local/bin"),
 	    ok
@@ -354,6 +387,8 @@ split(Config) when is_list(Config) ->
     ?line ["foo", "bar", "hello"]= filename:split("foo////bar//hello"),
     ?line ["foo", "bar", "hello"]= filename:split(["foo//",'//bar//h',"ello"]),
     ?line ["foo", "bar", "hello"]= filename:split(["foo//",'//bar//h'|ello]),
+    ["/"] = filename:split("/"),
+    [] = filename:split(""),
     case os:type() of
        {win32,_} ->
 	    ?line ["a:/","msdev","include"] =
@@ -450,11 +485,10 @@ absname_bin(Config) when is_list(Config) ->
 	    
 	    ?line file:set_cwd(Cwd),
 	    ok;
-	{unix, _} ->  
-	    ?line ok = file:set_cwd(<<"/usr">>),
-	    ?line <<"/usr/foo">> = filename:absname(<<"foo">>),
-	    ?line <<"/usr/../ebin">> = filename:absname(<<"../ebin">>),
-	    
+	{unix, _} ->
+            ?line ok = file:set_cwd(<<"/usr">>),
+            ?line <<"/usr/foo">> = filename:absname(<<"foo">>),
+            ?line <<"/usr/../ebin">> = filename:absname(<<"../ebin">>),
 	    ?line file:set_cwd(<<"/">>),
 	    ?line <<"/foo">> = filename:absname(<<"foo">>),
 	    ?line <<"/../ebin">> = filename:absname(<<"../ebin">>),
@@ -503,7 +537,7 @@ absname_bin_2(Config) when is_list(Config) ->
 	    ?line <<"a:/erlang">> = filename:absname(<<"a:erlang">>, <<Drive:8,":/">>),
 	    
 	    ok;
-	{unix, _} ->
+	_ ->
 	    ?line <<"/usr/foo">> = filename:absname(<<"foo">>, <<"/usr">>),
 	    ?line <<"/usr/../ebin">> = filename:absname(<<"../ebin">>, <<"/usr">>),
 	    
@@ -527,7 +561,7 @@ basename_bin_1(Config) when is_list(Config) ->
 	      {win32, _} ->
 		  ?line <<"foo">> = filename:basename(<<"A:\\usr\\foo">>),
 		  ?line <<"foo">> = filename:basename(<<"A:foo">>);
-	      {unix, _} ->
+	      _ ->
 		  ?line <<"strange\\but\\true">> =
 		      filename:basename(<<"strange\\but\\true">>)
 	  end,
@@ -551,7 +585,7 @@ basename_bin_2(Config) when is_list(Config) ->
 		  ?line <<"foo.erl">> = filename:basename(<<"c:\\usr.hrl\\foo.erl">>,
 						      <<".hrl">>),
 		  ?line <<"foo">> = filename:basename(<<"A:\\usr\\foo">>, <<".hrl">>);
-	      {unix, _} ->
+	      _ ->
 		  ?line <<"strange\\but\\true">> =
 		      filename:basename(<<"strange\\but\\true.erl">>, <<".erl">>),
 		  ?line <<"strange\\but\\true">> =
@@ -618,6 +652,53 @@ join_bin(Config) when is_list(Config) ->
 
     ?line <<"foo/bar">> = filename:join([$f,$o,$o,$/,[]], <<"bar">>),
 
+    %% Single dots - should be removed if in the middle of the path,
+    %% but not at the end of the path.
+    %% Also test equivalence between join/1 and join/2 (OTP-12158)
+    <<"/.">> = filename:join([<<"/.">>]),
+    <<"/">> = filename:join([<<"/./">>]),
+    <<"/.">> = filename:join([<<"/./.">>]),
+    <<"./.">> = filename:join([<<"./.">>]),
+
+    <<"/a/b">> = filename:join([<<"/a/.">>,<<"b">>]),
+    <<"/a/b">> = filename:join(<<"/a/.">>,<<"b">>),
+
+    <<"/a/b/.">> = filename:join([<<"/a/.">>,<<"b/.">>]),
+    <<"/a/b/.">> = filename:join(<<"/a/.">>,<<"b/.">>),
+
+    <<"/a/.">> = filename:join([<<"/a/.">>,<<".">>]),
+    <<"/a/.">> = filename:join(<<"/a/.">>,<<".">>),
+
+    <<"/a/.">> = filename:join([<<"/a">>,<<".">>]),
+    <<"/a/.">> = filename:join(<<"/a">>,<<".">>),
+
+    <<"/a/.">> = filename:join([<<"/a/.">>,<<"">>]),
+    <<"/a/.">> = filename:join(<<"/a/.">>,<<"">>),
+
+    <<"./.">> = filename:join([<<"./.">>,<<".">>]),
+    <<"./.">> = filename:join(<<"./.">>,<<".">>),
+
+    <<"./.">> = filename:join([<<"./">>,<<".">>]),
+    <<"./.">> = filename:join(<<"./">>,<<".">>),
+
+    <<"./.">> = filename:join([<<"./.">>,<<"">>]),
+    <<"./.">> = filename:join(<<"./.">>,<<"">>),
+
+    <<".">> = filename:join([<<".">>,<<"">>]),
+    <<".">> = filename:join(<<".">>,<<"">>),
+
+    <<"./.">> = filename:join([<<".">>,<<".">>]),
+    <<"./.">> = filename:join(<<".">>,<<".">>),
+
+    %% Trailing slash shall be removed - except the root
+    <<"/">> = filename:join([<<"/">>]),
+    <<"/">> = filename:join([<<"/./">>]),
+    <<"/a">> = filename:join([<<"/a/">>]),
+    <<"/b">> = filename:join([<<"/a/">>,<<"/b/">>]),
+    <<"/b">> = filename:join(<<"/a/">>,<<"/b/">>),
+    <<"/a/b">> = filename:join([<<"/a/">>,<<"b/">>]),
+    <<"/a/b">> = filename:join(<<"/a/">>,<<"b/">>),
+
     ?line case os:type() of
 	      {win32, _} ->
 		  ?line <<"d:/">> = filename:join([<<"D:/">>]),
@@ -639,7 +720,7 @@ join_bin(Config) when is_list(Config) ->
 		      filename:join([<<"A:">>,<<"C:usr">>,<<"foo.erl">>]),
 		  ?line <<"d:/foo">> = filename:join([$D, $:, $/, []], <<"foo">>),
 		  ok;
-	      {unix, _} ->
+	      _ ->
 		  ok
 	  end.
 
@@ -653,7 +734,7 @@ pathtype_bin(Config) when is_list(Config) ->
 	    volumerelative = filename:pathtype(<<"/usr/local/bin">>),
 	    volumerelative = filename:pathtype(<<"A:usr/local/bin">>),
 	    ok;
-	{unix, _} ->
+	_ ->
 	    absolute = filename:pathtype(<<"/">>),
 	    absolute = filename:pathtype(<<"/usr/local/bin">>),
 	    ok
@@ -672,6 +753,8 @@ split_bin(Config) when is_list(Config) ->
     [<<"/">>,<<"usr">>,<<"local">>,<<"bin">>] = filename:split(<<"/usr/local/bin">>),
     [<<"foo">>,<<"bar">>]= filename:split(<<"foo/bar">>),
     [<<"foo">>, <<"bar">>, <<"hello">>]= filename:split(<<"foo////bar//hello">>),
+    [<<"/">>] = filename:split(<<"/">>),
+    [] = filename:split(<<"">>),
     case os:type() of
        {win32,_} ->
 	    [<<"a:/">>,<<"msdev">>,<<"include">>] =

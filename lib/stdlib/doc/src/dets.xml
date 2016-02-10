@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
-      <year>1996</year><year>2011</year>
+      <year>1996</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
-    
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
+
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
     
     </legalnotice>
 
@@ -315,20 +316,20 @@
               bytes.</p>
           </item>
           <item>
-            <p><c>{filename, <seealso marker="file#type-name">file:name()</seealso>}</c>,
+            <p><c>{filename, </c><seealso marker="file#type-name">file:name()</seealso><c>}</c>,
               the name of the file where objects are stored.</p>
           </item>
           <item>
-            <p><c>{keypos, <seealso marker="#type-keypos">keypos()</seealso>}
-              </c>, the position of the key.</p>
+            <p><c>{keypos, </c><seealso marker="#type-keypos">keypos()</seealso>
+              <c>}</c>, the position of the key.</p>
           </item>
           <item>
             <p><c>{size, integer() >= 0}</c>, the number of objects stored
               in the table.</p>
           </item>
           <item>
-            <p><c>{type, <seealso marker="#type-type">type()</seealso>}</c>,
-            the type of the table.</p>
+            <p><c>{type, </c><seealso marker="#type-type">type()</seealso>
+            <c>}</c>, the type of the table.</p>
           </item>
         </list>
       </desc>
@@ -344,12 +345,12 @@
           allowed:</p>
         <list type="bulleted">
           <item>
-            <p><c>{access, <seealso marker="#type-access">access()</seealso>}
-            </c>, the access mode.</p>
+            <p><c>{access, </c><seealso marker="#type-access">access()</seealso>
+            <c>}</c>, the access mode.</p>
           </item>
           <item>
-            <p><c>{auto_save, <seealso marker="#type-auto_save">
-              auto_save()</seealso>}</c>, the auto save interval.</p>
+            <p><c>{auto_save, </c><seealso marker="#type-auto_save">
+              auto_save()</seealso><c>}</c>, the auto save interval.</p>
           </item>
           <item>
             <p><c>{bchunk_format, binary()}</c>, an opaque binary
@@ -398,15 +399,40 @@
               kept in RAM.</p>
           </item>
           <item>
-            <p><c>{safe_fixed,</c> SafeFixed<c>}</c>. If the table
-              is fixed, SafeFixed is a tuple <c>{FixedAtTime, [{Pid,RefCount}]}</c>. <c>FixedAtTime</c> is the time when
+            <p><c>{safe_fixed_monotonic_time, SafeFixed}</c>. If the table
+              is fixed, <c>SafeFixed</c> is a tuple <c>{FixedAtTime, [{Pid,RefCount}]}</c>.
+	      <c>FixedAtTime</c> is the time when
               the table was first fixed, and <c>Pid</c> is the pid of
               the process that fixes the table <c>RefCount</c> times.
               There may be any number of processes in the list. If the
               table is not fixed, SafeFixed is the atom <c>false</c>.</p>
+	      <p><c>FixedAtTime</c> will correspond to the result
+	      returned by
+	      <seealso marker="erts:erlang#monotonic_time/0">erlang:monotonic_time/0</seealso>
+	      at the time of fixation. The usage of <c>safe_fixed_monotonic_time</c> is
+	      <seealso marker="erts:time_correction#Time_Warp_Safe_Code">time warp
+	      safe</seealso>.</p>
           </item>
           <item>
-            <p><c>{version, integer()</c>, the version of the format of
+            <p>
+	      <c>{safe_fixed, SafeFixed}</c>. The same as
+	      <c>{safe_fixed_monotonic_time, SafeFixed}</c> with the exception
+	      of the format and value of <c>FixedAtTime</c>.
+	    </p>
+	    <p>
+	      <c>FixedAtTime</c> will correspond to the result returned by
+	      <seealso marker="erts:erlang#timestamp/0">erlang:timestamp/0</seealso>
+	      at the time of fixation. Note that when the system is using
+	      single or multi
+	      <seealso marker="erts:time_correction#Time_Warp_Modes">time warp
+	      modes</seealso> this might produce strange results. This
+	      since the usage of <c>safe_fixed</c> is not
+	      <seealso marker="erts:time_correction#Time_Warp_Safe_Code">time warp
+	      safe</seealso>. Time warp safe code need to use
+	      <c>safe_fixed_monotonic_time</c> instead.</p>
+          </item>
+          <item>
+            <p><c>{version, integer()}</c>, the version of the format of
               the table.</p>
           </item>
         </list>
@@ -729,16 +755,16 @@ ok
           tuples where the following values are allowed:</p>
         <list type="bulleted">
           <item>
-            <p><c>{access, <seealso marker="#type-access">
-              access()</seealso>}</c>. It is possible to open
+            <p><c>{access, </c><seealso marker="#type-access">
+              access()</seealso><c>}</c>. It is possible to open
               existing tables in read-only mode. A table which is opened
               in read-only mode is not subjected to the automatic file
               reparation algorithm if it is later opened after a crash.
               The default value is <c>read_write</c>.</p>
           </item>
           <item>
-            <p><c>{auto_save, <seealso marker="#type-auto_save">
-              auto_save()</seealso>}</c>, the auto save
+            <p><c>{auto_save, </c><seealso marker="#type-auto_save">
+              auto_save()</seealso><c>}</c>, the auto save
               interval. If the interval is an integer <c>Time</c>, the
               table is flushed to disk whenever it is not accessed for
               <c>Time</c> milliseconds. A table that has been flushed
@@ -748,18 +774,18 @@ ok
               is 180000 (3 minutes).</p>
           </item>
           <item>
-            <p><c>{estimated_no_objects, <seealso marker="#type-no_slots">
-              no_slots()</seealso>}</c>. Equivalent to the
+            <p><c>{estimated_no_objects, </c><seealso marker="#type-no_slots">
+              no_slots()</seealso><c>}</c>. Equivalent to the
               <c>min_no_slots</c> option.</p>
           </item>
           <item>
-            <p><c>{file, <seealso marker="file#type-name">
-              file:name()</seealso>}</c>, the name of the file to be
+            <p><c>{file, </c><seealso marker="file#type-name">
+              file:name()</seealso><c>}</c>, the name of the file to be
               opened. The default value is the name of the table.</p>
           </item>
           <item>
-            <p><c>{max_no_slots, <seealso marker="#type-no_slots">
-              no_slots()</seealso>}</c>, the maximum number
+            <p><c>{max_no_slots, </c><seealso marker="#type-no_slots">
+              no_slots()</seealso><c>}</c>, the maximum number
               of slots that will be used. The default value as well as
               the maximal value is 32 M. Note that a higher value may
               increase the fragmentation of the table, and conversely,
@@ -768,16 +794,16 @@ ok
               9 tables.</p>
           </item>
           <item>
-            <p><c>{min_no_slots, <seealso marker="#type-no_slots">
-              no_slots()</seealso>}</c>. Application
+            <p><c>{min_no_slots, </c><seealso marker="#type-no_slots">
+              no_slots()</seealso><c>}</c>. Application
               performance can be enhanced with this flag by specifying,
               when the table is created, the estimated number of
               different keys that will be stored in the table. The
               default value as well as the minimum value is 256.</p>
           </item>
           <item>
-            <p><c>{keypos, <seealso marker="#type-keypos">
-              keypos()</seealso>}</c>, the position of the
+            <p><c>{keypos, </c><seealso marker="#type-keypos">
+              keypos()</seealso><c>}</c>, the position of the
               element of each object to be used as key. The default
               value is 1. The ability to explicitly state the key
               position is most convenient when we want to store Erlang
@@ -814,12 +840,12 @@ ok
               already open.</p>
           </item>
           <item>
-            <p><c>{type, <seealso marker="#type-type">type()</seealso>}</c>,
+            <p><c>{type, </c><seealso marker="#type-type">type()</seealso><c>}</c>,
               the type of the table. The default value is <c>set</c>.</p>
           </item>
           <item>
-            <p><c>{version, <seealso marker="#type-version">
-              version()</seealso>}</c>, the version of the format
+            <p><c>{version, </c><seealso marker="#type-version">
+              version()</seealso><c>}</c>, the version of the format
               used for the table. The default value is <c>9</c>. Tables
               on the format used before OTP R8 can be created by giving
               the value <c>8</c>. A version 8 table can be converted to
@@ -1035,8 +1061,8 @@ ok
               specification that matches all objects.</p>
           </item>
           <item>
-            <p><c>{select, <seealso marker="#type-match_spec">
-              match_spec()}</seealso></c>. As for <c>select</c>
+            <p><c>{select, </c><seealso marker="#type-match_spec">
+              match_spec()</seealso><c>}</c>. As for <c>select</c>
               the table is traversed by calling <c>dets:select/3</c>
               and <c>dets:select/1</c>. The difference is that the
               match specification is explicitly given. This is how to

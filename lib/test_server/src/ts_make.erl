@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -67,7 +68,17 @@ get_port_data(Port, Last0, Complete0) ->
     end.
 
 update_last([C|Rest], Line, true) ->
-    io:put_chars(Line),
+    try
+	%% Utf-8 list to utf-8 binary
+	%% (e.g. we assume utf-8 bytes from port)
+	io:put_chars(list_to_binary(Line))
+    catch
+	error:badarg ->
+	    %% io:put_chars/1 badarged
+	    %% this likely means we had unicode code points
+	    %% in our bytes buffer (e.g warning from gcc with åäö)
+	    io:put_chars(unicode:characters_to_binary(Line))
+    end,
     io:nl(),
     update_last([C|Rest], [], false);
 update_last([$\r|Rest], Result, Complete) ->
@@ -79,7 +90,7 @@ update_last([C|Rest], Result, Complete) ->
 update_last([], Result, Complete) ->
     {Result, Complete};
 update_last(eof, Result, _) ->
-    Result.
+    unicode:characters_to_list(list_to_binary(Result)).
 
 run_make_script({win32, _}, Make, Dir, Makefile) ->
     {"run_make.bat",

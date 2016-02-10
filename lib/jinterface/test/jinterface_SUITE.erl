@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -22,7 +23,8 @@
 	 init_per_suite/1, end_per_suite/1,
 	 init_per_testcase/2, end_per_testcase/2]).
 
--export([nodename/1, register_and_whereis/1, get_names/1, boolean_atom/1,
+-export([transport_factory/1,
+	 nodename/1, register_and_whereis/1, get_names/1, boolean_atom/1,
 	 node_ping/1, mbox_ping/1,
 	 java_erlang_send_receive/1,
 	 java_internal_send_receive_same_node/1,
@@ -37,7 +39,11 @@
 	 erl_exit_with_reason_any_term/1,
 	 java_exit_with_reason_any_term/1,
 	 status_handler_localStatus/1, status_handler_remoteStatus/1,
-	 status_handler_connAttempt/1]).
+	 status_handler_connAttempt/1,
+	 maps/1,
+	 fun_equals/1,
+	 core_match_bind/1
+     ]).
 
 -include_lib("common_test/include/ct.hrl").
 -include("test_server_line.hrl").
@@ -100,10 +106,14 @@ end_per_group(_GroupName, Config) ->
 
 fundamental() ->
     [
+     transport_factory,    % TransportFactoryTest.java
      nodename,             % Nodename.java
      register_and_whereis, % RegisterAndWhereis.java
      get_names,            % GetNames.java
-     boolean_atom          % BooleanAtom.java
+     boolean_atom,         % BooleanAtom.java
+     maps,                 % Maps.java
+     fun_equals,           % FunEquals.java
+     core_match_bind       % CoreMatchBind.java
     ].
 
 ping() ->
@@ -180,16 +190,31 @@ init_per_testcase(Case, _Config)
        Case =:= kill_mbox_from_erlang ->
     {skip, "Not yet implemented"};
 init_per_testcase(_Case,Config) ->
-    Dog = ?t:timetrap({seconds,10}),
+    Dog = ?t:timetrap({seconds,30}),
     [{watch_dog,Dog}|Config].
 
 end_per_testcase(_Case,Config) ->
+    case whereis(erl_link_server) of
+	undefined -> ok;
+	Pid -> exit(Pid,kill)
+    end,
+    jitu:kill_all_jnodes(),
     ?t:timetrap_cancel(?config(watch_dog,Config)),
     ok.
 
 
 %%%-----------------------------------------------------------------
 %%% TEST CASES
+%%%-----------------------------------------------------------------
+transport_factory(doc) ->
+    ["TransportFactoryTest.java: Test custom OTP Transport Factory"];
+transport_factory(suite) ->
+    [];
+transport_factory(Config) when is_list(Config) ->
+    ok = jitu:java(?config(java, Config),
+		   ?config(data_dir, Config),
+		   "TransportFactoryTest").
+
 %%%-----------------------------------------------------------------
 nodename(doc) ->
     ["Nodename.java: "
@@ -670,6 +695,41 @@ status_handler_connAttempt(Config) when is_list(Config) ->
 		   "NodeStatusHandler",
 		   [erlang:get_cookie(),node(),?status_handler_connAttempt]).
 
+%%%-----------------------------------------------------------------
+maps(doc) ->
+    ["Maps.java: "
+     "Tests OtpErlangMap encoding, decoding, toString, get"];
+maps(suite) ->
+    [];
+maps(Config) when is_list(Config) ->
+    ok = jitu:java(?config(java, Config),
+           ?config(data_dir, Config),
+           "Maps",
+           []).
+
+%%%-----------------------------------------------------------------
+fun_equals(doc) ->
+    ["FunEquals.java: "
+     "Test OtpErlangFun.equals()"];
+fun_equals(suite) ->
+    [];
+fun_equals(Config) when is_list(Config) ->
+    ok = jitu:java(?config(java, Config),
+           ?config(data_dir, Config),
+           "FunEquals",
+           []).
+
+%%%-----------------------------------------------------------------
+core_match_bind(doc) ->
+    ["CoreMatchBind.java: "
+     "Test OtpErlangObject.match() and bind()"];
+core_match_bind(suite) ->
+    [];
+core_match_bind(Config) when is_list(Config) ->
+    ok = jitu:java(?config(java, Config),
+           ?config(data_dir, Config),
+           "CoreMatchBind",
+           []).
 
 %%%-----------------------------------------------------------------
 %%% INTERNAL FUNCTIONS

@@ -1,24 +1,55 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2012. All Rights Reserved.
+ * Copyright Ericsson AB 2012-2013. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
 
+#ifndef ERL_TRACE_H__FLAGS__
+#define ERL_TRACE_H__FLAGS__
+/*
+ * NOTE! The bits used for these flags matter. The flag with
+ * the least significant bit will take precedence!
+ *
+ * The "now timestamp" has highest precedence due to
+ * compatibility reasons.
+ */
+#define ERTS_TRACE_FLG_NOW_TIMESTAMP			(1 << 0)
+#define ERTS_TRACE_FLG_STRICT_MONOTONIC_TIMESTAMP	(1 << 1)
+#define ERTS_TRACE_FLG_MONOTONIC_TIMESTAMP		(1 << 2)
 
-#ifndef ERL_TRACE_H__
+/*
+ * The bits used effects trace flags (of processes and ports)
+ * as well as sequential trace flags. If changed make sure
+ * these arn't messed up...
+ */
+#define ERTS_TRACE_TS_TYPE_BITS 			3
+#define ERTS_TRACE_TS_TYPE_MASK					\
+    ((1 << ERTS_TRACE_TS_TYPE_BITS) - 1)
+
+#define ERTS_TFLGS2TSTYPE(TFLGS)				\
+    ((int) (((TFLGS) >> ERTS_TRACE_FLAGS_TS_TYPE_SHIFT) 	\
+	    & ERTS_TRACE_TS_TYPE_MASK))
+#define ERTS_SEQTFLGS2TSTYPE(SEQTFLGS)				\
+    ((int) (((SEQTFLGS) >> ERTS_SEQ_TRACE_FLAGS_TS_TYPE_SHIFT)	\
+	    & ERTS_TRACE_TS_TYPE_MASK))
+
+#endif /* ERL_TRACE_H__FLAGS__ */
+
+#if !defined(ERL_TRACE_H__) && !defined(ERTS_ONLY_INCLUDE_TRACE_FLAGS)
 #define ERL_TRACE_H__
 
 struct binary;
@@ -39,6 +70,7 @@ void erts_change_default_tracing(int setflags, Uint *flagsp, Eterm *tracerp);
 void erts_get_default_tracing(Uint *flagsp, Eterm *tracerp);
 void erts_set_system_monitor(Eterm monitor);
 Eterm erts_get_system_monitor(void);
+int erts_is_tracer_proc_valid(Process* p);
 
 #ifdef ERTS_SMP
 void erts_check_my_tracer_proc(Process *);
@@ -83,6 +115,8 @@ void erts_system_profile_setup_active_schedulers(void);
 
 /* system_monitor */
 void monitor_long_gc(Process *p, Uint time);
+void monitor_long_schedule_proc(Process *p, BeamInstr *in_i, BeamInstr *out_i, Uint time);
+void monitor_long_schedule_port(Port *pp, ErtsPortTaskType type, Uint time);
 void monitor_large_heap(Process *p);
 void monitor_generic(Process *p, Eterm type, Eterm spec);
 Uint erts_trace_flag2bit(Eterm flag);

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE chapter SYSTEM "chapter.dtd">
 
 <chapter>
@@ -8,16 +8,17 @@
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -32,6 +33,435 @@
     <file>notes.xml</file>
   </header>
 
+<section><title>Test_Server 3.9.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    When generating Makefile from Makefile.src,
+	    ts_lib:get_arg/4 earlier removed all spaces in the
+	    extracted argument. The code was probably meant for
+	    removing leading and trailing spaces only, and is now
+	    corrected to do so.</p>
+          <p>
+	    Own Id: OTP-13015</p>
+        </item>
+        <item>
+          <p>
+	    With the Common Test 'create_priv_dir' start option set
+	    to 'auto_per_tc', the name of the priv directory for a
+	    configuration function could clash with the name of the
+	    priv directory for a test case, which would cause Test
+	    Server failure. This error has been corrected.</p>
+          <p>
+	    Own Id: OTP-13181</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.9</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The status of an aborted test due to test suite
+	    compilation error has changed from 'auto_skipped' to
+	    'failed'. This affects both the textual log file, event
+	    handling and CT hook callbacks. The logging of
+	    compilation failures has also been improved, especially
+	    in the case of multiple test suites failing compilation.</p>
+          <p>
+	    Own Id: OTP-10816</p>
+        </item>
+        <item>
+          <p>
+	    The Test Server source code parser (erl2html2) failed to
+	    handle the macro tuple in the syntax tree returned by
+	    epp_dodger. This error has been corrected.</p>
+          <p>
+	    Own Id: OTP-12740</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    The Test Server application has been marked as obsolete
+	    and will be removed from OTP in the next major release
+	    (OTP 19.0).</p>
+          <p>
+	    Own Id: OTP-10923 Aux Id: OTP-12705 </p>
+        </item>
+        <item>
+          <p>
+	    When running OTP tests using the ts interface, it is now
+	    possible to specify so called test categories per OTP
+	    application. A test category is represented by a CT test
+	    specification and defines an arbitrary subset of existing
+	    test suites, groups and cases. Examples of test
+	    categories are 'smoke' (smoke tests) and 'bench'
+	    (benchmarks). (Call ts:help() for more info). Also,
+	    functions for reading terms from the current test
+	    specification during test, ct:get_testspec_terms/0 and
+	    ct:get_testspec_terms/1, have been implemented.</p>
+          <p>
+	    Own Id: OTP-11962</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.8.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    If the last expression in a test case causes a timetrap
+	    timeout, the stack trace is ignored and not printed to
+	    the test case log file. This happens because the
+	    {Suite,TestCase,Line} info is not available in the stack
+	    trace in this scenario, due to tail call elimination.
+	    Common Test has been modified to handle this situation by
+	    inserting a {Suite,TestCase,last_expr} tuple in the
+	    correct place and printing the stack trace as expected.</p>
+          <p>
+	    Own Id: OTP-12697 Aux Id: seq12848 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.8</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    When installing test suites in a cross compilation
+	    environment, ts_install was not able to read the values
+	    of the environment variables specified in the
+	    configuration file. This has been fixed.</p>
+          <p>
+	    Own Id: OTP-11441</p>
+        </item>
+        <item>
+          <p>
+	    Printouts by means of ct:log/2/3 or ct:pal/2/3 from the
+	    hook functions on_tc_fail/2 and on_tc_skip/2 would (quite
+	    unexpectedly) end up in the "unexpected i/o" log file
+	    instead of in the test case log file. This behaviour has
+	    been changed so that now, all printouts (including stdio
+	    printouts) from these hook functions will be routed to
+	    the test case log file.</p>
+          <p>
+	    Own Id: OTP-12468</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    The format of the information printed on top of the test
+	    case (and configuration function) log file has been
+	    slightly modified, mainly in order to make the start
+	    configuration data easier to read and interpret.</p>
+          <p>
+	    Own Id: OTP-12518 Aux Id: seq12808 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.7.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The source code to html code generator in Test Server
+	    (and Common Test) would fail to generate anchors in the
+	    html code for functions with non-expandable macros,
+	    resulting in bad html links to such functions. This
+	    correction lets the code generator ignore macros that
+	    can't be expanded (i.e. not pre-process them), so that
+	    correct anchors will always be produced.</p>
+          <p>
+	    Own Id: OTP-11766 Aux Id: seq12556 </p>
+        </item>
+        <item>
+          <p>
+	    Make sure to install .hrl files when needed</p>
+          <p>
+	    Own Id: OTP-12197</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Distribute <c>autoconf</c> helpers to applications at
+	    build time instead of having multiple identical copies
+	    committed in the repository.</p>
+          <p>
+	    Own Id: OTP-12348</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.7.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    The mechanism for running code cover analysis with
+	    common_test has been improved. Earlier, if a test run
+	    consisted of multiple tests, cover would be started and
+	    stopped for each test. This would give "intermediate"
+	    cover logs available from the "Coverage log" link on the
+	    test suite result pages. To accumulate cover data over
+	    all tests, the 'export' option had to be used in the
+	    cover spec file. This was not well documented, and the
+	    functionality was quite confusing.</p>
+          <p>
+	    Using the 'nodes' option in the cover spec file would
+	    fail when the test run consisted of multiple tests, since
+	    the specified nodes would only be included in the cover
+	    analysis of the first test.</p>
+          <p>
+	    The repeated compilation and analysis of the same modules
+	    was also very time consuming.</p>
+          <p>
+	    To overcome these problems, ct will now only cover
+	    compile and analyze modules once per test run, i.e. once
+	    for each cover spec file. The log file is available via a
+	    new button on the top level index page. The old "Coverage
+	    log" links on the test suite result pages still exist,
+	    but they all point to the same log containing the
+	    accumulated result.</p>
+          <p>
+	    Own Id: OTP-11971</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.7</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Application upgrade (appup) files are corrected for the
+	    following applications: </p>
+          <p>
+	    <c>asn1, common_test, compiler, crypto, debugger,
+	    dialyzer, edoc, eldap, erl_docgen, et, eunit, gs, hipe,
+	    inets, observer, odbc, os_mon, otp_mibs, parsetools,
+	    percept, public_key, reltool, runtime_tools, ssh,
+	    syntax_tools, test_server, tools, typer, webtool, wx,
+	    xmerl</c></p>
+          <p>
+	    A new test utility for testing appup files is added to
+	    test_server. This is now used by most applications in
+	    OTP.</p>
+          <p>
+	    (Thanks to Tobias Schlager)</p>
+          <p>
+	    Own Id: OTP-11744</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Calls to erlang:open_port/2 with 'spawn' are updated to
+	    handle space in the command path.</p>
+          <p>
+	    Own Id: OTP-10842</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.6.4</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p>The way Common Test handles skipping of test cases has
+	    been updated. In previous versions, returning
+	    <c>{skip,Reason}</c> from a configuration function (such
+	    as init_per_suite or init_per_group), resulted in all
+	    affected test cases getting skipped with status
+	    <c>auto_skipped</c>. This was inappropriate, since this
+	    status is supposed to be used to inform that Common Test
+	    has taken the initiative to skip something (e.g. a test
+	    case group if init_per_group failed). Therefore, in this
+	    version of Common Test, whenever the user skips a suite,
+	    group, or individual test case (by means of a
+	    configuration function or test specification term), the
+	    affected test cases get the status <c>user_skipped</c>
+	    instead.</p> <p>This update has meant a few changes that
+	    may affect Common Test users in various ways:</p> <list>
+	    <item>The test results and statistics will be affected,
+	    which is important to know when running regression tests
+	    and comparing results to previous test runs.</item>
+	    <item>Users that read or parse the textual log file
+	    <c>suite.log</c> will notice that an auto skipped
+	    function is now reported as <c>auto_skipped</c> rather
+	    than <c>skipped</c> as before.</item> <item>When
+	    <c>require</c> fails in an info function (such as suite/0
+	    or group/1), all affected configuration functions and
+	    test cases are marked as <c>auto_skipped</c>.</item>
+	    <item>If Common Test detects an error in the test suite
+	    (such as e.g. an invalid all/0 function), all affected
+	    configuration functions and test cases are marked as
+	    <c>auto_skipped</c>.</item> <item>If a repeated test run
+	    session reaches a deadline with <c>force_stop</c>
+	    enabled, all remaining test cases are marked as
+	    <c>auto_skipped</c> rather than <c>user_skipped</c> as
+	    before.</item> <item>The event messages that Common Test
+	    generates during test runs have been affected by this
+	    update. For details see OTP-11524.</item> </list>
+          <p>
+	    Own Id: OTP-11305 Aux Id: OTP-11524 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.6.3</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Test Server installed an error handler (test_server_h)
+	    only to be able to write the name of the current test
+	    case to stdout whenever it received an error- or progress
+	    report. This functionality was not useful and has been
+	    removed. The built-in Common Test hook, cth_log_redirect,
+	    has instead been improved to now also tag all error- and
+	    progress reports in the log with suite-, group-, and/or
+	    test case name.</p>
+          <p>
+	    Own Id: OTP-11263 Aux Id: seq12251 </p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    A new log, the "Pre- and Post Test I/O Log", has been
+	    introduced, which makes it possible to capture error- and
+	    progress reports, as well as printouts made with ct:log/2
+	    and ct:pal/2, before and after a test run. (Some minor
+	    improvements of the logging system have been made at the
+	    same time). Links to the new log are found on the Common
+	    Test Framework Log page. The Common Test User's Guide has
+	    been updated with information about the new log and also
+	    with a new section on how to synchronize external
+	    applications with Common Test by means of the CT Hook
+	    init and terminate functions.</p>
+          <p>
+	    Own Id: OTP-11272</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Known Bugs and Problems</title>
+      <list>
+        <item>
+          <p>
+	    Test Server: Report auto_skipped in major log.</p>
+          <p>
+	    Own Id: OTP-11297</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Test_Server 3.6.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Some unused code related to remote targets is removed,
+	    and documentation is updated.</p>
+          <p>
+	    Own Id: OTP-10607 Aux Id: kunagi-338 [249] </p>
+        </item>
+        <item>
+          <p>
+	    A bug in test_server_gl caused io requests containing
+	    invalid data (i.e. not unicode:chardata()) to hang, since
+	    no io reply was sent. This has been corrected.</p>
+          <p>
+	    Own Id: OTP-10991</p>
+        </item>
+        <item>
+          <p>
+	    Common Test would, in case of timetrap error, print a
+	    warning in the log if end_per_testcase wasn't implemented
+	    in the suite, even though it's an optional function. This
+	    printout has been removed.</p>
+          <p>
+	    Own Id: OTP-11052</p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    The '-force_stop' flag to use with time-limited repeats
+	    of test runs can now be used with a new 'skip_rest'
+	    option which causes the rest of the test cases in the
+	    ongoing test job to be skipped when the time limit is
+	    reached. E.g. 'ct_run -spec xxx -duration 010000
+	    -force_stop skip_rest'</p>
+          <p>
+	    Own Id: OTP-10856 Aux Id: OTP-10832 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
 <section><title>Test_Server 3.6.1</title>
 
     <section><title>Fixed Bugs and Malfunctions</title>
@@ -44,7 +474,7 @@
 	    that were not opened with the {encoding,utf8} option. If
 	    then the argument contained unicode characters above 255,
 	    the file descriptor would crash. This has been corrected
-	    by the following modifications: <list> <item> Since the
+	    by the following modifications:</p> <list> <item> Since the
 	    'unexpected_io' log file is used only when the test case
 	    HTML file is not available (e.g. between test cases),
 	    this file is now also a HTML file and as other
@@ -66,7 +496,7 @@
 	    path to the last run.&lt;timestamp&gt; directory, is now
 	    dependent on the file name mode of the VM. If file names
 	    are expected to be unicode, then the 'last_name' file is
-	    UTF-8 encoded, else it is latin1 encoded. </item> </list></p>
+	    UTF-8 encoded, else it is latin1 encoded. </item> </list>
           <p>
 	    Also, ~tp has been changed back to ~p unless it is
 	    somehow likely that the argument includes strings. It is
@@ -214,7 +644,7 @@
         </item>
         <item>
           <p>
-	    Update common test modules to handle unicode <list>
+	    Update common test modules to handle Unicode:</p> <list>
 	    <item> Use UTF-8 encoding for all HTML files, except the
 	    HTML version of the test suite generated with
 	    erl2html2:convert, which will have the same encoding as
@@ -225,9 +655,7 @@
 	    unicode:characters_to_list and
 	    unicode:characters_to_binary for conversion between
 	    binaries and strings instead of binary_to_list and
-	    list_to_binary. </item> </list></p>
-          <p>
-	    Own Id: OTP-10783</p>
+	    list_to_binary. </item> </list>
         </item>
       </list>
     </section>

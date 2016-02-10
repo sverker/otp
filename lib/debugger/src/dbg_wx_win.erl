@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -94,10 +95,9 @@ create_menu_item(Menu, [{Name, _N, cascade, Items}|Is], Win, Id0,Connect) ->
 			    false -> Acc
 			end		
 		end,
-    Filter = fun(_,_) ->	     
+    Filter = fun(Ev,_) ->
 		     Enabled = lists:foldl(IsChecked, [], Butts),
-		     Self ! #wx{userData={Name, Enabled},
-				event=#wxCommand{type=command_menu_selected}}
+		     Self ! Ev#wx{userData={Name, Enabled}}
 	     end,
     wxMenu:connect(Win, command_menu_selected, 
 		   [{id,Id0},{lastId, Id-1},{callback,Filter}]),
@@ -254,7 +254,7 @@ notify(Win,Message) ->
 entry(Parent, Title, Prompt, {Type, Value}) ->
     Ted = wxTextEntryDialog:new(Parent, to_string(Prompt),
 				[{caption, to_string(Title)},
-				 {value, to_string("~999999tp",[Value])}]),
+				 {value, Value}]),
 
     case wxDialog:showModal(Ted) of
 	?wxID_OK ->

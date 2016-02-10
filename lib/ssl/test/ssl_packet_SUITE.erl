@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -37,16 +38,12 @@
 -define(uint24(X), << ?UINT24(X) >> ).
 -define(uint32(X), << ?UINT32(X) >> ).
 -define(uint64(X), << ?UINT64(X) >> ).
--define(TIMEOUT, 120000).
 
 -define(MANY, 1000).
 -define(SOME, 50).
 %%--------------------------------------------------------------------
 %% Common Test interface functions -----------------------------------
 %%--------------------------------------------------------------------
-
-suite() -> [{ct_hooks,[ts_install_cth]}].
-
 all() -> 
     [
      {group, 'tlsv1.2'},
@@ -139,11 +136,9 @@ init_per_suite(Config) ->
     catch crypto:stop(),
     try crypto:start() of
 	ok ->
-	    application:start(public_key),
-	    Result =
-		(catch make_certs:all(?config(data_dir, Config),
-				      ?config(priv_dir, Config))),
-	    ct:print("Make certs  ~p~n", [Result]),
+	    ssl:start(),
+	    {ok, _} = make_certs:all(?config(data_dir, Config),
+				     ?config(priv_dir, Config)),
 	    ssl_test_lib:cert_options(Config)
     catch _:_ ->
 	    {skip, "Crypto did not start"}
@@ -172,10 +167,9 @@ init_per_group(GroupName, Config) ->
 end_per_group(_GroupName, Config) ->
     Config.
 
-init_per_testcase(_TestCase, Config0) ->
-    Config = lists:keydelete(watchdog, 1, Config0),
-    Dog = ct:timetrap(?TIMEOUT),
-    [{watchdog, Dog} | Config].
+init_per_testcase(_TestCase, Config) ->
+    ct:timetrap({seconds, 15}),
+    Config.
 
 
 end_per_testcase(_TestCase, Config) ->
@@ -1631,8 +1625,8 @@ header_decode_one_byte_active(Config) when is_list(Config) ->
 					{from, self()},
 					{mfa, {?MODULE, client_header_decode_active,
 					       [Data, [11 | <<"Hello world">> ]]}},
-					{options, [{active, true}, {header, 1},
-						   binary | ClientOpts]}]),
+					{options, [{active, true}, binary, {header, 1}
+						    | ClientOpts]}]),
 
     ssl_test_lib:check_result(Server, ok, Client, ok),
 
@@ -1688,7 +1682,7 @@ header_decode_two_bytes_two_sent_active(Config) when is_list(Config) ->
     Server = ssl_test_lib:start_server([{node, ClientNode}, {port, 0},
 					{from, self()},
 					{mfa, {?MODULE, server_header_decode_active,
-					       [Data, [$H, $e]]}},
+					       [Data, [$H, $e | <<>>]]}},
 					{options, [{active, true}, binary, 
 						   {header,2}|ServerOpts]}]),
 
@@ -1697,7 +1691,7 @@ header_decode_two_bytes_two_sent_active(Config) when is_list(Config) ->
 					{host, Hostname},
 					{from, self()},
 					{mfa, {?MODULE, client_header_decode_active,
-					       [Data, [$H, $e]]}},
+					       [Data, [$H, $e | <<>>]]}},
 					{options, [{active, true}, {header, 2},
 						   binary | ClientOpts]}]),
 
@@ -1765,8 +1759,8 @@ header_decode_one_byte_passive(Config) when is_list(Config) ->
 					{from, self()},
 					{mfa, {?MODULE, client_header_decode_passive,
 					       [Data, [11 | <<"Hello world">> ]]}},
-					{options, [{active, false}, {header, 1},
-						   binary | ClientOpts]}]),
+					{options, [{active, false}, binary, {header, 1}
+						   | ClientOpts]}]),
 
     ssl_test_lib:check_result(Server, ok, Client, ok),
 
@@ -1822,7 +1816,7 @@ header_decode_two_bytes_two_sent_passive(Config) when is_list(Config) ->
     Server = ssl_test_lib:start_server([{node, ClientNode}, {port, 0},
 					{from, self()},
 					{mfa, {?MODULE, server_header_decode_passive,
-					       [Data, [$H, $e]]}},
+					       [Data, [$H, $e | <<>>]]}},
 					{options, [{active, false}, binary,
 						   {header,2}|ServerOpts]}]),
 
@@ -1831,7 +1825,7 @@ header_decode_two_bytes_two_sent_passive(Config) when is_list(Config) ->
 					{host, Hostname},
 					{from, self()},
 					{mfa, {?MODULE, client_header_decode_passive,
-					       [Data, [$H, $e]]}},
+					       [Data, [$H, $e | <<>>]]}},
 					{options, [{active, false}, {header, 2},
 						   binary | ClientOpts]}]),
 
@@ -2069,7 +2063,7 @@ client_packet_decode(Socket, [Head | Tail] = Packet) ->
     client_packet_decode(Socket, [Head], Tail, Packet).
 
 client_packet_decode(Socket, P1, P2, Packet) ->
-    ct:print("Packet: ~p ~n", [Packet]),
+    ct:log("Packet: ~p ~n", [Packet]),
     ok = ssl:send(Socket, P1),
     ok = ssl:send(Socket, P2),
     receive
@@ -2124,10 +2118,14 @@ client_header_decode_passive(Socket, Packet, Result) ->
 %% option and the bitsynax makes it obsolete!
 check_header_result([Byte1 | _], [Byte1]) ->
     ok;
+check_header_result([Byte1 | _], [Byte1| <<>>]) ->
+    ok;
 check_header_result([Byte1, Byte2 | _], [Byte1, Byte2]) ->
     ok;
-check_header_result(_,Got) ->
-    exit({?LINE, Got}).
+check_header_result([Byte1, Byte2 | _], [Byte1, Byte2 | <<>>]) ->
+    ok;
+check_header_result(Expected,Got) ->
+    exit({?LINE, {Expected, Got}}).
     
 server_line_packet_decode(Socket, Packet) when is_binary(Packet) ->
     [L1, L2] = string:tokens(binary_to_list(Packet), "\n"),

@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
-      <year>2001</year><year>2011</year>
+      <year>2001</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -105,9 +106,9 @@
       <c>file:get_cwd()</c> is used instead. The names of
        temporary files are derived from the Erlang nodename
        (<c>node()</c>), the process identifier of the current Erlang
-       emulator (<c>os:getpid()</c>), and a timestamp
-       (<c>erlang:now()</c>); a typical name would be
-      <c>fs_mynode@myhost_1763_1043_337000_266005.17</c>, where
+       emulator (<c>os:getpid()</c>), and a unique integer
+       (<c>erlang:unique_integer([positive])</c>); a typical name would be
+      <c>fs_mynode@myhost_1763_4711.17</c>, where
       <c>17</c> is a sequence number. Existing files will be
        overwritten. Temporary files are deleted unless some
        uncaught EXIT signal occurs.
@@ -222,82 +223,82 @@ output(L) ->
 
   <datatypes>
     <datatype>
-      <name name="file_name"/><br/>
+      <name name="file_name"/>
     </datatype>
     <datatype>
-      <name name="file_names"/><br/>
+      <name name="file_names"/>
     </datatype>
     <datatype>
-      <name name="i_command"/><br/>
+      <name name="i_command"/>
     </datatype>
     <datatype>
-      <name name="i_reply"/><br/>
+      <name name="i_reply"/>
     </datatype>
     <datatype>
-      <name name="infun"/><br/>
+      <name name="infun"/>
     </datatype>
     <datatype>
-      <name name="input"/><br/>
+      <name name="input"/>
     </datatype>
     <datatype>
-      <name name="input_reply"/><br/>
+      <name name="input_reply"/>
     </datatype>
     <datatype>
-      <name name="o_command"/><br/>
+      <name name="o_command"/>
     </datatype>
     <datatype>
-      <name name="o_reply"/><br/>
+      <name name="o_reply"/>
     </datatype>
     <datatype>
-      <name name="object"/><br/>
+      <name name="object"/>
     </datatype>
     <datatype>
-      <name name="outfun"/><br/>
+      <name name="outfun"/>
     </datatype>
     <datatype>
-      <name name="output"/><br/>
+      <name name="output"/>
     </datatype>
     <datatype>
-      <name name="output_reply"/><br/>
+      <name name="output_reply"/>
     </datatype>
     <datatype>
-      <name name="value"/><br/>
+      <name name="value"/>
     </datatype>
     <datatype>
-      <name name="options"/><br/>
+      <name name="options"/>
     </datatype>
     <datatype>
-      <name name="option"/><br/>
+      <name name="option"/>
     </datatype>
     <datatype>
-      <name name="format"/><br/>
+      <name name="format"/>
     </datatype>
     <datatype>
-      <name name="format_fun"/><br/>
+      <name name="format_fun"/>
     </datatype>
     <datatype>
-      <name name="header_length"/><br/>
+      <name name="header_length"/>
     </datatype>
     <datatype>
-      <name name="key_pos"/><br/>
+      <name name="key_pos"/>
     </datatype>
     <datatype>
-      <name name="no_files"/><br/>
+      <name name="no_files"/>
     </datatype>
     <datatype>
-      <name name="order"/><br/>
+      <name name="order"/>
     </datatype>
     <datatype>
-      <name name="order_fun"/><br/>
+      <name name="order_fun"/>
     </datatype>
     <datatype>
-      <name name="size"/><br/>
+      <name name="size"/>
     </datatype>
     <datatype>
-      <name name="tmp_directory"/><br/>
+      <name name="tmp_directory"/>
     </datatype>
     <datatype>
-      <name name="reason"/><br/>
+      <name name="reason"/>
     </datatype>
   </datatypes>
 

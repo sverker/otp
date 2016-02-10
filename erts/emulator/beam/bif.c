@@ -1,18 +1,19 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2014. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -28,7 +29,9 @@
 #include "global.h"
 #include "erl_process.h"
 #include "error.h"
+#define ERL_WANT_HIPE_BIF_WRAPPER__
 #include "bif.h"
+#undef ERL_WANT_HIPE_BIF_WRAPPER__
 #include "big.h"
 #include "dist.h"
 #include "erl_version.h"
@@ -40,15 +43,26 @@
 #define ERTS_PTAB_WANT_BIF_IMPL__
 #include "erl_ptab.h"
 #include "erl_bits.h"
+#include "erl_bif_unique.h"
+#include "erl_msacc.h"
 
-static Export* flush_monitor_message_trap = NULL;
+Export *erts_await_result;
+static Export* flush_monitor_messages_trap = NULL;
 static Export* set_cpu_topology_trap = NULL;
 static Export* await_proc_exit_trap = NULL;
 static Export* await_port_send_result_trap = NULL;
 Export* erts_format_cpu_topology_trap = NULL;
+static Export dsend_continue_trap_export;
+Export *erts_convert_time_unit_trap = NULL;
+
+static Export *await_msacc_mod_trap = NULL;
+static erts_smp_atomic32_t msacc;
 
 static Export *await_sched_wall_time_mod_trap;
 static erts_smp_atomic32_t sched_wall_time;
+
+static erts_smp_mtx_t ports_snapshot_mtx;
+erts_smp_atomic_t erts_dead_ports_ptr; /* To store dying ports during snapshot */
 
 #define DECL_AM(S) Eterm AM_ ## S = am_atom_put(#S, sizeof(#S) - 1)
 
@@ -62,7 +76,7 @@ BIF_RETTYPE spawn_3(BIF_ALIST_3)
     ErlSpawnOpts so;
     Eterm pid;
 
-    so.flags = 0;
+    so.flags = erts_default_spo_flags;
     pid = erl_create_process(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3, &so);
     if (is_non_value(pid)) {
 	BIF_ERROR(BIF_P, so.error_code);
@@ -160,7 +174,10 @@ BIF_RETTYPE link_1(BIF_ALIST_1)
 
     if (is_internal_port(BIF_ARG_1)) {
 	int send_link_signal = 0;
-	Port *prt = erts_port_lookup(BIF_ARG_1, ERTS_PORT_SFLGS_INVALID_LOOKUP);
+	Port *prt = erts_port_lookup(BIF_ARG_1,
+				     (erts_port_synchronous_ops
+				      ? ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP
+				      : ERTS_PORT_SFLGS_INVALID_LOOKUP));
 	if (!prt) {
 	    goto res_no_proc;
 	}
@@ -388,7 +405,7 @@ remote_demonitor(Process *c_p, DistEntry *dep, Eterm ref, Eterm to)
     return res;
 }
 
-static int demonitor(Process *c_p, Eterm ref)
+static int demonitor(Process *c_p, Eterm ref, Eterm *multip)
 {
    ErtsMonitor *mon = NULL;  /* The monitor entry to delete */
    Process  *rp;    /* Local target process */
@@ -412,65 +429,73 @@ static int demonitor(Process *c_p, Eterm ref)
        goto done;
    }
 
-   if (mon->type != MON_ORIGIN) {
-       res = ERTS_DEMONITOR_BADARG;
-       goto done;
-   }
-   to = mon->pid;
-
-   if (is_atom(to)) {
-       /* Monitoring a name at node to */
-       ASSERT(is_node_name_atom(to));
-       dep = erts_sysname_to_connected_dist_entry(to);
-       ASSERT(dep != erts_this_dist_entry);
-       if (dep)
-	   deref_de = 1;
-   } else {
-       ASSERT(is_pid(to));
-       dep = pid_dist_entry(to);
-   }
-   if (dep != erts_this_dist_entry) {
-       res = remote_demonitor(c_p, dep, ref, to);
-       /* remote_demonitor() unlocks link lock on c_p */
-       unlock_link = 0;
-   }
-   else { /* Local monitor */
-       if (deref_de) {
-	   deref_de = 0;
-	   erts_deref_dist_entry(dep);
+   switch (mon->type) {
+   case MON_TIME_OFFSET:
+       *multip = am_true;
+       erts_demonitor_time_offset(ref);
+       res = ERTS_DEMONITOR_TRUE;
+       break;
+   case MON_ORIGIN:
+       to = mon->pid;
+       *multip = am_false;
+       if (is_atom(to)) {
+	   /* Monitoring a name at node to */
+	   ASSERT(is_node_name_atom(to));
+	   dep = erts_sysname_to_connected_dist_entry(to);
+	   ASSERT(dep != erts_this_dist_entry);
+	   if (dep)
+	       deref_de = 1;
+       } else {
+	   ASSERT(is_pid(to));
+	   dep = pid_dist_entry(to);
        }
-       dep = NULL;
-       rp = erts_pid2proc_opt(c_p,
-			      ERTS_PROC_LOCK_MAIN|ERTS_PROC_LOCK_LINK,
-			      to,
-			      ERTS_PROC_LOCK_LINK,
-			      ERTS_P2P_FLG_ALLOW_OTHER_X);
-       mon = erts_remove_monitor(&ERTS_P_MONITORS(c_p), ref);
+       if (dep != erts_this_dist_entry) {
+	   res = remote_demonitor(c_p, dep, ref, to);
+	   /* remote_demonitor() unlocks link lock on c_p */
+	   unlock_link = 0;
+       }
+       else { /* Local monitor */
+	   if (deref_de) {
+	       deref_de = 0;
+	       erts_deref_dist_entry(dep);
+	   }
+	   dep = NULL;
+	   rp = erts_pid2proc_opt(c_p,
+				  ERTS_PROC_LOCK_MAIN|ERTS_PROC_LOCK_LINK,
+				  to,
+				  ERTS_PROC_LOCK_LINK,
+				  ERTS_P2P_FLG_ALLOW_OTHER_X);
+	   mon = erts_remove_monitor(&ERTS_P_MONITORS(c_p), ref);
 #ifndef ERTS_SMP
-       ASSERT(mon);
+	   ASSERT(mon);
 #else
-       if (!mon)
-	   res = ERTS_DEMONITOR_FALSE;
-       else
+	   if (!mon)
+	       res = ERTS_DEMONITOR_FALSE;
+	   else
 #endif
-       {
-	   res = ERTS_DEMONITOR_TRUE;
-	   erts_destroy_monitor(mon);
-       }
-       if (rp) {
-	   ErtsMonitor *rmon;
-	   rmon = erts_remove_monitor(&ERTS_P_MONITORS(rp), ref);
-	   if (rp != c_p)
-	       erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
-	   if (rmon != NULL)
-	       erts_destroy_monitor(rmon);
-       }
-       else {
-	   ERTS_SMP_ASSERT_IS_NOT_EXITING(c_p);
-       }
+	   {
+	       res = ERTS_DEMONITOR_TRUE;
+	       erts_destroy_monitor(mon);
+	   }
+	   if (rp) {
+	       ErtsMonitor *rmon;
+	       rmon = erts_remove_monitor(&ERTS_P_MONITORS(rp), ref);
+	       if (rp != c_p)
+		   erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
+	       if (rmon != NULL)
+		   erts_destroy_monitor(rmon);
+	   }
+	   else {
+	       ERTS_SMP_ASSERT_IS_NOT_EXITING(c_p);
+	   }
 
+       }
+       break;
+   default:
+       res = ERTS_DEMONITOR_BADARG;
+       *multip = am_false;
+       break;
    }
-
  done:
 
    if (unlock_link)
@@ -487,7 +512,8 @@ static int demonitor(Process *c_p, Eterm ref)
 
 BIF_RETTYPE demonitor_1(BIF_ALIST_1)
 {
-    switch (demonitor(BIF_P, BIF_ARG_1)) {
+    Eterm multi;
+    switch (demonitor(BIF_P, BIF_ARG_1, &multi)) {
     case ERTS_DEMONITOR_FALSE:
     case ERTS_DEMONITOR_TRUE:
 	BIF_RET(am_true);
@@ -505,6 +531,7 @@ BIF_RETTYPE demonitor_1(BIF_ALIST_1)
 BIF_RETTYPE demonitor_2(BIF_ALIST_2)
 {
     Eterm res = am_true;
+    Eterm multi = am_false;
     int info = 0;
     int flush = 0;
     Eterm list = BIF_ARG_2;
@@ -527,13 +554,18 @@ BIF_RETTYPE demonitor_2(BIF_ALIST_2)
     if (is_not_nil(list))
 	goto badarg;
 
-    switch (demonitor(BIF_P, BIF_ARG_1)) {
+    switch (demonitor(BIF_P, BIF_ARG_1, &multi)) {
     case ERTS_DEMONITOR_FALSE:
 	if (info)
 	    res = am_false;
-	if (flush)
-	    BIF_TRAP2(flush_monitor_message_trap, BIF_P, BIF_ARG_1, res);
+	if (flush) {
+	flush_messages:
+	    BIF_TRAP3(flush_monitor_messages_trap, BIF_P,
+		      BIF_ARG_1, multi, res);
+	}
     case ERTS_DEMONITOR_TRUE:
+	if (multi == am_true && flush)
+	    goto flush_messages;
 	BIF_RET(res);
     case ERTS_DEMONITOR_YIELD_TRUE:
 	ERTS_BIF_YIELD_RETURN(BIF_P, am_true);
@@ -561,7 +593,7 @@ erts_queue_monitor_message(Process *p,
     Eterm reason_copy, ref_copy, item_copy;
     Uint reason_size, ref_size, item_size, heap_size;
     ErlOffHeap *ohp;
-    ErlHeapFragment *bp;
+    ErtsMessage *msgp;
 
     reason_size = IS_CONST(reason) ? 0 : size_object(reason);
     item_size   = IS_CONST(item) ? 0 : size_object(item);
@@ -569,11 +601,8 @@ erts_queue_monitor_message(Process *p,
 
     heap_size = 6+reason_size+ref_size+item_size;
 
-    hp = erts_alloc_message_heap(heap_size,
-				 &bp,
-				 &ohp,
-				 p,
-				 p_locksp);
+    msgp = erts_alloc_message_heap(p, p_locksp, heap_size,
+				   &hp, &ohp);
 
     reason_copy = (IS_CONST(reason)
 		   ? reason
@@ -584,22 +613,16 @@ erts_queue_monitor_message(Process *p,
     ref_copy    = copy_struct(ref, ref_size, &hp, ohp);
 
     tup = TUPLE5(hp, am_DOWN, ref_copy, type, item_copy, reason_copy);
-    erts_queue_message(p, p_locksp, bp, tup, NIL
-#ifdef USE_VM_PROBES
-		       , NIL
-#endif
-		       );
+    erts_queue_message(p, p_locksp, msgp, tup, NIL);
 }
 
 static BIF_RETTYPE
-local_pid_monitor(Process *p, Eterm target)
+local_pid_monitor(Process *p, Eterm target, Eterm mon_ref, int boolean)
 {
     BIF_RETTYPE ret;
-    Eterm mon_ref;
     Process *rp;
     ErtsProcLocks p_locks = ERTS_PROC_LOCK_MAIN|ERTS_PROC_LOCK_LINK;
 
-    mon_ref = erts_make_ref(p);
     ERTS_BIF_PREP_RET(ret, mon_ref);
     if (target == p->common.id) {
 	return ret;
@@ -612,11 +635,17 @@ local_pid_monitor(Process *p, Eterm target)
     if (!rp) {
 	erts_smp_proc_unlock(p, ERTS_PROC_LOCK_LINK);
 	p_locks &= ~ERTS_PROC_LOCK_LINK;
-	erts_queue_monitor_message(p, &p_locks,
-				   mon_ref, am_process, target, am_noproc);
+	if (boolean)
+	    ret = am_false;
+	else
+	    erts_queue_monitor_message(p, &p_locks,
+				       mon_ref, am_process, target, am_noproc);
     }
     else {
 	ASSERT(rp != p);
+
+	if (boolean)
+	    ret = am_true;
 
 	erts_add_monitor(&ERTS_P_MONITORS(p), MON_ORIGIN, mon_ref, target, NIL);
 	erts_add_monitor(&ERTS_P_MONITORS(rp), MON_TARGET, mon_ref, p->common.id, NIL);
@@ -741,13 +770,28 @@ BIF_RETTYPE monitor_2(BIF_ALIST_2)
     int deref_de = 0;
 
     /* Only process monitors are implemented */
-    if (BIF_ARG_1 != am_process) {
+    switch (BIF_ARG_1) {
+    case am_time_offset: {
+	Eterm ref;
+	if (BIF_ARG_2 != am_clock_service)
+	    goto error;
+	ref = erts_make_ref(BIF_P);
+	erts_smp_proc_lock(BIF_P, ERTS_PROC_LOCK_LINK);
+	erts_add_monitor(&ERTS_P_MONITORS(BIF_P), MON_TIME_OFFSET,
+			 ref, am_clock_service, NIL);
+	erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_LINK);
+	erts_monitor_time_offset(BIF_P->common.id, ref);
+	BIF_RET(ref);
+    }
+    case am_process:
+	break;
+    default:
 	goto error;
     }
 
     if (is_internal_pid(target)) {
     local_pid:
-	ret = local_pid_monitor(BIF_P, target);
+	ret = local_pid_monitor(BIF_P, target, erts_make_ref(BIF_P), 0);
     } else if (is_external_pid(target)) {
 	dep = external_pid_dist_entry(target);
 	if (dep == erts_this_dist_entry)
@@ -790,7 +834,6 @@ BIF_RETTYPE monitor_2(BIF_ALIST_2)
     return ret;
 }
 
-
 /**********************************************************************/
 /* this is a combination of the spawn and link BIFs */
 
@@ -799,7 +842,7 @@ BIF_RETTYPE spawn_link_3(BIF_ALIST_3)
     ErlSpawnOpts so;
     Eterm pid;
 
-    so.flags = SPO_LINK;
+    so.flags = erts_default_spo_flags|SPO_LINK;
     pid = erl_create_process(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3, &so);
     if (is_non_value(pid)) {
 	BIF_ERROR(BIF_P, so.error_code);
@@ -836,7 +879,7 @@ BIF_RETTYPE spawn_opt_1(BIF_ALIST_1)
     /*
      * Store default values for options.
      */
-    so.flags          = SPO_USE_ARGS;
+    so.flags          = erts_default_spo_flags|SPO_USE_ARGS;
     so.min_heap_size  = H_MIN_SIZE;
     so.min_vheap_size = BIN_VH_MIN_SIZE;
     so.priority       = PRIORITY_NORMAL;
@@ -871,6 +914,22 @@ BIF_RETTYPE spawn_opt_1(BIF_ALIST_1)
 		    so.priority = PRIORITY_LOW;
 		else
 		    goto error;
+	    } else if (arg == am_message_queue_data) {
+		switch (val) {
+		case am_mixed:
+		    so.flags &= ~(SPO_OFF_HEAP_MSGQ|SPO_ON_HEAP_MSGQ);
+		    break;
+		case am_on_heap:
+		    so.flags &= ~SPO_OFF_HEAP_MSGQ;
+		    so.flags |= SPO_ON_HEAP_MSGQ;
+		    break;
+		case am_off_heap:
+		    so.flags &= ~SPO_ON_HEAP_MSGQ;
+		    so.flags |= SPO_OFF_HEAP_MSGQ;
+		    break;
+		default:
+		    goto error;
+		}
 	    } else if (arg == am_min_heap_size && is_small(val)) {
 		Sint min_heap_size = signed_val(val);
 		if (min_heap_size < 0) {
@@ -1363,11 +1422,22 @@ BIF_RETTYPE exit_2(BIF_ALIST_2)
       */
 
      if (is_internal_port(BIF_ARG_1)) {
-	 Port *prt = erts_port_lookup(BIF_ARG_1, ERTS_PORT_SFLGS_INVALID_LOOKUP);
+	 Eterm ref, *refp;
+	 Uint32 invalid_flags;
+	 Port *prt;
+
+	 if (erts_port_synchronous_ops) {
+	     refp = &ref;
+	     invalid_flags = ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP;
+	 }
+	 else {
+	     refp = NULL;
+	     invalid_flags = ERTS_PORT_SFLGS_INVALID_LOOKUP;
+	 }
+
+	 prt = erts_port_lookup(BIF_ARG_1, invalid_flags);
 
 	 if (prt) {
-	     Eterm ref;
-	     Eterm *refp = erts_port_synchronous_ops ? &ref : NULL;
 	     ErtsPortOpResult res;
 
 #ifdef DEBUG
@@ -1638,6 +1708,12 @@ BIF_RETTYPE process_flag_2(BIF_ALIST_2)
        }
        BIF_RET(old_value);
    }
+   else if (BIF_ARG_1 == am_message_queue_data) {
+       old_value = erts_change_message_queue_management(BIF_P, BIF_ARG_2);
+       if (is_non_value(old_value))
+	   goto error;
+       BIF_RET(old_value);
+   }
    else if (BIF_ARG_1 == am_sensitive) {
        Uint is_sensitive;
        if (BIF_ARG_2 == am_true) {
@@ -1763,6 +1839,8 @@ BIF_RETTYPE whereis_1(BIF_ALIST_1)
  * erlang:'!'/2
  */
 
+HIPE_WRAPPER_BIF_DISABLE_GC(ebif_bang, 2)
+
 BIF_RETTYPE
 ebif_bang_2(BIF_ALIST_2)
 {
@@ -1781,34 +1859,36 @@ ebif_bang_2(BIF_ALIST_2)
 #define SEND_USER_ERROR		(-5)
 #define SEND_INTERNAL_ERROR	(-6)
 #define SEND_AWAIT_RESULT	(-7)
+#define SEND_YIELD_CONTINUE     (-8)
 
-Sint do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp);
+
+Sint do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, ErtsSendContext*);
 
 static Sint remote_send(Process *p, DistEntry *dep,
-			Eterm to, Eterm full_to, Eterm msg, int suspend)
+			Eterm to, Eterm full_to, Eterm msg,
+			ErtsSendContext* ctx)
 {
     Sint res;
     int code;
-    ErtsDSigData dsd;
 
     ASSERT(is_atom(to) || is_external_pid(to));
 
-    code = erts_dsig_prepare(&dsd, dep, p, ERTS_DSP_NO_LOCK, !suspend);
+    code = erts_dsig_prepare(&ctx->dsd, dep, p, ERTS_DSP_NO_LOCK, !ctx->suspend);
     switch (code) {
     case ERTS_DSIG_PREP_NOT_ALIVE:
     case ERTS_DSIG_PREP_NOT_CONNECTED:
 	res = SEND_TRAP;
 	break;
     case ERTS_DSIG_PREP_WOULD_SUSPEND:
-	ASSERT(!suspend);
+	ASSERT(!ctx->suspend);
 	res = SEND_YIELD;
 	break;
     case ERTS_DSIG_PREP_CONNECTED: {
 
 	if (is_atom(to))
-	    code = erts_dsig_send_reg_msg(&dsd, to, msg);
+	    code = erts_dsig_send_reg_msg(to, msg, ctx);
 	else
-	    code = erts_dsig_send_msg(&dsd, to, msg);
+	    code = erts_dsig_send_msg(to, msg, ctx);
 	/*
 	 * Note that reductions have been bumped on calling
 	 * process by erts_dsig_send_reg_msg() or
@@ -1816,6 +1896,8 @@ static Sint remote_send(Process *p, DistEntry *dep,
 	 */
 	if (code == ERTS_DSIG_SEND_YIELD)
 	    res = SEND_YIELD_RETURN;
+	else if (code == ERTS_DSIG_SEND_CONTINUE)
+	    res = SEND_YIELD_CONTINUE;
 	else
 	    res = 0;
 	break;
@@ -1836,7 +1918,8 @@ static Sint remote_send(Process *p, DistEntry *dep,
 }
 
 Sint
-do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp) {
+do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, ErtsSendContext* ctx)
+{
     Eterm portid;
     Port *pt;
     Process* rp;
@@ -1867,15 +1950,23 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp) {
 	    erts_send_error_to_logger(p->group_leader, dsbufp);
 	    return 0;
 	}
-	return remote_send(p, dep, to, to, msg, suspend);
+	return remote_send(p, dep, to, to, msg, ctx);
     } else if (is_atom(to)) {
 	Eterm id = erts_whereis_name_to_id(p, to);
 
-	rp = erts_proc_lookup(id);
-	if (rp)
+	rp = erts_proc_lookup_raw(id);
+	if (rp) {
+	    if (IS_TRACED(p))
+		trace_send(p, to, msg);
+	    if (ERTS_PROC_GET_SAVED_CALLS_BUF(p))
+		save_calls(p, &exp_send);
 	    goto send_message;
+	}
 
-	pt = erts_port_lookup(id, ERTS_PORT_SFLGS_INVALID_LOOKUP);
+	pt = erts_port_lookup(id,
+			      (erts_port_synchronous_ops
+			       ? ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP
+			       : ERTS_PORT_SFLGS_INVALID_LOOKUP));
 	if (pt) {
 	    portid = id;
 	    goto port_common;
@@ -1905,13 +1996,16 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp) {
 	int ret_val;
 	portid = to;
 
-	pt = erts_port_lookup(portid, ERTS_PORT_SFLGS_INVALID_LOOKUP);
+	pt = erts_port_lookup(portid,
+			      (erts_port_synchronous_ops
+			       ? ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP
+			       : ERTS_PORT_SFLGS_INVALID_LOOKUP));
 
       port_common:
 	ret_val = 0;
         
 	if (pt) {
-	    int ps_flags = suspend ? 0 : ERTS_PORT_SIG_FLG_NOSUSPEND;
+	    int ps_flags = ctx->suspend ? 0 : ERTS_PORT_SIG_FLG_NOSUSPEND;
 	    *refp = NIL;
 
 	    switch (erts_port_command(p, ps_flags, pt, msg, refp)) {
@@ -1920,12 +2014,12 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp) {
 		return SEND_USER_ERROR;
 	    case ERTS_PORT_OP_BUSY:
 		/* Nothing has been sent */
-		if (suspend)
+		if (ctx->suspend)
 		    erts_suspend(p, ERTS_PROC_LOCK_MAIN, pt);
 		return SEND_YIELD;
 	    case ERTS_PORT_OP_BUSY_SCHEDULED:
 		/* Message was sent */
-		if (suspend) {
+		if (ctx->suspend) {
 		    erts_suspend(p, ERTS_PROC_LOCK_MAIN, pt);
 		    ret_val = SEND_YIELD_RETURN;
 		    break;
@@ -1952,11 +2046,7 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp) {
 	if (ERTS_PROC_GET_SAVED_CALLS_BUF(p))
 	    save_calls(p, &exp_send);
 	
-	if (SEQ_TRACE_TOKEN(p) != NIL
-#ifdef USE_VM_PROBES
-	    && SEQ_TRACE_TOKEN(p) != am_have_dt_utag
-#endif
-	    ) {
+        if (have_seqtrace(SEQ_TRACE_TOKEN(p))) {
 	    seq_trace_update_send(p);
 	    seq_trace_output(SEQ_TRACE_TOKEN(p), msg, 
 			     SEQ_TRACE_SEND, portid, p);
@@ -1994,7 +2084,10 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp) {
 	    rp = erts_proc_lookup_raw(id);
 	    if (rp)
 		goto send_message;
-	    pt = erts_port_lookup(id, ERTS_PORT_SFLGS_INVALID_LOOKUP);
+	    pt = erts_port_lookup(id,
+				  (erts_port_synchronous_ops
+				   ? ERTS_PORT_SFLGS_INVALID_DRIVER_LOOKUP
+				   : ERTS_PORT_SFLGS_INVALID_LOOKUP));
 	    if (pt) {
 		portid = id;
 		goto port_common;
@@ -2002,9 +2095,14 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp) {
 	    return 0;
 	}
 
-	ret = remote_send(p, dep, tp[1], to, msg, suspend);
-	if (dep)
-	    erts_deref_dist_entry(dep);
+	ret = remote_send(p, dep, tp[1], to, msg, ctx);
+	if (ret != SEND_YIELD_CONTINUE) {
+	    if (dep) {
+		erts_deref_dist_entry(dep);
+	    }
+	} else {
+	    ctx->dep_to_deref = dep;
+	}
 	return ret;
     } else {
 	if (IS_TRACED(p)) /* XXX Is this really neccessary ??? */
@@ -2035,9 +2133,11 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend, Eterm *refp) {
     }
 }
 
+HIPE_WRAPPER_BIF_DISABLE_GC(send, 3)
 
 BIF_RETTYPE send_3(BIF_ALIST_3)
 {
+    BIF_RETTYPE retval;
     Eterm ref;
     Process *p = BIF_P;
     Eterm to = BIF_ARG_1;
@@ -2045,34 +2145,51 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
     Eterm opts = BIF_ARG_3;
 
     int connect = !0;
-    int suspend = !0;
     Eterm l = opts;
     Sint result;
-    
+
+    DeclareTypedTmpHeap(ErtsSendContext, ctx, BIF_P);
+
+    ERTS_MSACC_PUSH_STATE_M_X();
+
+    UseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), BIF_P);
+
+    ctx->suspend = !0;
+    ctx->dep_to_deref = NULL;
+    ctx->return_term = am_ok;
+    ctx->dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
+    ctx->dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
+
     while (is_list(l)) {
 	if (CAR(list_val(l)) == am_noconnect) {
 	    connect = 0;
 	} else if (CAR(list_val(l)) == am_nosuspend) {
-	    suspend = 0;
+	    ctx->suspend = 0;
 	} else {
-	    BIF_ERROR(p, BADARG);
+	    ERTS_BIF_PREP_ERROR(retval, p, BADARG);
+	    goto done;
 	}
 	l = CDR(list_val(l));
     }
     if(!is_nil(l)) {
-	BIF_ERROR(p, BADARG);
+	ERTS_BIF_PREP_ERROR(retval, p, BADARG);
+	goto done;
     }
 
 #ifdef DEBUG
     ref = NIL;
 #endif
 
-    result = do_send(p, to, msg, suspend, &ref);
+    ERTS_MSACC_SET_STATE_CACHED_M_X(ERTS_MSACC_STATE_SEND);
+    result = do_send(p, to, msg, &ref, ctx);
+    ERTS_MSACC_POP_STATE_M_X();
+
     if (result > 0) {
 	ERTS_VBUMP_REDS(p, result);
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
 	    goto yield_return;
-	BIF_RET(am_ok);
+	ERTS_BIF_PREP_RET(retval, am_ok);
+	goto done;
     }
 
     switch (result) {
@@ -2080,68 +2197,129 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
 	/* May need to yield even though we do not bump reds here... */
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
 	    goto yield_return;
-	BIF_RET(am_ok); 
+	ERTS_BIF_PREP_RET(retval, am_ok);
 	break;
     case SEND_TRAP:
 	if (connect) {
-	    BIF_TRAP3(dsend3_trap, p, to, msg, opts); 
+	    ERTS_BIF_PREP_TRAP3(retval, dsend3_trap, p, to, msg, opts);
 	} else {
-	    BIF_RET(am_noconnect);
+	    ERTS_BIF_PREP_RET(retval, am_noconnect);
 	}
 	break;
     case SEND_YIELD:
-	if (suspend) {
-	    ERTS_BIF_YIELD3(bif_export[BIF_send_3], p, to, msg, opts);
+	if (ctx->suspend) {
+	    ERTS_BIF_PREP_YIELD3(retval,
+				 bif_export[BIF_send_3], p, to, msg, opts);
 	} else {
-	    BIF_RET(am_nosuspend);
+	    ERTS_BIF_PREP_RET(retval, am_nosuspend);
 	}
 	break;
     case SEND_YIELD_RETURN:
-	if (!suspend)
-	    BIF_RET(am_nosuspend);
+	if (!ctx->suspend) {
+	    ERTS_BIF_PREP_RET(retval, am_nosuspend);
+	    break;
+	}
     yield_return:
-	ERTS_BIF_YIELD_RETURN(p, am_ok);
+	ERTS_BIF_PREP_YIELD_RETURN(retval, p, am_ok);
+        break;
     case SEND_AWAIT_RESULT:
 	ASSERT(is_internal_ref(ref));
-	BIF_TRAP3(await_port_send_result_trap, p, ref, am_nosuspend, am_ok);
+	ERTS_BIF_PREP_TRAP3(retval, await_port_send_result_trap, p, ref, am_nosuspend, am_ok);
+	break;
     case SEND_BADARG:
-	BIF_ERROR(p, BADARG); 
+	ERTS_BIF_PREP_ERROR(retval, p, BADARG);
 	break;
     case SEND_USER_ERROR:
-	BIF_ERROR(p, EXC_ERROR); 
+	ERTS_BIF_PREP_ERROR(retval, p, EXC_ERROR);
 	break;
     case SEND_INTERNAL_ERROR:
-	BIF_ERROR(p, EXC_INTERNAL_ERROR);
+	ERTS_BIF_PREP_ERROR(retval, p, EXC_INTERNAL_ERROR);
+	break;
+    case SEND_YIELD_CONTINUE:
+	BUMP_ALL_REDS(p);
+	erts_set_gc_state(p, 0);
+	ERTS_BIF_PREP_TRAP1(retval, &dsend_continue_trap_export, p,
+			    erts_dsend_export_trap_context(p, ctx));
 	break;
     default:
-	ASSERT(! "Illegal send result"); 
+	erl_exit(ERTS_ABORT_EXIT, "send_3 invalid result %d\n", (int)result);
 	break;
     }
-    ASSERT(! "Can not arrive here");
-    BIF_ERROR(p, BADARG);
+
+done:
+    UnUseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), BIF_P);
+    return retval;
 }
+
+HIPE_WRAPPER_BIF_DISABLE_GC(send, 2)
 
 BIF_RETTYPE send_2(BIF_ALIST_2)
 {
     return erl_send(BIF_P, BIF_ARG_1, BIF_ARG_2);
 }
 
+static BIF_RETTYPE dsend_continue_trap_1(BIF_ALIST_1)
+{
+    Binary* bin = ((ProcBin*) binary_val(BIF_ARG_1))->val;
+    ErtsSendContext* ctx = (ErtsSendContext*) ERTS_MAGIC_BIN_DATA(bin);
+    Sint initial_reds = (Sint) (ERTS_BIF_REDS_LEFT(BIF_P) * TERM_TO_BINARY_LOOP_FACTOR);
+    int result;
+
+    ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(bin) == erts_dsend_context_dtor);
+
+    ctx->dss.reds = initial_reds;
+    result = erts_dsig_send(&ctx->dsd, &ctx->dss);
+
+    switch (result) {
+    case ERTS_DSIG_SEND_OK:
+	erts_set_gc_state(BIF_P, 1);
+	BIF_RET(ctx->return_term);
+	break;
+    case ERTS_DSIG_SEND_YIELD: /*SEND_YIELD_RETURN*/
+	erts_set_gc_state(BIF_P, 1);
+	if (!ctx->suspend)
+	    BIF_RET(am_nosuspend);
+	ERTS_BIF_YIELD_RETURN(BIF_P, ctx->return_term);
+
+    case ERTS_DSIG_SEND_CONTINUE: { /*SEND_YIELD_CONTINUE*/
+	BUMP_ALL_REDS(BIF_P);
+	BIF_TRAP1(&dsend_continue_trap_export, BIF_P, BIF_ARG_1);
+    }
+    default:
+	erl_exit(ERTS_ABORT_EXIT, "dsend_continue_trap invalid result %d\n", (int)result);
+	break;
+    }
+    ASSERT(! "Can not arrive here");
+    BIF_ERROR(BIF_P, BADARG);
+}
+
 Eterm erl_send(Process *p, Eterm to, Eterm msg)
 {
+    Eterm retval;
     Eterm ref;
     Sint result;
-
+    DeclareTypedTmpHeap(ErtsSendContext, ctx, p);
+    ERTS_MSACC_PUSH_AND_SET_STATE_M_X(ERTS_MSACC_STATE_SEND);
+    UseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), p);
 #ifdef DEBUG
     ref = NIL;
 #endif
+    ctx->suspend = !0;
+    ctx->dep_to_deref = NULL;
+    ctx->return_term = msg;
+    ctx->dss.reds = (Sint) (ERTS_BIF_REDS_LEFT(p) * TERM_TO_BINARY_LOOP_FACTOR);
+    ctx->dss.phase = ERTS_DSIG_SEND_PHASE_INIT;
 
-    result = do_send(p, to, msg, !0, &ref);
-    
+    result = do_send(p, to, msg, &ref, ctx);
+
+    ERTS_MSACC_POP_STATE_M_X();
+
     if (result > 0) {
 	ERTS_VBUMP_REDS(p, result);
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
 	    goto yield_return;
-	BIF_RET(msg);
+	ERTS_BIF_PREP_RET(retval, msg);
+	goto done;
     }
 
     switch (result) {
@@ -2149,35 +2327,46 @@ Eterm erl_send(Process *p, Eterm to, Eterm msg)
 	/* May need to yield even though we do not bump reds here... */
 	if (ERTS_IS_PROC_OUT_OF_REDS(p))
 	    goto yield_return;
-	BIF_RET(msg); 
+	ERTS_BIF_PREP_RET(retval, msg);
 	break;
     case SEND_TRAP:
-	BIF_TRAP2(dsend2_trap, p, to, msg); 
+	ERTS_BIF_PREP_TRAP2(retval, dsend2_trap, p, to, msg);
 	break;
     case SEND_YIELD:
-	ERTS_BIF_YIELD2(bif_export[BIF_send_2], p, to, msg);
+	ERTS_BIF_PREP_YIELD2(retval, bif_export[BIF_send_2], p, to, msg);
 	break;
     case SEND_YIELD_RETURN:
     yield_return:
-	ERTS_BIF_YIELD_RETURN(p, msg);
+	ERTS_BIF_PREP_YIELD_RETURN(retval, p, msg);
+        break;
     case SEND_AWAIT_RESULT:
 	ASSERT(is_internal_ref(ref));
-	BIF_TRAP3(await_port_send_result_trap, p, ref, msg, msg);
+	ERTS_BIF_PREP_TRAP3(retval,
+			    await_port_send_result_trap, p, ref, msg, msg);
+	break;
     case SEND_BADARG:
-	BIF_ERROR(p, BADARG); 
+	ERTS_BIF_PREP_ERROR(retval, p, BADARG);
 	break;
     case SEND_USER_ERROR:
-	BIF_ERROR(p, EXC_ERROR); 
+	ERTS_BIF_PREP_ERROR(retval, p, EXC_ERROR);
 	break;
     case SEND_INTERNAL_ERROR:
-	BIF_ERROR(p, EXC_INTERNAL_ERROR);
+	ERTS_BIF_PREP_ERROR(retval, p, EXC_INTERNAL_ERROR);
+	break;
+    case SEND_YIELD_CONTINUE:
+	BUMP_ALL_REDS(p);
+	erts_set_gc_state(p, 0);
+	ERTS_BIF_PREP_TRAP1(retval, &dsend_continue_trap_export, p,
+			    erts_dsend_export_trap_context(p, ctx));
 	break;
     default:
-	ASSERT(! "Illegal send result"); 
+	erl_exit(ERTS_ABORT_EXIT, "invalid send result %d\n", (int)result);
 	break;
     }
-    ASSERT(! "Can not arrive here");
-    BIF_ERROR(p, BADARG);
+
+done:
+    UnUseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), p);
+    return retval;
 }
 
 /**********************************************************************/
@@ -2543,7 +2732,7 @@ BIF_RETTYPE insert_element_3(BIF_ALIST_3)
     Eterm* hp;
     Uint arity;
     Eterm res;
-    Sint ix;
+    Sint ix, c1, c2;
 
     if (is_not_tuple(BIF_ARG_2) || is_not_small(BIF_ARG_1)) {
 	BIF_ERROR(BIF_P, BADARG);
@@ -2561,14 +2750,12 @@ BIF_RETTYPE insert_element_3(BIF_ALIST_3)
     res = make_tuple(hp);
     *hp = make_arityval(arity + 1);
 
-    ix--;
-    arity -= ix;
+    c1 = ix - 1;
+    c2 = arity - ix + 1;
 
-    while (ix--) { *++hp = *++ptr; }
-
+    while (c1--) { *++hp = *++ptr; }
     *++hp = BIF_ARG_3;
-
-    while(arity--) { *++hp = *++ptr; }
+    while (c2--) { *++hp = *++ptr; }
 
     BIF_RET(res);
 }
@@ -2579,7 +2766,7 @@ BIF_RETTYPE delete_element_2(BIF_ALIST_3)
     Eterm* hp;
     Uint arity;
     Eterm res;
-    Sint ix;
+    Sint ix, c1, c2;
 
     if (is_not_tuple(BIF_ARG_2) || is_not_small(BIF_ARG_1)) {
 	BIF_ERROR(BIF_P, BADARG);
@@ -2597,14 +2784,12 @@ BIF_RETTYPE delete_element_2(BIF_ALIST_3)
     res = make_tuple(hp);
     *hp = make_arityval(arity - 1);
 
-    ix--;
-    arity -= ix;
+    c1  = ix - 1;
+    c2  = arity - ix;
 
-    while (ix--) { *++hp = *++ptr; }
-
+    while (c1--) { *++hp = *++ptr; }
     ++ptr;
-
-    while(arity--) { *++hp = *++ptr; }
+    while (c2--) { *++hp = *++ptr; }
 
     BIF_RET(res);
 }
@@ -2656,7 +2841,7 @@ BIF_RETTYPE list_to_atom_1(BIF_ALIST_1)
 
     if (i < 0) {
 	erts_free(ERTS_ALC_T_TMP, (void *) buf);
-	i = list_length(BIF_ARG_1);
+	i = erts_list_length(BIF_ARG_1);
 	if (i > MAX_ATOM_CHARACTERS) {
 	    BIF_ERROR(BIF_P, SYSTEM_LIMIT);
 	}
@@ -2732,170 +2917,20 @@ BIF_RETTYPE integer_to_list_1(BIF_ALIST_1)
 
 /**********************************************************************/
 
-/* convert a list of ascii ascii integer value to an integer */
+/*
+ * Converts a list of ascii base10 digits to an integer fully or partially.
+ * Returns result and the remaining tail.
+ * On error returns: {error,not_a_list}, or {error, no_integer}
+ */
 
-
-#define LTI_BAD_STRUCTURE 0
-#define LTI_NO_INTEGER 1
-#define LTI_SOME_INTEGER 2
-#define LTI_ALL_INTEGER 3
-
-static int do_list_to_integer(Process *p, Eterm orig_list, 
-			      Eterm *integer, Eterm *rest)
-{
-     Sint i = 0;
-     int skip = 0;
-     int neg = 0;
-     int n = 0;
-     int m;
-     int lg2;
-     Eterm res;
-     Eterm* hp;
-     Eterm *hp_end;
-     Eterm lst = orig_list;
-     Eterm tail = lst;
-     int error_res = LTI_BAD_STRUCTURE;
-
-     if (is_nil(lst)) {
-       error_res = LTI_NO_INTEGER;
-     error:
-	 *rest = tail;
-	 *integer = make_small(0);
-	 return error_res;
-     }       
-     if (is_not_list(lst))
-       goto error;
-
-     /* if first char is a '-' then it is a negative integer */
-     if (CAR(list_val(lst)) == make_small('-')) {
-	  neg = 1;
-	  skip = 1;
-	  lst = CDR(list_val(lst));
-	  if (is_not_list(lst)) {
-	      tail = lst;
-	      error_res = LTI_NO_INTEGER;
-	      goto error;
-	  }
-     } else if (CAR(list_val(lst)) == make_small('+')) {
-	 /* ignore plus */
-	 skip = 1;
-	 lst = CDR(list_val(lst));
-	 if (is_not_list(lst)) {
-	     tail = lst;
-	     error_res = LTI_NO_INTEGER;
-	     goto error;
-	 }
-     }
-
-     /* Calculate size and do type check */
-
-     while(1) {
-	 if (is_not_small(CAR(list_val(lst)))) {
-	     break;
-	 }
-	 if (unsigned_val(CAR(list_val(lst))) < '0' ||
-	     unsigned_val(CAR(list_val(lst))) > '9') {
-	     break;
-	 }
-	 i = i * 10;
-	 i = i + unsigned_val(CAR(list_val(lst))) - '0';
-	 n++;
-	 lst = CDR(list_val(lst));
-	 if (is_nil(lst)) {
-	     break;
-	 }
-	 if (is_not_list(lst)) {
-	     break;
-	 }
-     }
-
-     tail = lst;
-     if (!n) {
-	 error_res = LTI_NO_INTEGER;
-	 goto error;
-     } 
-
-	 
-      /* If n <= 8 then we know it's a small int 
-      ** since 2^27 = 134217728. If n > 8 then we must
-      ** construct a bignum and let that routine do the checking
-      */
-
-     if (n <= SMALL_DIGITS) {  /* It must be small */
-	 if (neg) i = -i;
-	 res = make_small(i);
-     } else {
-	 lg2 =  (n+1)*230/69+1;
-	 m  = (lg2+D_EXP-1)/D_EXP; /* number of digits */
-	 m  = BIG_NEED_SIZE(m);    /* number of words + thing */
-
-	 hp = HAlloc(p, m);
-	 hp_end = hp + m;
-	 
-	 lst = orig_list;
-	 if (skip)
-	     lst = CDR(list_val(lst));
-	 
-	 /* load first digits (at least one digit) */
-	 if ((i = (n % D_DECIMAL_EXP)) == 0)
-	     i = D_DECIMAL_EXP;
-	 n -= i;
-	 m = 0;
-	 while(i--) {
-	     m = 10*m + (unsigned_val(CAR(list_val(lst))) - '0');
-	     lst = CDR(list_val(lst));
-	 }
-	 res = small_to_big(m, hp);  /* load first digits */
-	 
-	 while(n) {
-	     i = D_DECIMAL_EXP;
-	     n -= D_DECIMAL_EXP;
-	     m = 0;
-	     while(i--) {
-		 m = 10*m + (unsigned_val(CAR(list_val(lst))) - '0');
-		 lst = CDR(list_val(lst));
-	     }
-	     if (is_small(res))
-		 res = small_to_big(signed_val(res), hp);
-	     res = big_times_small(res, D_DECIMAL_BASE, hp);
-	     if (is_small(res))
-		 res = small_to_big(signed_val(res), hp);
-	     res = big_plus_small(res, m, hp);
-	 }
-
-	 if (is_big(res))  /* check if small */
-	     res = big_plus_small(res, 0, hp); /* includes conversion to small */
-	 
-	 if (neg) {
-	     if (is_small(res))
-		 res = make_small(-signed_val(res));
-	     else {
-		 Uint *big = big_val(res); /* point to thing */
-		 *big = bignum_header_neg(*big);
-	     }
-	 }
-
-	 if (is_big(res)) {
-	     hp += (big_arity(res)+1);
-	 }
-	 HRelease(p,hp_end,hp);
-     }
-     *integer = res;
-     *rest = tail;
-     if (tail != NIL) {
-	 return LTI_SOME_INTEGER;
-     }
-     return LTI_ALL_INTEGER;
-}
 BIF_RETTYPE string_to_integer_1(BIF_ALIST_1)
 {
      Eterm res;
      Eterm tail;
      Eterm *hp;
      /* must be a list */
-     switch (do_list_to_integer(BIF_P,BIF_ARG_1,&res,&tail)) {
-	 /* HAlloc after do_list_to_integer as it 
-	    might HAlloc itself (bignum) */
+     switch (erts_list_to_integer(BIF_P, BIF_ARG_1, 10, &res, &tail)) {
+     /* HAlloc after erts_list_to_integer as it might HAlloc itself (bignum) */
      case LTI_BAD_STRUCTURE:
 	 hp = HAlloc(BIF_P,3);
 	 BIF_RET(TUPLE2(hp, am_error, am_not_a_list));
@@ -2910,13 +2945,14 @@ BIF_RETTYPE string_to_integer_1(BIF_ALIST_1)
 
 BIF_RETTYPE list_to_integer_1(BIF_ALIST_1)
  {
-   /* Using do_list_to_integer is about twice as fast as using 
+   /* Using erts_list_to_integer is about twice as fast as using
       erts_chars_to_integer because we do not have to copy the 
       entire list */
      Eterm res;
      Eterm dummy;
      /* must be a list */
-     if (do_list_to_integer(BIF_P,BIF_ARG_1,&res,&dummy) != LTI_ALL_INTEGER) {
+     if (erts_list_to_integer(BIF_P, BIF_ARG_1, 10,
+                              &res, &dummy) != LTI_ALL_INTEGER) {
 	 BIF_ERROR(BIF_P,BADARG);
      }
      BIF_RET(res);
@@ -2924,46 +2960,29 @@ BIF_RETTYPE list_to_integer_1(BIF_ALIST_1)
 
 BIF_RETTYPE list_to_integer_2(BIF_ALIST_2)
 {
-
   /* Bif implementation is about 50% faster than pure erlang,
      and since we have erts_chars_to_integer now it is simpler
      as well. This could be optmized further if we did not have to
      copy the list to buf. */
     int i;
-    Eterm res;
-    char *buf = NULL;
+    Eterm res, dummy;
     int base;
 
-    i = list_length(BIF_ARG_1);
+    i = erts_list_length(BIF_ARG_1);
     if (i < 0)
       BIF_ERROR(BIF_P, BADARG);
     
     base = signed_val(BIF_ARG_2);
-  
+
     if (base < 2 || base > 36) 
       BIF_ERROR(BIF_P, BADARG);
 
-    /* Take fast path if base it 10 */
-    if (base == 10)
-      return list_to_integer_1(BIF_P,&BIF_ARG_1);
-    
-    buf = (char *) erts_alloc(ERTS_ALC_T_TMP, i + 1);
-    
-    if (intlist_to_buf(BIF_ARG_1, buf, i) < 0)
-      goto list_to_integer_1_error;
-    buf[i] = '\0';		/* null terminal */
-    
-    if ((res = erts_chars_to_integer(BIF_P,buf,i,base)) == THE_NON_VALUE)
-      goto list_to_integer_1_error;
-    
-    erts_free(ERTS_ALC_T_TMP, (void *) buf);
+    if (erts_list_to_integer(BIF_P, BIF_ARG_1, base,
+                             &res, &dummy) != LTI_ALL_INTEGER) {
+        BIF_ERROR(BIF_P,BADARG);
+    }
     BIF_RET(res);
-    
- list_to_integer_1_error:
-    erts_free(ERTS_ALC_T_TMP, (void *) buf);
-    BIF_ERROR(BIF_P, BADARG);
-     
- }
+}
 
 /**********************************************************************/
 
@@ -3273,7 +3292,7 @@ BIF_RETTYPE list_to_float_1(BIF_ALIST_1)
     Eterm res;
     char *buf = NULL;
 
-    i = list_length(BIF_ARG_1);
+    i = erts_list_length(BIF_ARG_1);
     if (i < 0)
       BIF_ERROR(BIF_P, BADARG);
     
@@ -3388,7 +3407,7 @@ BIF_RETTYPE list_to_tuple_1(BIF_ALIST_1)
     Eterm* hp;
     int len;
 
-    if ((len = list_length(list)) < 0 || len > ERTS_MAX_TUPLE_SIZE) {
+    if ((len = erts_list_length(list)) < 0 || len > ERTS_MAX_TUPLE_SIZE) {
 	BIF_ERROR(BIF_P, BADARG);
     }
 
@@ -3411,91 +3430,6 @@ BIF_RETTYPE list_to_tuple_1(BIF_ALIST_1)
 BIF_RETTYPE self_0(BIF_ALIST_0)
 {
      BIF_RET(BIF_P->common.id);
-}
-
-/**********************************************************************/
-
-/*
-   New representation of refs in R9, see erl_term.h
-
-   In the first data word, only the usual 18 bits are used. Ordinarily,
-   in "long refs" all words are used (in other words, practically never
-   wrap around), but for compatibility with older nodes, "short refs"
-   exist. Short refs come into being by being converted from the old
-   external format for refs (tag REFERENCE_EXT). Short refs are
-   converted back to the old external format.
-
-   When converting a long ref to the external format in the case of
-   preparing for sending to an older node, the ref is truncated by only
-   using the first word (with 18 significant bits), and using the old tag
-   REFERENCE_EXT.
-
-   When comparing refs or different size, only the parts up to the length
-   of the shorter operand are used. This has the desirable effect that a
-   long ref sent to an old node and back will be treated as equal to
-   the original, although some of the bits have been lost.
-
-   The hash value for a ref always considers only the first word, since
-   in the above scenario, the original and the copy should have the same
-   hash value.
-*/
-
-static Uint32 reference0; /* Initialized in erts_init_bif */
-static Uint32 reference1;
-static Uint32 reference2;
-static erts_smp_spinlock_t make_ref_lock;
-static erts_smp_mtx_t ports_snapshot_mtx;
-erts_smp_atomic_t erts_dead_ports_ptr; /* To store dying ports during snapshot */
-
-void
-erts_make_ref_in_array(Uint32 ref[ERTS_MAX_REF_NUMBERS])
-{
-    erts_smp_spin_lock(&make_ref_lock);
-
-    reference0++;
-    if (reference0 >= MAX_REFERENCE) {
-	reference0 = 0;
-	reference1++;
-	if (reference1 == 0) {
-	    reference2++;
-	}
-    }
-
-    ref[0] = reference0;
-    ref[1] = reference1;
-    ref[2] = reference2;
-
-    erts_smp_spin_unlock(&make_ref_lock);
-}
-
-Eterm erts_make_ref_in_buffer(Eterm buffer[REF_THING_SIZE])
-{
-    Eterm* hp = buffer;
-    Uint32 ref[ERTS_MAX_REF_NUMBERS];
-
-    erts_make_ref_in_array(ref);
-    write_ref_thing(hp, ref[0], ref[1], ref[2]);
-    return make_internal_ref(hp);
-}
-
-Eterm erts_make_ref(Process *p)
-{
-    Eterm* hp;
-    Uint32 ref[ERTS_MAX_REF_NUMBERS];
-
-    ERTS_SMP_LC_ASSERT(ERTS_PROC_LOCK_MAIN & erts_proc_lc_my_proc_locks(p));
-
-    hp = HAlloc(p, REF_THING_SIZE);
-
-    erts_make_ref_in_array(ref);
-    write_ref_thing(hp, ref[0], ref[1], ref[2]);
-
-    return make_internal_ref(hp);
-}
-
-BIF_RETTYPE make_ref_0(BIF_ALIST_0)
-{
-    return erts_make_ref(BIF_P);
 }
 
 /**********************************************************************/
@@ -3745,52 +3679,11 @@ BIF_RETTYPE now_0(BIF_ALIST_0)
 
 /**********************************************************************/
 
-BIF_RETTYPE garbage_collect_1(BIF_ALIST_1)
-{
-    int reds;
-    Process *rp;
-
-    if (is_not_pid(BIF_ARG_1)) {
-	BIF_ERROR(BIF_P, BADARG);
-    }
-
-    if (BIF_P->common.id == BIF_ARG_1)
-	rp = BIF_P;
-    else {
-#ifdef ERTS_SMP
-	rp = erts_pid2proc_suspend(BIF_P, ERTS_PROC_LOCK_MAIN,
-				   BIF_ARG_1, ERTS_PROC_LOCK_MAIN);
-	if (rp == ERTS_PROC_LOCK_BUSY)
-	    ERTS_BIF_YIELD1(bif_export[BIF_garbage_collect_1], BIF_P, BIF_ARG_1);
-#else
-	rp = erts_proc_lookup(BIF_ARG_1);
-#endif
-	if (!rp)
-	    BIF_RET(am_false);
-    }
-
-    /* The GC cost is taken for the process executing this BIF. */
-
-    FLAGS(rp) |= F_NEED_FULLSWEEP;
-    reds = erts_garbage_collect(rp, 0, rp->arg_reg, rp->arity);
-
-#ifdef ERTS_SMP
-    if (BIF_P != rp) {
-	erts_resume(rp, ERTS_PROC_LOCK_MAIN);
-	erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_MAIN);
-    }
-#endif
-
-    BIF_RET2(am_true, reds);
-}
-
 BIF_RETTYPE garbage_collect_0(BIF_ALIST_0)
 {
-    int reds;
-
     FLAGS(BIF_P) |= F_NEED_FULLSWEEP;
-    reds = erts_garbage_collect(BIF_P, 0, NULL, 0);
-    BIF_RET2(am_true, reds);
+    erts_garbage_collect(BIF_P, 0, NULL, 0);
+    BIF_RET(am_true);
 }
 
 /**********************************************************************/
@@ -3946,7 +3839,7 @@ BIF_RETTYPE halt_2(BIF_ALIST_2)
 {
     Sint code;
     Eterm optlist = BIF_ARG_2;
-    int flush = 0;
+    int flush = 1;
 
     for (optlist = BIF_ARG_2;
 	 is_list(optlist);
@@ -4012,16 +3905,19 @@ BIF_RETTYPE halt_2(BIF_ALIST_2)
 
 BIF_RETTYPE function_exported_3(BIF_ALIST_3)
 {
+    int arity;
     if (is_not_atom(BIF_ARG_1) ||
 	is_not_atom(BIF_ARG_2) || 
 	is_not_small(BIF_ARG_3)) {
 	BIF_ERROR(BIF_P, BADARG);
     }
-    if (erts_find_function(BIF_ARG_1, BIF_ARG_2, signed_val(BIF_ARG_3),
-			   erts_active_code_ix()) == NULL) {
-	BIF_RET(am_false);
+    arity = signed_val(BIF_ARG_3);
+    if (erts_find_function(BIF_ARG_1, BIF_ARG_2, arity,
+			   erts_active_code_ix()) != NULL ||
+	erts_is_builtin(BIF_ARG_1, BIF_ARG_2, arity)) {
+	BIF_RET(am_true);
     }
-    BIF_RET(am_true);
+    BIF_RET(am_false);
 }
 
 /**********************************************************************/    
@@ -4084,16 +3980,9 @@ BIF_RETTYPE make_fun_3(BIF_ALIST_3)
     if (arity < 0) {
 	goto error;
     }
-#if HALFWORD_HEAP
-    hp = HAlloc(BIF_P, 3);
-    hp[0] = HEADER_EXPORT;
-    /* Yes, May be misaligned, but X86_64 will fix it... */
-    *((Export **) (hp+1)) = erts_export_get_or_make_stub(BIF_ARG_1, BIF_ARG_2, (Uint) arity);
-#else
     hp = HAlloc(BIF_P, 2);
     hp[0] = HEADER_EXPORT;
     hp[1] = (Eterm) erts_export_get_or_make_stub(BIF_ARG_1, BIF_ARG_2, (Uint) arity);
-#endif
     BIF_RET(make_export(hp));
 }
 
@@ -4198,6 +4087,7 @@ BIF_RETTYPE list_to_pid_1(BIF_ALIST_1)
 	  goto bad;
       
       enp = erts_find_or_insert_node(dep->sysname, dep->creation);
+      ASSERT(enp != erts_this_node);
 
       etp = (ExternalThing *) HAlloc(BIF_P, EXTERNAL_THING_HEAD_SIZE + 1);
       etp->header = make_external_pid_header(1);
@@ -4362,7 +4252,11 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
 	switch (erts_set_schedulers_online(BIF_P,
 					   ERTS_PROC_LOCK_MAIN,
 					   signed_val(BIF_ARG_2),
-					   &old_no)) {
+					   &old_no
+#ifdef ERTS_DIRTY_SCHEDULERS
+					   , 0
+#endif
+					   )) {
 	case ERTS_SCHDLR_SSPND_DONE:
 	    BIF_RET(make_small(old_no));
 	case ERTS_SCHDLR_SSPND_YIELD_RESTART:
@@ -4450,7 +4344,7 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
 	}
     } else if (BIF_ARG_1 == make_small(1)) {
 	int i, max;
-	ErlMessage* mp;
+	ErtsMessage* mp;
 	erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
 	erts_smp_thr_progress_block();
 
@@ -4494,6 +4388,80 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
 		      ref,
 		      old ? am_true : am_false);
 	}
+#if defined(ERTS_SMP) && defined(ERTS_DIRTY_SCHEDULERS)
+    } else if (BIF_ARG_1 == am_dirty_cpu_schedulers_online) {
+	Sint old_no;
+	if (!is_small(BIF_ARG_2))
+	    goto error;
+	switch (erts_set_schedulers_online(BIF_P,
+					   ERTS_PROC_LOCK_MAIN,
+					   signed_val(BIF_ARG_2),
+					   &old_no,
+					   1)) {
+	case ERTS_SCHDLR_SSPND_DONE:
+	    BIF_RET(make_small(old_no));
+	case ERTS_SCHDLR_SSPND_YIELD_RESTART:
+	    ERTS_VBUMP_ALL_REDS(BIF_P);
+	    BIF_TRAP2(bif_export[BIF_system_flag_2],
+		      BIF_P, BIF_ARG_1, BIF_ARG_2);
+	case ERTS_SCHDLR_SSPND_YIELD_DONE:
+	    ERTS_BIF_YIELD_RETURN_X(BIF_P, make_small(old_no),
+				    am_dirty_cpu_schedulers_online);
+	case ERTS_SCHDLR_SSPND_EINVAL:
+	    goto error;
+	default:
+	    ASSERT(0);
+	    BIF_ERROR(BIF_P, EXC_INTERNAL_ERROR);
+	    break;
+	}
+#endif
+    } else if (BIF_ARG_1 == am_time_offset
+	       && ERTS_IS_ATOM_STR("finalize", BIF_ARG_2)) {
+	ErtsTimeOffsetState res;
+	erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
+	res = erts_finalize_time_offset();
+        erts_smp_proc_lock(BIF_P, ERTS_PROC_LOCK_MAIN);
+	switch (res) {
+	case ERTS_TIME_OFFSET_PRELIMINARY: {
+	    DECL_AM(preliminary);
+	    BIF_RET(AM_preliminary);
+	}
+	case ERTS_TIME_OFFSET_FINAL: {
+	    DECL_AM(final);
+	    BIF_RET(AM_final);
+	}
+	case ERTS_TIME_OFFSET_VOLATILE: {
+	    DECL_AM(volatile);
+	    BIF_RET(AM_volatile);
+	}
+	default:
+	    ERTS_INTERNAL_ERROR("Unknown state");
+	}
+#ifdef ERTS_ENABLE_MSACC
+    } else if (BIF_ARG_1 == am_microstate_accounting) {
+      Eterm threads;
+      if (BIF_ARG_2 == am_true || BIF_ARG_2 == am_false) {
+        erts_aint32_t new = BIF_ARG_2 == am_true ? ERTS_MSACC_ENABLE : ERTS_MSACC_DISABLE;
+	erts_aint32_t old = erts_smp_atomic32_xchg_nob(&msacc, new);
+	Eterm ref = erts_msacc_request(BIF_P, new, &threads);
+        if (is_non_value(ref))
+            BIF_RET(old ? am_true : am_false);
+	BIF_TRAP3(await_msacc_mod_trap,
+		  BIF_P,
+		  ref,
+		  old ? am_true : am_false,
+		  threads);
+      } else if (BIF_ARG_2 == am_reset) {
+	Eterm ref = erts_msacc_request(BIF_P, ERTS_MSACC_RESET, &threads);
+	erts_aint32_t old = erts_smp_atomic32_read_nob(&msacc);
+	ASSERT(is_value(ref));
+	BIF_TRAP3(await_msacc_mod_trap,
+		  BIF_P,
+		  ref,
+		  old ? am_true : am_false,
+		  threads);
+      }
+#endif
     } else if (ERTS_IS_ATOM_STR("scheduling_statistics", BIF_ARG_1)) {
 	int what;
 	if (ERTS_IS_ATOM_STR("disable", BIF_ARG_2))
@@ -4517,7 +4485,7 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
 	    BIF_P->group_leader,
 	    "A call to erlang:system_flag(cpu_topology, _) was made.\n"
 	    "The cpu_topology argument is deprecated and scheduled\n"
-	    "for removal in erts-5.10/OTP-R16. For more information\n"
+	    "for removal in Erlang/OTP 18. For more information\n"
 	    "see the erlang:system_flag/2 documentation.\n");
 	BIF_TRAP1(set_cpu_topology_trap, BIF_P, BIF_ARG_2);
     } else if (ERTS_IS_ATOM_STR("scheduler_bind_type", BIF_ARG_1)) {
@@ -4525,7 +4493,7 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
 	    BIF_P->group_leader,
 	    "A call to erlang:system_flag(scheduler_bind_type, _) was\n"
 	    "made. The scheduler_bind_type argument is deprecated and\n"
-	    "scheduled for removal in erts-5.10/OTP-R16. For more\n"
+	    "scheduled for removal in Erlang/OTP 18. For more\n"
 	    "information see the erlang:system_flag/2 documentation.\n");
 	return erts_bind_schedulers(BIF_P, BIF_ARG_2);
     }
@@ -4546,7 +4514,7 @@ BIF_RETTYPE hash_2(BIF_ALIST_2)
     if ((range = signed_val(BIF_ARG_2)) <= 0) {  /* [1..MAX_SMALL] */
 	BIF_ERROR(BIF_P, BADARG);
     }
-#if defined(ARCH_64) && !HALFWORD_HEAP
+#if defined(ARCH_64)
     if (range > ((1L << 27) - 1))
 	BIF_ERROR(BIF_P, BADARG);
 #endif
@@ -4618,7 +4586,7 @@ BIF_RETTYPE phash2_2(BIF_ALIST_2)
     /*
      * Return either a small or a big. Use the heap for bigs if there is room.
      */
-#if defined(ARCH_64) && !HALFWORD_HEAP
+#if defined(ARCH_64)
     BIF_RET(make_small(final_hash));
 #else
     if (IS_USMALL(0, final_hash)) {
@@ -4644,6 +4612,17 @@ BIF_RETTYPE bump_reductions_1(BIF_ALIST_1)
     BIF_RET2(am_true, reds);
 }
 
+BIF_RETTYPE erts_internal_cmp_term_2(BIF_ALIST_2) {
+    Sint res = CMP_TERM(BIF_ARG_1,BIF_ARG_2);
+
+    /* ensure -1, 0, 1 result */
+    if (res < 0) {
+	BIF_RET(make_small(-1));
+    } else if (res > 0) {
+	BIF_RET(make_small(1));
+    }
+    BIF_RET(make_small(0));
+}
 /*
  * Processes doing yield on return in a bif ends up in bif_return_trap().
  */
@@ -4770,11 +4749,6 @@ void erts_init_trap_export(Export* ep, Eterm m, Eterm f, Uint a,
 
 void erts_init_bif(void)
 {
-    reference0 = 0;
-    reference1 = 0;
-    reference2 = 0;
-
-    erts_smp_spinlock_init(&make_ref_lock, "make_ref");
     erts_smp_mtx_init(&ports_snapshot_mtx, "ports_snapshot");
     erts_smp_atomic_init_nob(&erts_dead_ports_ptr, (erts_aint_t) NULL);
 
@@ -4791,9 +4765,21 @@ void erts_init_bif(void)
 #endif
 		     , &bif_return_trap);
 
-    flush_monitor_message_trap = erts_export_put(am_erlang,
-						 am_flush_monitor_message,
-						 2);
+    erts_await_result = erts_export_put(am_erts_internal,
+					am_await_result,
+					1);
+
+    erts_init_trap_export(&dsend_continue_trap_export,
+			  am_erts_internal, am_dsend_continue_trap, 1,
+			  dsend_continue_trap_1);
+
+    flush_monitor_messages_trap = erts_export_put(am_erts_internal,
+						  am_flush_monitor_messages,
+						  3);
+
+    erts_convert_time_unit_trap = erts_export_put(am_erlang,
+						  am_convert_time_unit,
+						  3);
 
     set_cpu_topology_trap = erts_export_put(am_erlang,
 					    am_set_cpu_topology,
@@ -4805,8 +4791,12 @@ void erts_init_bif(void)
     await_port_send_result_trap
 	= erts_export_put(am_erts_internal, am_await_port_send_result, 3);
     await_sched_wall_time_mod_trap
-	= erts_export_put(am_erlang, am_await_sched_wall_time_modifications, 2);
+        = erts_export_put(am_erlang, am_await_sched_wall_time_modifications, 2);
+    await_msacc_mod_trap
+	= erts_export_put(am_erts_internal, am_await_microstate_accounting_modifications, 3);
+
     erts_smp_atomic32_init_nob(&sched_wall_time, 0);
+    erts_smp_atomic32_init_nob(&msacc, ERTS_MSACC_IS_ENABLED());
 }
 
 #ifdef HARDDEBUG

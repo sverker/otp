@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -26,13 +27,14 @@
 	 delete_handler/1, swap_handler/1, swap_sup_handler/1,
 	 notify/1, sync_notify/1, call/1, info/1, hibernate/1,
 	 call_format_status/1, call_format_status_anon/1,
-         error_format_status/1]).
+         error_format_status/1, get_state/1, replace_state/1]).
 
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [start, {group, test_all}, hibernate,
-     call_format_status, call_format_status_anon, error_format_status].
+     call_format_status, call_format_status_anon, error_format_status,
+     get_state, replace_state].
 
 groups() -> 
     [{test_all, [],
@@ -105,7 +107,7 @@ start(Config) when is_list(Config) ->
     ?line {error, {already_started, _}} =
 	gen_event:start({global, my_dummy_name}),
 
-    exit(Pid6, shutdown),
+    ok = gen_event:stop({global, my_dummy_name}, shutdown, 10000),
     receive
 	{'EXIT', Pid6, shutdown} -> ok
     after 10000 ->
@@ -130,90 +132,105 @@ start(Config) when is_list(Config) ->
     ok.
 
 
-hibernate(suite) -> [];
 hibernate(Config) when is_list(Config) ->
-    ?line {ok,Pid} = gen_event:start({local, my_dummy_handler}),
-    ?line ok = gen_event:add_handler(my_dummy_handler, dummy_h, [self()]),
-    ?line [dummy_h] = gen_event:which_handlers(my_dummy_handler),
-    ?line true = gen_event:call(my_dummy_handler, dummy_h, hibernate),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line Pid ! wake,
-    ?line receive after 1000 -> ok end,
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid,current_function)),    
-    ?line later = gen_event:call(my_dummy_handler, dummy_h, hibernate_later),
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid,current_function)),    
-    ?line receive after 2000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line Pid ! wake,
-    ?line receive after 1000 -> ok end,
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid,current_function)),    
-    ?line gen_event:notify(my_dummy_handler,hibernate),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line gen_event:notify(my_dummy_handler,wakeup),
-    ?line receive after 1000 -> ok end,
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid,current_function)),    
-    ?line gen_event:notify(my_dummy_handler,hibernate),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line gen_event:sync_notify(my_dummy_handler,wakeup),
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid,current_function)),    
-    ?line ok = gen_event:sync_notify(my_dummy_handler,hibernate),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line Pid ! wake,
-    ?line receive after 1000 -> ok end,
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid,current_function)),
-    ?line ok = gen_event:add_handler(my_dummy_handler, dummy1_h, [self()]),
-    ?line [_,_] = gen_event:which_handlers(my_dummy_handler),
-    ?line gen_event:notify(my_dummy_handler,hibernate),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line gen_event:notify(my_dummy_handler,wakeup),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line Pid ! wake,
-    ?line receive after 1000 -> ok end,
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid,current_function)),
-    ?line Pid ! gnurf,
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line Pid ! sleep,
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid,current_function),
-    ?line Pid ! wake,
-    ?line receive after 1000 -> ok end,
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid,current_function)),
-    ?line ok = gen_event:stop(my_dummy_handler),
-    ?line {ok,Pid2} = gen_event:start({local, my_dummy_handler}),
-    ?line ok = gen_event:add_handler(my_dummy_handler, dummy_h, [self(),hibernate]),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid2,current_function),
-    ?line sys:suspend(my_dummy_handler),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid2,current_function),
-    ?line sys:resume(my_dummy_handler),
-    ?line receive after 1000 -> ok end,
-    ?line {current_function,{erlang,hibernate,3}} = erlang:process_info(Pid2,current_function),
-    ?line Pid2 ! wake,
-    ?line receive after 1000 -> ok end,
-    ?line true = ({current_function,{erlang,hibernate,3}} =/= 
-		  erlang:process_info(Pid2,current_function)),
-   
+    {ok,Pid} = gen_event:start({local, my_dummy_handler}),
+    ok = gen_event:add_handler(my_dummy_handler, dummy_h, [self()]),
+    [dummy_h] = gen_event:which_handlers(my_dummy_handler),
+    true = gen_event:call(my_dummy_handler, dummy_h, hibernate),
+    is_in_erlang_hibernate(Pid),
 
-    ?line ok = gen_event:stop(my_dummy_handler),
+    Pid ! wake,
+    is_not_in_erlang_hibernate(Pid),
+    later = gen_event:call(my_dummy_handler, dummy_h, hibernate_later),
+    true = ({current_function,{erlang,hibernate,3}} =/=
+		erlang:process_info(Pid, current_function)),
+    is_in_erlang_hibernate(Pid),
+
+    Pid ! wake,
+    is_not_in_erlang_hibernate(Pid),
+    gen_event:notify(my_dummy_handler, hibernate),
+    is_in_erlang_hibernate(Pid),
+    gen_event:notify(my_dummy_handler, wakeup),
+    is_not_in_erlang_hibernate(Pid),
+    gen_event:notify(my_dummy_handler, hibernate),
+    is_in_erlang_hibernate(Pid),
+    gen_event:sync_notify(my_dummy_handler, wakeup),
+    true = ({current_function,{erlang,hibernate,3}} =/=
+		erlang:process_info(Pid, current_function)),
+    ok = gen_event:sync_notify(my_dummy_handler, hibernate),
+    is_in_erlang_hibernate(Pid),
+
+    Pid ! wake,
+    is_not_in_erlang_hibernate(Pid),
+    ok = gen_event:add_handler(my_dummy_handler, dummy1_h, [self()]),
+    [_,_] = gen_event:which_handlers(my_dummy_handler),
+    gen_event:notify(my_dummy_handler, hibernate),
+    is_in_erlang_hibernate(Pid),
+    gen_event:notify(my_dummy_handler, wakeup),
+    is_in_erlang_hibernate(Pid),
+
+    Pid ! wake,
+    is_not_in_erlang_hibernate(Pid),
+
+    Pid ! gnurf,
+    is_in_erlang_hibernate(Pid),
+
+    Pid ! sleep,
+    is_in_erlang_hibernate(Pid),
+
+    Pid ! wake,
+    is_not_in_erlang_hibernate(Pid),
+    ok = gen_event:stop(my_dummy_handler),
+
+    {ok,Pid2} = gen_event:start({local, my_dummy_handler}),
+    ok = gen_event:add_handler(my_dummy_handler, dummy_h,
+				     [self(),hibernate]),
+    is_in_erlang_hibernate(Pid2),
+    sys:suspend(my_dummy_handler),
+    is_in_erlang_hibernate(Pid2),
+    sys:resume(my_dummy_handler),
+    is_in_erlang_hibernate(Pid2),
+
+    Pid2 ! wake,
+    is_not_in_erlang_hibernate(Pid2),
+   
+    ok = gen_event:stop(my_dummy_handler),
 
     ok.
 
+is_in_erlang_hibernate(Pid) ->
+    receive after 1 -> ok end,
+    is_in_erlang_hibernate_1(200, Pid).
+
+is_in_erlang_hibernate_1(0, Pid) ->
+    io:format("~p\n", [erlang:process_info(Pid, current_function)]),
+    ?t:fail(not_in_erlang_hibernate_3);
+is_in_erlang_hibernate_1(N, Pid) ->
+    {current_function,MFA} = erlang:process_info(Pid, current_function),
+    case MFA of
+	{erlang,hibernate,3} ->
+	    ok;
+	_ ->
+	    receive after 10 -> ok end,
+	    is_in_erlang_hibernate_1(N-1, Pid)
+    end.
+
+is_not_in_erlang_hibernate(Pid) ->
+    receive after 1 -> ok end,
+    is_not_in_erlang_hibernate_1(200, Pid).
+
+is_not_in_erlang_hibernate_1(0, Pid) ->
+    io:format("~p\n", [erlang:process_info(Pid, current_function)]),
+    ?t:fail(not_in_erlang_hibernate_3);
+is_not_in_erlang_hibernate_1(N, Pid) ->
+    {current_function,MFA} = erlang:process_info(Pid, current_function),
+    case MFA of
+	{erlang,hibernate,3} ->
+	    receive after 10 -> ok end,
+	    is_not_in_erlang_hibernate_1(N-1, Pid);
+	_ ->
+	    ok
+    end.
 
 
 add_handler(doc) -> [];
@@ -395,7 +412,6 @@ notify(Config) when is_list(Config) ->
 		  ok
 	  end,
     ?line ok = gen_event:notify(my_dummy_handler, {swap_event,dummy1_h,swap}),
-    ?t:sleep(1000),
     ?line [dummy1_h] = gen_event:which_handlers(my_dummy_handler),
     ?line ok = gen_event:notify(my_dummy_handler, Event),
     ?line receive
@@ -428,7 +444,6 @@ notify(Config) when is_list(Config) ->
 	  end,
     ?line ok = gen_event:notify(my_dummy_handler,
 				{swap_event, {dummy1_h, 9}, swap}),
-    ?t:sleep(1000),
     ?line [{dummy1_h,9}] = gen_event:which_handlers(my_dummy_handler),
     ?line ok = gen_event:notify(my_dummy_handler, Event),
     ?line receive
@@ -468,7 +483,6 @@ notify(Config) when is_list(Config) ->
 
     ?line ok = gen_event:add_sup_handler(my_dummy_handler, dummy_h, [self()]),
     ?line ok = gen_event:notify(my_dummy_handler, {swap_event,dummy1_h,swap}),
-    ?t:sleep(1000),
     ?line [dummy1_h] = gen_event:which_handlers(my_dummy_handler),
 
     ?line ok = gen_event:notify(my_dummy_handler, do_crash),
@@ -479,7 +493,6 @@ notify(Config) when is_list(Config) ->
 
     ?line ok = gen_event:add_sup_handler(my_dummy_handler, dummy_h, [self()]),
     ?line ok = gen_event:notify(my_dummy_handler, {swap_event,dummy1_h,swap}),
-    ?t:sleep(1000),
     ?line [dummy1_h] = gen_event:which_handlers(my_dummy_handler),
 
     ?line ok = gen_event:notify(my_dummy_handler, delete_event),
@@ -512,7 +525,6 @@ sync_notify(Config) when is_list(Config) ->
 	  end,
     ?line ok = gen_event:sync_notify(my_dummy_handler,
 				     {swap_event, dummy1_h, swap}),
-    ?t:sleep(1000),
     ?line [dummy1_h] = gen_event:which_handlers(my_dummy_handler),
     ?line ok = gen_event:sync_notify(my_dummy_handler, Event),
     ?line receive
@@ -545,7 +557,6 @@ sync_notify(Config) when is_list(Config) ->
 	  end,
     ?line ok = gen_event:sync_notify(my_dummy_handler,
 				     {swap_event, {dummy1_h, 9}, swap}),
-    ?t:sleep(1000),
     ?line [{dummy1_h,9}] = gen_event:which_handlers(my_dummy_handler),
     ?line ok = gen_event:sync_notify(my_dummy_handler, Event),
     ?line receive
@@ -586,7 +597,6 @@ sync_notify(Config) when is_list(Config) ->
     ?line ok = gen_event:add_sup_handler(my_dummy_handler, dummy_h, [self()]),
     ?line ok = gen_event:sync_notify(my_dummy_handler,
 				     {swap_event,dummy1_h,swap}),
-    ?t:sleep(1000),
     ?line [dummy1_h] = gen_event:which_handlers(my_dummy_handler),
 
     ?line ok = gen_event:sync_notify(my_dummy_handler, do_crash),
@@ -598,7 +608,6 @@ sync_notify(Config) when is_list(Config) ->
     ?line ok = gen_event:add_sup_handler(my_dummy_handler, dummy_h, [self()]),
     ?line ok = gen_event:sync_notify(my_dummy_handler,
 				     {swap_event,dummy1_h,swap}),
-    ?t:sleep(1000),
     ?line [dummy1_h] = gen_event:which_handlers(my_dummy_handler),
 
     ?line ok = gen_event:sync_notify(my_dummy_handler, delete_event),
@@ -772,7 +781,6 @@ info(Config) when is_list(Config) ->
 		  ok
 	  end,
     ?line my_dummy_handler ! {swap_info,dummy1_h,swap},
-    ?t:sleep(1000),
     ?line [dummy1_h] = gen_event:which_handlers(my_dummy_handler),
     ?line my_dummy_handler ! Info,
     ?line receive
@@ -804,7 +812,6 @@ info(Config) when is_list(Config) ->
 		  ok
 	  end,
     ?line my_dummy_handler ! {swap_info,{dummy1_h,2},swap},
-    ?t:sleep(1000),
     ?line [{dummy1_h,2}] = gen_event:which_handlers(my_dummy_handler),
     ?line my_dummy_handler ! Info,
     ?line receive
@@ -836,7 +843,6 @@ info(Config) when is_list(Config) ->
 		  ok
 	  end,
     ?line my_dummy_handler ! {swap_info,dummy1_h,swap},
-    ?t:sleep(1000),
     ?line [dummy1_h] = gen_event:which_handlers(my_dummy_handler),
     ?line my_dummy_handler ! Info,
     ?line receive
@@ -955,4 +961,57 @@ error_format_status(Config) when is_list(Config) ->
     ?t:messages_get(),
     ?line ok = gen_event:stop(Pid),
     process_flag(trap_exit, OldFl),
+    ok.
+
+get_state(suite) ->
+    [];
+get_state(doc) ->
+    ["Test that sys:get_state/1,2 return the gen_event state"];
+get_state(Config) when is_list(Config) ->
+    {ok, Pid} = gen_event:start({local, my_dummy_handler}),
+    State1 = self(),
+    ok = gen_event:add_handler(my_dummy_handler, dummy1_h, [State1]),
+    [{dummy1_h,false,State1}] = sys:get_state(Pid),
+    [{dummy1_h,false,State1}] = sys:get_state(Pid, 5000),
+    State2 = {?MODULE, self()},
+    ok = gen_event:add_handler(my_dummy_handler, {dummy1_h,id}, [State2]),
+    Result1 = sys:get_state(Pid),
+    [{dummy1_h,false,State1},{dummy1_h,id,State2}] = lists:sort(Result1),
+    Result2 = sys:get_state(Pid, 5000),
+    [{dummy1_h,false,State1},{dummy1_h,id,State2}] = lists:sort(Result2),
+    ok = sys:suspend(Pid),
+    Result3 = sys:get_state(Pid),
+    [{dummy1_h,false,State1},{dummy1_h,id,State2}] = lists:sort(Result3),
+    ok = sys:resume(Pid),
+    ok = gen_event:stop(Pid),
+    ok.
+
+replace_state(suite) ->
+    [];
+replace_state(doc) ->
+    ["Test that replace_state/2,3 replace the gen_event state"];
+replace_state(Config) when is_list(Config) ->
+    {ok, Pid} = gen_event:start({local, my_dummy_handler}),
+    State1 = self(),
+    ok = gen_event:add_handler(my_dummy_handler, dummy1_h, [State1]),
+    [{dummy1_h,false,State1}] = sys:get_state(Pid),
+    NState1 = "replaced",
+    Replace1 = fun({dummy1_h,false,_}=S) -> setelement(3,S,NState1) end,
+    [{dummy1_h,false,NState1}] = sys:replace_state(Pid, Replace1),
+    [{dummy1_h,false,NState1}] = sys:get_state(Pid),
+    NState2 = "replaced again",
+    Replace2 = fun({dummy1_h,false,_}=S) -> setelement(3,S,NState2) end,
+    [{dummy1_h,false,NState2}] = sys:replace_state(Pid, Replace2, 5000),
+    [{dummy1_h,false,NState2}] = sys:get_state(Pid),
+    %% verify no change in state if replace function crashes
+    Replace3 = fun(_) -> exit(fail) end,
+    [{dummy1_h,false,NState2}] = sys:replace_state(Pid, Replace3),
+    [{dummy1_h,false,NState2}] = sys:get_state(Pid),
+    %% verify state replaced if process sys suspended
+    NState3 = "replaced again and again",
+    Replace4 = fun({dummy1_h,false,_}=S) -> setelement(3,S,NState3) end,
+    ok = sys:suspend(Pid),
+    [{dummy1_h,false,NState3}] = sys:replace_state(Pid, Replace4),
+    ok = sys:resume(Pid),
+    [{dummy1_h,false,NState3}] = sys:get_state(Pid),
     ok.

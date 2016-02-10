@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2003-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -40,6 +41,7 @@
 -export([action_function/1]).
 -export([warnings/1]).
 -export([no_warnings/1]).
+-export([eep37/1]).
 -export([init_per_testcase/2, end_per_testcase/2]).
 
 init_per_testcase(_Func, Config) ->
@@ -57,7 +59,7 @@ all() ->
      record_index, multipass, bitsyntax, record_defaults,
      andalso_orelse, float_1_function, action_function,
      warnings, no_warnings, top_match, old_guards, autoimported,
-     semicolon].
+     semicolon, eep37].
 
 groups() -> 
     [].
@@ -90,21 +92,23 @@ warnings(Config) when is_list(Config) ->
 	    "            end)">>,
     ?line [{_,[{_,ms_transform,{?WARN_NUMBER_SHADOW,'A'}}]}] =
 	compile_ww(Prog),
-    Prog2 = <<"C=5, "
-	    "ets:fun2ms(fun({A,B} = C) "
-	    "            when is_integer(A) and (A+5 > B) -> "
-	    "              {A andalso B,C} "
-	    "            end)">>,
-    ?line [{_,[{_,ms_transform,{?WARN_NUMBER_SHADOW,'C'}}]}] =
+    Prog2 = <<"C = 5,
+               ets:fun2ms(fun ({A,B} =
+                                       C) when is_integer(A) and (A+5 > B) ->
+                                  {A andalso B,C}
+                          end)">>,
+    [{_,[{3,ms_transform,{?WARN_NUMBER_SHADOW,'C'}}]}] =
 	compile_ww(Prog2),
     Rec3 = <<"-record(a,{a,b,c,d=foppa}).">>,
-    Prog3 = <<"A=3,C=5, "
-	    "ets:fun2ms(fun(#a{a = A, b = B} = C) "
-	    "            when is_integer(A) and (A+5 > B) -> "
-	    "              {A andalso B,C} "
-	    "            end)">>,
-    ?line [{_,[{_,ms_transform,{?WARN_NUMBER_SHADOW,'A'}},
-	       {_,ms_transform,{?WARN_NUMBER_SHADOW,'C'}}]}] =
+    Prog3 = <<"A = 3,
+               C = 5,
+               ets:fun2ms(fun (C
+                                 = #a{a = A, b = B})
+                              when is_integer(A) and (A+5 > B) ->
+                                  {A andalso B,C}
+                          end)">>,
+    [{_,[{3,ms_transform,{?WARN_NUMBER_SHADOW,'C'}},
+         {4,ms_transform,{?WARN_NUMBER_SHADOW,'A'}}]}] =
 	compile_ww(Rec3,Prog3),
     Rec4 = <<"-record(a,{a,b,c,d=foppa}).">>,
     Prog4 = <<"A=3,C=5, "
@@ -806,6 +810,14 @@ action_function(Config) when is_list(Config) ->
     ok.
 
 
+eep37(Config) when is_list(Config) ->
+    setup(Config),
+    [{'$1',[],['$1']}] =
+        compile_and_run(<<"F = fun _Ms() ->\n"
+                          "            ets:fun2ms(fun (X) -> X end)\n"
+                          "    end,\n"
+                          "F()">>).
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -858,6 +870,7 @@ compile_ww(Records,Expr) ->
     "-include_lib(\"stdlib/include/ms_transform.hrl\").\n",
     "-export([tmp/0]).\n",
     Records/binary,"\n",
+    "-file(?FILE, 0). ",
     "tmp() ->\n",
     Expr/binary,".\n">>,
     FN=temp_name(),

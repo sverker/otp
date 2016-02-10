@@ -1,13 +1,14 @@
-%% ``The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved via the world wide web at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% ``Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% The Initial Developer of the Original Code is Ericsson Utvecklings AB.
 %% Portions created by Ericsson are Copyright 1999, Ericsson Utvecklings
@@ -144,6 +145,13 @@ pattern({cons,Line,H0,T0}) ->
 pattern({tuple,Line,Ps0}) ->
     Ps1 = pattern_list(Ps0),
     {tuple,Line,Ps1};
+pattern({map,Line,Ps0}) ->
+    Ps1 = pattern_list(Ps0),
+    {map,Line,Ps1};
+pattern({map_field_exact,Line,K,V}) ->
+    Ke = expr(K),
+    Ve = pattern(V),
+    {map_field_exact,Line,Ke,Ve};
 %%pattern({struct,Line,Tag,Ps0}) ->
 %%    Ps1 = pattern_list(Ps0),
 %%    {struct,Line,Tag,Ps1};
@@ -251,6 +259,20 @@ gexpr({float,Line,F}) -> {float,Line,F};
 gexpr({atom,Line,A}) -> {atom,Line,A};
 gexpr({string,Line,S}) -> {string,Line,S};
 gexpr({nil,Line}) -> {nil,Line};
+gexpr({map,Line,Map0,Es0}) ->
+    [Map1|Es1] = gexpr_list([Map0|Es0]),
+    {map,Line,Map1,Es1};
+gexpr({map,Line,Es0}) ->
+    Es1 = gexpr_list(Es0),
+    {map,Line,Es1};
+gexpr({map_field_assoc,Line,K,V}) ->
+    Ke = gexpr(K),
+    Ve = gexpr(V),
+    {map_field_assoc,Line,Ke,Ve};
+gexpr({map_field_exact,Line,K,V}) ->
+    Ke = gexpr(K),
+    Ve = gexpr(V),
+    {map_field_exact,Line,Ke,Ve};
 gexpr({cons,Line,H0,T0}) ->
     H1 = gexpr(H0),
     T1 = gexpr(T0),				%They see the same variables
@@ -356,6 +378,20 @@ expr({bc,Line,E0,Qs0}) ->
 expr({tuple,Line,Es0}) ->
     Es1 = expr_list(Es0),
     {tuple,Line,Es1};
+expr({map,Line,Map0,Es0}) ->
+    [Map1|Es1] = exprs([Map0|Es0]),
+    {map,Line,Map1,Es1};
+expr({map,Line,Es0}) ->
+    Es1 = exprs(Es0),
+    {map,Line,Es1};
+expr({map_field_assoc,Line,K,V}) ->
+    Ke = expr(K),
+    Ve = expr(V),
+    {map_field_assoc,Line,Ke,Ve};
+expr({map_field_exact,Line,K,V}) ->
+    Ke = expr(K),
+    Ve = expr(V),
+    {map_field_exact,Line,Ke,Ve};
 %%expr({struct,Line,Tag,Es0}) ->
 %%    Es1 = pattern_list(Es0),
 %%    {struct,Line,Tag,Es1};
@@ -419,6 +455,8 @@ expr({'fun',Line,Body}) ->
 	    A = expr(A0),
 	    {'fun',Line,{function,M,F,A}}
     end;
+expr({named_fun,Loc,Name,Cs}) ->
+    {named_fun,Loc,Name,fun_clauses(Cs)};
 expr({call,Line,F0,As0}) ->
     %% N.B. If F an atom then call to local function or BIF, if F a
     %% remote structure (see below) then call to other module,

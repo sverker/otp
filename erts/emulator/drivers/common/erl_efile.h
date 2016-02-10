@@ -1,18 +1,19 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1997-2011. All Rights Reserved.
+ * Copyright Ericsson AB 1997-2013. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -34,6 +35,7 @@
 #define EFILE_COMPRESSED 	8
 #define EFILE_MODE_EXCL        16
 #define EFILE_NO_TRUNCATE      32 /* Special for reopening on VxWorks */
+#define EFILE_MODE_SYNC        64
 
 /*
  * Seek modes for efile_seek().
@@ -67,7 +69,7 @@
 #define FILENAMES_16BIT 1
 #endif
 
-// We use sendfilev if it exist on solaris
+/* We use sendfilev if it exist on solaris */
 #if !defined(HAVE_SENDFILE) && defined(HAVE_SENDFILEV)
 #define HAVE_SENDFILE
 #endif
@@ -86,20 +88,6 @@ typedef struct _Efile_error {
     int posix_errno;		/* Posix error number, as in <errno.h>. */
     int os_errno;		/* Os-dependent error number (not used). */
 } Efile_error;
-
-/*
- * This structure contains date and time.
- */
-
-//typedef struct _Efile_time {
-//    unsigned year;		/* (4 digits). */
-//    unsigned month;		/* (1..12). */
-//    unsigned day;		/* (1..31). */
-//    unsigned hour;		/* (0..23). */
-//    unsigned minute;		/* (0..59). */
-//    unsigned second;		/* (0..59). */
-//} Efile_time;
-
 
 /*
  * Describes what is returned by file:file_info/1.
@@ -140,7 +128,7 @@ struct t_sendfile_hdtl {
 /*
  * Functions.
  */
-
+int efile_init(void);
 int efile_mkdir(Efile_error* errInfo, char* name);
 int efile_rmdir(Efile_error* errInfo, char* name);
 int efile_delete_file(Efile_error* errInfo, char* name);

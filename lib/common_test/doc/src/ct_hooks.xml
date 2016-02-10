@@ -9,16 +9,17 @@
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -450,12 +451,15 @@
     </func>
 
     <func>
-      <name>Module:on_tc_fail(TestcaseName, Reason, CTHState) -&gt; 
+      <name>Module:on_tc_fail(TestName, Reason, CTHState) -&gt; 
               NewCTHState</name>
       <fsummary>Called after the CTH scope ends</fsummary>
       <type>
-	<v>TestcaseName = init_per_suite | end_per_suite | 
-	                  init_per_group | end_per_group | atom()</v>
+	<v>TestName = init_per_suite | end_per_suite |
+                      {init_per_group,GroupName} | {end_per_group,GroupName} |
+                      {FuncName,GroupName} | FuncName</v>
+	<v>FuncName = atom()</v>
+	<v>GroupName = atom()</v>
 	<v>Reason = term()</v>
 	<v>CTHState = NewCTHState = term()</v>
       </type>
@@ -463,14 +467,16 @@
       <desc>	
 	<p> OPTIONAL </p>
 
-	<p>This function is called whenever a testcase fails. 
-	It is called after the post function has been called for 
-	the testcase which failed. i.e. 
-	if init_per_suite fails this function is called after 
+	<p>This function is called whenever a test case (or config function)
+	  fails. It is called after the post function has been called for 
+	  the failed test case. I.e. if init_per_suite fails, this function
+	  is called after 
 	<seealso marker="#Module:post_init_per_suite-4">
-	  post_init_per_suite</seealso>, and if a testcase fails it is called 
+	  post_init_per_suite</seealso>, and if a test case fails, it is called 
 	  after <seealso marker="#Module:post_end_per_testcase-4">
-	  post_end_per_testcase</seealso>.</p>
+	  post_end_per_testcase</seealso>. If the failed test case belongs
+	  to a test case group, the first argument is a tuple
+	  <c>{FuncName,GroupName}</c>, otherwise simply the function name.</p>
 
 	<p>The data which comes with the Reason follows the same format as the
 	<seealso marker="event_handler_chapter#failreason">FailReason
@@ -481,12 +487,15 @@
     </func>
 
     <func>
-      <name>Module:on_tc_skip(TestcaseName, Reason, CTHState) -&gt; 
+      <name>Module:on_tc_skip(TestName, Reason, CTHState) -&gt; 
               NewCTHState</name>
       <fsummary>Called after the CTH scope ends</fsummary>
       <type>
-	<v>TestcaseName = end_per_suite | init_per_group | 
-                          end_per_group | atom()</v>
+	<v>TestName = init_per_suite | end_per_suite |
+                      {init_per_group,GroupName} | {end_per_group,GroupName} |
+                      {FuncName,GroupName} | FuncName</v>
+	<v>FuncName = atom()</v>
+	<v>GroupName = atom()</v>
 	<v>Reason = {tc_auto_skip | tc_user_skip, term()}</v>
 	<v>CTHState = NewCTHState = term()</v>
       </type>
@@ -494,14 +503,17 @@
       <desc>	
 	<p> OPTIONAL </p>
 
-	<p>This function is called whenever a testcase is skipped. 
-	It is called after the post function has been called for the 
-	testcase which was skipped. 
-	i.e. if init_per_group is skipped this function is called after 
-	<seealso marker="#Module:post_init_per_suite-4">post_init_per_group
-	</seealso>, and if a testcase is skipped it is called after 
-	<seealso marker="#Module:post_end_per_testcase-4">post_end_per_testcase
-	</seealso>.</p>
+	<p>This function is called whenever a test case (or config function)
+	  is skipped. It is called after the post function has been called
+	  for the skipped test case. I.e. if init_per_group is skipped, this
+	  function is called after 
+	  <seealso marker="#Module:post_init_per_group-4">
+	    post_init_per_group</seealso>, and if a test case is skipped,
+	  it is called after 
+	<seealso marker="#Module:post_end_per_testcase-4">
+	  post_end_per_testcase</seealso>. If the skipped test case belongs to a
+	test case group, the first argument is a tuple <c>{FuncName,GroupName}</c>,
+	otherwise simply the function name.</p>
 
 	<p>The data which comes with the Reason follows the same format as 
 	<seealso marker="event_handler_chapter#tc_auto_skip">tc_auto_skip

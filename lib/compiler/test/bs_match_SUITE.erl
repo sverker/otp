@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2005-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -24,7 +25,7 @@
 	 init_per_group/2,end_per_group/2,
 	 init_per_testcase/2,end_per_testcase/2,
 	 fun_shadow/1,int_float/1,otp_5269/1,null_fields/1,wiger/1,
-	 bin_tail/1,save_restore/1,shadowed_size_var/1,
+	 bin_tail/1,save_restore/1,
 	 partitioned_bs_match/1,function_clause/1,
 	 unit/1,shared_sub_bins/1,bin_and_float/1,
 	 dec_subidentifiers/1,skip_optional_tag/1,
@@ -34,7 +35,9 @@
 	 otp_7188/1,otp_7233/1,otp_7240/1,otp_7498/1,
 	 match_string/1,zero_width/1,bad_size/1,haystack/1,
 	 cover_beam_bool/1,matched_out_size/1,follow_fail_branch/1,
-	 no_partition/1]).
+	 no_partition/1,calling_a_binary/1,binary_in_map/1,
+	 match_string_opt/1,select_on_integer/1,
+	 map_and_binary/1,unsafe_branch_caching/1]).
 
 -export([coverage_id/1,coverage_external_ignore/2]).
 
@@ -48,9 +51,9 @@ all() ->
     [{group,p}].
 
 groups() -> 
-    [{p,test_lib:parallel(),
+    [{p,[parallel],
       [fun_shadow,int_float,otp_5269,null_fields,wiger,
-       bin_tail,save_restore,shadowed_size_var,
+       bin_tail,save_restore,
        partitioned_bs_match,function_clause,unit,
        shared_sub_bins,bin_and_float,dec_subidentifiers,
        skip_optional_tag,wfbm,degenerated_match,bs_sum,
@@ -59,7 +62,9 @@ groups() ->
        matching_and_andalso,otp_7188,otp_7233,otp_7240,
        otp_7498,match_string,zero_width,bad_size,haystack,
        cover_beam_bool,matched_out_size,follow_fail_branch,
-       no_partition]}].
+       no_partition,calling_a_binary,binary_in_map,
+       match_string_opt,select_on_integer,
+       map_and_binary,unsafe_branch_caching]}].
 
 
 init_per_suite(Config) ->
@@ -113,9 +118,16 @@ fun_shadow_4(L) ->
 
 int_float(Config) when is_list(Config) ->
     %% OTP-5323
-    ?line <<103133.0:64/float>> = <<103133:64/float>>,
-    ?line <<103133:64/float>> = <<103133:64/float>>,
-    ok.
+    <<103133.0:64/float>> = <<103133:64/float>>,
+    <<103133:64/float>> = <<103133:64/float>>,
+
+    %% Coverage of error cases in sys_pre_expand:coerce_to_float/2.
+    case id(default) of
+	<<(1 bsl 1024):64/float>> ->
+	    ?t:fail();
+	default ->
+	    ok
+    end.
 
 %% Stolen from erl_eval_SUITE and modified.
 %% OTP-5269. Bugs in the bit syntax.
@@ -322,16 +334,6 @@ bad_float_unpack_match(<<F:64/float>>) -> F;
 bad_float_unpack_match(<<I:64/integer-signed>>) -> I.
 
 
-shadowed_size_var(Config) when is_list(Config) ->
-    ?line PrivDir = ?config(priv_dir, Config),
-    ?line Dir = filename:dirname(code:which(?MODULE)),
-    ?line Core = filename:join(Dir, "bs_shadowed_size_var"),
-    ?line Opts = [from_core,{outdir,PrivDir}|test_lib:opt_opts(?MODULE)],
-    ?line io:format("~p", [Opts]),
-    ?line {ok,Mod} = c:c(Core, Opts),
-    ?line [42|<<"abcde">>] = Mod:filter_essentials([<<42:32>>|<<5:32,"abcde">>]),
-    ok.
-
 partitioned_bs_match(Config) when is_list(Config) ->
     ?line <<1,2,3>> = partitioned_bs_match(blurf, <<42,1,2,3>>),
     ?line error = partitioned_bs_match(10, <<7,8,15,13>>),
@@ -368,16 +370,32 @@ partitioned_bs_match_3(Var, <<_>>) -> Var;
 partitioned_bs_match_3(1, 2) -> ok.
 
 function_clause(Config) when is_list(Config)  ->
-    ?line ok = function_clause_1(<<0,7,0,7,42>>),
-    ?line fc(function_clause_1, [<<0,1,2,3>>],
-	     catch function_clause_1(<<0,1,2,3>>)),
-    ?line fc(function_clause_1, [<<0,1,2,3>>],
-	     catch function_clause_1(<<0,7,0,1,2,3>>)),
+    ok = function_clause_1(<<0,7,0,7,42>>),
+    fc(function_clause_1, [<<0,1,2,3>>],
+       catch function_clause_1(<<0,1,2,3>>)),
+    fc(function_clause_1, [<<0,1,2,3>>],
+       catch function_clause_1(<<0,7,0,1,2,3>>)),
+
+    ok = function_clause_2(<<0,7,0,7,42>>),
+    ok = function_clause_2(<<255>>),
+    ok = function_clause_2(<<13:4>>),
+    fc(function_clause_2, [<<0,1,2,3>>],
+       catch function_clause_2(<<0,1,2,3>>)),
+    fc(function_clause_2, [<<0,1,2,3>>],
+       catch function_clause_2(<<0,7,0,1,2,3>>)),
+
     ok.
 
 function_clause_1(<<0:8,7:8,T/binary>>) ->
     function_clause_1(T);
 function_clause_1(<<_:8>>) ->
+    ok.
+
+function_clause_2(<<0:8,7:8,T/binary>>) ->
+    function_clause_2(T);
+function_clause_2(<<_:8>>) ->
+    ok;
+function_clause_2(<<_:4>>) ->
     ok.
 
 unit(Config) when is_list(Config) ->
@@ -1177,6 +1195,104 @@ no_partition_2([], a5) ->
     five;
 no_partition_2(42.0, a6) ->
     six.
+
+calling_a_binary(Config) when is_list(Config) ->
+    [] = call_binary(<<>>, []),
+    {'EXIT',{badarg,_}} = (catch call_binary(<<1>>, [])),
+    {'EXIT',{badarg,_}} = (catch call_binary(<<1,2,3>>, [])),
+    ok.
+
+call_binary(<<>>, Acc) ->
+    Acc;
+call_binary(<<H,T/bits>>, Acc) ->
+    T(<<Acc/binary,H>>).
+
+binary_in_map(Config) when is_list(Config) ->
+    ok = match_binary_in_map(#{key => <<42:8>>}),
+    {'EXIT',{{badmatch,#{key := 1}},_}} =
+	(catch match_binary_in_map(#{key => 1})),
+    {'EXIT',{{badmatch,#{key := <<1023:16>>}},_}} =
+	(catch match_binary_in_map(#{key => <<1023:16>>})),
+    {'EXIT',{{badmatch,#{key := <<1:8>>}},_}} =
+	(catch match_binary_in_map(#{key => <<1:8>>})),
+    {'EXIT',{{badmatch,not_a_map},_}} =
+	(catch match_binary_in_map(not_a_map)),
+    ok.
+
+match_binary_in_map(Map) ->
+    case 8 of
+	N ->
+	    #{key := <<42:N>>} = Map,
+	    ok
+    end.
+
+match_string_opt(Config) when is_list(Config) ->
+    {x,<<1,2,3>>,{<<1>>,{v,<<1,2,3>>}}} =
+	do_match_string_opt({<<1>>,{v,<<1,2,3>>}}),
+    ok.
+
+do_match_string_opt({<<1>>,{v,V}}=T) ->
+    {x,V,T}.
+
+select_on_integer(Config) when is_list(Config) ->
+    42 = do_select_on_integer(<<42>>),
+    <<"abc">> = do_select_on_integer(<<128,"abc">>),
+
+    {'EXIT',_} = (catch do_select_on_integer(<<0:1>>)),
+    {'EXIT',_} = (catch do_select_on_integer(<<1:1>>)),
+    {'EXIT',_} = (catch do_select_on_integer(<<0:1,0:15>>)),
+    ok.
+
+%% The ASN.1 compiler frequently generates code like this.
+do_select_on_integer(<<0:1,I:7>>) ->
+    I;
+do_select_on_integer(<<1:1,_:7,Bin/binary>>) ->
+    Bin.
+
+%% If 'bin_opt_info' was given the warning would lack filename
+%% and line number.
+
+map_and_binary(_Config) ->
+    {<<"10">>,<<"37">>,<<"am">>} = do_map_and_binary(<<"10:37am">>),
+    Map1 = #{time => "noon"},
+    {ok,Map1} = do_map_and_binary(Map1),
+    Map2 = #{hour => 8, min => 42},
+    {8,42,Map2} = do_map_and_binary(Map2),
+    ok.
+
+do_map_and_binary(<<Hour:2/bytes, $:, Min:2/bytes, Rest/binary>>) ->
+    {Hour, Min, Rest};
+do_map_and_binary(#{time := _} = T) ->
+    {ok, T};
+do_map_and_binary(#{hour := Hour, min := Min} = T) ->
+    {Hour, Min, T}.
+
+%% Unsafe caching of branch outcomes in beam_bsm would cause the
+%% delayed creation of sub-binaries optimization to be applied even
+%% when it was unsafe.
+
+unsafe_branch_caching(_Config) ->
+    <<>> = do_unsafe_branch_caching(<<42,1>>),
+    <<>> = do_unsafe_branch_caching(<<42,2>>),
+    <<>> = do_unsafe_branch_caching(<<42,3>>),
+    <<17,18>> = do_unsafe_branch_caching(<<42,3,17,18>>),
+    <<>> = do_unsafe_branch_caching(<<1,3,42,2>>),
+
+    ok.
+
+do_unsafe_branch_caching(<<Code/integer, Bin/binary>>) ->
+    <<C1/integer, B1/binary>> = Bin,
+    case C1 of
+	X when X =:= 1 orelse X =:= 2 ->
+	    Bin2 = <<>>;
+	_ ->
+	    Bin2 = B1
+    end,
+    case Code of
+	1 -> do_unsafe_branch_caching(Bin2);
+	_ -> Bin2
+    end.
+
 
 check(F, R) ->
     R = F().

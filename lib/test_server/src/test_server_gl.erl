@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2012-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2012-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -29,7 +30,7 @@
 -export([init/1,handle_call/3,handle_cast/2,handle_info/2,terminate/2]).
 
 -record(st, {tc_supervisor :: 'none'|pid(),    %Test case supervisor
-	     tc :: mfa(),		       %Current test case MFA
+	     tc :: mfa() | 'undefined',	       %Current test case MFA
 	     minor :: 'none'|pid(),	       %Minor fd
 	     minor_monitor,		       %Monitor ref for minor fd
 	     capture :: 'none'|pid(),	       %Capture output
@@ -166,7 +167,7 @@ handle_info({'DOWN',Ref,process,_,Reason}=D, #st{minor_monitor=Ref}=St) ->
 	    Data = io_lib:format("=== WARNING === TC: ~w\n"
 				 "Got down from minor Fd ~w: ~w\n\n",
 				 [St#st.tc,St#st.minor,D]),
-	    test_server_io:print(xxxFrom, unexpected_io, Data)
+	    test_server_io:print_unexpected(Data)
     end,
     {noreply,St#st{minor=none,minor_monitor=none}};
 handle_info({permit_io,Pid}, #st{permit_io=P}=St) ->
@@ -197,7 +198,7 @@ handle_info({io_request,From,ReplyAs,Req}=IoReq, St) ->
 	    From ! {io_reply,ReplyAs,ok}
     catch
 	_:_ ->
-	    {io_reply,ReplyAs,{error,arguments}}
+	    From ! {io_reply,ReplyAs,{error,arguments}}
     end,
     {noreply,St};
 handle_info({structured_io,ClientPid,{Detail,Str}}, St) ->

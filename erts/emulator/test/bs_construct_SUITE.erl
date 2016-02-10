@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 1999-2012. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -28,7 +29,7 @@
 	 mem_leak/1, coerce_to_float/1, bjorn/1,
 	 huge_float_field/1, huge_binary/1, system_limit/1, badarg/1,
 	 copy_writable_binary/1, kostis/1, dynamic/1, bs_add/1,
-	 otp_7422/1, zero_width/1, bad_append/1]).
+	 otp_7422/1, zero_width/1, bad_append/1, bs_add_overflow/1]).
 
 -include_lib("test_server/include/test_server.hrl").
 
@@ -39,7 +40,7 @@ all() ->
      in_guard, mem_leak, coerce_to_float, bjorn,
      huge_float_field, huge_binary, system_limit, badarg,
      copy_writable_binary, kostis, dynamic, bs_add, otp_7422, zero_width,
-     bad_append].
+     bad_append, bs_add_overflow].
 
 groups() -> 
     [].
@@ -438,6 +439,8 @@ in_guard(Config) when is_list(Config) ->
     ?line 1 = in_guard(<<16#74ad:16>>, 16#e95, 5),
     ?line 2 = in_guard(<<16#3A,16#F7,"hello">>, 16#3AF7, <<"hello">>),
     ?line 3 = in_guard(<<16#FBCD:14,3.1415/float,3:2>>, 16#FBCD, 3.1415),
+    ?line 3 = in_guard(<<16#FBCD:14,3/float,3:2>>, 16#FBCD, 3),
+    ?line 3 = in_guard(<<16#FBCD:14,(2 bsl 226)/float,3:2>>, 16#FBCD, 2 bsl 226),
     nope = in_guard(<<1>>, 42, b),
     nope = in_guard(<<1>>, a, b),
     nope = in_guard(<<1,2>>, 1, 1),
@@ -548,10 +551,24 @@ huge_binary(Config) when is_list(Config) ->
     ?line 16777216 = size(<<0:(id(1 bsl 26)),(-1):(id(1 bsl 26))>>),
     ?line garbage_collect(),
     {Shift,Return} = case free_mem() of
-			 undefined -> {32,ok};
-			 Mb when Mb > 600 -> {32,ok};
-			 Mb when Mb > 300 -> {31,"Limit huge binaries to 256 Mb"};
-			 _ -> {30,"Limit huge binary to 128 Mb"}
+			 undefined ->
+			     %% This test has to be inlined inside the case to
+			     %% use a literal Shift
+			     ?line garbage_collect(),
+			     ?line id(<<0:((1 bsl 32)-1)>>),
+			     {32,ok};
+			 Mb when Mb > 600 ->
+			     ?line garbage_collect(),
+			     ?line id(<<0:((1 bsl 32)-1)>>),
+			     {32,ok};
+			 Mb when Mb > 300 ->
+			     ?line garbage_collect(),
+			     ?line id(<<0:((1 bsl 31)-1)>>),
+			     {31,"Limit huge binaries to 256 Mb"};
+			 _ ->
+			     ?line garbage_collect(),
+			     ?line id(<<0:((1 bsl 30)-1)>>),
+			     {30,"Limit huge binary to 128 Mb"}
 		     end,
     ?line garbage_collect(),
     ?line id(<<0:((1 bsl Shift)-1)>>),
@@ -908,5 +925,19 @@ append_unit_8(Bin) ->
 append_unit_16(Bin) ->
     <<Bin/binary-unit:16,0:1>>.
 
+%% Produce a large result of bs_add that, if cast to signed int, would overflow
+%% into a negative number that fits a smallnum.
+bs_add_overflow(Config) ->
+    case erlang:system_info(wordsize) of
+	8 ->
+	    {skip, "64-bit architecture"};
+	4 ->
+	    Large = <<0:((1 bsl 30)-1)>>,
+	    {'EXIT',{system_limit,_}} =
+		(catch <<Large/bits, Large/bits, Large/bits, Large/bits,
+			 Large/bits, Large/bits, Large/bits, Large/bits,
+			 Large/bits>>),
+	    ok
+    end.
     
 id(I) -> I.

@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 
@@ -31,8 +32,9 @@
 	 end_per_suite/1, init_per_group/2,end_per_group/2,
 	 init_per_testcase/2,
 	 end_per_testcase/2,
+
+	 a_test/1,
 	 outputv_echo/1,
-	
 	 timer_measure/1,
 	 timer_cancel/1,
 	 timer_change/1,
@@ -79,7 +81,8 @@
 	 thr_free_drv/1,
 	 async_blast/1,
 	 thr_msg_blast/1,
-	 consume_timeslice/1]).
+	 consume_timeslice/1,
+	 z_test/1]).
 
 -export([bin_prefix/2]).
 
@@ -122,19 +125,19 @@ init_per_testcase(Case, Config) when is_atom(Case), is_list(Config) ->
 	_ -> erts_debug:set_internal_state(available_internal_state, true)
     end,
     erlang:display({init_per_testcase, Case}),
-    ?line 0 = erts_debug:get_internal_state(check_io_debug),
+    ?line 0 = element(1, erts_debug:get_internal_state(check_io_debug)),
     [{watchdog, Dog},{testcase, Case}|Config].
 
 end_per_testcase(Case, Config) ->
     Dog = ?config(watchdog, Config),
     erlang:display({end_per_testcase, Case}),
-    ?line 0 = erts_debug:get_internal_state(check_io_debug),
+    ?line 0 = element(1, erts_debug:get_internal_state(check_io_debug)),
     ?t:timetrap_cancel(Dog).
 
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
-all() -> 
-    [outputv_errors, outputv_echo, queue_echo, {group, timer},
+all() -> %% Keep a_test first and z_test last...
+    [a_test, outputv_errors, outputv_echo, queue_echo, {group, timer},
      driver_unloaded, io_ready_exit, use_fallback_pollset,
      bad_fd_in_pollset, driver_event, fd_change,
      steal_control, otp_6602, driver_system_info_base_ver,
@@ -151,7 +154,8 @@ all() ->
      thr_free_drv,
      async_blast,
      thr_msg_blast,
-     consume_timeslice].
+     consume_timeslice,
+     z_test].
 
 groups() -> 
     [{timer, [],
@@ -220,7 +224,7 @@ outputv_errors_1(Term) ->
     port_close(Port).
 
 build_iolist(N, Base) when N < 16 ->
-    case random:uniform(3) of
+    case rand:uniform(3) of
 	1 ->
 	    <<Bin:N/binary,_/binary>> = Base,
 	    Bin;
@@ -228,7 +232,7 @@ build_iolist(N, Base) when N < 16 ->
 	    lists:seq(1, N)
     end;
 build_iolist(N, Base) when N =< byte_size(Base) ->
-    case random:uniform(3) of
+    case rand:uniform(3) of
 	1 ->
 	    <<Bin:N/binary,_/binary>> = Base,
 	    Bin;
@@ -246,7 +250,7 @@ build_iolist(N, Base) when N =< byte_size(Base) ->
 	    end
     end;
 build_iolist(N0, Base) ->
-    Small = random:uniform(15),
+    Small = rand:uniform(15),
     Seq = lists:seq(1, Small),
     N = N0 - Small,
     case N rem 2 of
@@ -367,7 +371,7 @@ compare(Got, Expected) ->
 	    ?t:fail(got_bad_data)
     end.
 
-
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 		Driver timer test suites
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -387,12 +391,12 @@ timer_measure(Config) when is_list(Config) ->
 
 try_timeouts(_, 0) -> ok;
 try_timeouts(Port, Timeout) ->
-    ?line TimeBefore = now(),
+    ?line TimeBefore = erlang:monotonic_time(),
     ?line erlang:port_command(Port, <<?START_TIMER,Timeout:32>>),
     receive
 	{Port,{data,[?TIMER]}} ->
 	    ?line Elapsed = erl_millisecs() - erl_millisecs(TimeBefore),
-	    io:format("Elapsed: ~p Timeout: ~p\n", [Elapsed,Timeout]),
+	    io:format("Elapsed: ~p Timeout: ~p\n", [Elapsed, Timeout]),
 	    if
 		Elapsed < Timeout ->
 		    ?line ?t:fail(too_short);
@@ -452,7 +456,7 @@ timer_delay(Config) when is_list(Config) ->
     Name = 'timer_drv',
     ?line Port = start_driver(Config, Name, false),
 
-    ?line TimeBefore = now(),
+    ?line TimeBefore = erlang:monotonic_time(),
     Timeout0 = 350,
     ?line erlang:port_command(Port, <<?DELAY_START_TIMER,Timeout0:32>>),
     Timeout = Timeout0 +
@@ -496,7 +500,7 @@ timer_change(Config) when is_list(Config) ->
 try_change_timer(_Port, 0) -> ok;
 try_change_timer(Port, Timeout) ->
     ?line Timeout_3 = Timeout*3,
-    ?line TimeBefore = now(),
+    ?line TimeBefore = erlang:monotonic_time(),
     ?line erlang:port_command(Port, <<?START_TIMER,Timeout_3:32>>),
     ?line erlang:port_command(Port, <<?START_TIMER,Timeout:32>>),
     receive
@@ -515,7 +519,7 @@ try_change_timer(Port, Timeout) ->
 	    ?line test_server:fail("driver failed to timeout")
     end.
 
-
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 		Queue test suites
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -719,7 +723,7 @@ deq(Port, Size) ->
 read_head(Port, Size) ->
     erlang:port_control(Port, ?READ_HEAD, <<Size:32>>).
 
-
+
 driver_unloaded(doc) ->
     [];
 driver_unloaded(suite) ->
@@ -917,8 +921,7 @@ steal_control_test(Hndl = {erts_poll_info, Before}) ->
 	  end.
 
 chkio_test_init(Config) when is_list(Config) ->
-    ?line wait_until_no_pending_updates(),
-    ?line ChkIo = erlang:system_info(check_io),
+    ?line ChkIo = get_stable_check_io_info(),
     ?line case catch lists:keysearch(name, 1, ChkIo) of
 	      {value, {name, erts_poll}} ->
 		  ?line ?t:format("Before test: ~p~n", [ChkIo]),
@@ -937,8 +940,7 @@ chkio_test_fini({skipped, _} = Res) ->
 chkio_test_fini({chkio_test_result, Res, Before}) ->
     ?line ok = erl_ddll:unload_driver('chkio_drv'),
     ?line ok = erl_ddll:stop(),
-    ?line wait_until_no_pending_updates(),
-    ?line After = erlang:system_info(check_io),
+    ?line After = get_stable_check_io_info(),
     ?line ?t:format("After test: ~p~n", [After]),
     ?line verify_chkio_state(Before, After),
     ?line Res.
@@ -985,7 +987,7 @@ chkio_test({erts_poll_info, Before},
 		  ?line Fun(),
 		  ?line During = erlang:system_info(check_io),
 		  ?line erlang:display(During),
-		  ?line 0 = erts_debug:get_internal_state(check_io_debug),
+		  ?line 0 = element(1, erts_debug:get_internal_state(check_io_debug)),
 		  ?line ?t:format("During test: ~p~n", [During]),
 		  ?line chk_chkio_port(Port),
 		  ?line case erlang:port_control(Port, ?CHKIO_STOP, "") of
@@ -1034,18 +1036,22 @@ verify_chkio_state(Before, After) ->
 						       After)
 	  end,
     ?line ok.
-    
-    
 
-wait_until_no_pending_updates() ->
-    case lists:keysearch(pending_updates, 1, erlang:system_info(check_io)) of
-	{value, {pending_updates, 0}} ->
-	    ok;
-	false ->
-	    ok;
+get_stable_check_io_info() ->
+    ChkIo = erlang:system_info(check_io),
+    PendUpdNo = case lists:keysearch(pending_updates, 1, ChkIo) of
+		    {value, {pending_updates, PendNo}} ->
+			PendNo;
+		    false ->
+			0
+		end,
+    {value, {active_fds, ActFds}} = lists:keysearch(active_fds, 1, ChkIo),
+    case {PendUpdNo, ActFds} of
+	{0, 0} ->
+	    ChkIo;
 	_ ->
 	    receive after 10 -> ok end,
-	    wait_until_no_pending_updates()
+	    get_stable_check_io_info()
     end.
 
 otp_6602(doc) -> ["Missed port lock when stealing control of fd from a "
@@ -1062,10 +1068,9 @@ otp_6602(Config) when is_list(Config) ->
 				      %% Inet driver use port locking...
 				      {ok, S} = gen_udp:open(0),
 				      {ok, Fd} = inet:getfd(S),
-				      {ok, Port} = inet:port(S),
 				      %% Steal fd (lock checker used to
 				      %% trigger here).
-				      {ok, _S2} = gen_udp:open(Port,[{fd,Fd}]),
+				      {ok, _S2} = gen_udp:open(0,[{fd,Fd}]),
 				      Parent ! Done
 			      end),
     ?line receive Done -> ok end,
@@ -1085,7 +1090,15 @@ otp_6602(Config) when is_list(Config) ->
 	 ["async_thrs",
 	  "sched_thrs"])).
 
--define(EXPECTED_SYSTEM_INFO_NAMES, ?EXPECTED_SYSTEM_INFO_NAMES2).
+-define(EXPECTED_SYSTEM_INFO_NAMES3,
+	(?EXPECTED_SYSTEM_INFO_NAMES2 ++
+	 ["emu_nif_vsn"])).
+
+-define(EXPECTED_SYSTEM_INFO_NAMES4,
+	(?EXPECTED_SYSTEM_INFO_NAMES3 ++
+	 ["dirty_sched"])).
+
+-define(EXPECTED_SYSTEM_INFO_NAMES, ?EXPECTED_SYSTEM_INFO_NAMES4).
 
 'driver_system_info_base_ver'(doc) ->
     [];
@@ -1133,16 +1146,18 @@ check_driver_system_info_result(Result) ->
 		drv_vsn_str2tup(erlang:system_info(driver_version))} of
 	      {DDVSN, DDVSN} ->
 		  ?line [] = Ns;
-	      {{1, 0}, _} ->
+	      %% {{1, 0}, _} ->
+	      %% 	  ?line ExpNs = lists:sort(?EXPECTED_SYSTEM_INFO_NAMES
+	      %% 				   -- ?EXPECTED_SYSTEM_INFO_NAMES1),
+	      %% 	  ?line ExpNs = lists:sort(Ns);
+	      %% {{1, 1}, _} ->
+	      %% 	  ?line ExpNs = lists:sort(?EXPECTED_SYSTEM_INFO_NAMES
+	      %% 				   -- ?EXPECTED_SYSTEM_INFO_NAMES2),
+	      %% 	  ?line ExpNs = lists:sort(Ns);
+	      {{3, 0}, _} ->
 		  ?line ExpNs = lists:sort(?EXPECTED_SYSTEM_INFO_NAMES
-					   -- ?EXPECTED_SYSTEM_INFO_NAMES1),
-		  ?line ExpNs = lists:sort(Ns);
-	      {{1, 1}, _} ->
-		  ?line ExpNs = lists:sort(?EXPECTED_SYSTEM_INFO_NAMES
-					   -- ?EXPECTED_SYSTEM_INFO_NAMES2),
-		  ?line ExpNs = lists:sort(Ns);
-	      {{2, 0}, _} ->
-		  ?line [] = Ns
+					   -- ?EXPECTED_SYSTEM_INFO_NAMES3),
+		  ?line ExpNs = lists:sort(Ns)
 	  end.
 
 chk_sis(SIs, Ns) ->
@@ -1188,6 +1203,14 @@ check_si_res(["async_thrs", Value]) ->
     ?line Value = integer_to_list(erlang:system_info(thread_pool_size));
 check_si_res(["sched_thrs", Value]) ->
     ?line Value = integer_to_list(erlang:system_info(schedulers));
+
+%% Data added in 3rd version of driver_system_info() (driver version 1.5)
+check_si_res(["emu_nif_vsn", Value]) ->
+    ?line Value = erlang:system_info(nif_version);
+
+%% Data added in 4th version of driver_system_info() (driver version 3.1)
+check_si_res(["dirty_sched", _Value]) ->
+    true;
 
 check_si_res(Unexpected) ->
     ?line ?t:fail({unexpected_result, Unexpected}).
@@ -1854,10 +1877,7 @@ mseg_alloc_cached_segments() ->
     mseg_alloc_cached_segments(mseg_inst_info(0)).
 
 mseg_alloc_cached_segments(MsegAllocInfo) ->
-    MemName = case is_halfword_vm() of
-	true -> "high memory";
-	false -> "all memory"
-    end,
+    MemName = "all memory",
     ?line [{memkind,DrvMem}]
 	= lists:filter(fun(E) -> case E of
 				    {memkind, [{name, MemName} | _]} -> true;
@@ -1875,13 +1895,6 @@ mseg_inst_info(I) ->
 			  2,
 			  erlang:system_info({allocator,mseg_alloc})),
     Value.
-
-is_halfword_vm() ->
-    case {erlang:system_info({wordsize, internal}),
-	  erlang:system_info({wordsize, external})} of
-	{4, 8} -> true;
-	{WS, WS} -> false
-    end.
 
 driver_alloc_sbct() ->
     {_, _, _, As} = erlang:system_info(allocator),
@@ -1945,6 +1958,14 @@ otp_9302(Config) when is_list(Config) ->
 	  end.
 
 thr_free_drv(Config) when is_list(Config) ->
+    case erlang:system_info(threads) of
+	false ->
+	    {skipped, "No thread support"};
+	true ->
+	    thr_free_drv_do(Config)
+    end.
+
+thr_free_drv_do(Config) ->
     ?line Path = ?config(data_dir, Config),
     ?line erl_ddll:start(),
     ?line ok = load_driver(Path, thr_free_drv),
@@ -2075,6 +2096,21 @@ thr_msg_blast(Config) when is_list(Config) ->
 	    Res
     end.
 
+-define(IN_RANGE(LoW_, VaLuE_, HiGh_),
+	case in_range(LoW_, VaLuE_, HiGh_) of
+	    true -> ok;
+	    false ->
+		case erlang:system_info(lock_checking) of
+		    true ->
+			?t:format("~p:~p: Ignore bad sched count due to "
+				  "lock checking~n",
+				  [?MODULE,?LINE]);
+		    false ->
+			?t:fail({unexpected_sched_counts, VaLuE_})
+		end
+	end).
+
+
 consume_timeslice(Config) when is_list(Config) ->
     %%
     %% Verify that erl_drv_consume_timeslice() works.
@@ -2131,15 +2167,8 @@ consume_timeslice(Config) when is_list(Config) ->
     Proc1 ! Go,
     wait_command_msgs(Port, 10),
     [{Port, Sprt1}, {Proc1, Sproc1}] = count_pp_sched_stop([Port, Proc1]),
-    case Sprt1 of
-	10 ->
-	    true = in_range(5, Sproc1-10, 7);
-	_ ->
-	    case erlang:system_info(lock_checking) of
-		true -> ?t:format("Ignore bad sched count due to lock checking", []);
-		false -> ?t:fail({unexpected_sched_counts, Sprt1, Sproc1})
-	    end
-    end,
+    ?IN_RANGE(10, Sprt1, 10),
+    ?IN_RANGE(5, Sproc1-10, 7),
 
     "disabled" = port_control(Port, $D, ""),
     Proc2 = spawn_link(fun () ->
@@ -2160,15 +2189,8 @@ consume_timeslice(Config) when is_list(Config) ->
     Proc2 ! Go,
     wait_command_msgs(Port, 10),
     [{Port, Sprt2}, {Proc2, Sproc2}] = count_pp_sched_stop([Port, Proc2]),
-    case Sprt2 of
-	10 ->
-	    true = in_range(1, Sproc2-10, 2);
-	_ ->
-	    case erlang:system_info(lock_checking) of
-		true -> ?t:format("Ignore bad sched count due to lock checking", []);
-		false -> ?t:fail({unexpected_sched_counts, Sprt2, Sproc2})
-	    end
-    end,
+    ?IN_RANGE(10, Sprt2, 10),
+    ?IN_RANGE(1, Sproc2-10, 2),
 
     "enabled" = port_control(Port, $E, ""),
     Proc3 = spawn_link(fun () ->
@@ -2188,15 +2210,8 @@ consume_timeslice(Config) when is_list(Config) ->
     Proc3 ! Go,
     wait_command_msgs(Port, 10),
     [{Port, Sprt3}, {Proc3, Sproc3}] = count_pp_sched_stop([Port, Proc3]),
-    case Sprt3 of
-	10 ->
-	    true = in_range(5, Sproc3-10, 7);
-	_ ->
-	    case erlang:system_info(lock_checking) of
-		true -> ?t:format("Ignore bad sched count due to lock checking", []);
-		false -> ?t:fail({unexpected_sched_counts, Sprt3, Sproc3})
-	    end
-    end,
+    ?IN_RANGE(10, Sprt3, 10),
+    ?IN_RANGE(5, Sproc3-10, 7),
 
     "disabled" = port_control(Port, $D, ""),
     Proc4 = spawn_link(fun () ->
@@ -2216,15 +2231,8 @@ consume_timeslice(Config) when is_list(Config) ->
     Proc4 ! Go,
     wait_command_msgs(Port, 10),
     [{Port, Sprt4}, {Proc4, Sproc4}] = count_pp_sched_stop([Port, Proc4]),
-    case Sprt4 of
-	10 ->
-	    true = in_range(1, Sproc4-10, 2);
-	_ ->
-	    case erlang:system_info(lock_checking) of
-		true -> ?t:format("Ignore bad sched count due to lock checking", []);
-		false -> ?t:fail({unexpected_sched_counts, Sprt4, Sproc4})
-	    end
-    end,
+    ?IN_RANGE(10, Sprt4, 10),
+    ?IN_RANGE(1, Sproc4-10, 2),
 
     SOnl = erlang:system_info(schedulers_online),
     %% If only one scheduler use port with parallelism set to true,
@@ -2272,8 +2280,8 @@ consume_timeslice(Config) when is_list(Config) ->
     wait_procs_exit([W5, Proc5]),
     wait_command_msgs(Port2, 10),
     [{Port2, Sprt5}, {Proc5, Sproc5}] = count_pp_sched_stop([Port2, Proc5]),
-    true = in_range(2, Sproc5, 3),
-    true = in_range(7, Sprt5, 20),
+    ?IN_RANGE(2, Sproc5, 3),
+    ?IN_RANGE(6, Sprt5, 20),
 		  
     count_pp_sched_start(),
     "disabled" = port_control(Port2, $D, ""),
@@ -2307,14 +2315,15 @@ consume_timeslice(Config) when is_list(Config) ->
     wait_procs_exit([W6, Proc6]),
     wait_command_msgs(Port2, 10),
     [{Port2, Sprt6}, {Proc6, Sproc6}] = count_pp_sched_stop([Port2, Proc6]),
-    true = in_range(2, Sproc6, 3),
-    true = in_range(3, Sprt6, 6),
+    ?IN_RANGE(2, Sproc6, 3),
+    ?IN_RANGE(2, Sprt6, 6),
 
     process_flag(scheduler, 0),
 
     Port2 ! {self(), close},
     receive {Port2, closed} -> ok end,
     ok.
+
 
 wait_command_msgs(_, 0) ->
     ok;
@@ -2374,9 +2383,46 @@ count_proc_sched(Ps, PNs) ->
 	    PNs
     end.
     
+a_test(Config) when is_list(Config) ->
+    check_io_debug().
+
+z_test(Config) when is_list(Config) ->
+    check_io_debug().
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 		Utilities
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+check_io_debug() ->
+    get_stable_check_io_info(),
+    {NoErrorFds, NoUsedFds, NoDrvSelStructs, NoDrvEvStructs} = CheckIoDebug
+	= erts_debug:get_internal_state(check_io_debug),
+    HasGetHost = has_gethost(),
+    ct:log("check_io_debug: ~p~n"
+           "HasGetHost: ~p",[CheckIoDebug, HasGetHost]),
+    0 = NoErrorFds,
+    if
+        NoUsedFds == NoDrvSelStructs ->
+            ok;
+        HasGetHost andalso (NoUsedFds == (NoDrvSelStructs - 1)) ->
+            %% If the inet_gethost port is alive, we may have
+            %% one extra used fd that is not selected on
+            ok
+    end,
+    0 = NoDrvEvStructs,
+    ok.
+
+has_gethost() ->
+    has_gethost(erlang:ports()).
+has_gethost([P|T]) ->
+    case erlang:port_info(P, name) of
+        {name,"inet_gethost"++_} ->
+            true;
+        _ ->
+            has_gethost(T)
+    end;
+has_gethost([]) ->
+    false.
 
 %flush_msgs() ->
 %    receive
@@ -2478,22 +2524,13 @@ random_char() ->
     uniform(256) - 1.
 
 uniform(N) ->
-    case get(random_seed) of
-	undefined ->
-	    {X, Y, Z} = time(),
-	    random:seed(X, Y, Z);
-	_ ->
-	    ok
-    end,
-    random:uniform(N).
+    rand:uniform(N).
 
-%% return millisecs from statistics source
 erl_millisecs() ->
-    {Ms, S, Us} = erlang:now(),
-    Ms * 1000000000 + S * 1000 + Us / 1000.
+    erl_millisecs(erlang:monotonic_time()).
 
-erl_millisecs({Ms,S,Us}) ->
-    Ms * 1000000000 + S * 1000 + Us / 1000.
+erl_millisecs(MonotonicTime) ->
+    (1000*MonotonicTime)/erlang:convert_time_unit(1,seconds,native).
 
 %% Start/stop drivers.
 start_driver(Config, Name, Binary) ->
@@ -2542,18 +2579,15 @@ sleep(Ms) when is_integer(Ms), Ms >= 0 ->
 
 
 start_node(Config) when is_list(Config) ->
-    ?line Pa = filename:dirname(code:which(?MODULE)),
-    ?line {A, B, C} = now(),
-    ?line Name = list_to_atom(atom_to_list(?MODULE)
-			      ++ "-"
-			      ++ atom_to_list(?config(testcase, Config))
-			      ++ "-"
-			      ++ integer_to_list(A)
-			      ++ "-"
-			      ++ integer_to_list(B)
-			      ++ "-"
-			      ++ integer_to_list(C)),
-    ?line ?t:start_node(Name, slave, [{args, "-pa "++Pa}]).
+    Pa = filename:dirname(code:which(?MODULE)),
+    Name = list_to_atom(atom_to_list(?MODULE)
+			++ "-"
+			++ atom_to_list(?config(testcase, Config))
+			++ "-"
+			++ integer_to_list(erlang:system_time(seconds))
+			++ "-"
+			++ integer_to_list(erlang:unique_integer([positive]))),
+    ?t:start_node(Name, slave, [{args, "-pa "++Pa}]).
 
 stop_node(Node) ->
     ?t:stop_node(Node).
@@ -2582,10 +2616,9 @@ driver_alloc_size() ->
 	MemInfo ->
 	    CS = lists:foldl(
 		   fun ({instance, _, L}, Acc) ->
-			   {value,{_,SBMBCS}} = lists:keysearch(sbmbcs, 1, L),
 			   {value,{_,MBCS}} = lists:keysearch(mbcs, 1, L),
 			   {value,{_,SBCS}} = lists:keysearch(sbcs, 1, L),
-			   [SBMBCS,MBCS,SBCS | Acc]
+			   [MBCS,SBCS | Acc]
 		   end,
 		   [],
 		   MemInfo),

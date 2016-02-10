@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -20,7 +21,7 @@
 %%
 %%----------------------------------------------------------------------
 %% Purpose: Record and constant defenitions for the SSL-record protocol
-%% see RFC 2246
+% see RFC 2246
 %%----------------------------------------------------------------------
 
 -ifndef(ssl_record).
@@ -29,6 +30,18 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Connection states - RFC 4346 section 6.1
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-record(connection_state, {
+	  security_parameters,
+	  compression_state,
+	  cipher_state,
+	  mac_secret,
+	  epoch, %% Only used by DTLS
+	  sequence_number,
+	  %% RFC 5746
+	  secure_renegotiation,
+	  client_verify_data,
+	  server_verify_data
+	 }).
 
 -record(connection_states, {
 	  current_read,
@@ -56,19 +69,9 @@
           exportable				% boolean
        }). 
 
--record(connection_state, {
-	  security_parameters,
-	  compression_state,
-	  cipher_state,
-	  mac_secret,
-	  sequence_number,
-	  %% RFC 5746
-	  secure_renegotiation,
-	  client_verify_data,
-	  server_verify_data
-	 }).
+-define(INITIAL_BYTES, 5).
 
--define(MAX_SEQENCE_NUMBER, 18446744073709552000). %% math:pow(2, 64) - 1 = 1.8446744073709552e19
+-define(MAX_SEQENCE_NUMBER, 18446744073709551615). %% (1 bsl 64) - 1 = 18446744073709551615
 %% Sequence numbers can not wrap so when max is about to be reached we should renegotiate.
 %% We will renegotiate a little before so that there will be sequence numbers left
 %% for the rehandshake and a little data. Currently we decided to renegotiate a little more
@@ -88,11 +91,14 @@
 -define('3DES', 4).
 -define(DES40, 5).
 -define(IDEA, 6).
--define(AES, 7). 
+-define(AES_CBC, 7).
+-define(AES_GCM, 8).
+-define(CHACHA20_POLY1305, 9).
 
 %% CipherType
 -define(STREAM, 0).
 -define(BLOCK, 1).
+-define(AEAD, 2).
 
 %% IsExportable
 %-define(TRUE, 0).  %% Already defined by ssl_internal.hrl
@@ -143,34 +149,6 @@
 
 -define(LOWEST_MAJOR_SUPPORTED_VERSION, 3).
 	
--record(ssl_tls, {   %% From inet driver
-	  port,
-	  type,
-	  version, 
-	  fragment
-	 }).
-
-%% -record(tls_plain_text, {
-%% 	  type, 
-%% 	  version,   % #protocol_version{} 
-%% 	  length,    % unit 16  
-%% 	  fragment   % opaque  
-%% 	 }).
-
-%% -record(tls_compressed, {
-%% 	  type,
-%% 	  version,
-%% 	  length,    % unit 16  
-%% 	  fragment   % opaque  
-%% 	 }).
-
-%% -record(tls_cipher_text, {
-%%           type,
-%%           version,
-%%           length,
-%%           cipher,
-%%           fragment
-%%          }).
 
 -record(generic_stream_cipher, {
           content,  % opaque content[TLSCompressed.length];

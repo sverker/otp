@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -22,13 +23,15 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2, not_run/1]).
 -export([test_1/1, test_2/1, test_3/1, bad_match_spec_bin/1,
-	 trace_control_word/1, silent/1, silent_no_ms/1, 
+	 trace_control_word/1, silent/1, silent_no_ms/1, silent_test/1,
 	 ms_trace2/1, ms_trace3/1, boxed_and_small/1,
 	 destructive_in_test_bif/1, guard_exceptions/1,
+	 empty_list/1,
 	 unary_plus/1, unary_minus/1, moving_labels/1]).
 -export([fpe/1]).
 -export([otp_9422/1]).
 -export([faulty_seq_trace/1, do_faulty_seq_trace/0]).
+-export([maps/1]).
 -export([runner/2, loop_runner/3]).
 -export([f1/1, f2/2, f3/2, fn/1, fn/2, fn/3]).
 -export([do_boxed_and_small/0]).
@@ -41,7 +44,7 @@
 -export([init_per_testcase/2, end_per_testcase/2]).
 
 init_per_testcase(Func, Config) when is_atom(Func), is_list(Config) ->
-    Dog=?t:timetrap(?t:seconds(10)),
+    Dog=?t:timetrap(?t:seconds(30)),
     [{watchdog, Dog}|Config].
 
 end_per_testcase(_Func, Config) ->
@@ -55,12 +58,14 @@ all() ->
     case test_server:is_native(match_spec_SUITE) of
 	false ->
 	    [test_1, test_2, test_3, bad_match_spec_bin,
-	     trace_control_word, silent, silent_no_ms, ms_trace2,
+	     trace_control_word, silent, silent_no_ms, silent_test, ms_trace2,
 	     ms_trace3, boxed_and_small, destructive_in_test_bif,
 	     guard_exceptions, unary_plus, unary_minus, fpe,
 	     moving_labels,
 	     faulty_seq_trace,
-	     otp_9422];
+	     empty_list,
+             otp_9422,
+             maps];
 	true -> [not_run]
     end.
 
@@ -165,12 +170,11 @@ test_1(Config) when is_list(Config) ->
 	     [{['$1','$1'],[{is_atom, '$1'}],[kakalorum]}],
 	     [{call, {?MODULE, f2, [a, a]}}]),
 
-%    case tr0(fun() -> ?MODULE:f2(a, a) end,
-%	     {?MODULE, f2, 2},
-%	     [{['$1','$1'],[{is_atom, '$1'}],[{message, {process_dump}}]}]) of
-%	[{trace, _, call, {?MODULE, f2, [a, a]}, Bin}] ->
-%	    erlang:display(binary_to_list(Bin))
-%    end,
+    %% Verify that 'process_dump' can handle a matchstate on the stack.
+    tr(fun() -> fbinmatch(<<0>>, 0) end,
+       {?MODULE, f1, 1},
+       [{['_'],[],[{message, {process_dump}}]}],
+       [fun({trace, _, call, {?MODULE, f1, [0]}, _Bin}) -> true end]),
 
 % Error cases
     ?line errchk([{['$1','$1'],[{is_atom, '$1'}],[{banka, kanin}]}]),
@@ -213,7 +217,7 @@ test_3(Config) when is_list(Config) ->
 
 otp_9422(doc) -> [];
 otp_9422(Config) when is_list(Config) ->
-    Laps = 1000,
+    Laps = 10000,
     ?line Fun1 = fun() -> otp_9422_tracee() end,
     ?line P1 = spawn_link(?MODULE, loop_runner, [self(), Fun1, Laps]),
     io:format("spawned ~p as tracee\n", [P1]),
@@ -230,7 +234,7 @@ otp_9422(Config) when is_list(Config) ->
     %%receive after 10*1000 -> ok end,
 
     stop_collect(P1),
-    stop_collect(P2),
+    stop_collect(P2, abort),
     ok.
     
 otp_9422_tracee() ->
@@ -500,6 +504,14 @@ silent_no_ms(Config) when is_list(Config) ->
 			 {trace,Tracee,call,{?MODULE,f2,[h,i]}},
 			 {trace,Tracee,return_to,{?MODULE,f3,2}}]
 	    end).
+
+silent_test(doc) ->
+    ["Test that match_spec_test does not activate silent"];
+silent_test(_Config) ->
+    {flags,[]} = erlang:trace_info(self(),flags),
+    erlang:match_spec_test([],[{'_',[],[{silent,true}]}],trace),
+    {flags,[]} = erlang:trace_info(self(),flags).
+
 
 ms_trace2(doc) ->
     ["Test the match spec functions {trace/2}"];
@@ -889,6 +901,79 @@ fpe(Config) when is_list(Config) ->
 	_ -> ok 
     end.
 
+maps(Config) when is_list(Config) ->
+    {ok,#{},[],[]} = erlang:match_spec_test(#{}, [{'_',[],['$_']}], table),
+    {ok,#{},[],[]} = erlang:match_spec_test(#{}, [{#{},[],['$_']}], table),
+    {ok,false,[],[]} =
+        erlang:match_spec_test(#{}, [{not_a_map,[],['$_']}], table),
+    {ok,bar,[],[]} =
+        erlang:match_spec_test(#{foo => bar},
+                               [{#{foo => '$1'},[],['$1']}],
+                               table),
+    {ok,false,[],[]} =
+        erlang:match_spec_test(#{foo => bar},
+                               [{#{foo => qux},[],[qux]}],
+                               table),
+    {ok,false,[],[]} =
+        erlang:match_spec_test(#{}, [{#{foo => '_'},[],[foo]}], table),
+    {error,_} =
+        erlang:match_spec_test(#{}, [{#{'$1' => '_'},[],[foo]}], table),
+    {ok,bar,[],[]} =
+        erlang:match_spec_test({#{foo => bar}},
+                               [{{#{foo => '$1'}},[],['$1']}],
+                               table),
+    {ok,#{foo := 3},[],[]} =
+        erlang:match_spec_test({}, [{{},[],[#{foo => {'+',1,2}}]}], table),
+
+    {ok,"camembert",[],[]} =
+        erlang:match_spec_test(#{b => "camembert",c => "cabécou"},
+                               [{#{b => '$1',c => "cabécou"},[],['$1']}], table),
+
+    {ok,#{a :="camembert",b := "hi"},[],[]} =
+        erlang:match_spec_test(#{<<"b">> =>"camembert","c"=>"cabécou", "wat"=>"hi", b=><<"other">>},
+                               [{#{<<"b">> => '$1',"wat" => '$2'},[],[#{a=>'$1',b=>'$2'}]}],
+                               table),
+    %% large maps
+
+    Ls0 = [{I,<<I:32>>}||I <- lists:seq(1,415)],
+    M0  = maps:from_list(Ls0),
+    M1  = #{a=>1,b=>2,c=>3,d=>4},
+
+    R1  = M0#{263 := #{ a=> 3 }},
+    Ms1 = [{M1#{c:='$1'},[],[M0#{263 := #{a => '$1'}}]}],
+
+    {ok,R1,[],[]} = erlang:match_spec_test(M1,Ms1,table),
+
+    Ms2 = [{M0#{63:='$1', 19:='$2'},[],[M0#{19:='$1', 63:='$2'}]}],
+    R2  = M0#{63 := maps:get(19,M0), 19 := maps:get(63,M0) },
+    {ok,R2,[],[]} = erlang:match_spec_test(M0,Ms2,table),
+
+    ok = maps_check_loop(M1),
+    ok = maps_check_loop(M0),
+    M2 = maps:from_list([{integer_to_list(K),V} || {K,V} <- Ls0]),
+    ok = maps_check_loop(M2),
+    ok.
+
+maps_check_loop(M) ->
+    Ks = maps:keys(M),
+    maps_check_loop(M,M,M,M,Ks,lists:reverse(Ks),1).
+
+maps_check_loop(Orig,M0,MsM0,Rm0,[K|Ks],[Rk|Rks],Ix) ->
+    MsK  = list_to_atom([$$]++integer_to_list(Ix)),
+    MsM1 = MsM0#{K := MsK},
+    Rm1  = Rm0#{Rk := MsK},
+    M1   = M0#{Rk  := maps:get(K,MsM0)},
+    Ms   = [{MsM1,[],[Rm1]}],
+    {ok,M1,[],[]} = erlang:match_spec_test(Orig,Ms,table),
+    maps_check_loop(Orig,M1,MsM1,Rm1,Ks,Rks,Ix+1);
+maps_check_loop(_,_,_,_,[],[],_) -> ok.
+
+
+empty_list(Config) when is_list(Config) ->
+    Val=[{'$1',[], [{message,'$1'},{message,{caller}},{return_trace}]}],
+     %% Did crash debug VM in faulty assert:
+    erlang:match_spec_test([],Val,trace).
+
 moving_labels(Config) when is_list(Config) ->
     %% Force an andalso/orelse construction to be moved by placing it
     %% in a tuple followed by a constant term. Labels should still
@@ -913,14 +998,14 @@ tr(Fun, MFA, TraceFlags, Pat, PatFlags, Expected0) ->
 	       erlang:trace(P, true, TraceFlags),
 	       erlang:trace_pattern(MFA, Pat, PatFlags),
 	       lists:map(
-		 fun(X) -> 
-			 list_to_tuple([trace, P | tuple_to_list(X)])
+		 fun(X) when is_function(X,1) -> X;
+		    (X) -> list_to_tuple([trace, P | tuple_to_list(X)])
 		 end,
 		 Expected0)
        end).
 
 tr(RunFun, ControlFun) ->
-    P = spawn(?MODULE, runner, [self(), RunFun]),
+    P = spawn_link(?MODULE, runner, [self(), RunFun]),
     collect(P, ControlFun(P)).
 
 collect(P, TMs) ->
@@ -939,18 +1024,33 @@ collect([]) ->
 collect([TM | TMs]) ->
     ?t:format(        "Expecting:      ~p~n", [TM]),
     receive
-	M ->
-	    case if element(1, M) == trace_ts ->
-			 list_to_tuple(lists:reverse(
-					 tl(lists:reverse(tuple_to_list(M)))));
-		    true -> M
-		 end of
-		TM ->
-		    ?t:format("Got:            ~p~n", [M]),
-		    collect(TMs);
-		_ ->
-		    ?t:format("Got unexpected: ~p~n", [M]),
-		    flush({got_unexpected,M})
+	M0 ->
+	    M = case element(1, M0) of
+		    trace_ts ->
+			list_to_tuple(lists:reverse(
+					tl(lists:reverse(tuple_to_list(M0)))));
+		    _ -> M0
+		end,
+	    case is_function(TM,1) of
+		true ->
+		    case (catch TM(M)) of
+			true ->
+			    ?t:format("Got:            ~p~n", [M]),
+			    collect(TMs);
+			_ ->
+			    ?t:format("Got unexpected: ~p~n", [M]),
+			    flush({got_unexpected,M})
+		    end;
+
+		false ->
+		    case M of
+			TM ->
+			    ?t:format("Got:            ~p~n", [M]),
+			    collect(TMs);
+			_ ->
+			    ?t:format("Got unexpected: ~p~n", [M]),
+			    flush({got_unexpected,M})
+		    end
 	    end
     end.
 
@@ -967,7 +1067,9 @@ start_collect(P) ->
     P ! {go, self()}.
 
 stop_collect(P) ->
-    P ! {done, self()},
+    stop_collect(P, done).
+stop_collect(P, Order) ->
+    P ! {Order, self()},
     receive
 	{gone, P} ->
 	    ok
@@ -992,15 +1094,23 @@ loop_runner(Collector, Fun, Laps) ->
     end,
     loop_runner_cont(Collector, Fun, 0, Laps).
 
-loop_runner_cont(_Collector, _Fun, Laps, Laps) ->
+loop_runner_cont(Collector, _Fun, Laps, Laps) ->
     receive
-	{done, Collector} ->
-	    io:format("loop_runner ~p exit after ~p laps\n", [self(), Laps]),
-	    Collector ! {gone, self()}
-    end;
+	{done, Collector} -> ok;
+	{abort, Collector} -> ok
+    end,
+    io:format("loop_runner ~p exit after ~p laps\n", [self(), Laps]),
+    Collector ! {gone, self()};
+
 loop_runner_cont(Collector, Fun, N, Laps) ->
     Fun(),
-    loop_runner_cont(Collector, Fun, N+1, Laps).
+    receive
+	{abort, Collector} ->
+	    io:format("loop_runner ~p aborted after ~p of ~p laps\n", [self(), N+1, Laps]),
+	    Collector ! {gone, self()}
+    after 0 ->
+	    loop_runner_cont(Collector, Fun, N+1, Laps)
+    end.
 
 
 f1(X) ->
@@ -1019,6 +1129,10 @@ fn(X, Y) ->
     [X, Y].
 fn(X, Y, Z) ->
     [X, Y, Z].
+
+fbinmatch(<<Int, Rest/binary>>, Acc) ->
+    fbinmatch(Rest, [?MODULE:f1(Int) | Acc]);
+fbinmatch(<<>>, Acc) -> Acc.
 
 id(X) ->
     X.

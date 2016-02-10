@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxlayoutalgorithm.html">wxLayoutAlgorithm</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxlayoutalgorithm.html">wxLayoutAlgorithm</a>.
 %% @type wxLayoutAlgorithm().  An object reference, The representation is internal
 %% and can be changed without notice. It can't be used for comparsion
 %% stored on disc or distributed for use on other nodes.
@@ -35,7 +36,7 @@
 parent_class(_Class) -> erlang:error({badtype, ?MODULE}).
 
 -type wxLayoutAlgorithm() :: wx:wx_object().
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxlayoutalgorithm.html#wxlayoutalgorithmwxlayoutalgorithm">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxlayoutalgorithm.html#wxlayoutalgorithmwxlayoutalgorithm">external documentation</a>.
 -spec new() -> wxLayoutAlgorithm().
 new() ->
   wxe_util:construct(?wxLayoutAlgorithm_new,
@@ -49,7 +50,7 @@ layoutFrame(This,Frame)
  when is_record(This, wx_ref),is_record(Frame, wx_ref) ->
   layoutFrame(This,Frame, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxlayoutalgorithm.html#wxlayoutalgorithmlayoutframe">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxlayoutalgorithm.html#wxlayoutalgorithmlayoutframe">external documentation</a>.
 -spec layoutFrame(This, Frame, [Option]) -> boolean() when
 	This::wxLayoutAlgorithm(), Frame::wxFrame:wxFrame(),
 	Option :: {mainWindow, wxWindow:wxWindow()}.
@@ -71,7 +72,7 @@ layoutMDIFrame(This,Frame)
  when is_record(This, wx_ref),is_record(Frame, wx_ref) ->
   layoutMDIFrame(This,Frame, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxlayoutalgorithm.html#wxlayoutalgorithmlayoutmdiframe">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxlayoutalgorithm.html#wxlayoutalgorithmlayoutmdiframe">external documentation</a>.
 -spec layoutMDIFrame(This, Frame, [Option]) -> boolean() when
 	This::wxLayoutAlgorithm(), Frame::wxMDIParentFrame:wxMDIParentFrame(),
 	Option :: {rect, {X::integer(), Y::integer(), W::integer(), H::integer()}}.
@@ -93,7 +94,7 @@ layoutWindow(This,Frame)
  when is_record(This, wx_ref),is_record(Frame, wx_ref) ->
   layoutWindow(This,Frame, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxlayoutalgorithm.html#wxlayoutalgorithmlayoutwindow">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxlayoutalgorithm.html#wxlayoutalgorithmlayoutwindow">external documentation</a>.
 -spec layoutWindow(This, Frame, [Option]) -> boolean() when
 	This::wxLayoutAlgorithm(), Frame::wxWindow:wxWindow(),
 	Option :: {mainWindow, wxWindow:wxWindow()}.

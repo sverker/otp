@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 2000-2011. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -21,10 +22,10 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2,
 	 test1/1,overwritten_fun/1,otp_7202/1,bif_fun/1,
-	 external/1]).
+         external/1,eep37/1,eep37_dup/1,badarity/1]).
 
-%% Internal export.
--export([call_me/1]).
+%% Internal exports.
+-export([call_me/1,dup1/0,dup2/0]).
 
 -include_lib("test_server/include/test_server.hrl").
 
@@ -32,7 +33,7 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     test_lib:recompile(?MODULE),
-    [test1,overwritten_fun,otp_7202,bif_fun,external].
+    [test1,overwritten_fun,otp_7202,bif_fun,external,eep37,eep37_dup,badarity].
 
 groups() -> 
     [].
@@ -196,6 +197,30 @@ external(Config) when is_list(Config) ->
 
 call_me(I) ->
     {ok,I}.
+
+eep37(Config) when is_list(Config) ->
+    F = fun Fact(N) when N > 0 -> N * Fact(N - 1); Fact(0) -> 1 end,
+    Add = fun _(N) -> N + 1 end,
+    UnusedName = fun BlackAdder(N) -> N + 42 end,
+    720 = F(6),
+    10 = Add(9),
+    50 = UnusedName(8),
+    ok.
+
+eep37_dup(Config) when is_list(Config) ->
+    dup1 = (dup1())(),
+    dup2 = (dup2())(),
+    ok.
+
+dup1() ->
+    fun _F() -> dup1 end.
+
+dup2() ->
+    fun _F() -> dup2 end.
+
+badarity(Config) when is_list(Config) ->
+    {'EXIT',{{badarity,{_,[]}},_}} = (catch (fun badarity/1)()),
+    ok.
 
 id(I) ->
     I.

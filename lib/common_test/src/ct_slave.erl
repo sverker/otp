@@ -1,18 +1,19 @@
 %%--------------------------------------------------------------------
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 
@@ -37,18 +38,19 @@
 
 -record(options, {username, password, boot_timeout, init_timeout,
 		  startup_timeout, startup_functions, monitor_master,
-		  kill_if_fail, erl_flags, env}).
+		  kill_if_fail, erl_flags, env, ssh_port, ssh_opts}).
 
 %%%-----------------------------------------------------------------
 %%% @spec start(Node) -> Result
 %%%   Node = atom()
 %%%   Result = {ok, NodeName} |
-%%%	       {error, already_started, NodeName} |
-%%%	       {error, started_not_connected, NodeName} |
-%%%	       {error, boot_timeout, NodeName} |
-%%%	       {error, init_timeout, NodeName} |
-%%%	       {error, startup_timeout, NodeName} |
-%%%	       {error, not_alive, NodeName}
+%%%            {error, Reason, NodeName}
+%%%   Reason = already_started |
+%%%            started_not_connected |
+%%%            boot_timeout |
+%%%            init_timeout |
+%%%            startup_timeout |
+%%%            not_alive
 %%%   NodeName = atom()
 %%% @doc Starts an Erlang node with name <code>Node</code> on the local host.
 %%% @see start/3
@@ -56,20 +58,28 @@ start(Node) ->
     start(gethostname(), Node).
 
 %%%-----------------------------------------------------------------
-%%% @spec start(Host, Node) -> Result
-%%%   Node = atom()
-%%%   Host = atom()
+%%% @spec start(HostOrNode, NodeOrOpts) -> Result
+%%%   HostOrNode = atom()
+%%%   NodeOrOpts = atom() | list()
 %%%   Result = {ok, NodeName} |
-%%%	       {error, already_started, NodeName} |
-%%%	       {error, started_not_connected, NodeName} |
-%%%	       {error, boot_timeout, NodeName} |
-%%%	       {error, init_timeout, NodeName} |
-%%%	       {error, startup_timeout, NodeName} |
-%%%	       {error, not_alive, NodeName}
+%%%            {error, Reason, NodeName}
+%%%   Reason = already_started |
+%%%            started_not_connected |
+%%%            boot_timeout |
+%%%            init_timeout |
+%%%            startup_timeout |
+%%%            not_alive
 %%%   NodeName = atom()
-%%% @doc Starts an Erlang node with name <code>Node</code> on host
-%%% <code>Host</code> with the default options.
+%%% @doc Starts an Erlang node with default options on a specified
+%%% host, or on the local host with specified options. That is,
+%%% the call is interpreted as <code>start(Host, Node)</code> when the
+%%% second argument is atom-valued and <code>start(Node, Opts)</code>
+%%% when it's list-valued.
 %%% @see start/3
+start(_HostOrNode = Node, _NodeOrOpts = Opts) %% match to satiate edoc
+  when is_list(Opts) ->
+    start(gethostname(), Node, Opts);
+
 start(Host, Node) ->
     start(Host, Node, []).
 
@@ -102,12 +112,14 @@ start(Host, Node) ->
 %%%   ErlangFlags = string()
 %%%   EnvVar = string()
 %%%   Value = string()
-%%%   Result = {ok, NodeName} | {error, already_started, NodeName} |
-%%%	       {error, started_not_connected, NodeName} |
-%%%	       {error, boot_timeout, NodeName} |
-%%%	       {error, init_timeout, NodeName} |
-%%%	       {error, startup_timeout, NodeName} |
-%%%	       {error, not_alive, NodeName}
+%%%   Result = {ok, NodeName} |
+%%%            {error, Reason, NodeName}
+%%%   Reason = already_started |
+%%%            started_not_connected |
+%%%            boot_timeout |
+%%%            init_timeout |
+%%%            startup_timeout |
+%%%            not_alive
 %%%   NodeName = atom()
 %%% @doc Starts an Erlang node with name <code>Node</code> on host
 %%% <code>Host</code> as specified by the combination of options in
@@ -122,7 +134,7 @@ start(Host, Node) ->
 %%% executed after startup of the node. Note that all used modules should be
 %%% present in the code path on the <code>Host</code>.</p>
 %%%
-%%% <p>The timeouts are applied as follows:
+%%% <p>The timeouts are applied as follows:</p>
 %%% <list>
 %%%  <item>
 %%%   <code>BootTimeout</code> - time to start the Erlang node, in seconds.
@@ -142,7 +154,7 @@ start(Host, Node) ->
 %%%    If this timeout occurs, the result
 %%%    <code>{error, startup_timeout, NodeName}</code> is returned.
 %%%  </item>
-%%% </list></p>
+%%% </list>
 %%%
 %%% <p>Option <code>monitor_master</code> specifies, if the slave node should be
 %%% stopped in case of master node stop. Defaults to false.</p>
@@ -158,7 +170,7 @@ start(Host, Node) ->
 %%% <p>Option <code>env</code> specifies a list of environment variables
 %%% that will extended the environment.</p>
 %%%
-%%% <p>Special return values are:
+%%% <p>Special return values are:</p>
 %%% <list>
 %%%  <item><code>{error, already_started, NodeName}</code> - if the node with
 %%%   the given name is already started on a given host;</item>
@@ -167,9 +179,9 @@ start(Host, Node) ->
 %%%  <item><code>{error, not_alive, NodeName}</code> - if node on which the
 %%%   <code>ct_slave:start/3</code> is called, is not alive. Note that
 %%%   <code>NodeName</code> is the name of current node in this case.</item>
-%%% </list></p>
+%%% </list>
 %%%
-start(Host, Node, Options) ->
+start(Host, Node, Opts) ->
     ENode = enodename(Host, Node),
     case erlang:is_alive() of
 	false->
@@ -177,7 +189,7 @@ start(Host, Node, Options) ->
 	true->
 	    case is_started(ENode) of
 		false->
-		    OptionsRec = fetch_options(Options),
+		    OptionsRec = fetch_options(Opts),
 		    do_start(Host, Node, OptionsRec);
 		{true, not_connected}->
 		    {error, started_not_connected, ENode};
@@ -189,9 +201,11 @@ start(Host, Node, Options) ->
 %%% @spec stop(Node) -> Result
 %%%   Node = atom()
 %%%   Result = {ok, NodeName} |
-%%%	       {error, not_started, NodeName} |
-%%%	       {error, not_connected, NodeName} |
-%%%            {error, stop_timeout, NodeName}
+%%%            {error, Reason, NodeName}
+%%%   Reason = not_started |
+%%%            not_connected |
+%%%            stop_timeout
+
 %%%   NodeName = atom()
 %%% @doc Stops the running Erlang node with name <code>Node</code> on
 %%% the localhost.
@@ -202,9 +216,10 @@ stop(Node) ->
 %%%   Host = atom()
 %%%   Node = atom()
 %%%   Result = {ok, NodeName} |
-%%%	       {error, not_started, NodeName} |
-%%%	       {error, not_connected, NodeName} |
-%%%            {error, stop_timeout, NodeName}
+%%%            {error, Reason, NodeName}
+%%%   Reason = not_started |
+%%%            not_connected |
+%%%            stop_timeout
 %%%   NodeName = atom()
 %%% @doc Stops the running Erlang node with name <code>Node</code> on
 %%% host <code>Host</code>.
@@ -240,11 +255,13 @@ fetch_options(Options) ->
     KillIfFail = get_option_value(kill_if_fail, Options, true),
     ErlFlags = get_option_value(erl_flags, Options, []),
     EnvVars = get_option_value(env, Options, []),
+    SSHPort = get_option_value(ssh_port, Options, []),
+    SSHOpts = get_option_value(ssh_opts, Options, []),
     #options{username=UserName, password=Password,
 	     boot_timeout=BootTimeout, init_timeout=InitTimeout,
 	     startup_timeout=StartupTimeout, startup_functions=StartupFunctions,
 	     monitor_master=Monitor, kill_if_fail=KillIfFail,
-	     erl_flags=ErlFlags, env=EnvVars}.
+	     erl_flags=ErlFlags, env=EnvVars, ssh_port=SSHPort, ssh_opts=SSHOpts}.
 
 % send a message when slave node is started
 % @hidden
@@ -385,27 +402,18 @@ spawn_local_node(Node, Options) ->
     Cmd = get_cmd(Node, ErlFlags),
     open_port({spawn, Cmd}, [stream,{env,Env}]).
 
-% start crypto and ssh if not yet started
-check_for_ssh_running() ->
-    case application:get_application(crypto) of
-	undefined->
-	    application:start(crypto),
-	    case application:get_application(ssh) of
-		undefined->
-		    application:start(ssh);
-		{ok, ssh}->
-		    ok
-	    end;
-	{ok, crypto}->
-	    ok
-    end.
-
 % spawn node remotely
 spawn_remote_node(Host, Node, Options) ->
     #options{username=Username,
 	     password=Password,
 	     erl_flags=ErlFlags,
-	     env=Env} = Options,
+	     env=Env,
+       ssh_port=MaybeSSHPort,
+       ssh_opts=SSHOpts} = Options,
+    SSHPort = case MaybeSSHPort of
+                [] -> 22; % Use default SSH port
+                A  -> A
+              end,
     SSHOptions = case {Username, Password} of
 	{[], []}->
 	    [];
@@ -413,13 +421,12 @@ spawn_remote_node(Host, Node, Options) ->
 	    [{user, Username}];
 	{_, _}->
 	    [{user, Username}, {password, Password}]
-    end ++ [{silently_accept_hosts, true}],
-    check_for_ssh_running(),
-    {ok, SSHConnRef} = ssh:connect(atom_to_list(Host), 22, SSHOptions),
+    end ++ [{silently_accept_hosts, true}] ++ SSHOpts,
+    application:ensure_all_started(ssh),
+    {ok, SSHConnRef} = ssh:connect(atom_to_list(Host), SSHPort, SSHOptions),
     {ok, SSHChannelId} = ssh_connection:session_channel(SSHConnRef, infinity),
     ssh_setenv(SSHConnRef, SSHChannelId, Env),
     ssh_connection:exec(SSHConnRef, SSHChannelId, get_cmd(Node, ErlFlags), infinity).
-
 
 ssh_setenv(SSHConnRef, SSHChannelId, [{Var, Value} | Vars])
   when is_list(Var), is_list(Value) ->

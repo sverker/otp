@@ -2,18 +2,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -204,9 +205,9 @@ info(IoDevice) ->
 	    _ ->
 		lists:flatten(
 		  io_lib:format("======= Orber Execution Environment ======~n"
-				"   *** Orber-~s is not running ***~n"
+				"   *** Orber is not running ***~n"
 				"==========================================~n",
-				[?ORBVSN]))
+				[]))
 	end,
     case IoDevice of
 	info_msg ->
@@ -223,6 +224,7 @@ info(IoDevice) ->
 
 create_main_info() ->
     {Major, Minor} = giop_version(),
+    {orber, _, OrberVsn} = lists:keyfind(orber, 1, application:loaded_applications()),
     [io_lib:format("======= Orber Execution Environment ======~n"
 		   "Orber version.................: ~s~n"
 		   "Orber domain..................: ~s~n"
@@ -257,7 +259,7 @@ create_main_info() ->
 		   "Debug Level...................: ~p~n"
 		   "orbInitRef....................: ~p~n"
 		   "orbDefaultInitRef.............: ~p~n",
-		   [?ORBVSN, domain(), iiop_port(), nat_iiop_port(), host(),
+		   [OrberVsn, domain(), iiop_port(), nat_iiop_port(), host(),
 		    nat_host(), ip_address_local(),
 		    orber:orber_nodes(), Major, Minor,
 		    iiop_timeout(), iiop_connection_timeout(),
@@ -302,6 +304,7 @@ create_security_info(ssl, Info) ->
 				 "SSL IIOP accept timeout.......: ~p~n"
 				 "SSL IIOP backlog..............: ~p~n"
 				 "SSL IIOP Local Interface......: ~p~n"
+				 "SSL server options............: ~p~n"
 				 "SSL server certfile...........: ~p~n"
 				 "SSL server verification type..: ~p~n"
 				 "SSL server verification depth.: ~p~n"
@@ -310,6 +313,7 @@ create_security_info(ssl, Info) ->
 				 "SSL server password...........: ~p~n"
 				 "SSL server ciphers............: ~p~n"
 				 "SSL server cachetimeout.......: ~p~n"
+				 "SSL client options............: ~p~n"
 				 "SSL client certfile...........: ~p~n"
 				 "SSL client verification type..: ~p~n"
 				 "SSL client verification depth.: ~p~n"
@@ -323,10 +327,12 @@ create_security_info(ssl, Info) ->
 				  iiop_ssl_in_keepalive(), iiop_ssl_out_keepalive(),
 				  nat_iiop_ssl_port(), iiop_ssl_accept_timeout(),
 				  iiop_ssl_backlog(), iiop_ssl_ip_address_local(),
+				  ssl_server_options(),
 				  ssl_server_certfile(), ssl_server_verify(),
 				  ssl_server_depth(), ssl_server_cacertfile(),
 				  ssl_server_keyfile(), ssl_server_password(),
 				  ssl_server_ciphers(), ssl_server_cachetimeout(),
+				  ssl_client_options(),
 				  ssl_client_certfile(), ssl_client_verify(),
 				  ssl_client_depth(), ssl_client_cacertfile(),
 				  ssl_client_keyfile(), ssl_client_password(),

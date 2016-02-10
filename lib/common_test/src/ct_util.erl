@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2003-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -25,19 +26,19 @@
 %%%
 -module(ct_util).
 
--export([start/0,start/1,start/2,start/3,
-	 stop/1,update_last_run_index/0]).
+-export([start/0, start/1, start/2, start/3,
+	 stop/1, update_last_run_index/0]).
 
--export([register_connection/4,unregister_connection/1,
-	 does_connection_exist/3,get_key_from_name/1]).
+-export([register_connection/4, unregister_connection/1,
+	 does_connection_exist/3, get_key_from_name/1]).
 
--export([close_connections/0]).
+-export([get_connections/1, close_connections/0]).
 
 -export([save_suite_data/3, save_suite_data/2,
 	 save_suite_data_async/3, save_suite_data_async/2,
 	 read_suite_data/1, 
 	 delete_suite_data/0, delete_suite_data/1, match_delete_suite_data/1,
-	 delete_testdata/0, delete_testdata/1,
+	 delete_testdata/0, delete_testdata/1, match_delete_testdata/1,
 	 set_testdata/1, get_testdata/1, get_testdata/2,
 	 set_testdata_async/1, update_testdata/2, update_testdata/3,
 	 set_verbosity/1, get_verbosity/1]).
@@ -56,11 +57,11 @@
 
 -export([listenv/1]).
 
--export([get_target_name/1, get_connections/2]).
+-export([get_target_name/1, get_connection/2]).
 
 -export([is_test_dir/1, get_testdir/2]).
 
--export([kill_attached/2, get_attached/1, ct_make_ref/0]).
+-export([kill_attached/2, get_attached/1]).
 
 -export([warn_duplicates/1]).
 
@@ -77,6 +78,8 @@
 -record(suite_data, {key,name,value}).
 
 %%%-----------------------------------------------------------------
+start() ->
+    start(normal, ".", ?default_verbosity).
 %%% @spec start(Mode) -> Pid | exit(Error)
 %%%       Mode = normal | interactive
 %%%       Pid = pid()
@@ -91,9 +94,6 @@
 %%% <code>ct_util_server</code>.</p>
 %%%
 %%% @see ct
-start() ->
-    start(normal, ".", ?default_verbosity).
-
 start(LogDir) when is_list(LogDir) ->
     start(normal, LogDir, ?default_verbosity);
 start(Mode) ->
@@ -187,6 +187,7 @@ do_start(Parent, Mode, LogDir, Verbosity) ->
 	false ->
 	    ok
     end,
+
     {StartTime,TestLogDir} = ct_logs:init(Mode, Verbosity),
 
     ct_event:notify(#event{name=test_start,
@@ -198,12 +199,26 @@ do_start(Parent, Mode, LogDir, Verbosity) ->
 	ok ->
 	    Parent ! {self(),started};
 	{fail,CTHReason} ->
-	    ct_logs:tc_print('Suite Callback',CTHReason,[]),
+	    ErrorInfo = if is_atom(CTHReason) ->
+				io_lib:format("{~p,~p}",
+					      [CTHReason,
+					       erlang:get_stacktrace()]);
+			   true ->
+				CTHReason
+			end,
+	    ct_logs:tc_print('Suite Callback',ErrorInfo,[]),
 	    self() ! {{stop,{self(),{user_error,CTHReason}}},
 		      {Parent,make_ref()}}
     catch
 	_:CTHReason ->
-	    ct_logs:tc_print('Suite Callback',CTHReason,[]),
+	    ErrorInfo = if is_atom(CTHReason) ->
+				io_lib:format("{~p,~p}",
+					      [CTHReason,
+					       erlang:get_stacktrace()]);
+			   true ->
+				CTHReason
+			end,
+	    ct_logs:tc_print('Suite Callback',ErrorInfo,[]),
 	    self() ! {{stop,{self(),{user_error,CTHReason}}},
 		      {Parent,make_ref()}}
     end,
@@ -256,6 +271,9 @@ delete_testdata() ->
 delete_testdata(Key) ->
     call({delete_testdata, Key}).
 
+match_delete_testdata(KeyPat) ->
+    call({match_delete_testdata, KeyPat}).
+
 update_testdata(Key, Fun) ->
     update_testdata(Key, Fun, []).
 
@@ -286,14 +304,23 @@ get_start_dir() ->
 %% handle verbosity outside ct_util_server (let the client read
 %% the verbosity table) to avoid possible deadlock situations
 set_verbosity(Elem = {_Category,_Level}) ->
-    ets:insert(?verbosity_table, Elem),
-    ok.
+    try ets:insert(?verbosity_table, Elem) of
+	_ ->
+	    ok
+    catch
+	_:Reason ->
+	    {error,Reason}
+    end.
+	
 get_verbosity(Category) ->
-    case ets:lookup(?verbosity_table, Category) of
+    try ets:lookup(?verbosity_table, Category) of
 	[{Category,Level}] -> 
 	    Level;
 	_ ->
 	    undefined
+    catch
+	_:Reason ->
+	    {error,Reason}
     end.
 
 loop(Mode,TestData,StartDir) ->
@@ -338,7 +365,25 @@ loop(Mode,TestData,StartDir) ->
 	{{delete_testdata,Key},From} ->
 	    TestData1 = lists:keydelete(Key,1,TestData),
 	    return(From,ok),
-	    loop(From,TestData1,StartDir);	
+	    loop(From,TestData1,StartDir);
+	{{match_delete_testdata,{Key1,Key2}},From} ->
+	    %% handles keys with 2 elements
+	    TestData1 =
+		lists:filter(fun({Key,_}) when not is_tuple(Key) ->
+				     true;
+				({Key,_}) when tuple_size(Key) =/= 2 ->
+				     true;
+				({{_,KeyB},_}) when Key1 == '_' ->
+				     KeyB =/= Key2; 
+				({{KeyA,_},_}) when Key2 == '_' ->
+				     KeyA =/= Key1; 
+				(_) when Key1 == '_' ; Key2 == '_' ->
+				     false;
+				(_) ->
+				     true
+			     end, TestData),
+	    return(From,ok),
+	    loop(From,TestData1,StartDir);
 	{{set_testdata,New = {Key,_Val}},From} ->
 	    TestData1 = lists:keydelete(Key,1,TestData),
 	    return(From,ok),
@@ -358,9 +403,18 @@ loop(Mode,TestData,StartDir) ->
 	    TestData1 =
 		case lists:keysearch(Key,1,TestData) of
 		    {value,{Key,Val}} ->
-			NewVal = Fun(Val),
-			return(From,NewVal),
-			[{Key,NewVal}|lists:keydelete(Key,1,TestData)];
+			try Fun(Val) of
+			    '$delete' ->
+				return(From,deleted),
+				lists:keydelete(Key,1,TestData);
+			    NewVal ->
+				return(From,NewVal),
+				[{Key,NewVal}|lists:keydelete(Key,1,TestData)]
+			catch
+			    _:Error ->
+				return(From,{error,Error}),
+				TestData
+			end;
 		    _ ->
 			case lists:member(create,Opts) of
 			    true ->
@@ -383,19 +437,38 @@ loop(Mode,TestData,StartDir) ->
 	    return(From,StartDir),
 	    loop(From,TestData,StartDir);
 	{{stop,Info},From} ->
+	    test_server_io:reset_state(),
+	    {MiscIoName,MiscIoDivider,MiscIoFooter} =
+		proplists:get_value(misc_io_log,TestData),
+	    {ok,MiscIoFd} = file:open(MiscIoName,
+				      [append,{encoding,utf8}]),
+	    io:put_chars(MiscIoFd, MiscIoDivider),
+	    test_server_io:set_fd(unexpected_io, MiscIoFd),
+
 	    Time = calendar:local_time(),
 	    ct_event:sync_notify(#event{name=test_done,
 					node=node(),
 					data=Time}),
-	    Callbacks = ets:lookup_element(?suite_table,
-					   ct_hooks,
-					   #suite_data.value),
+	    Callbacks =
+		try ets:lookup_element(?suite_table,
+				       ct_hooks,
+				       #suite_data.value) of
+		    CTHMods -> CTHMods
+		catch
+		    %% this is because ct_util failed in init
+		    error:badarg -> []
+		end,
 	    ct_hooks:terminate(Callbacks),
 	    close_connections(ets:tab2list(?conn_table)),
 	    ets:delete(?conn_table),
 	    ets:delete(?board_table),
 	    ets:delete(?suite_table),
 	    ets:delete(?verbosity_table),
+
+	    io:put_chars(MiscIoFd, "\n</pre>\n"++MiscIoFooter),
+	    test_server_io:stop([unexpected_io]),
+	    test_server_io:finish(),
+
 	    ct_logs:close(Info, StartDir),
 	    ct_event:stop(),
 	    ct_config:stop(),
@@ -414,16 +487,21 @@ loop(Mode,TestData,StartDir) ->
 		[#conn{address=A,callback=CB}] ->
 		    %% A connection crashed - remove the connection but don't die
 		    ct_logs:tc_log_async(ct_error_notify,
+					 ?MAX_IMPORTANCE,
+					 "CT Error Notification",
 					 "Connection process died: "
-					 "Pid: ~w, Address: ~p, Callback: ~w\n"
+					 "Pid: ~w, Address: ~p, "
+					 "Callback: ~w\n"
 					 "Reason: ~p\n\n",
 					 [Pid,A,CB,Reason]),
 		    catch CB:close(Pid),
+		    %% in case CB:close failed to do this:
+		    unregister_connection(Pid),
 		    loop(Mode,TestData,StartDir);
 		_ ->
 		    %% Let process crash in case of error, this shouldn't happen!
-		    io:format("\n\nct_util_server got EXIT from ~w: ~p\n\n",
-			      [Pid,Reason]),
+		    io:format("\n\nct_util_server got EXIT "
+			      "from ~w: ~p\n\n", [Pid,Reason]),
 		    file:set_cwd(StartDir),
 		    exit(Reason)
 	    end
@@ -453,10 +531,13 @@ get_key_from_name(Name)->
 %%% table, and ct_util will close all registered connections when the
 %%% test is finished by calling <code>Callback:close/1</code>.</p>
 register_connection(TargetName,Address,Callback,Handle) ->
+    %% If TargetName is a registered alias for a config
+    %% variable, use it as reference for the connection,
+    %% otherwise use the Handle value.
     TargetRef = 
-	case ct_config:get_ref_from_name(TargetName) of
-	    {ok,Ref} ->
-		Ref;
+	case ct_config:get_key_from_name(TargetName) of
+	    {ok,_Key} ->
+		TargetName;
 	    _ ->
 		%% no config name associated with connection,
 		%% use handle for identification instead
@@ -492,10 +573,10 @@ unregister_connection(Handle) ->
 %%%
 %%% @doc Check if a connection already exists.
 does_connection_exist(TargetName,Address,Callback) ->
-    case ct_config:get_ref_from_name(TargetName) of
-	{ok,TargetRef} ->
+    case ct_config:get_key_from_name(TargetName) of
+	{ok,_Key} ->
 	    case ets:select(?conn_table,[{#conn{handle='$1',
-						targetref=TargetRef,
+						targetref=TargetName,
 						address=Address,
 						callback=Callback},
 					  [],
@@ -510,41 +591,76 @@ does_connection_exist(TargetName,Address,Callback) ->
     end.
 
 %%%-----------------------------------------------------------------
-%%% @spec get_connections(TargetName,Callback) -> 
-%%%                                {ok,Connections} | {error,Reason}
+%%% @spec get_connection(TargetName,Callback) -> 
+%%%                                {ok,Connection} | {error,Reason}
 %%%      TargetName = ct:target_name()
 %%%      Callback = atom()
-%%%      Connections = [Connection]
 %%%      Connection = {Handle,Address}
 %%%      Handle = term()
 %%%      Address = term()
 %%%
-%%% @doc Return all connections for the <code>Callback</code> on the
+%%% @doc Return the connection for <code>Callback</code> on the
 %%% given target (<code>TargetName</code>).
-get_connections(TargetName,Callback) ->
-    case ct_config:get_ref_from_name(TargetName) of
-	{ok,Ref} ->
-	    {ok,ets:select(?conn_table,[{#conn{handle='$1',
-					       address='$2',
-					       targetref=Ref,
-					       callback=Callback},
-					 [],
-					 [{{'$1','$2'}}]}])};
+get_connection(TargetName,Callback) ->
+    %% check that TargetName is a registered alias
+    case ct_config:get_key_from_name(TargetName) of
+	{ok,_Key} ->
+	    case ets:select(?conn_table,[{#conn{handle='$1',
+						address='$2',
+						targetref=TargetName,
+						callback=Callback},
+					  [],
+					  [{{'$1','$2'}}]}]) of
+		[Result] ->
+		    {ok,Result};
+		[] ->
+		    {error,no_registered_connection}
+	    end;
 	Error ->
 	    Error
     end.
 
 %%%-----------------------------------------------------------------
+%%% @spec get_connections(ConnPid) -> 
+%%%                                {ok,Connections} | {error,Reason}
+%%%      Connections = [Connection]
+%%%      Connection = {TargetName,Handle,Callback,Address}
+%%%      TargetName = ct:target_name() | undefined
+%%%      Handle = term()
+%%%      Callback = atom()
+%%%      Address = term()
+%%%
+%%% @doc Get data for all connections associated with a particular
+%%%      connection pid (see Callback:init/3).
+get_connections(ConnPid) ->
+    Conns = ets:tab2list(?conn_table),
+    lists:flatmap(fun(#conn{targetref=TargetName,
+			    handle=Handle,
+			    callback=Callback,
+			    address=Address}) ->
+			  case ct_gen_conn:get_conn_pid(Handle) of
+			      ConnPid when is_atom(TargetName) ->
+				  [{TargetName,Handle,
+				    Callback,Address}];
+			      ConnPid ->
+				  [{undefined,Handle,
+				   Callback,Address}];
+			      _ ->
+				  []
+			  end
+		  end, Conns).
+
+%%%-----------------------------------------------------------------
 %%% @hidden
 %%% @equiv ct:get_target_name/1
-get_target_name(ConnPid) ->
-    case ets:select(?conn_table,[{#conn{handle=ConnPid,targetref='$1',_='_'},
+get_target_name(Handle) ->
+    case ets:select(?conn_table,[{#conn{handle=Handle,targetref='$1',_='_'},
 				  [],
 				  ['$1']}]) of
-	[TargetRef] ->
-	    ct_config:get_name_from_ref(TargetRef);
-	[] ->
-	    {error,{unknown_connection,ConnPid}}
+	[TargetName] when is_atom(TargetName) ->
+	    {ok,TargetName};
+	_ ->
+	    {error,{unknown_connection,Handle}}
     end.
 
 %%%-----------------------------------------------------------------
@@ -627,8 +743,14 @@ reset_silent_connections() ->
 %%% @see ct
 stop(Info) ->
     case whereis(ct_util_server) of
-	undefined -> ok;
-	_ -> call({stop,Info})
+	undefined -> 
+	    ok;
+	CtUtilPid ->
+	    Ref = monitor(process, CtUtilPid),
+	    call({stop,Info}),
+	    receive
+		{'DOWN',Ref,_,_,_} -> ok
+	    end
     end.
 
 %%%-----------------------------------------------------------------
@@ -918,29 +1040,8 @@ cast(Msg) ->
 seconds(T) ->
     test_server:seconds(T).
 
-ct_make_ref() ->
-    Pid = case whereis(ct_make_ref) of
-	      undefined -> 
-		  spawn_link(fun() -> ct_make_ref_init() end);
-	      P -> 
-		  P
-	  end,
-    Pid ! {self(),ref_req},
-    receive
-	{Pid,Ref} -> Ref
-    end.
-
-ct_make_ref_init() ->
-    register(ct_make_ref,self()),
-    ct_make_ref_loop(0).
-
-ct_make_ref_loop(N) ->
-    receive
-	{From,ref_req} -> 
-	    From ! {self(),N},
-	    ct_make_ref_loop(N+1)
-    end.
-   
+abs_name("/") ->
+    "/";
 abs_name(Dir0) ->
     Abs = filename:absname(Dir0),
     Dir = case lists:reverse(Abs) of

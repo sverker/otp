@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2011-2012. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 
@@ -84,7 +85,8 @@ create_window(Notebook, ParentPid) ->
     %% Create the window
     Panel = wxPanel:new(Notebook, [{size, wxWindow:getClientSize(Notebook)}]),
     Sizer = wxBoxSizer:new(?wxVERTICAL),
-    Splitter = wxSplitterWindow:new(Panel, [{size, wxWindow:getClientSize(Panel)}]),
+    Splitter = wxSplitterWindow:new(Panel, [{size, wxWindow:getClientSize(Panel)},
+					    {style, ?SASH_STYLE}]),
     {NodeProcView, NodeView, ProcessView} = create_process_view(Splitter),
     {MatchSpecView,ModView,FuncView} = create_matchspec_view(Splitter),
     wxSplitterWindow:setSashGravity(Splitter, 0.5),
@@ -120,7 +122,7 @@ create_process_view(Parent) ->
     Panel  = wxPanel:new(Parent),
     MainSz = wxBoxSizer:new(?wxHORIZONTAL),
     Style = ?wxLC_REPORT bor ?wxLC_HRULES,
-    Splitter = wxSplitterWindow:new(Panel, []),
+    Splitter = wxSplitterWindow:new(Panel, [{style, ?SASH_STYLE}]),
     Nodes = wxListCtrl:new(Splitter, [{winid, ?NODES_WIN}, {style, Style}]),
     Procs = wxListCtrl:new(Splitter, [{winid, ?PROC_WIN}, {style, Style}]),
     Li = wxListItem:new(),
@@ -157,7 +159,7 @@ create_matchspec_view(Parent) ->
     Panel  = wxPanel:new(Parent),
     MainSz = wxBoxSizer:new(?wxHORIZONTAL),
     Style = ?wxLC_REPORT bor ?wxLC_HRULES,
-    Splitter = wxSplitterWindow:new(Panel, []),
+    Splitter = wxSplitterWindow:new(Panel, [{style, ?SASH_STYLE}]),
     Modules = wxListCtrl:new(Splitter, [{winid, ?MODULES_WIN}, {style, Style}]),
     Funcs   = wxListCtrl:new(Splitter, [{winid, ?FUNCS_WIN}, {style, Style}]),
     Li = wxListItem:new(),

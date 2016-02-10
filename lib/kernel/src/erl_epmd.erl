@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1998-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -85,24 +86,19 @@ port_please1(Node,HostName, Timeout) ->
       Else
   end.
 
-names() -> 
+names() ->
     {ok, H} = inet:gethostname(),
     names(H).
 
-names(HostName) when is_atom(HostName) ->
-  names1(atom_to_list(HostName));
-names(HostName) when is_list(HostName) ->
-  names1(HostName);
-names(EpmdAddr) ->
-  get_names(EpmdAddr).
-
-names1(HostName) ->
+names(HostName) when is_atom(HostName); is_list(HostName) ->
   case inet:gethostbyname(HostName) of
     {ok,{hostent, _Name, _ , _Af, _Size, [EpmdAddr | _]}} ->
       get_names(EpmdAddr);
     Else ->
       Else
-  end.
+  end;
+names(EpmdAddr) ->
+  get_names(EpmdAddr).
 
 
 register_node(Name, PortNo) ->
@@ -217,17 +213,23 @@ do_register_node(NodeName, TcpPort) ->
 	    Extra = "",
 	    Elen = length(Extra),
 	    Len = 1+2+1+1+2+2+2+length(Name)+2+Elen,
-	    gen_tcp:send(Socket, [?int16(Len), ?EPMD_ALIVE2_REQ,
-				   ?int16(TcpPort),
-				   $M,
-				   0,
-				   ?int16(epmd_dist_high()),
-				   ?int16(epmd_dist_low()),
-				   ?int16(length(Name)),
-				   Name,
-				   ?int16(Elen),
-				   Extra]),
-	    wait_for_reg_reply(Socket, []);
+            Packet = [?int16(Len), ?EPMD_ALIVE2_REQ,
+                      ?int16(TcpPort),
+                      $M,
+                      0,
+                      ?int16(epmd_dist_high()),
+                      ?int16(epmd_dist_low()),
+                      ?int16(length(Name)),
+                      Name,
+                      ?int16(Elen),
+                      Extra],
+	    case gen_tcp:send(Socket, Packet) of
+                ok ->
+                    wait_for_reg_reply(Socket, []);
+                Error ->
+                    close(Socket),
+                    Error
+            end;
 	Error ->
 	    Error
     end.
@@ -294,8 +296,14 @@ get_port(Node, EpmdAddress, Timeout) ->
 	{ok, Socket} ->
 	    Name = to_string(Node),
 	    Len = 1+length(Name),
-	    gen_tcp:send(Socket, [?int16(Len),?EPMD_PORT_PLEASE2_REQ, Name]),
-	    wait_for_port_reply(Socket, []);
+	    Msg = [?int16(Len),?EPMD_PORT_PLEASE2_REQ,Name],
+	    case gen_tcp:send(Socket, Msg) of
+		ok ->
+		    wait_for_port_reply(Socket, []);
+		_Error ->
+		    ?port_please_failure2(_Error),
+		    noport
+	    end;
 	_Error -> 
 	    ?port_please_failure2(_Error),
 	    noport
@@ -374,7 +382,7 @@ wait_for_port_reply_name(Socket, Len, Sofar) ->
 %	    io:format("data = ~p~n", _Data),
 	    wait_for_port_reply_name(Socket, Len, Sofar);
 	{tcp_closed, Socket} ->
-	    "foobar"
+	    ok
     end.
 		    
 
@@ -424,19 +432,24 @@ get_names(EpmdAddress) ->
     end.
 
 do_get_names(Socket) ->
-    gen_tcp:send(Socket, [?int16(1),?EPMD_NAMES]),
-    receive
-	{tcp, Socket, [P0,P1,P2,P3|T]} ->
-	    EpmdPort = ?u32(P0,P1,P2,P3),
-	    case get_epmd_port() of
-		EpmdPort ->
-		    names_loop(Socket, T, []);
-		_ ->
-		    close(Socket),
-		    {error, address}
+    case gen_tcp:send(Socket, [?int16(1),?EPMD_NAMES]) of
+	ok ->
+	    receive
+		{tcp, Socket, [P0,P1,P2,P3|T]} ->
+		    EpmdPort = ?u32(P0,P1,P2,P3),
+		    case get_epmd_port() of
+			EpmdPort ->
+			    names_loop(Socket, T, []);
+			_ ->
+			    close(Socket),
+			    {error, address}
+		    end;
+		{tcp_closed, Socket} ->
+		    {ok, []}
 	    end;
-	{tcp_closed, Socket} ->
-	    {ok, []}
+	_ ->
+	    close(Socket),
+	    {error, address}
     end.
 
 names_loop(Socket, Acc, Ps) ->

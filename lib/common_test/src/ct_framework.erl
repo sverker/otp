@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2004-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -32,6 +33,7 @@
 -export([error_in_suite/1, init_per_suite/1, end_per_suite/1,
 	 init_per_group/2, end_per_group/2]).
 
+-include("ct.hrl").
 -include("ct_event.hrl").
 -include("ct_util.hrl").
 
@@ -64,38 +66,46 @@ init_tc(Mod,Func,Config) ->
 	    ok
     end,
 
-    case ct_util:get_testdata(curr_tc) of
-	{Suite,{suite0_failed,{require,Reason}}} ->
-	    {skip,{require_failed_in_suite0,Reason}};
-	{Suite,{suite0_failed,_}=Failure} ->
-	    {skip,Failure};
+    case Func=/=end_per_suite
+	andalso Func=/=end_per_group
+	andalso ct_util:get_testdata(skip_rest) of
+	true ->
+	    {auto_skip,"Repeated test stopped by force_stop option"};
 	_ ->
-	    ct_util:update_testdata(curr_tc,
-				    fun(undefined) ->
-					    [{Suite,Func}];
-				       (Running) ->
-					    [{Suite,Func}|Running]
-				    end, [create]),
-	    case ct_util:read_suite_data({seq,Suite,Func}) of
-		undefined ->
-		    init_tc1(Mod,Suite,Func,Config);
-		Seq when is_atom(Seq) ->
-		    case ct_util:read_suite_data({seq,Suite,Seq}) of
-			[Func|TCs] ->		% this is the 1st case in Seq
-			    %% make sure no cases in this seq are
-			    %% marked as failed from an earlier execution 
-			    %% in the same suite
-			    lists:foreach(
-			      fun(TC) ->
-				      ct_util:save_suite_data({seq,Suite,TC},
-							      Seq)
-			      end, TCs);
-			_ ->
-			    ok
-		    end,
-		    init_tc1(Mod,Suite,Func,Config);
-		{failed,Seq,BadFunc} ->
-		    {skip,{sequence_failed,Seq,BadFunc}}
+	    case ct_util:get_testdata(curr_tc) of
+		{Suite,{suite0_failed,{require,Reason}}} ->
+		    {auto_skip,{require_failed_in_suite0,Reason}};
+		{Suite,{suite0_failed,_}=Failure} ->
+		    {fail,Failure};
+		_ ->
+		    ct_util:update_testdata(curr_tc,
+					    fun(undefined) ->
+						    [{Suite,Func}];
+					       (Running) ->
+						    [{Suite,Func}|Running]
+					    end, [create]),
+		    case ct_util:read_suite_data({seq,Suite,Func}) of
+			undefined ->
+			    init_tc1(Mod,Suite,Func,Config);
+			Seq when is_atom(Seq) ->
+			    case ct_util:read_suite_data({seq,Suite,Seq}) of
+				[Func|TCs] -> % this is the 1st case in Seq
+				    %% make sure no cases in this seq are
+				    %% marked as failed from an earlier execution
+				    %% in the same suite
+				    lists:foreach(
+				      fun(TC) ->
+					      ct_util:save_suite_data(
+						{seq,Suite,TC},
+						Seq)
+				      end, TCs);
+				_ ->
+				    ok
+			    end,
+			    init_tc1(Mod,Suite,Func,Config);
+			{failed,Seq,BadFunc} ->
+			    {auto_skip,{sequence_failed,Seq,BadFunc}}
+		    end
 	    end
     end.	    
 
@@ -104,11 +114,12 @@ init_tc1(?MODULE,_,error_in_suite,[Config0]) when is_list(Config0) ->
     ct_event:notify(#event{name=tc_start,
 			   node=node(),
 			   data={?MODULE,error_in_suite}}),
+    ct_suite_init(?MODULE, error_in_suite, [], Config0),
     case ?val(error, Config0) of
 	undefined ->
-	    {skip,"unknown_error_in_suite"};
+	    {fail,"unknown_error_in_suite"};
 	Reason ->
-	    {skip,Reason}
+	    {fail,Reason}
     end;
 
 init_tc1(Mod,Suite,Func,[Config0]) when is_list(Config0) ->
@@ -150,22 +161,28 @@ init_tc1(Mod,Suite,Func,[Config0]) when is_list(Config0) ->
        true ->
 	    ct_config:delete_default_config(testcase)
     end,
+    Initialize = fun() -> 
+			 ct_logs:init_tc(false),
+			 ct_event:notify(#event{name=tc_start,
+						node=node(),
+						data={Mod,FuncSpec}})
+		 end,
     case add_defaults(Mod,Func,AllGroups) of
 	Error = {suite0_failed,_} ->
-	    ct_logs:init_tc(false),
-	    ct_event:notify(#event{name=tc_start,
-				   node=node(),
-				   data={Mod,FuncSpec}}),
+	    Initialize(),
 	    ct_util:set_testdata({curr_tc,{Suite,Error}}),
 	    {error,Error};
+	Error = {group0_failed,_} ->
+	    Initialize(),
+	    {auto_skip,Error};
+	Error = {testcase0_failed,_} ->
+	    Initialize(),
+	    {auto_skip,Error};
 	{SuiteInfo,MergeResult} ->
 	    case MergeResult of
 		{error,Reason} ->
-		    ct_logs:init_tc(false),
-		    ct_event:notify(#event{name=tc_start,
-					   node=node(),
-					   data={Mod,FuncSpec}}),
-		    {skip,Reason};
+		    Initialize(),
+		    {fail,Reason};
 		_ ->
 		    init_tc2(Mod,Suite,Func,SuiteInfo,MergeResult,Config)
 	    end
@@ -213,11 +230,11 @@ init_tc2(Mod,Suite,Func,SuiteInfo,MergeResult,Config) ->
 	{suite0_failed,Reason} ->
 	    ct_util:set_testdata({curr_tc,{Mod,{suite0_failed,
 						{require,Reason}}}}),
-	    {skip,{require_failed_in_suite0,Reason}};
+	    {auto_skip,{require_failed_in_suite0,Reason}};
 	{error,Reason} ->
 	    {auto_skip,{require_failed,Reason}};
 	{'EXIT',Reason} ->
-	    {auto_skip,Reason};
+	    {fail,Reason};
 	{ok,PostInitHook,Config1} ->
 	    case get('$test_server_framework_test') of
 		undefined ->
@@ -234,8 +251,8 @@ init_tc2(Mod,Suite,Func,SuiteInfo,MergeResult,Config) ->
 	    end
     end.
 
-ct_suite_init(Suite, Func, PostInitHook, Config) when is_list(Config) ->
-    case ct_hooks:init_tc(Suite, Func, Config) of
+ct_suite_init(Suite, FuncSpec, PostInitHook, Config) when is_list(Config) ->
+    case ct_hooks:init_tc(Suite, FuncSpec, Config) of
 	NewConfig when is_list(NewConfig) ->
 	    PostInitHookResult = do_post_init_hook(PostInitHook, NewConfig),
 	    {ok, [PostInitHookResult ++ NewConfig]};
@@ -263,6 +280,8 @@ add_defaults(Mod,Func, GroupPath) ->
 	    SuiteInfo = merge_with_suite_defaults(Suite,[]),
 	    SuiteInfoNoCTH = [I || I <- SuiteInfo, element(1,I) =/= ct_hooks],
 	    case add_defaults1(Mod,Func, GroupPath, SuiteInfoNoCTH) of
+		Error = {group0_failed,_} -> Error;
+		Error = {testcase0_failed,_} -> Error;
 		Error = {error,_} -> {SuiteInfo,Error};
 		MergedInfo -> {SuiteInfo,MergedInfo}
 	    end;
@@ -283,13 +302,16 @@ add_defaults(Mod,Func, GroupPath) ->
 					   element(1,I) =/= ct_hooks],
 		    case add_defaults1(Mod,Func, GroupPath,
 				       SuiteInfoNoCTH) of
+			Error = {group0_failed,_} -> Error;
+			Error = {testcase0_failed,_} -> Error;
 			Error = {error,_} -> {SuiteInfo1,Error};
 			MergedInfo -> {SuiteInfo1,MergedInfo}
 		    end;
 		false ->
 		    ErrStr = io_lib:format("~n*** ERROR *** "
 					   "Invalid return value from "
-					   "~w:suite/0: ~p~n", [Suite,SuiteInfo]),
+					   "~w:suite/0: ~p~n",
+					   [Suite,SuiteInfo]),
 		    io:format(ErrStr, []),
 		    io:format(user, ErrStr, []),
 		    {suite0_failed,bad_return_value}
@@ -309,36 +331,69 @@ add_defaults1(Mod,Func, GroupPath, SuiteInfo) ->
     %%     [LevelXGroupInfo, LevelX-1GroupInfo, ..., TopLevelGroupInfo]
     GroupPathInfo =  
 	lists:map(fun(GroupProps) ->
-			  Name = ?val(name, GroupProps),
-			  case catch Suite:group(Name) of
-			      GrInfo when is_list(GrInfo) -> GrInfo;
-			      _ -> []
+			  case ?val(name, GroupProps) of
+			      undefined ->
+				  [];
+			      Name ->
+				  case catch Suite:group(Name) of
+				      GrInfo when is_list(GrInfo) -> GrInfo;
+				      {'EXIT',{undef,_}} -> [];
+				      BadGr0 -> {error,BadGr0,Name}
+				  end
 			  end
 		  end, GroupPath),
-    Args = if Func == init_per_group ; Func == end_per_group ->
-		   [?val(name, hd(GroupPath))];
-	      true ->
-		   []
-	   end,
-    TestCaseInfo =
-	case catch apply(Mod,Func,Args) of
-	    TCInfo when is_list(TCInfo) -> TCInfo;
-	    _ -> []
-	end,
-    %% let test case info (also for all config funcs) override group info,
-    %% and lower level group info override higher level info
-    TCAndGroupInfo = [TestCaseInfo | remove_info_in_prev(TestCaseInfo,
-							 GroupPathInfo)],
-    %% find and save require terms found in suite info
-    SuiteReqs = 
-	[SDDef || SDDef <- SuiteInfo,
-		  ((require == element(1,SDDef)) or
-		   (default_config == element(1,SDDef)))],
-    case check_for_clashes(TestCaseInfo, GroupPathInfo, SuiteReqs) of
-	[] ->
-	    add_defaults2(Mod,Func, TCAndGroupInfo,SuiteInfo,SuiteReqs);
-	Clashes ->
-	    {error,{config_name_already_in_use,Clashes}}
+    case lists:keysearch(error, 1, GroupPathInfo) of
+	{value,{error,BadGr0Val,GrName}} ->
+	    Gr0ErrStr = io_lib:format("~n*** ERROR *** "
+				      "Invalid return value from "
+				      "~w:group(~w): ~p~n",
+				      [Mod,GrName,BadGr0Val]),
+	    io:format(Gr0ErrStr, []),
+	    io:format(user, Gr0ErrStr, []),
+	    {group0_failed,bad_return_value};
+	_ ->
+	    Args = if Func == init_per_group ; Func == end_per_group ->
+			   [?val(name, hd(GroupPath))];
+		      true ->
+			   []
+		   end,
+	    TestCaseInfo =
+		case catch apply(Mod,Func,Args) of
+		    TCInfo when is_list(TCInfo) -> TCInfo;
+		    {'EXIT',{undef,_}} -> [];
+		    BadTC0 -> {error,BadTC0}
+		end,
+	    
+	    case TestCaseInfo of
+		{error,BadTC0Val} ->
+		    TC0ErrStr = io_lib:format("~n*** ERROR *** "
+					      "Invalid return value from "
+					      "~w:~w/0: ~p~n",
+					      [Mod,Func,BadTC0Val]),
+		    io:format(TC0ErrStr, []),
+		    io:format(user, TC0ErrStr, []),
+		    {testcase0_failed,bad_return_value};
+		_ ->
+		    %% let test case info (also for all config funcs) override
+		    %% group info, and lower level group info override higher
+		    %% level info
+		    TCAndGroupInfo =
+			[TestCaseInfo | remove_info_in_prev(TestCaseInfo,
+							    GroupPathInfo)],
+		    %% find and save require terms found in suite info
+		    SuiteReqs = 
+			[SDDef || SDDef <- SuiteInfo,
+				  ((require == element(1,SDDef))
+				   or (default_config == element(1,SDDef)))],
+		    case check_for_clashes(TestCaseInfo, GroupPathInfo,
+					   SuiteReqs) of
+			[] ->
+			    add_defaults2(Mod,Func, TCAndGroupInfo,
+					  SuiteInfo,SuiteReqs);
+			Clashes ->
+			    {error,{config_name_already_in_use,Clashes}}
+		    end
+	    end
     end.
 
 get_suite_name(?MODULE, [Cfg|_]) when is_list(Cfg), Cfg /= [] ->
@@ -582,7 +637,20 @@ try_set_default(Name,Key,Info,Where) ->
 end_tc(Mod, Fun, Args) ->
     %% Have to keep end_tc/3 for backwards compatibility issues
     end_tc(Mod, Fun, Args, '$end_tc_dummy').
-end_tc(?MODULE,error_in_suite,_, _) ->		% bad start!
+end_tc(?MODULE,error_in_suite,{Result,[Args]},Return) ->
+    %% this clause gets called if CT has encountered a suite that
+    %% can't be executed
+    FinalNotify =
+	case ct_hooks:end_tc(?MODULE, error_in_suite, Args, Result, Return) of
+	    '$ct_no_change' ->
+		Result;
+	    HookResult ->
+		HookResult
+	end,
+    Event = #event{name=tc_done,
+		   node=node(),
+		   data={?MODULE,error_in_suite,tag(FinalNotify)}},
+    ct_event:sync_notify(Event),
     ok;
 end_tc(Mod,Func,{TCPid,Result,[Args]}, Return) when is_pid(TCPid) ->
     end_tc(Mod,Func,TCPid,Result,Args,Return);
@@ -604,39 +672,53 @@ end_tc(Mod,Func,TCPid,Result,Args,Return) ->
 	_ ->
 	    ok
     end,
-    ct_util:delete_testdata(comment),
+    if Func == end_per_group; Func == end_per_suite ->
+	    %% clean up any saved comments
+	    ct_util:match_delete_testdata({comment,'_'});
+       true ->
+	    %% attemp to delete any saved comment for this TC
+	    case process_info(TCPid, group_leader) of
+		{group_leader,TCGL} ->
+		    ct_util:delete_testdata({comment,TCGL});
+		_ ->
+		    ok
+	    end
+    end,
     ct_util:delete_suite_data(last_saved_config),
 
-    FuncSpec = case group_or_func(Func,Args) of
-		   {_,_GroupName,_} = Group -> Group;
-		   _ -> Func
-	       end,
+    FuncSpec = group_or_func(Func,Args),
 
-    case get('$test_server_framework_test') of
-	undefined ->
-	    {FinalResult,FinalNotify} =
-		case ct_hooks:end_tc(
-		       Suite, FuncSpec, Args, Result, Return) of
-		    '$ct_no_change' ->
-			{ok,Result};
-		    FinalResult1 ->
-			{FinalResult1,FinalResult1}
-		end,
-	    %% send sync notification so that event handlers may print
-	    %% in the log file before it gets closed
-	    ct_event:sync_notify(#event{name=tc_done,
-					node=node(),
-					data={Mod,FuncSpec,
-					      tag_cth(FinalNotify)}});
-	Fun ->
-	    %% send sync notification so that event handlers may print
-	    %% in the log file before it gets closed
-	    ct_event:sync_notify(#event{name=tc_done,
-					node=node(),
-					data={Mod,FuncSpec,tag(Result)}}),
-	    FinalResult = Fun(end_tc, Return)
-    end,    
-    
+    {Result1,FinalNotify} =
+	case ct_hooks:end_tc(
+	       Suite, FuncSpec, Args, Result, Return) of
+	    '$ct_no_change' ->
+		{ok,Result};
+	    HookResult ->
+		{HookResult,HookResult}
+	end,
+    FinalResult =
+	case get('$test_server_framework_test') of
+	    undefined ->
+		%% send sync notification so that event handlers may print
+		%% in the log file before it gets closed
+		Event = #event{name=tc_done,
+			       node=node(),
+			       data={Mod,FuncSpec,
+				     tag(FinalNotify)}},
+		ct_event:sync_notify(Event),
+		Result1;
+	    Fun ->
+		%% send sync notification so that event handlers may print
+		%% in the log file before it gets closed
+		Event = #event{name=tc_done,
+			       node=node(),
+			       data={Mod,FuncSpec,
+				     tag({'$test_server_framework_test',
+					  FinalNotify})}},
+		ct_event:sync_notify(Event),
+		Fun(end_tc, Return)
+	end,    
+
     case FuncSpec of
 	{_,GroupName,_Props} ->
 	    if Func == end_per_group ->
@@ -674,12 +756,17 @@ end_tc(Mod,Func,TCPid,Result,Args,Return) ->
 		     (undefined) ->
 			  undefined;
 		     (Unexpected) ->
-			  exit({error,{reset_curr_tc,{Mod,Func},Unexpected}})
+			  {error,{reset_curr_tc,{Mod,Func},Unexpected}}
 		  end,
-    ct_util:update_testdata(curr_tc,ClearCurrTC),
+    case ct_util:update_testdata(curr_tc, ClearCurrTC) of
+	{error,_} = ClearError ->
+	    exit(ClearError);
+	_ ->
+	    ok
+    end,
 
     case FinalResult of
-	{skip,{sequence_failed,_,_}} ->
+	{auto_skip,{sequence_failed,_,_}} ->
 	    %% ct_logs:init_tc is never called for a skipped test case
 	    %% in a failing sequence, so neither should end_tc	    
 	    ok;
@@ -701,32 +788,37 @@ end_tc(Mod,Func,TCPid,Result,Args,Return) ->
 
 %% {error,Reason} | {skip,Reason} | {timetrap_timeout,TVal} | 
 %% {testcase_aborted,Reason} | testcase_aborted_or_killed | 
-%% {'EXIT',Reason} | Other (ignored return value, e.g. 'ok')
+%% {'EXIT',Reason} | {fail,Reason} | {failed,Reason} |
+%% {user_timetrap_error,Reason} |
+%% Other (ignored return value, e.g. 'ok')
+tag({'$test_server_framework_test',Result}) ->
+    case tag(Result) of
+	ok      -> Result;
+	Failure -> Failure
+    end;	    
+tag({skipped,Reason={failed,{_,init_per_testcase,_}}}) ->
+    {auto_skipped,Reason};
 tag({STag,Reason}) when STag == skip; STag == skipped -> 
-    {skipped,Reason};
+    case Reason of
+	{failed,{_,init_per_testcase,_}} -> {auto_skipped,Reason};
+	_ -> {skipped,Reason}
+    end;
+tag({auto_skip,Reason}) ->
+    {auto_skipped,Reason};
+tag({fail,Reason}) ->
+    {failed,{error,Reason}};
+tag(Failed = {failed,_Reason}) ->
+    Failed;
 tag(E = {ETag,_}) when ETag == error; ETag == 'EXIT'; 
-                       ETag == timetrap_timeout;
-                       ETag == testcase_aborted -> 
+			   ETag == timetrap_timeout;
+			   ETag == testcase_aborted -> 
     {failed,E};
 tag(E = testcase_aborted_or_killed) ->
     {failed,E};
-tag(Other) ->
-    Other.
-
-tag_cth({STag,Reason}) when STag == skip; STag == skipped -> 
-    {skipped,Reason};
-tag_cth({fail, Reason}) ->
-    {failed, {error,Reason}};
-tag_cth(E = {ETag,_}) when ETag == error; ETag == 'EXIT'; 
-                       ETag == timetrap_timeout;
-                       ETag == testcase_aborted -> 
-    {failed,E};
-tag_cth(E = testcase_aborted_or_killed) ->
-    {failed,E};
-tag_cth(List) when is_list(List) ->
-    ok;
-tag_cth(Other) ->
-    Other.
+tag(UserTimetrap = {user_timetrap_error,_Reason}) ->
+    UserTimetrap;
+tag(_Other) ->
+    ok.
 
 %%%-----------------------------------------------------------------
 %%% @spec error_notification(Mod,Func,Args,Error) -> ok
@@ -760,6 +852,8 @@ error_notification(Mod,Func,_Args,{Error,Loc}) ->
 			     io_lib:format("{test_case_failed,~p}", [Reason]);
 			 Result -> Result
 		     end;
+		 {'EXIT',_Reason} = EXIT ->
+		     io_lib:format("~P", [EXIT,5]);
 		 {Spec,_Reason} when is_atom(Spec) ->
 		     io_lib:format("~w", [Spec]);
 		 Other ->
@@ -780,7 +874,7 @@ error_notification(Mod,Func,_Args,{Error,Loc}) ->
 	_ ->			     
 	    %% this notification comes from the test case process, so
 	    %% we can add error info to comment with test_server:comment/1
-	    case ct_util:get_testdata(comment) of
+	    case ct_util:get_testdata({comment,group_leader()}) of
 		undefined ->
 		    test_server:comment(ErrorHtml);
 		Comment ->
@@ -794,12 +888,18 @@ error_notification(Mod,Func,_Args,{Error,Loc}) ->
     end,
 
     PrintErr = fun(ErrFormat, ErrArgs) ->
-		       Div = "~n- - - - - - - - - - - - - - - - "
-			   "- - - - - - - - - -~n",
+		       Div = "~n- - - - - - - - - - - - - - - - - - - "
+			     "- - - - - - - - - - - - - - - - - - - - -~n",
 		       io:format(user, lists:concat([Div,ErrFormat,Div,"~n"]),
 				 ErrArgs),
-		       ct_logs:tc_log(ct_error_notify, "CT Error Notification",
-				      ErrFormat, ErrArgs)
+		       Link =
+			   "\n\n<a href=\"#end\">"
+			   "Full error description and stacktrace"
+			   "</a>",
+		       ct_logs:tc_log(ct_error_notify,
+				      ?MAX_IMPORTANCE,
+				      "CT Error Notification",
+				      ErrFormat++Link, ErrArgs)
 	       end,
     case Loc of
 	[{?MODULE,error_in_suite}] ->
@@ -977,9 +1077,32 @@ get_all_cases1(_, []) ->
 
 get_all(Mod, ConfTests) ->	
     case catch apply(Mod, all, []) of
-	{'EXIT',_} ->
-	    Reason = 
-		list_to_atom(atom_to_list(Mod)++":all/0 is missing"),
+	{'EXIT',{undef,[{Mod,all,[],_} | _]}} ->
+	    Reason =
+		case code:which(Mod) of
+		    non_existing ->
+			list_to_atom(atom_to_list(Mod)++
+					 " can not be compiled or loaded");
+		    _ ->
+			list_to_atom(atom_to_list(Mod)++":all/0 is missing")
+		end,
+	    %% this makes test_server call error_in_suite as first
+	    %% (and only) test case so we can report Reason properly
+	    [{?MODULE,error_in_suite,[[{error,Reason}]]}];
+	{'EXIT',ExitReason} ->
+	    case ct_util:get_testdata({error_in_suite,Mod}) of
+		undefined ->
+		    ErrStr = io_lib:format("~n*** ERROR *** "
+					   "~w:all/0 failed: ~p~n",
+					   [Mod,ExitReason]),
+		    io:format(user, ErrStr, []),
+		    %% save the error info so it doesn't get printed twice
+		    ct_util:set_testdata_async({{error_in_suite,Mod},
+						ExitReason});
+		_ExitReason ->
+		    ct_util:delete_testdata({error_in_suite,Mod})
+	    end,
+	    Reason = list_to_atom(atom_to_list(Mod)++":all/0 failed"),
 	    %% this makes test_server call error_in_suite as first
 	    %% (and only) test case so we can report Reason properly
 	    [{?MODULE,error_in_suite,[[{error,Reason}]]}];
@@ -1157,38 +1280,7 @@ report(What,Data) ->
 	    ct_logs:make_all_suites_index({TestName,RunDir}),
 	    ok;
 	tests_start ->
-	    case ct_util:get_testdata(cover) of
-		undefined -> 
-		    ok;
-		{_CovFile,_CovNodes,CovImport,CovExport,_CovAppData} ->
-		    %% Always import cover data from files specified by CovImport 
-		    %% if no CovExport defined. If CovExport is defined, only
-		    %% import from CovImport files initially, then use CovExport
-		    %% to pass coverdata between proceeding tests (in the same run).
-		    Imps =
-			case CovExport of
-			    [] ->  % don't export data between tests
-				CovImport;
-			    _ ->
-				case filelib:is_file(CovExport) of
-				    true ->
-					[CovExport];
-				    false ->
-					CovImport
-				end
-			end,
-		    lists:foreach(
-		      fun(Imp) ->
-			      case cover:import(Imp) of
-				  ok -> 
-				      ok;
-				  {error,Reason} ->
-				      ct_logs:log("COVER INFO",
-						  "Importing cover data from: ~ts fails! "
-						  "Reason: ~p", [Imp,Reason])
-			      end
-		      end, Imps)
-	    end;
+	    ok;
 	tests_done ->
 	    ok;
 	severe_error ->
@@ -1198,26 +1290,43 @@ report(What,Data) ->
 	    ct_util:set_testdata({What,Data}),
 	    ok;
 	tc_start ->
-	    %% Data = {{Suite,Func},LogFileName}
+	    %% Data = {{Suite,{Func,GroupName}},LogFileName}
+	    Data1 = case Data of
+			{{Suite,{Func,undefined}},LFN} -> {{Suite,Func},LFN};
+			_ -> Data
+		    end,
 	    ct_event:sync_notify(#event{name=tc_logfile,
 					node=node(),
-					data=Data}),
+					data=Data1}),
 	    ok;
 	tc_done ->
-	    {_Suite,Case,Result} = Data,
+	    {Suite,{Func,GrName},Result} = Data,
+	    Data1 = if GrName == undefined -> {Suite,Func,Result};
+		       true                -> Data
+	    end,
+	    %% Register the group leader for the process calling the report
+	    %% function, making it possible for a hook function to print
+	    %% in the test case log file
+	    ReportingPid = self(),
+	    ct_logs:register_groupleader(ReportingPid, group_leader()),
 	    case Result of
 		{failed, _} ->
-		    ct_hooks:on_tc_fail(What, Data);
+		    ct_hooks:on_tc_fail(What, Data1);
 		{skipped,{failed,{_,init_per_testcase,_}}} ->
-		    ct_hooks:on_tc_skip(tc_auto_skip, Data);
+		    ct_hooks:on_tc_skip(tc_auto_skip, Data1);
 		{skipped,{require_failed,_}} ->
-		    ct_hooks:on_tc_skip(tc_auto_skip, Data);
+		    ct_hooks:on_tc_skip(tc_auto_skip, Data1);
 		{skipped,_} ->
-		    ct_hooks:on_tc_skip(tc_user_skip, Data);
+		    ct_hooks:on_tc_skip(tc_user_skip, Data1);
+		{auto_skipped,_} ->
+		    ct_hooks:on_tc_skip(tc_auto_skip, Data1);
 		_Else ->
 		    ok
 	    end,
-	    case {Case,Result} of
+	    ct_logs:unregister_groupleader(ReportingPid),
+	    case {Func,Result} of
+		{error_in_suite,_} when Suite == ?MODULE ->
+		    ok;
 		{init_per_suite,_} ->
 		    ok;
 		{end_per_suite,_} ->
@@ -1238,31 +1347,49 @@ report(What,Data) ->
 		    add_to_stats(auto_skipped);
 		{_,{skipped,_}} ->
 		    add_to_stats(user_skipped);
+		{_,{auto_skipped,_}} ->
+		    add_to_stats(auto_skipped);
 		{_,{SkipOrFail,_Reason}} ->
 		    add_to_stats(SkipOrFail)
 	    end;
-	tc_user_skip ->	    
-	    %% test case specified as skipped in testspec
-	    %% Data = {Suite,Case,Comment}
+	tc_user_skip ->
+	    %% test case or config function specified as skipped in testspec,
+	    %% or init config func for suite/group has returned {skip,Reason}
+	    %% Data = {Suite,{Func,GroupName},Comment}
+	    {Func,Data1} = case Data of
+			       {Suite,{F,undefined},Comment} ->
+				   {F,{Suite,F,Comment}};
+			       D = {_,{F,_},_} ->
+				   {F,D}
+			   end,
 	    ct_event:sync_notify(#event{name=tc_user_skip,
 					node=node(),
-					data=Data}),
-	    ct_hooks:on_tc_skip(What, Data),
-	    add_to_stats(user_skipped);
+					data=Data1}),
+	    ct_hooks:on_tc_skip(What, Data1),
+	    if Func /= init_per_suite, Func /= init_per_group,
+	       Func /= end_per_suite, Func /= end_per_group ->
+		    add_to_stats(user_skipped);
+	       true ->
+		    ok
+	    end;
 	tc_auto_skip ->
-	    %% test case skipped because of error in init_per_suite
-	    %% Data = {Suite,Case,Comment}
-
-	    {_Suite,Case,_Result} = Data,
-
+	    %% test case skipped because of error in config function, or
+	    %% config function skipped because of error in info function
+	    %% Data = {Suite,{Func,GroupName},Comment}
+	    {Func,Data1} = case Data of
+			       {Suite,{F,undefined},Comment} ->
+				   {F,{Suite,F,Comment}};
+			       D = {_,{F,_},_} ->
+				   {F,D}
+			   end,
 	    %% this test case does not have a log, so printouts
 	    %% from event handlers should end up in the main log
 	    ct_event:sync_notify(#event{name=tc_auto_skip,
 					node=node(),
-					data=Data}),
-	    ct_hooks:on_tc_skip(What, Data),
-	    if Case /= end_per_suite, 
-	       Case /= end_per_group ->
+					data=Data1}),
+	    ct_hooks:on_tc_skip(What, Data1),
+	    if Func /= end_per_suite, 
+	       Func /= end_per_group ->
 		    add_to_stats(auto_skipped);
 	       true -> 
 		    ok
@@ -1313,7 +1440,7 @@ warn(_What) ->
     true.
 
 %%%-----------------------------------------------------------------
-%%% @spec add_data_dir(File0) -> File1
+%%% @spec add_data_dir(File0, Config) -> File1
 add_data_dir(File,Config) when is_atom(File) ->
     add_data_dir(atom_to_list(File),Config);
 

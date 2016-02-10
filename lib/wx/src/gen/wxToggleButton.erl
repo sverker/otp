@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxtogglebutton.html">wxToggleButton</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxtogglebutton.html">wxToggleButton</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxControl}
 %% <br />{@link wxWindow}
@@ -77,7 +78,7 @@ parent_class(wxEvtHandler) -> true;
 parent_class(_Class) -> erlang:error({badtype, ?MODULE}).
 
 -type wxToggleButton() :: wx:wx_object().
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxtogglebutton.html#wxtogglebuttonwxtogglebutton">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxtogglebutton.html#wxtogglebuttonwxtogglebutton">external documentation</a>.
 -spec new() -> wxToggleButton().
 new() ->
   wxe_util:construct(?wxToggleButton_new_0,
@@ -91,7 +92,7 @@ new(Parent,Id,Label)
  when is_record(Parent, wx_ref),is_integer(Id),is_list(Label) ->
   new(Parent,Id,Label, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxtogglebutton.html#wxtogglebuttonwxtogglebutton">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxtogglebutton.html#wxtogglebuttonwxtogglebutton">external documentation</a>.
 -spec new(Parent, Id, Label, [Option]) -> wxToggleButton() when
 	Parent::wxWindow:wxWindow(), Id::integer(), Label::unicode:chardata(),
 	Option :: {pos, {X::integer(), Y::integer()}}
@@ -119,7 +120,7 @@ create(This,Parent,Id,Label)
  when is_record(This, wx_ref),is_record(Parent, wx_ref),is_integer(Id),is_list(Label) ->
   create(This,Parent,Id,Label, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxtogglebutton.html#wxtogglebuttoncreate">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxtogglebutton.html#wxtogglebuttoncreate">external documentation</a>.
 -spec create(This, Parent, Id, Label, [Option]) -> boolean() when
 	This::wxToggleButton(), Parent::wxWindow:wxWindow(), Id::integer(), Label::unicode:chardata(),
 	Option :: {pos, {X::integer(), Y::integer()}}
@@ -140,7 +141,7 @@ create(#wx_ref{type=ThisT,ref=ThisRef},#wx_ref{type=ParentT,ref=ParentRef},Id,La
   wxe_util:call(?wxToggleButton_Create,
   <<ThisRef:32/?UI,ParentRef:32/?UI,Id:32/?UI,(byte_size(Label_UC)):32/?UI,(Label_UC)/binary, 0:(((8- ((0+byte_size(Label_UC)) band 16#7)) band 16#7))/unit:8, BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxtogglebutton.html#wxtogglebuttongetvalue">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxtogglebutton.html#wxtogglebuttongetvalue">external documentation</a>.
 -spec getValue(This) -> boolean() when
 	This::wxToggleButton().
 getValue(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -148,7 +149,7 @@ getValue(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxToggleButton_GetValue,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxtogglebutton.html#wxtogglebuttonsetvalue">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxtogglebutton.html#wxtogglebuttonsetvalue">external documentation</a>.
 -spec setValue(This, State) -> ok when
 	This::wxToggleButton(), State::boolean().
 setValue(#wx_ref{type=ThisT,ref=ThisRef},State)

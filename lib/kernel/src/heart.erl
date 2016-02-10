@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -25,7 +26,7 @@
 %%%--------------------------------------------------------------------
 %%% This is a rewrite of pre_heart from BS.3.
 %%%
-%%% The purpose of this process-module is to act as an supervisor
+%%% The purpose of this process-module is to act as a supervisor
 %%% of the entire erlang-system. This 'heart' beats with a frequence
 %%% satisfying an external port program *not* reboot the entire
 %%% system. If however the erlang-emulator would hang, a reboot is
@@ -182,20 +183,24 @@ wait_ack(Port) ->
     end.
 
 loop(Parent, Port, Cmd) ->
-    send_heart_beat(Port),
+    _ = send_heart_beat(Port),
     receive
-	{From, set_cmd, NewCmd} when length(NewCmd) < 2047 ->
-	    send_heart_cmd(Port, NewCmd),
-	    wait_ack(Port),
-	    From ! {heart, ok},
-	    loop(Parent, Port, NewCmd);
-	{From, set_cmd, NewCmd} ->
-	    From ! {heart, {error, {bad_cmd, NewCmd}}},
-	    loop(Parent, Port, Cmd);
+	{From, set_cmd, NewCmd0} ->
+	    Enc = file:native_name_encoding(),
+	    case catch unicode:characters_to_binary(NewCmd0,Enc,Enc) of
+		NewCmd when is_binary(NewCmd), byte_size(NewCmd) < 2047 ->
+		    _ = send_heart_cmd(Port, NewCmd),
+		    _ = wait_ack(Port),
+		    From ! {heart, ok},
+		    loop(Parent, Port, NewCmd);
+		_ ->
+		    From ! {heart, {error, {bad_cmd, NewCmd0}}},
+		    loop(Parent, Port, Cmd)
+	    end;
 	{From, clear_cmd} ->
 	    From ! {heart, ok},
-	    send_heart_cmd(Port, ""),
-	    wait_ack(Port),
+	    _ = send_heart_cmd(Port, ""),
+	    _ = wait_ack(Port),
 	    loop(Parent, Port, "");
 	{From, get_cmd} ->
 	    From ! {heart, get_heart_cmd(Port)},
@@ -222,7 +227,7 @@ loop(Parent, Port, Cmd) ->
 -spec no_reboot_shutdown(port()) -> no_return().
 
 no_reboot_shutdown(Port) ->
-    send_shutdown(Port),
+    _ = send_shutdown(Port),
     receive
 	{'EXIT', Port, Reason} when Reason =/= badsig ->
 	    exit(normal)
@@ -232,10 +237,10 @@ do_cycle_port_program(Caller, Parent, Port, Cmd) ->
     unregister(?HEART_PORT_NAME),
     case catch start_portprogram() of
 	{ok, NewPort} ->
-	    send_shutdown(Port),
+	    _ = send_shutdown(Port),
 	    receive
 		{'EXIT', Port, _Reason} ->
-		    send_heart_cmd(NewPort, Cmd),
+		    _ = send_heart_cmd(NewPort, Cmd),
 		    Caller ! {heart, ok},
 		    loop(Parent, NewPort, Cmd)
 	    after
@@ -243,7 +248,7 @@ do_cycle_port_program(Caller, Parent, Port, Cmd) ->
 		    %% Huh! Two heart port programs running...
 		    %% well, the old one has to be sick not to respond
 		    %% so we'll settle for the new one...
-		    send_heart_cmd(NewPort, Cmd),
+		    _ = send_heart_cmd(NewPort, Cmd),
 		    Caller ! {heart, {error, stop_error}},
 		    loop(Parent, NewPort, Cmd)
 	    end;

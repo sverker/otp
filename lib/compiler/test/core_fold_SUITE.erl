@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 2007-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -22,7 +23,9 @@
 	 init_per_group/2,end_per_group/2,
 	 t_element/1,setelement/1,t_length/1,append/1,t_apply/1,bifs/1,
 	 eq/1,nested_call_in_case/1,guard_try_catch/1,coverage/1,
-	 unused_multiple_values_error/1,unused_multiple_values/1]).
+	 unused_multiple_values_error/1,unused_multiple_values/1,
+	 multiple_aliases/1,redundant_boolean_clauses/1,
+	 mixed_matching_clauses/1,unnecessary_building/1]).
 
 -export([foo/0,foo/1,foo/2,foo/3]).
 
@@ -35,10 +38,12 @@ all() ->
     [{group,p}].
 
 groups() -> 
-    [{p,test_lib:parallel(),
+    [{p,[parallel],
       [t_element,setelement,t_length,append,t_apply,bifs,
        eq,nested_call_in_case,guard_try_catch,coverage,
-       unused_multiple_values_error,unused_multiple_values]}].
+       unused_multiple_values_error,unused_multiple_values,
+       multiple_aliases,redundant_boolean_clauses,
+       mixed_matching_clauses,unnecessary_building]}].
 
 
 init_per_suite(Config) ->
@@ -58,6 +63,12 @@ t_element(Config) when is_list(Config) ->
     X = make_ref(),
     ?line X = id(element(1, {X,y,z})),
     ?line b = id(element(2, {a,b,c,d})),
+    (fun() ->
+	    case {a,#{k=>X}} of
+		{a,#{k:=X}}=Tuple ->
+		    #{k:=X} = id(element(2, Tuple))
+	    end
+    end)(),
 
     %% No optimization, but should work.
     Tuple = id({x,y,z}),
@@ -78,6 +89,7 @@ t_element(Config) when is_list(Config) ->
 	{_,_,_}=Tup ->
 	    ?line {'EXIT',{badarg,_}} = (catch element(4, Tup))
     end,
+    {'EXIT',{badarg,_}} = (catch element(1, tuple_size(Tuple))),
 
     ok.
 
@@ -96,6 +108,7 @@ setelement(Config) when is_list(Config) ->
     ?line error = setelement_crash_2({a,b,c,d,e,f}, <<42>>),
 
     {'EXIT',{badarg,_}} = (catch setelement(1, not_a_tuple, New)),
+    {'EXIT',{badarg,_}} = (catch setelement(3, {a,b}, New)),
 
     ok.
 
@@ -187,7 +200,10 @@ foo(A, B, C) ->
     A + B + C.
 
 bifs(Config) when is_list(Config) ->
-    ?line <<1,2,3,4>> = id(list_to_binary([1,2,3,4])),
+    <<1,2,3,4>> = id(list_to_binary([1,2,3,4])),
+    K = {a,key},
+    V = {a,value},
+    {ok,#{K:=V}} = id(list_to_tuple([ok,#{K=>V}])),
     ok.
 
 -define(CMP_SAME(A0, B), (fun(A) -> true = A == B, false = A /= B end)(id(A0))).
@@ -202,19 +218,31 @@ eq(Config) when is_list(Config) ->
     ?line ?CMP_DIFF(a, [a]),
     ?line ?CMP_DIFF(a, {1,2,3}),
 
+    ?CMP_SAME(#{a=>1.0,b=>2}, #{b=>2.0,a=>1}),
+    ?CMP_SAME(#{a=>[1.0],b=>[2]}, #{b=>[2.0],a=>[1]}),
+
+    %% The rule for comparing keys are different in 17.x and 18.x.
+    %% Just test that the results are consistent.
+    Bool = id(#{1=>a}) == id(#{1.0=>a}),	%Unoptimizable.
+    Bool = id(#{1=>a}) == #{1.0=>a},		%Optimizable.
+    Bool = #{1=>a} == #{1.0=>a},		%Optimizable.
+    io:format("Bool = ~p\n", [Bool]),
+
     ok.
 
 %% OTP-7117.
 nested_call_in_case(Config) when is_list(Config) ->
-    ?line PrivDir = ?config(priv_dir, Config),
-    ?line Dir = filename:dirname(code:which(?MODULE)),
-    ?line Core = filename:join(Dir, "nested_call_in_case"),
-    ?line Opts = [from_core,{outdir,PrivDir}|test_lib:opt_opts(?MODULE)],
-    ?line io:format("~p", [Opts]),
-    ?line {ok,Mod} = c:c(Core, Opts),
-    ?line yes = Mod:a([1,2,3], 2),
-    ?line no = Mod:a([1,2,3], 4),
-    ?line {'EXIT',_} = (catch Mod:a(not_a_list, 42)),
+    PrivDir = ?config(priv_dir, Config),
+    Dir = test_lib:get_data_dir(Config),
+    Core = filename:join(Dir, "nested_call_in_case"),
+    Opts = [from_core,{outdir,PrivDir}|test_lib:opt_opts(?MODULE)],
+    io:format("~p", [Opts]),
+    {ok,Mod} = c:c(Core, Opts),
+    yes = Mod:a([1,2,3], 2),
+    no = Mod:a([1,2,3], 4),
+    {'EXIT',_} = (catch Mod:a(not_a_list, 42)),
+    _ = code:delete(Mod),
+    _ = code:purge(Mod),
     ok.
 
 guard_try_catch(_Config) ->
@@ -234,6 +262,8 @@ do_guard_try_catch(K, V) ->
 	    false
     end.
 
+-record(cover_opt_guard_try, {list=[]}).
+
 coverage(Config) when is_list(Config) ->
     ?line {'EXIT',{{case_clause,{a,b,c}},_}} =
 	(catch cover_will_match_list_type({a,b,c})),
@@ -243,12 +273,27 @@ coverage(Config) when is_list(Config) ->
     ?line error = cover_will_match_lit_list(),
     {ok,[a]} = cover_is_safe_bool_expr(a),
 
+    ok = cover_opt_guard_try(#cover_opt_guard_try{list=[a]}),
+    error = cover_opt_guard_try(#cover_opt_guard_try{list=[]}),
+
     %% Make sure that we don't attempt to make literals
     %% out of pids. (Putting a pid into a #c_literal{}
     %% would crash later compiler passes.)
     case list_to_pid("<0.42.0>") of
 	Pid when is_pid(Pid) -> ok
     end,
+
+    %% Cover the non-variable case in bsm_do_an/4.
+    ok = bsm_an_inlined(<<1>>, Config),
+    error = bsm_an_inlined(<<1,2,3>>, Config),
+    error = bsm_an_inlined([], Config),
+
+    %% Cover eval_rel_op/4.
+    Tuple = id({a,b}),
+    false = case Tuple of
+		{_,_} ->
+		    Tuple =:= true
+	    end,
     ok.
 
 cover_will_match_list_type(A) ->
@@ -290,16 +335,25 @@ cover_is_safe_bool_expr(X) ->
 	    false
     end.
 
-id(I) -> I.
+cover_opt_guard_try(Msg) ->
+    if
+	length(Msg#cover_opt_guard_try.list) =/= 1 ->
+	    error;
+	true ->
+	    ok
+    end.
+
+bsm_an_inlined(<<_:8>>, _) -> ok;
+bsm_an_inlined(_, _) -> error.
 
 unused_multiple_values_error(Config) when is_list(Config) ->
     PrivDir = ?config(priv_dir, Config),
-    Dir = filename:dirname(code:which(?MODULE)),
+    Dir = test_lib:get_data_dir(Config),
     Core = filename:join(Dir, "unused_multiple_values_error"),
     Opts = [no_copt,clint,return,from_core,{outdir,PrivDir}
 	   |test_lib:opt_opts(?MODULE)],
     {error,[{unused_multiple_values_error,
-        [{core_lint,{return_mismatch,{hello,1}}}]}],
+	     [{none,core_lint,{return_mismatch,{hello,1}}}]}],
      []} = c:c(Core, Opts),
     ok.
 
@@ -329,3 +383,75 @@ do_something(I) ->
     put(unused_multiple_values,
 	[I|get(unused_multiple_values)]),
     I.
+
+
+%% Make sure that multiple aliases does not cause
+%% the case expression to be evaluated twice.
+multiple_aliases(Config) when is_list(Config) ->
+    do_ma(fun() ->
+		  X = Y = run_once(),
+		  {X,Y}
+	  end, {ok,ok}),
+    do_ma(fun() ->
+		  case {true,run_once()} of
+		      {true=A=B,ok=X=Y} ->
+			  {A,B,X,Y}
+		  end
+	  end, {true,true,ok,ok}),
+    ok.
+
+do_ma(Fun, Expected) when is_function(Fun, 0) ->
+    Expected = Fun(),
+    ran_once = erase(run_once),
+    ok.
+
+run_once() ->
+    undefined = put(run_once, ran_once),
+    ok.
+
+
+redundant_boolean_clauses(Config) when is_list(Config) ->
+  X = id(0),
+  yes = case X == 0 of
+            false -> no;
+            false -> no;
+            true -> yes
+        end.
+
+mixed_matching_clauses(Config) when is_list(Config) ->
+  0 = case #{} of
+          #{} -> 0;
+          a -> 1
+      end,
+  0 = case <<>> of
+          <<>> -> 0;
+          a -> 1
+      end,
+  ok.
+
+unnecessary_building(Config) when is_list(Config) ->
+    Term1 = do_unnecessary_building_1(test_lib:id(a)),
+    [{a,a},{a,a}] = Term1,
+    7 = erts_debug:size(Term1),
+
+    %% The Input term should not be rebuilt (thus, it should
+    %% only be counted once in the size of the combined term).
+    Input = test_lib:id({a,b,c}),
+    Term2 = test_lib:id(do_unnecessary_building_2(Input)),
+    {b,[{a,b,c},none],x} = Term2,
+    4+4+4+2 = erts_debug:size([Term2|Input]),
+
+    ok.
+
+do_unnecessary_building_1(S) ->
+    %% The tuple must only be built once.
+    F0 = F1 = {S,S},
+    [F0,F1].
+
+do_unnecessary_building_2({a,_,_}=T) ->
+    %% The T term should not be rebuilt.
+    {b,
+     [_,_] = [T,none],
+     x}.
+
+id(I) -> I.

@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 1997-2012. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -24,7 +25,7 @@
 	 init_per_group/2,end_per_group/2, command/1,
 	 command_e_1/1, command_e_2/1, command_e_3/1, command_e_4/1,
 	 port_info1/1, port_info2/1,
-	 port_info_os_pid/1,
+	 port_info_os_pid/1, port_info_race/1,
 	 connect/1, control/1, echo_to_busy/1]).
 
 -export([do_command_e_1/1, do_command_e_2/1, do_command_e_4/1]).
@@ -42,7 +43,8 @@ all() ->
 groups() -> 
     [{command_e, [],
       [command_e_1, command_e_2, command_e_3, command_e_4]},
-     {port_info, [], [port_info1, port_info2, port_info_os_pid]}].
+     {port_info, [],
+      [port_info1, port_info2, port_info_os_pid, port_info_race]}].
 
 init_per_suite(Config) ->
     Config.
@@ -254,6 +256,28 @@ do_port_info_os_pid() ->
     true = erlang:port_close(P),
     ok.
 
+port_info_race(Config) when is_list(Config) ->
+    DataDir = ?config(data_dir, Config),
+    Program = filename:join(DataDir, "port_test"),
+    Top = self(),
+    P1 = open_port({spawn,Program}, [{packet,1}]),
+    P2 = open_port({spawn,Program}, [{packet,1}]),
+    Info1 = erlang:port_info(P1),
+    Info2 = erlang:port_info(P2),
+    F = fun Loop(Port, _, 0) ->
+                Top ! {ok,Port};
+            Loop(Port, Info, N) ->
+                Info = erlang:port_info(Port),
+                Loop(Port, Info, N - 1)
+        end,
+    spawn_link(fun () -> F(P1, Info1, 1000) end),
+    spawn_link(fun () -> F(P2, Info2, 1000) end),
+    receive {ok,P1} -> ok end,
+    receive {ok,P2} -> ok end,
+    true = erlang:port_close(P1),
+    true = erlang:port_close(P2),
+    ok.
+
 output_test(_, _, Input, Output) when Output > 16#1fffffff ->
     io:format("~p bytes received\n", [Input]);
 output_test(P, Bin, Input0, Output0) ->
@@ -461,14 +485,7 @@ random_char(Chars) ->
     lists:nth(uniform(length(Chars)), Chars).
 
 uniform(N) ->
-    case get(random_seed) of
-	undefined ->
-	    {X, Y, Z} = time(),
-	    random:seed(X, Y, Z);
-	_ ->
-	    ok
-    end,
-    random:uniform(N).
+    rand:uniform(N).
 
 unaligned_sub_bin(Bin0) ->
     Bin1 = <<0:3,Bin0/binary,31:5>>,

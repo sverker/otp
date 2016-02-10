@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -40,12 +41,14 @@
          send_unknown_application/1,
          send_unknown_command/1,
          send_ok/1,
-         send_invalid_avp_bits/1,
+         send_invalid_hdr_bits/1,
          send_missing_avp/1,
          send_ignore_missing_avp/1,
+         send_5xxx_missing_avp/1,
          send_double_error/1,
          send_3xxx/1,
          send_5xxx/1,
+         counters/1,
          stop/1]).
 
 %% diameter callbacks
@@ -110,7 +113,7 @@ all() ->
 
 groups() ->
     Tc = tc(),
-    [{?util:name([E,D]), [], [start] ++ Tc ++ [stop]}
+    [{?util:name([E,D]), [], [start] ++ Tc ++ [counters, stop]}
      || E <- ?ERRORS, D <- ?RFCS].
 
 init_per_suite(Config) ->
@@ -136,9 +139,10 @@ tc() ->
     [send_unknown_application,
      send_unknown_command,
      send_ok,
-     send_invalid_avp_bits,
+     send_invalid_hdr_bits,
      send_missing_avp,
      send_ignore_missing_avp,
+     send_5xxx_missing_avp,
      send_double_error,
      send_3xxx,
      send_5xxx].
@@ -166,6 +170,203 @@ stop(_Config) ->
     ok = diameter:remove_transport(?SERVER, true),
     ok = diameter:stop_service(?SERVER),
     ok = diameter:stop_service(?CLIENT).
+
+%% counters/1
+%%
+%% Check that counters are as expected.
+
+counters(Config) ->
+    Group = proplists:get_value(group, Config),
+    [_Errors, _Rfc] = G = ?util:name(Group),
+    [] = ?util:run([[fun counters/3, K, S, G]
+                    || K <- [statistics, transport, connections],
+                       S <- [?CLIENT, ?SERVER]]).
+
+counters(Key, Svc, Group) ->
+    counters(Key, Svc, Group, [_|_] = diameter:service_info(Svc, Key)).
+
+counters(statistics, Svc, [Errors, Rfc], L) ->
+    [{P, Stats}] = L,
+    true = is_pid(P),
+    stats(Svc, Errors, Rfc, lists:sort(Stats));
+
+counters(_, _, _, _) ->
+    todo.
+
+stats(?CLIENT, E, rfc3588, L)
+  when E == answer;
+       E == answer_3xxx ->
+    [{{{unknown,0},recv},2},
+     {{{0,257,0},recv},1},
+     {{{0,257,1},send},1},
+     {{{0,275,0},recv},6},
+     {{{0,275,1},send},10},
+     {{{unknown,0},recv,{'Result-Code',3001}},1},
+     {{{unknown,0},recv,{'Result-Code',3007}},1},
+     {{{0,257,0},recv,{'Result-Code',2001}},1},
+     {{{0,275,0},recv,{'Result-Code',2001}},1},
+     {{{0,275,0},recv,{'Result-Code',3008}},2},
+     {{{0,275,0},recv,{'Result-Code',3999}},1},
+     {{{0,275,0},recv,{'Result-Code',5002}},1},
+     {{{0,275,0},recv,{'Result-Code',5005}},1}]
+        = L;
+
+stats(?SERVER, E, rfc3588, L)
+  when E == answer;
+       E == answer_3xxx ->
+    [{{{unknown,0},send},2},
+     {{{unknown,1},recv},1},
+     {{{0,257,0},send},1},
+     {{{0,257,1},recv},1},
+     {{{0,275,0},send},6},
+     {{{0,275,1},recv},8},
+     {{{unknown,0},send,{'Result-Code',3001}},1},
+     {{{unknown,0},send,{'Result-Code',3007}},1},
+     {{{unknown,1},recv,error},1},
+     {{{0,257,0},send,{'Result-Code',2001}},1},
+     {{{0,275,0},send,{'Result-Code',2001}},1},
+     {{{0,275,0},send,{'Result-Code',3008}},2},
+     {{{0,275,0},send,{'Result-Code',3999}},1},
+     {{{0,275,0},send,{'Result-Code',5002}},1},
+     {{{0,275,0},send,{'Result-Code',5005}},1},
+     {{{0,275,1},recv,error},5}]
+        = L;
+
+stats(?CLIENT, answer, rfc6733, L) ->
+    [{{{unknown,0},recv},2},
+     {{{0,257,0},recv},1},
+     {{{0,257,1},send},1},
+     {{{0,275,0},recv},8},
+     {{{0,275,1},send},10},
+     {{{unknown,0},recv,{'Result-Code',3001}},1},
+     {{{unknown,0},recv,{'Result-Code',3007}},1},
+     {{{0,257,0},recv,{'Result-Code',2001}},1},
+     {{{0,275,0},recv,{'Result-Code',3008}},2},
+     {{{0,275,0},recv,{'Result-Code',3999}},1},
+     {{{0,275,0},recv,{'Result-Code',5002}},1},
+     {{{0,275,0},recv,{'Result-Code',5005}},3},
+     {{{0,275,0},recv,{'Result-Code',5999}},1}]
+        = L;
+
+stats(?SERVER, answer, rfc6733, L) ->
+    [{{{unknown,0},send},2},
+     {{{unknown,1},recv},1},
+     {{{0,257,0},send},1},
+     {{{0,257,1},recv},1},
+     {{{0,275,0},send},8},
+     {{{0,275,1},recv},8},
+     {{{unknown,0},send,{'Result-Code',3001}},1},
+     {{{unknown,0},send,{'Result-Code',3007}},1},
+     {{{unknown,1},recv,error},1},
+     {{{0,257,0},send,{'Result-Code',2001}},1},
+     {{{0,275,0},send,{'Result-Code',3008}},2},
+     {{{0,275,0},send,{'Result-Code',3999}},1},
+     {{{0,275,0},send,{'Result-Code',5002}},1},
+     {{{0,275,0},send,{'Result-Code',5005}},3},
+     {{{0,275,0},send,{'Result-Code',5999}},1},
+     {{{0,275,1},recv,error},5}]
+        = L;
+
+stats(?CLIENT, answer_3xxx, rfc6733, L) ->
+    [{{{unknown,0},recv},2},
+     {{{0,257,0},recv},1},
+     {{{0,257,1},send},1},
+     {{{0,275,0},recv},8},
+     {{{0,275,1},send},10},
+     {{{unknown,0},recv,{'Result-Code',3001}},1},
+     {{{unknown,0},recv,{'Result-Code',3007}},1},
+     {{{0,257,0},recv,{'Result-Code',2001}},1},
+     {{{0,275,0},recv,{'Result-Code',2001}},1},
+     {{{0,275,0},recv,{'Result-Code',3008}},2},
+     {{{0,275,0},recv,{'Result-Code',3999}},1},
+     {{{0,275,0},recv,{'Result-Code',5002}},1},
+     {{{0,275,0},recv,{'Result-Code',5005}},2},
+     {{{0,275,0},recv,{'Result-Code',5999}},1}]
+        = L;
+
+stats(?SERVER, answer_3xxx, rfc6733, L) ->
+    [{{{unknown,0},send},2},
+     {{{unknown,1},recv},1},
+     {{{0,257,0},send},1},
+     {{{0,257,1},recv},1},
+     {{{0,275,0},send},8},
+     {{{0,275,1},recv},8},
+     {{{unknown,0},send,{'Result-Code',3001}},1},
+     {{{unknown,0},send,{'Result-Code',3007}},1},
+     {{{unknown,1},recv,error},1},
+     {{{0,257,0},send,{'Result-Code',2001}},1},
+     {{{0,275,0},send,{'Result-Code',2001}},1},
+     {{{0,275,0},send,{'Result-Code',3008}},2},
+     {{{0,275,0},send,{'Result-Code',3999}},1},
+     {{{0,275,0},send,{'Result-Code',5002}},1},
+     {{{0,275,0},send,{'Result-Code',5005}},2},
+     {{{0,275,0},send,{'Result-Code',5999}},1},
+     {{{0,275,1},recv,error},5}]
+        = L;
+
+stats(?CLIENT, callback, rfc3588, L) ->
+    [{{{unknown,0},recv},1},
+     {{{0,257,0},recv},1},
+     {{{0,257,1},send},1},
+     {{{0,275,0},recv},6},
+     {{{0,275,1},send},10},
+     {{{unknown,0},recv,{'Result-Code',3007}},1},
+     {{{0,257,0},recv,{'Result-Code',2001}},1},
+     {{{0,275,0},recv,{'Result-Code',2001}},2},
+     {{{0,275,0},recv,{'Result-Code',3999}},1},
+     {{{0,275,0},recv,{'Result-Code',5002}},1},
+     {{{0,275,0},recv,{'Result-Code',5005}},2}]
+        = L;
+
+stats(?SERVER, callback, rfc3588, L) ->
+    [{{{unknown,0},send},1},
+     {{{unknown,1},recv},1},
+     {{{0,257,0},send},1},
+     {{{0,257,1},recv},1},
+     {{{0,275,0},send},6},
+     {{{0,275,1},recv},8},
+     {{{unknown,0},send,{'Result-Code',3007}},1},
+     {{{unknown,1},recv,error},1},
+     {{{0,257,0},send,{'Result-Code',2001}},1},
+     {{{0,275,0},send,{'Result-Code',2001}},2},
+     {{{0,275,0},send,{'Result-Code',3999}},1},
+     {{{0,275,0},send,{'Result-Code',5002}},1},
+     {{{0,275,0},send,{'Result-Code',5005}},2},
+     {{{0,275,1},recv,error},5}]
+        = L;
+
+stats(?CLIENT, callback, rfc6733, L) ->
+    [{{{unknown,0},recv},1},
+     {{{0,257,0},recv},1},
+     {{{0,257,1},send},1},
+     {{{0,275,0},recv},8},
+     {{{0,275,1},send},10},
+     {{{unknown,0},recv,{'Result-Code',3007}},1},
+     {{{0,257,0},recv,{'Result-Code',2001}},1},
+     {{{0,275,0},recv,{'Result-Code',2001}},2},
+     {{{0,275,0},recv,{'Result-Code',3999}},1},
+     {{{0,275,0},recv,{'Result-Code',5002}},1},
+     {{{0,275,0},recv,{'Result-Code',5005}},3},
+     {{{0,275,0},recv,{'Result-Code',5999}},1}]
+        = L;
+
+stats(?SERVER, callback, rfc6733, L) ->
+    [{{{unknown,0},send},1},
+     {{{unknown,1},recv},1},
+     {{{0,257,0},send},1},
+     {{{0,257,1},recv},1},
+     {{{0,275,0},send},8},
+     {{{0,275,1},recv},8},
+     {{{unknown,0},send,{'Result-Code',3007}},1},
+     {{{unknown,1},recv,error},1},
+     {{{0,257,0},send,{'Result-Code',2001}},1},
+     {{{0,275,0},send,{'Result-Code',2001}},2},
+     {{{0,275,0},send,{'Result-Code',3999}},1},
+     {{{0,275,0},send,{'Result-Code',5002}},1},
+     {{{0,275,0},send,{'Result-Code',5005}},3},
+     {{{0,275,0},send,{'Result-Code',5999}},1},
+     {{{0,275,1},recv,error},5}]
+        = L.
 
 %% send_unknown_application/1
 %%
@@ -216,27 +417,26 @@ send_ok([_,_]) ->
 send_ok(Config) ->
     send_ok(?group(Config)).
 
-%% send_invalid_avp_bits/1
+%% send_invalid_hdr_bits/1
 %%
-%% Send a request with an incorrect length on the optional
-%% Origin-State-Id that a callback ignores.
+%% Send a request with an incorrect E-bit that a callback ignores.
 
 %% Callback answers.
-send_invalid_avp_bits([callback, _]) ->
+send_invalid_hdr_bits([callback, _]) ->
     #diameter_base_STA{'Result-Code' = 2001,  %% SUCCESS
                        'Failed-AVP' = [],
                        'AVP' = []}
         = call();
 
 %% diameter answers.
-send_invalid_avp_bits([_,_]) ->
-    #'diameter_base_answer-message'{'Result-Code' = 3009, %% INVALID_AVP_BITS
+send_invalid_hdr_bits([_,_]) ->
+    #'diameter_base_answer-message'{'Result-Code' = 3008, %% INVALID_HDR_BITS
                                     'Failed-AVP' = [],
                                     'AVP' = []}
         = call();
 
-send_invalid_avp_bits(Config) ->
-    send_invalid_avp_bits(?group(Config)).
+send_invalid_hdr_bits(Config) ->
+    send_invalid_hdr_bits(?group(Config)).
 
 %% send_missing_avp/1
 %%
@@ -280,10 +480,35 @@ send_ignore_missing_avp([_,_]) ->
 send_ignore_missing_avp(Config) ->
     send_ignore_missing_avp(?group(Config)).
 
+%% send_5xxx_missing_avp/1
+%%
+%% Send a request with a missing AVP that a callback answers
+%% with {answer_message, 5005}.
+
+%% RFC 6733 allows 5xxx in an answer-message.
+send_5xxx_missing_avp([_, rfc6733]) ->
+    #'diameter_base_answer-message'{'Result-Code' = 5005,  %% MISSING_AVP
+                                    'Failed-AVP' = [_],
+                                    'AVP' = []}
+        = call();
+
+%% RFC 3588 doesn't: sending answer fails.
+send_5xxx_missing_avp([_, rfc3588]) ->
+    {error, timeout} = call();
+
+%% Callback answers, ignores the error
+send_5xxx_missing_avp([_,_]) ->
+    #diameter_base_STA{'Result-Code' = 2001,  %% SUCCESS
+                       'Failed-AVP' = [],
+                       'AVP' = []}
+        = call();
+
+send_5xxx_missing_avp(Config) ->
+    send_5xxx_missing_avp(?group(Config)).
+
 %% send_double_error/1
 %%
-%% Send a request with both an incorrect length on the optional
-%% Origin-State-Id and a missing AVP.
+%% Send a request with both an invalid E-bit and a missing AVP.
 
 %% Callback answers with STA.
 send_double_error([callback, _]) ->
@@ -294,8 +519,8 @@ send_double_error([callback, _]) ->
 
 %% diameter answers with answer-message.
 send_double_error([_,_]) ->
-    #'diameter_base_answer-message'{'Result-Code' = 3009, %% INVALID_AVP_BITS
-                                    'Failed-AVP' = [_],
+    #'diameter_base_answer-message'{'Result-Code' = 3008, %% INVALID_HDR_BITS
+                                    'Failed-AVP' = [],
                                     'AVP' = []}
         = call();
 
@@ -392,24 +617,21 @@ prepare(Pkt, Caps, T)
        T == send_5xxx ->
     sta(Pkt, Caps);
 
-prepare(Pkt0, Caps, send_invalid_avp_bits) ->
-    Req0 = sta(Pkt0, Caps),
-    %% Append an Origin-State-Id with an incorrect AVP Length in order
-    %% to force 3009.
-    Req = Req0#diameter_base_STR{'Origin-State-Id' = [7]},
-    #diameter_packet{bin = Bin}
+prepare(Pkt0, Caps, send_invalid_hdr_bits) ->
+    Req = sta(Pkt0, Caps),
+    %% Set the E-bit to force 3008.
+    #diameter_packet{bin = <<H:34, 0:1, T/bitstring>>}
         = Pkt
         = diameter_codec:encode(?DICT, Pkt0#diameter_packet{msg = Req}),
-    Offset = size(Bin) - 12 + 5,
-    <<H:Offset/binary, Len:24, T/binary>> = Bin,
-    Pkt#diameter_packet{bin = <<H/binary, (Len + 2):24, T/binary>>};
+    Pkt#diameter_packet{bin = <<H:34, 1:1, T/bitstring>>};
 
 prepare(Pkt0, Caps, send_double_error) ->
-    dehost(prepare(Pkt0, Caps, send_invalid_avp_bits));
+    dehost(prepare(Pkt0, Caps, send_invalid_hdr_bits));
 
 prepare(Pkt, Caps, T)
   when T == send_missing_avp;
-       T == send_ignore_missing_avp ->
+       T == send_ignore_missing_avp;
+       T == send_5xxx_missing_avp ->
     Req = sta(Pkt, Caps),
     dehost(diameter_codec:encode(?DICT, Pkt#diameter_packet{msg = Req})).
 
@@ -480,9 +702,7 @@ request(send_3xxx, _Req, _Caps) ->
 request(send_5xxx, _Req, _Caps) ->
     {answer_message, 5999};
 
-request(send_invalid_avp_bits, Req, Caps) ->
-    #diameter_base_STR{'Origin-State-Id' = []}
-        = Req,
+request(send_invalid_hdr_bits, Req, Caps) ->
     %% Default errors field but a non-answer-message and only 3xxx
     %% errors detected means diameter sets neither Result-Code nor
     %% Failed-AVP.
@@ -495,7 +715,10 @@ request(T, Req, Caps)
 
 request(send_ignore_missing_avp, Req, Caps) ->
     {reply, #diameter_packet{msg = answer(Req, Caps),
-                             errors = false}}.  %% ignore errors
+                             errors = false}};  %% ignore errors
+
+request(send_5xxx_missing_avp, _Req, _Caps) ->
+    {answer_message, 5005}.  %% MISSING_AVP
 
 answer(Req, Caps) ->
     #diameter_base_STR{'Session-Id' = SId}

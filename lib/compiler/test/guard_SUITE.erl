@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -30,10 +31,11 @@
 	 old_guard_tests/1,
 	 build_in_guard/1,gbif/1,
 	 t_is_boolean/1,is_function_2/1,
-	 tricky/1,rel_ops/1,literal_type_tests/1,
+	 tricky/1,rel_ops/1,rel_op_combinations/1,literal_type_tests/1,
 	 basic_andalso_orelse/1,traverse_dcd/1,
 	 check_qlc_hrl/1,andalso_semi/1,t_tuple_size/1,binary_part/1,
-	 bad_constants/1]).
+	 bad_constants/1,bad_guards/1,scotland/1,
+	 guard_in_catch/1]).
 
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
@@ -42,15 +44,16 @@ all() ->
     [{group,p}].
 
 groups() -> 
-    [{p,test_lib:parallel(),
+    [{p,[parallel],
       [misc,const_cond,basic_not,complex_not,nested_nots,
        semicolon,complex_semicolon,comma,or_guard,
        more_or_guards,complex_or_guards,and_guard,xor_guard,
        more_xor_guards,build_in_guard,old_guard_tests,gbif,
-       t_is_boolean,is_function_2,tricky,rel_ops,
+       t_is_boolean,is_function_2,tricky,
+       rel_ops,rel_op_combinations,
        literal_type_tests,basic_andalso_orelse,traverse_dcd,
        check_qlc_hrl,andalso_semi,t_tuple_size,binary_part,
-       bad_constants]}].
+       bad_constants,bad_guards,scotland,guard_in_catch]}].
 
 init_per_suite(Config) ->
     Config.
@@ -330,7 +333,15 @@ complex_semicolon(Config) when is_list(Config) ->
     ?line ok = csemi6({a,b}, 0),
     ?line ok = csemi6({}, 3),
     ?line ok = csemi6({a,b,c}, 3),
-    
+
+    %% 7
+    error = csemi7(#{a=>1}, 1, 0),
+    error = csemi7(<<>>, 1, 0),
+    ok = csemi7(#{a=>1}, 3, 0),
+    ok = csemi7(#{a=>1}, 0, 3),
+    ok = csemi7(#{a=>1}, 3, 3),
+    ok = csemi7(#{a=>1, b=>3}, 0, 0),
+
     ok.
 
 csemi1(Type, Val) when is_list(Val), Type == float;
@@ -442,6 +453,9 @@ csemi5(_, _) -> error.
 csemi6(A, B) when hd([tuple_size(A)]) > 1; abs(B) > 2 -> ok;
 csemi6(_, _) -> error.
     
+csemi7(A, B, C) when A#{a:=B} > #{a=>1}; abs(C) > 2 -> ok;
+csemi7(_, _, _) -> error.
+
 comma(Config) when is_list(Config) ->
 
     %% ',' combinations of literal true/false.
@@ -813,7 +827,15 @@ and_guard(Config) when is_list(Config) ->
 
     ?line ok = relprod({'Set',a,b}, {'Set',a,b}),
     
+    ok = and_same_var(42),
+    {'EXIT',{if_clause,_}} = (catch and_same_var(x)),
     ok.
+
+and_same_var(V) ->
+    B = is_integer(V),
+    if
+	B or B -> ok
+    end.
 
 relprod(R1, R2) when (erlang:size(R1) =:= 3) and (erlang:element(1,R1) =:= 'Set'), (erlang:size(R2) =:= 3) and (erlang:element(1,R2) =:= 'Set') ->
     ok.
@@ -1015,6 +1037,10 @@ is_function_2(Config) when is_list(Config) ->
     true = is_function(id(fun() -> ok end), 0),
     false = is_function(id(fun ?MODULE:all/1), 0),
     false = is_function(id(fun() -> ok end), 1),
+    {'EXIT',{badarg,_}} =
+        (catch is_function(id(fun() -> ok end), -1) orelse error),
+    {'EXIT',{badarg,_}} =
+        (catch is_function(id(fun() -> ok end), '') orelse error),
 
     F = fun(_) -> ok end,
     if
@@ -1110,6 +1136,231 @@ rel_ops(Config) when is_list(Config) ->
 
 -undef(TestOp).
 
+rel_op_combinations(Config) when is_list(Config) ->
+    Digits0 = lists:seq(16#0030, 16#0039) ++
+	lists:seq(16#0660, 16#0669) ++
+	lists:seq(16#06F0, 16#06F9),
+    Digits = gb_sets:from_list(Digits0),
+    rel_op_combinations_1(16#0700, Digits),
+
+    BrokenRange0 = lists:seq(3, 5) ++
+	lists:seq(10, 12) ++ lists:seq(14, 20),
+    BrokenRange = gb_sets:from_list(BrokenRange0),
+    rel_op_combinations_2(30, BrokenRange),
+
+    Red0 = [{I,2*I} || I <- lists:seq(0, 50)] ++
+	[{I,5*I} || I <- lists:seq(51, 80)],
+    Red = gb_trees:from_orddict(Red0),
+    rel_op_combinations_3(100, Red).
+
+rel_op_combinations_1(0, _) ->
+    ok;
+rel_op_combinations_1(N, Digits) ->
+    Bool = gb_sets:is_member(N, Digits),
+    Bool = is_digit_1(N),
+    Bool = is_digit_2(N),
+    Bool = is_digit_3(N),
+    Bool = is_digit_4(N),
+    Bool = is_digit_5(N),
+    Bool = is_digit_6(N),
+    Bool = is_digit_7(N),
+    Bool = is_digit_8(N),
+    rel_op_combinations_1(N-1, Digits).
+
+is_digit_1(X) when 16#0660 =< X, X =< 16#0669 -> true;
+is_digit_1(X) when 16#0030 =< X, X =< 16#0039 -> true;
+is_digit_1(X) when 16#06F0 =< X, X =< 16#06F9 -> true;
+is_digit_1(_) -> false.
+
+is_digit_2(X) when (16#0030-1) < X, X =< 16#0039 -> true;
+is_digit_2(X) when (16#0660-1) < X, X =< 16#0669 -> true;
+is_digit_2(X) when (16#06F0-1) < X, X =< 16#06F9 -> true;
+is_digit_2(_) -> false.
+
+is_digit_3(X) when 16#0660 =< X, X < (16#0669+1) -> true;
+is_digit_3(X) when 16#0030 =< X, X < (16#0039+1) -> true;
+is_digit_3(X) when 16#06F0 =< X, X < (16#06F9+1) -> true;
+is_digit_3(_) -> false.
+
+is_digit_4(X) when (16#0660-1) < X, X < (16#0669+1) -> true;
+is_digit_4(X) when (16#0030-1) < X, X < (16#0039+1) -> true;
+is_digit_4(X) when (16#06F0-1) < X, X < (16#06F9+1) -> true;
+is_digit_4(_) -> false.
+
+is_digit_5(X) when X >= 16#0660, X =< 16#0669 -> true;
+is_digit_5(X) when X >= 16#0030, X =< 16#0039 -> true;
+is_digit_5(X) when X >= 16#06F0, X =< 16#06F9 -> true;
+is_digit_5(_) -> false.
+
+is_digit_6(X) when X > (16#0660-1), X =< 16#0669 -> true;
+is_digit_6(X) when X > (16#0030-1), X =< 16#0039 -> true;
+is_digit_6(X) when X > (16#06F0-1), X =< 16#06F9 -> true;
+is_digit_6(_) -> false.
+
+is_digit_7(X) when 16#0660 =< X, X =< 16#0669 -> true;
+is_digit_7(X) when 16#0030 =< X, X =< 16#003A, X =/= 16#003A -> true;
+is_digit_7(X) when 16#06F0 =< X, X =< 16#06F9 -> true;
+is_digit_7(_) -> false.
+
+is_digit_8(X) when X =< 16#0039, X > (16#0030-1) -> true;
+is_digit_8(X) when X =< 16#06F9, X > (16#06F0-1) -> true;
+is_digit_8(X) when X =< 16#0669, X > (16#0660-1) -> true;
+is_digit_8(16#0670) -> false;
+is_digit_8(_) -> false.
+
+rel_op_combinations_2(0, _) ->
+    ok;
+rel_op_combinations_2(N, Range) ->
+    Bool = gb_sets:is_member(N, Range),
+    Bool = broken_range_1(N),
+    Bool = broken_range_2(N),
+    Bool = broken_range_3(N),
+    Bool = broken_range_4(N),
+    Bool = broken_range_5(N),
+    Bool = broken_range_6(N),
+    Bool = broken_range_7(N),
+    Bool = broken_range_8(N),
+    Bool = broken_range_9(N),
+    Bool = broken_range_10(N),
+    Bool = broken_range_11(N),
+    Bool = broken_range_12(N),
+    Bool = broken_range_13(N),
+    rel_op_combinations_2(N-1, Range).
+
+broken_range_1(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_1(X) when X >= 3, X =< 5 -> true;
+broken_range_1(_) -> false.
+
+broken_range_2(X) when X >= 10, X =< 12 -> true;
+broken_range_2(X) when X >= 14, X =< 20 -> true;
+broken_range_2(X) when X >= 3, X =< 5 -> true;
+broken_range_2(_) -> false.
+
+broken_range_3(X) when X >= 10, X =< 12 -> true;
+broken_range_3(X) when X >= 14, X < 21 -> true;
+broken_range_3(3) -> true;
+broken_range_3(4) -> true;
+broken_range_3(5) -> true;
+broken_range_3(_) -> false.
+
+broken_range_4(X) when X =< 5, X >= 3 -> true;
+broken_range_4(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_4(X) when X =< 100 -> false;
+broken_range_4(_) -> false.
+
+broken_range_5(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_5(X) when X > 2, X =< 5 -> true;
+broken_range_5(_) -> false.
+
+broken_range_6(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_6(X) when X > 2, X < 6 -> true;
+broken_range_6(_) -> false.
+
+broken_range_7(X) when X > 2, X < 6 -> true;
+broken_range_7(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_7(X) when X > 30 -> false;
+broken_range_7(_) -> false.
+
+broken_range_8(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_8(X) when X =:= 3 -> true;
+broken_range_8(X) when X >= 3, X =< 5 -> true;
+broken_range_8(_) -> false.
+
+broken_range_9(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_9(X) when X =:= 13 -> false;
+broken_range_9(X) when X >= 3, X =< 5 -> true;
+broken_range_9(_) -> false.
+
+broken_range_10(X) when X >= 3, X =< 5 -> true;
+broken_range_10(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_10(X) when X =/= 13 -> false;
+broken_range_10(_) -> false.
+
+broken_range_11(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_11(X) when is_tuple(X), X =:= 10 -> true;
+broken_range_11(X) when X >= 3, X =< 5 -> true;
+broken_range_11(_) -> false.
+
+broken_range_12(X) when X >= 3, X =< 5 -> true;
+broken_range_12(X) when X >= 10, X =< 20, X =/= 13 -> true;
+broken_range_12(X) when X < 30, X > 20 -> false;
+broken_range_12(_) -> false.
+
+broken_range_13(X) when X >= 10, X =< 20, 13 =/= X -> true;
+broken_range_13(X) when X >= 3, X =< 5 -> true;
+broken_range_13(_) -> false.
+
+rel_op_combinations_3(0, _) ->
+    ok;
+rel_op_combinations_3(N, Red) ->
+    Val = case gb_trees:lookup(N, Red) of
+	      none -> none;
+	      {value,V} -> V
+	  end,
+    Val = redundant_1(N),
+    Val = redundant_2(N),
+    Val = redundant_3(N),
+    Val = redundant_4(N),
+    Val = redundant_5(N),
+    Val = redundant_6(N),
+    Val = redundant_7(N),
+    Val = redundant_8(N),
+    Val = redundant_9(N),
+    Val = redundant_10(N),
+    Val = redundant_11(N),
+    rel_op_combinations_3(N-1, Red).
+
+redundant_1(X) when X >= 51, X =< 80 -> 5*X;
+redundant_1(X) when X < 51 -> 2*X;
+redundant_1(_) -> none.
+
+redundant_2(X) when X < 51 -> 2*X;
+redundant_2(X) when X >= 51, X =< 80 -> 5*X;
+redundant_2(_) -> none.
+
+redundant_3(X) when X < 51 -> 2*X;
+redundant_3(X) when X =< 80, X >= 51 -> 5*X;
+redundant_3(X) when X =/= 100 -> none;
+redundant_3(_) -> none.
+
+redundant_4(X) when X < 51 -> 2*X;
+redundant_4(X) when X =< 80, X > 50 -> 5*X;
+redundant_4(X) when X =/= 100 -> none;
+redundant_4(_) -> none.
+
+redundant_5(X) when X < 51 -> 2*X;
+redundant_5(X) when X > 50, X < 81 -> 5*X;
+redundant_5(X) when X =< 10 -> none;
+redundant_5(_) -> none.
+
+redundant_6(X) when X > 50, X =< 80 -> 5*X;
+redundant_6(X) when X < 51 -> 2*X;
+redundant_6(_) -> none.
+
+redundant_7(X) when is_integer(X), X >= 51, X =< 80 -> 5*X;
+redundant_7(X) when is_integer(X), X < 51 -> 2*X;
+redundant_7(_) -> none.
+
+redundant_8(X) when X >= 51, X =< 80 -> 5*X;
+redundant_8(X) when X < 51 -> 2*X;
+redundant_8(_) -> none.
+
+redundant_9(X) when X >= 51, X =< 80 -> 5*X;
+redundant_9(X) when X < 51 -> 2*X;
+redundant_9(90) -> none;
+redundant_9(X) when X =/= 90 -> none;
+redundant_9(_) -> none.
+
+redundant_10(X) when X >= 51, X =< 80 -> 5*X;
+redundant_10(X) when X < 51 -> 2*X;
+redundant_10(90) -> none;
+redundant_10(X) when X =:= 90 -> none;
+redundant_10(_) -> none.
+
+redundant_11(X) when X < 51 -> 2*X;
+redundant_11(X) when X =:= 10 -> 2*X;
+redundant_11(X) when X >= 51, X =< 80 -> 5*X;
+redundant_11(_) -> none.
 
 %% Test type tests on literal values. (From emulator test suites.)
 literal_type_tests(Config) when is_list(Config) ->
@@ -1124,10 +1375,11 @@ literal_type_tests_1(Config) ->
 			    [{is_function,L1,L2} || 
 				L1 <- literals(), L2 <- literals()]),
     ?line Mod = literal_test,
-    ?line Func = {function, 0, test, 0, [{clause,0,[],[],Tests}]},
-    ?line Form = [{attribute,0,module,Mod},
-		  {attribute,0,compile,export_all},
-		  Func, {eof,0}],
+    Anno = erl_anno:new(0),
+    Func = {function, Anno, test, 0, [{clause,Anno,[],[],Tests}]},
+    Form = [{attribute,Anno,module,Mod},
+            {attribute,Anno,compile,export_all},
+            Func, {eof,Anno}],
 
     %% Print generated code for inspection.
     ?line lists:foreach(fun (F) -> io:put_chars([erl_pp:form(F),"\n"]) end, Form),
@@ -1162,7 +1414,8 @@ test(T, L) ->
     {ok,Toks,_Line} = erl_scan:string(S),
     {ok,E} = erl_parse:parse_exprs(Toks),
     {value,Val,_Bs} = erl_eval:exprs(E, []),
-    {match,0,{atom,0,Val},hd(E)}.
+    Anno = erl_anno:new(0),
+    {match,Anno,{atom,Anno,Val},hd(E)}.
 
 test(T, L1, L2) ->
     S0 = io_lib:format("begin io:format(\"~~p~n\", [{~p,~p,~p}]), if ~w(~w, ~w) -> true; true -> false end end. ", [T,L1,L2,T,L1,L2]),
@@ -1170,7 +1423,8 @@ test(T, L1, L2) ->
     {ok,Toks,_Line} = erl_scan:string(S),
     {ok,E} = erl_parse:parse_exprs(Toks),
     {value,Val,_Bs} = erl_eval:exprs(E, []),
-    {match,0,{atom,0,Val},hd(E)}.
+    Anno = erl_anno:new(0),
+    {match,Anno,{atom,Anno,Val},hd(E)}.
 
 smoke_disasm(Config, Mod, Bin) ->
     Priv = ?config(priv_dir, Config),
@@ -1365,6 +1619,8 @@ t_tuple_size(Config) when is_list(Config) ->
     ?line {ok,Mod,Code} = compile:file(File, [from_asm,binary]),
     ?line code:load_binary(Mod, File, Code),
     ?line 14 = Mod:t({1,2,3,4}),
+    _ = code:delete(Mod),
+    _ = code:purge(Mod),
     
     ok.
 
@@ -1541,6 +1797,114 @@ bad_constants(Config) when is_list(Config) ->
     ?line ?FAILING(42),
     ?line ?FAILING(3.14),
     ok.
+
+bad_guards(Config) when is_list(Config) ->
+    if erlang:float(self()); true -> ok end,
+
+    fc(catch bad_guards_1(1, [])),
+    fc(catch bad_guards_1(1, [2])),
+    fc(catch bad_guards_1(atom, [2])),
+
+    fc(catch bad_guards_2(#{a=>0,b=>0}, [])),
+    fc(catch bad_guards_2(#{a=>0,b=>0}, [x])),
+    fc(catch bad_guards_2(not_a_map, [x])),
+    fc(catch bad_guards_2(42, [x])),
+
+    fc(catch bad_guards_3(#{a=>0,b=>0}, [])),
+    fc(catch bad_guards_3(#{a=>0,b=>0}, [x])),
+    fc(catch bad_guards_3(not_a_map, [x])),
+    fc(catch bad_guards_3(42, [x])),
+
+    ok.
+
+%% beam_bool used to produce GC BIF instructions whose
+%% Live operands included uninitialized registers.
+
+bad_guards_1(X, [_]) when {{X}}, -X ->
+    ok.
+
+bad_guards_2(M, [_]) when M#{a := 0, b => 0}, map_size(M) ->
+    ok.
+
+%% beam_type used to produce an GC BIF instruction whose Live operand
+%% included uninitialized registers.
+
+bad_guards_3(M, [_]) when is_map(M) andalso M#{a := 0, b => 0}, length(M) ->
+    ok.
+
+%% beam_bool would remove the initialization of {y,0}.
+%% (Thanks to Thomas Arts and QuickCheck.)
+
+scotland(_Config) ->
+    million = do_scotland(placed),
+    {'EXIT',{{badmatch,placed},_}} = (catch do_scotland(false)),
+    {'EXIT',{{badmatch,placed},_}} = (catch do_scotland(true)),
+    {'EXIT',{{badmatch,placed},_}} = (catch do_scotland(echo)),
+    ok.
+
+do_scotland(Echo) ->
+  found(case Echo of
+	    Echo when true; Echo, Echo, Echo ->
+		Echo;
+	    echo ->
+		[]
+	end,
+	Echo = placed).
+
+found(_, _) -> million.
+
+%% Building maps in a guard in a 'catch' would crash v3_codegen.
+
+guard_in_catch(_Config) ->
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_map_1(#{}),
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_map_1(#{a=>b}),
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_map_1(atom),
+
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_map_2(#{}),
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_map_2(#{a=>b}),
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_map_2(atom),
+
+    {'EXIT',{if_clause,_}} = (catch do_guard_in_catch_map_3()),
+
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_bin(42),
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_bin(<<1,2,3>>),
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_bin(atom),
+    {'EXIT',{if_clause,_}} = do_guard_in_catch_bin(#{}),
+
+    ok.
+
+do_guard_in_catch_map_1(From) ->
+    catch
+	if
+	    From#{[] => sufficient} ->
+		saint
+	end.
+
+do_guard_in_catch_map_2(From) ->
+    catch
+	if
+	    From#{From => sufficient} ->
+		saint
+	end.
+
+do_guard_in_catch_map_3() ->
+    try
+	if [] -> solo end
+    catch
+	Friendly when Friendly#{0 => []} -> minutes
+    after
+	membership
+    end.
+
+do_guard_in_catch_bin(From) ->
+    %% Would not crash v3_codegen, but there would be an unnecessary
+    %% 'move' to a Y register.
+    catch
+	if
+	    <<From:32>> ->
+		saint
+	end.
+
 
 %% Call this function to turn off constant propagation.
 id(I) -> I.

@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
-      <year>1996</year><year>2012</year>
+      <year>1996</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -123,6 +124,14 @@
       </desc>
     </func>
     <func>
+      <name name="droplast" arity="1"/>
+      <fsummary>Drop the last element of a list</fsummary>
+      <desc>
+        <p>Drops the last element of a <c><anno>List</anno></c>. The list should
+           be non-empty, otherwise the function will crash with a <c>function_clause</c></p>
+      </desc>
+    </func>
+    <func>
       <name name="dropwhile" arity="2"/>
       <fsummary>Drop elements from a list while a predicate is true</fsummary>
       <desc>
@@ -149,6 +158,31 @@
         <p><c><anno>List2</anno></c> is a list of all elements <c><anno>Elem</anno></c> in
           <c><anno>List1</anno></c> for which <c><anno>Pred</anno>(<anno>Elem</anno>)</c> returns
           <c>true</c>.</p>
+      </desc>
+    </func>
+    <func>
+      <name name="filtermap" arity="2"/>
+      <fsummary>Filter and map elements which satisfy a function</fsummary>
+      <desc>
+        <p>Calls <c><anno>Fun</anno>(<anno>Elem</anno>)</c> on successive elements <c>Elem</c>
+          of <c><anno>List1</anno></c>. <c><anno>Fun</anno>/2</c> must return either a boolean
+          or a tuple <c>{true, <anno>Value</anno>}</c>. The function returns the list of elements
+          for which <c><anno>Fun</anno></c> returns a new value, where a value of <c>true</c>
+          is synonymous with <c>{true, <anno>Elem</anno>}</c>.</p>
+        <p>That is, <c>filtermap</c> behaves as if it had been defined as follows:</p>
+        <code type="none">
+filtermap(Fun, List1) ->
+    lists:foldr(fun(Elem, Acc) ->
+                       case Fun(Elem) of
+                           false -> Acc;
+                           true -> [Elem|Acc];
+                           {true,Value} -> [Value|Acc]
+                       end
+                end, [], List1).</code>
+        <p>Example:</p>
+        <pre>
+> <input>lists:filtermap(fun(X) -> case X rem 2 of 0 -> {true, X div 2}; _ -> false end end, [1,2,3,4,5]).</input>
+[1,2]</pre>
       </desc>
     </func>
     <func>
@@ -249,8 +283,8 @@ flatmap(Fun, List1) ->
     </func>
     <func>
       <name name="keyfind" arity="3"/>
-      <type_desc variable="N">1..tuple_size(<anno>Tuple</anno>)</type_desc>
       <fsummary>Search for an element in a list of tuples</fsummary>
+      <type_desc variable="N">1..tuple_size(<anno>Tuple</anno>)</type_desc>
       <desc>
         <p>Searches the list of tuples <c><anno>TupleList</anno></c> for a
           tuple whose <c><anno>N</anno></c>th element compares equal to <c><anno>Key</anno></c>.
@@ -277,8 +311,8 @@ flatmap(Fun, List1) ->
     </func>
     <func>
       <name name="keymember" arity="3"/>
-      <type_desc variable="N">1..tuple_size(<anno>Tuple</anno>)</type_desc>
       <fsummary>Test for membership of a list of tuples</fsummary>
+      <type_desc variable="N">1..tuple_size(<anno>Tuple</anno>)</type_desc>
       <desc>
         <p>Returns <c>true</c> if there is a tuple in <c><anno>TupleList</anno></c>
           whose <c><anno>N</anno></c>th element compares equal to <c><anno>Key</anno></c>, otherwise
@@ -312,8 +346,8 @@ flatmap(Fun, List1) ->
     </func>
     <func>
       <name name="keysearch" arity="3"/>
-      <type_desc variable="N">1..tuple_size(<anno>Tuple</anno>)</type_desc>
       <fsummary>Search for an element in a list of tuples</fsummary>
+      <type_desc variable="N">1..tuple_size(<anno>Tuple</anno>)</type_desc>
       <desc>
         <p>Searches the list of tuples <c><anno>TupleList</anno></c> for a
           tuple whose <c><anno>N</anno></c>th element compares equal to <c><anno>Key</anno></c>.

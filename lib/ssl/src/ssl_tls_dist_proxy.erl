@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2011-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -47,6 +48,55 @@ accept(Listen) ->
 connect(Ip, Port) ->
     gen_server:call(?MODULE, {connect, Ip, Port}, infinity).
 
+
+do_listen(Options) ->
+    {First,Last} = case application:get_env(kernel,inet_dist_listen_min) of
+                        {ok,N} when is_integer(N) ->
+                            case application:get_env(kernel,
+                                                    inet_dist_listen_max) of
+                               {ok,M} when is_integer(M) ->
+                                   {N,M};
+                               _ ->
+                                   {N,N}
+                            end;
+                        _ ->
+                            {0,0}
+                   end,
+    do_listen(First, Last, listen_options([{backlog,128}|Options])).
+
+do_listen(First,Last,_) when First > Last ->
+    {error,eaddrinuse};
+do_listen(First,Last,Options) ->
+    case gen_tcp:listen(First, Options) of
+        {error, eaddrinuse} ->
+            do_listen(First+1,Last,Options);
+        Other ->
+            Other
+    end.
+
+listen_options(Opts0) ->
+    Opts1 =
+        case application:get_env(kernel, inet_dist_use_interface) of
+            {ok, Ip} ->
+                [{ip, Ip} | Opts0];
+            _ ->
+                Opts0
+        end,
+    case application:get_env(kernel, inet_dist_listen_options) of
+        {ok,ListenOpts} ->
+            ListenOpts ++ Opts1;
+        _ ->
+            Opts1
+    end.
+
+connect_options(Opts) ->
+    case application:get_env(kernel, inet_dist_connect_options) of
+	{ok,ConnectOpts} ->
+	    lists:ukeysort(1, ConnectOpts ++ Opts);
+	_ ->
+	    Opts
+    end.
+
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
@@ -59,15 +109,19 @@ init([]) ->
     {ok, #state{}}.
 
 handle_call({listen, Name}, _From, State) ->
-    case gen_tcp:listen(0, [{active, false}, {packet,?PPRE}]) of
+    case gen_tcp:listen(0, [{active, false}, {packet,?PPRE}, {ip, loopback}]) of
 	{ok, Socket} ->
-	    {ok, World} = gen_tcp:listen(0, [{active, false}, binary, {packet,?PPRE}]),
+	    {ok, World} = do_listen([{active, false}, binary, {packet,?PPRE}, {reuseaddr, true}]),
 	    {ok, TcpAddress} = get_tcp_address(Socket),
 	    {ok, WorldTcpAddress} = get_tcp_address(World),
 	    {_,Port} = WorldTcpAddress#net_address.address,
-	    {ok, Creation} = erl_epmd:register_node(Name, Port),
-	    {reply, {ok, {Socket, TcpAddress, Creation}},
-	     State#state{listen={Socket, World}}};
+	    case erl_epmd:register_node(Name, Port) of
+		{ok, Creation} ->
+		    {reply, {ok, {Socket, TcpAddress, Creation}},
+		     State#state{listen={Socket, World}}};
+		{error, _} = Error ->
+		    {reply, Error, State}
+	    end;
 	Error ->
 	    {reply, Error, State}
     end;
@@ -133,6 +187,7 @@ accept_loop(Proxy, erts = Type, Listen, Extra) ->
 	    Extra ! {accept,self(),Socket,inet,proxy},
 	    receive 
 		{_Kernel, controller, Pid} ->
+		    inet:setopts(Socket, [nodelay()]),
 		    ok = gen_tcp:controlling_process(Socket, Pid),
 		    flush_old_controller(Pid, Socket),
 		    Pid ! {self(), controller};
@@ -149,6 +204,7 @@ accept_loop(Proxy, world = Type, Listen, Extra) ->
     case gen_tcp:accept(Listen) of
 	{ok, Socket} ->
 	    Opts = get_ssl_options(server),
+	    wait_for_code_server(),
 	    case ssl:ssl_accept(Socket, Opts) of
 		{ok, SslSocket} ->
 		    PairHandler =
@@ -157,6 +213,11 @@ accept_loop(Proxy, world = Type, Listen, Extra) ->
 				   end),
 		    ok = ssl:controlling_process(SslSocket, PairHandler),
 		    flush_old_controller(PairHandler, SslSocket);
+		{error, {options, _}} = Error ->
+		    %% Bad options: that's probably our fault.  Let's log that.
+		    error_logger:error_msg("Cannot accept TLS distribution connection: ~s~n",
+					   [ssl:format_error(Error)]),
+		    gen_tcp:close(Socket);
 		_ ->
 		    gen_tcp:close(Socket)
 	    end;
@@ -165,8 +226,37 @@ accept_loop(Proxy, world = Type, Listen, Extra) ->
     end,
     accept_loop(Proxy, Type, Listen, Extra).
 
+wait_for_code_server() ->
+    %% This is an ugly hack.  Upgrading a socket to TLS requires the
+    %% crypto module to be loaded.  Loading the crypto module triggers
+    %% its on_load function, which calls code:priv_dir/1 to find the
+    %% directory where its NIF library is.  However, distribution is
+    %% started earlier than the code server, so the code server is not
+    %% necessarily started yet, and code:priv_dir/1 might fail because
+    %% of that, if we receive an incoming connection on the
+    %% distribution port early enough.
+    %%
+    %% If the on_load function of a module fails, the module is
+    %% unloaded, and the function call that triggered loading it fails
+    %% with 'undef', which is rather confusing.
+    %%
+    %% Thus, the ssl_tls_dist_proxy process will terminate, and be
+    %% restarted by ssl_dist_sup.  However, it won't have any memory
+    %% of being asked by net_kernel to listen for incoming
+    %% connections.  Hence, the node will believe that it's open for
+    %% distribution, but it actually isn't.
+    %%
+    %% So let's avoid that by waiting for the code server to start.
+    case whereis(code_server) of
+	undefined ->
+	    timer:sleep(10),
+	    wait_for_code_server();
+	Pid when is_pid(Pid) ->
+	    ok
+    end.
+
 try_connect(Port) ->
-    case gen_tcp:connect({127,0,0,1}, Port, [{active, false}, {packet,?PPRE}]) of
+    case gen_tcp:connect({127,0,0,1}, Port, [{active, false}, {packet,?PPRE}, nodelay()]) of
 	R = {ok, _S} ->
 	    R;
 	{error, _R} ->
@@ -175,10 +265,10 @@ try_connect(Port) ->
 
 setup_proxy(Ip, Port, Parent) ->
     process_flag(trap_exit, true),
-    Opts = get_ssl_options(client),
-    case ssl:connect(Ip, Port, [{active, true}, binary, {packet,?PPRE}] ++ Opts) of
+    Opts = connect_options(get_ssl_options(client)),
+    case ssl:connect(Ip, Port, [{active, true}, binary, {packet,?PPRE}, nodelay()] ++ Opts) of
 	{ok, World} ->
-	    {ok, ErtsL} = gen_tcp:listen(0, [{active, true}, {ip, {127,0,0,1}}, binary, {packet,?PPRE}]),
+	    {ok, ErtsL} = gen_tcp:listen(0, [{active, true}, {ip, loopback}, binary, {packet,?PPRE}]),
 	    {ok, #net_address{address={_,LPort}}} = get_tcp_address(ErtsL),
 	    Parent ! {self(), go_ahead, LPort},
 	    case gen_tcp:accept(ErtsL) of
@@ -188,29 +278,50 @@ setup_proxy(Ip, Port, Parent) ->
 		Err ->
 		    Parent ! {self(), Err}
 	    end;
+	{error, {options, _}} = Err ->
+	    %% Bad options: that's probably our fault.  Let's log that.
+	    error_logger:error_msg("Cannot open TLS distribution connection: ~s~n",
+				   [ssl:format_error(Err)]),
+	    Parent ! {self(), Err};
 	Err ->
 	    Parent ! {self(), Err}
+    end.
+
+
+%% we may not always want the nodelay behaviour
+%% %% for performance reasons
+
+nodelay() ->
+    case application:get_env(kernel, dist_nodelay) of
+  undefined ->
+      {nodelay, true};
+  {ok, true} ->
+      {nodelay, true};
+  {ok, false} ->
+      {nodelay, false};
+  _ ->
+      {nodelay, true}
     end.
 
 setup_connection(World, ErtsListen) ->
     process_flag(trap_exit, true),
     {ok, TcpAddress} = get_tcp_address(ErtsListen),
     {_Addr,Port} = TcpAddress#net_address.address,
-    {ok, Erts} = gen_tcp:connect({127,0,0,1}, Port, [{active, true}, binary, {packet,?PPRE}]),
-    ssl:setopts(World, [{active,true}, {packet,?PPRE}]),
+    {ok, Erts} = gen_tcp:connect({127,0,0,1}, Port, [{active, true}, binary, {packet,?PPRE}, nodelay()]),
+    ssl:setopts(World, [{active,true}, {packet,?PPRE}, nodelay()]),
     loop_conn_setup(World, Erts).
 
 loop_conn_setup(World, Erts) ->
     receive 
 	{ssl, World, Data = <<$a, _/binary>>} ->
 	    gen_tcp:send(Erts, Data),
-	    ssl:setopts(World, [{packet,?PPOST}]),
-	    inet:setopts(Erts, [{packet,?PPOST}]),
+	    ssl:setopts(World, [{packet,?PPOST}, nodelay()]),
+	    inet:setopts(Erts, [{packet,?PPOST}, nodelay()]),
 	    loop_conn(World, Erts);
 	{tcp, Erts, Data = <<$a, _/binary>>} ->
 	    ssl:send(World, Data),
-	    ssl:setopts(World, [{packet,?PPOST}]),
-	    inet:setopts(Erts, [{packet,?PPOST}]),
+	    ssl:setopts(World, [{packet,?PPOST}, nodelay()]),
+	    inet:setopts(Erts, [{packet,?PPOST}, nodelay()]),
 	    loop_conn(World, Erts);
 	{ssl, World, Data = <<_, _/binary>>} ->
 	    gen_tcp:send(Erts, Data),
@@ -227,7 +338,10 @@ loop_conn_setup(World, Erts) ->
 	{tcp_closed, Erts} ->
 	    ssl:close(World);
 	{ssl_closed,  World} ->
-	    gen_tcp:close(Erts)
+	    gen_tcp:close(Erts);
+	{ssl_error, World, _} ->
+
+	    ssl:close(World)
     end.
 
 loop_conn(World, Erts) ->
@@ -241,7 +355,9 @@ loop_conn(World, Erts) ->
 	{tcp_closed, Erts} ->
 	    ssl:close(World);
 	{ssl_closed,  World} ->
-	    gen_tcp:close(Erts)
+	    gen_tcp:close(Erts);
+	{ssl_error, World, _} ->
+	    ssl:close(World)
     end.
 
 get_ssl_options(Type) ->

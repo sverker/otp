@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -78,7 +79,7 @@
 	    _ ->  apply(?PRIM_FILE, F, [H | A])
 	end).
 
-suite() -> [{ct_hooks,[ts_install_cth]}].
+suite() -> [].
 
 all() -> 
     [read_write_file, {group, dirs}, {group, files},
@@ -183,7 +184,6 @@ time_dist({_D1, _T1} = DT1, {_D2, _T2} = DT2) ->
 read_write_file(suite) -> [];
 read_write_file(doc) -> [];
 read_write_file(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line Name = filename:join(RootDir, 
 			       atom_to_list(?MODULE)
@@ -232,7 +232,6 @@ read_write_file(Config) when is_list(Config) ->
     ?line {ok,Bin5} = ?PRIM_FILE:read_file(Name),
     ?line {Bin1,Bin2} = split_binary(Bin5,byte_size(Bin1)),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -254,7 +253,6 @@ make_del_dir_b(Config) when is_list(Config) ->
     Result.
 
 make_del_dir(Config, Handle, Suffix) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line NewDir = filename:join(RootDir, 
 				 atom_to_list(?MODULE)
@@ -265,11 +263,17 @@ make_del_dir(Config, Handle, Suffix) ->
     ?line {error, enoent} = ?PRIM_FILE_call(del_dir, Handle, [NewDir]),
 
     % Make sure we are not in a directory directly under test_server
-    % as that would result in eacess errors when trying to delere '..',
+    % as that would result in eacces errors when trying to delete '..',
     % because there are processes having that directory as current.
     ?line ok = ?PRIM_FILE_call(make_dir, Handle, [NewDir]),
     ?line {ok, CurrentDir} = ?PRIM_FILE_call(get_cwd, Handle, []),
-    ?line ok = ?PRIM_FILE_call(set_cwd, Handle, [NewDir]),
+    case {os:type(), length(NewDir) >= 260 } of
+	{{win32,_}, true} ->
+	    io:format("Skip set_cwd for windows path longer than 260 (MAX_PATH)\n", []),
+	    io:format("\nNewDir = ~p\n", [NewDir]);
+	_ ->
+	    ok = ?PRIM_FILE_call(set_cwd, Handle, [NewDir])
+    end,
     try
 	%% Check that we get an error when trying to create...
 	%% a deep directory
@@ -302,9 +306,7 @@ make_del_dir(Config, Handle, Suffix) ->
 		  {error, einval} -> ok		%FreeBSD
 	      end,
 	?line {error, enoent} = ?PRIM_FILE_call(del_dir, Handle, [""]),
-	?line {error, badarg} = ?PRIM_FILE_call(del_dir, Handle, [[3,2,1,{}]]),
-
-	?line test_server:timetrap_cancel(Dog)
+	?line {error, badarg} = ?PRIM_FILE_call(del_dir, Handle, [[3,2,1,{}]])
     after
 	?line ok = ?PRIM_FILE_call(set_cwd, Handle, [CurrentDir])
     end,
@@ -324,7 +326,6 @@ cur_dir_0b(Config) when is_list(Config) ->
     Result.
 
 cur_dir_0(Config, Handle) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     %% Find out the current dir, and cd to it ;-)
     ?line {ok,BaseDir} = ?PRIM_FILE_call(get_cwd, Handle, []),
     ?line Dir1 = BaseDir ++ "", %% Check that it's a string
@@ -341,31 +342,37 @@ cur_dir_0(Config, Handle) ->
     ?line RootDir = ?config(priv_dir,Config),
     ?line NewDir = filename:join(RootDir, DirName),
     ?line ok = ?PRIM_FILE_call(make_dir, Handle, [NewDir]),
-    ?line io:format("cd to ~s",[NewDir]),
-    ?line ok = ?PRIM_FILE_call(set_cwd, Handle, [NewDir]),
+    case {os:type(), length(NewDir) >= 260} of
+	{{win32,_}, true} ->
+	    io:format("Skip set_cwd for windows path longer than 260 (MAX_PATH):\n"),
+	    io:format("\nNewDir = ~p\n", [NewDir]);
+	_ ->
+	    io:format("cd to ~s",[NewDir]),
+	    ok = ?PRIM_FILE_call(set_cwd, Handle, [NewDir]),
 
-    %% Create a file in the new current directory, and check that it
-    %% really is created there
-    ?line UncommonName = "uncommon.fil",
-    ?line {ok,Fd} = ?PRIM_FILE:open(UncommonName, [read, write]),
-    ?line ok = ?PRIM_FILE:close(Fd),
-    ?line {ok,NewDirFiles} = ?PRIM_FILE_call(list_dir, Handle, ["."]),
-    ?line true = lists:member(UncommonName,NewDirFiles),
+	    %% Create a file in the new current directory, and check that it
+	    %% really is created there
+	    UncommonName = "uncommon.fil",
+	    {ok,Fd} = ?PRIM_FILE:open(UncommonName, [read, write]),
+	    ok = ?PRIM_FILE:close(Fd),
+	    {ok,NewDirFiles} = ?PRIM_FILE_call(list_dir, Handle, ["."]),
+	    true = lists:member(UncommonName,NewDirFiles),
 
-    %% Delete the directory and return to the old current directory
-    %% and check that the created file isn't there (too!)
-    ?line expect({error, einval}, {error, eacces}, {error, eexist}, 
+	    %% Delete the directory and return to the old current directory
+	    %% and check that the created file isn't there (too!)
+	    expect({error, einval}, {error, eacces}, {error, eexist},
 		 ?PRIM_FILE_call(del_dir, Handle, [NewDir])),
-    ?line ?PRIM_FILE_call(delete, Handle, [UncommonName]),
-    ?line {ok,[]} = ?PRIM_FILE_call(list_dir, Handle, ["."]),
-    ?line ok = ?PRIM_FILE_call(set_cwd, Handle, [Dir1]),
-    ?line io:format("cd back to ~s",[Dir1]),
-    ?line ok = ?PRIM_FILE_call(del_dir, Handle, [NewDir]),
-    ?line {error, enoent} = ?PRIM_FILE_call(set_cwd, Handle, [NewDir]),
-    ?line ok = ?PRIM_FILE_call(set_cwd, Handle, [Dir1]),
-    ?line io:format("cd back to ~s",[Dir1]),
-    ?line {ok,OldDirFiles} = ?PRIM_FILE_call(list_dir, Handle, ["."]),
-    ?line false = lists:member(UncommonName,OldDirFiles),
+	    ?PRIM_FILE_call(delete, Handle, [UncommonName]),
+	    {ok,[]} = ?PRIM_FILE_call(list_dir, Handle, ["."]),
+	    ok = ?PRIM_FILE_call(set_cwd, Handle, [Dir1]),
+	    io:format("cd back to ~s",[Dir1]),
+	    ok = ?PRIM_FILE_call(del_dir, Handle, [NewDir]),
+	    {error, enoent} = ?PRIM_FILE_call(set_cwd, Handle, [NewDir]),
+	    ok = ?PRIM_FILE_call(set_cwd, Handle, [Dir1]),
+	    io:format("cd back to ~s",[Dir1]),
+	    {ok,OldDirFiles} = ?PRIM_FILE_call(list_dir, Handle, ["."]),
+	    false = lists:member(UncommonName,OldDirFiles)
+    end,
 
     %% Try doing some bad things
     ?line {error, badarg} = 
@@ -385,7 +392,6 @@ cur_dir_0(Config, Handle) ->
     ?line {ok, BaseDir} = ?PRIM_FILE_call(get_cwd, Handle, []),
     ?line false = lists:member($\\, BaseDir),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 %% Tests ?PRIM_FILE:get_cwd/1.
@@ -404,16 +410,13 @@ cur_dir_1b(Config) when is_list(Config) ->
     Result.
 
 cur_dir_1(Config, Handle) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
-
     ?line case os:type() of
-	      {unix, _} ->
-		  ?line {error, enotsup} = 
-		      ?PRIM_FILE_call(get_cwd, Handle, ["d:"]);
 	      {win32, _} ->
-		  win_cur_dir_1(Config, Handle)
+		  win_cur_dir_1(Config, Handle);
+	      _ ->
+		  ?line {error, enotsup} =
+		      ?PRIM_FILE_call(get_cwd, Handle, ["d:"])
 	  end,
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 	
 win_cur_dir_1(_Config, Handle) ->
@@ -439,7 +442,6 @@ win_cur_dir_1(_Config, Handle) ->
 open1(suite) -> [];
 open1(doc) -> [];
 open1(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line NewDir = filename:join(RootDir, 
 				 atom_to_list(?MODULE)
@@ -462,7 +464,6 @@ open1(Config) when is_list(Config) ->
     ?line {ok,Fd3} = ?PRIM_FILE:open(Name, [read]),
     ?line eof = ?PRIM_FILE:read(Fd3,Length),
     ?line ok = ?PRIM_FILE:close(Fd3),
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 %% Tests all open modes.
@@ -514,7 +515,6 @@ modes(Config) when is_list(Config) ->
 close(suite) -> [];
 close(doc) -> [];
 close(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line Name = filename:join(RootDir, 
 			       atom_to_list(?MODULE)
@@ -531,13 +531,11 @@ close(Config) when is_list(Config) ->
     ?line Val = ?PRIM_FILE:close(Fd1),
     ?line io:format("Second close gave: ~p", [Val]),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 access(suite) -> [];
 access(doc) -> [];
 access(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line Name = filename:join(RootDir, 
 			       atom_to_list(?MODULE)
@@ -559,7 +557,6 @@ access(Config) when is_list(Config) ->
     ?line {ok, Str} = ?PRIM_FILE:read(Fd3,length(Str)),
     ?line ok = ?PRIM_FILE:close(Fd3),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 %% Tests ?PRIM_FILE:read/2 and ?PRIM_FILE:write/2.
@@ -567,7 +564,6 @@ access(Config) when is_list(Config) ->
 read_write(suite) -> [];
 read_write(doc) -> [];
 read_write(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir, Config),
     ?line NewDir = filename:join(RootDir, 
 				 atom_to_list(?MODULE)
@@ -579,7 +575,6 @@ read_write(Config) when is_list(Config) ->
     ?line {ok, Fd} = ?PRIM_FILE:open(Name, [read, write]),
     ?line read_write_test(Fd),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 read_write_test(File) ->
@@ -597,7 +592,6 @@ read_write_test(File) ->
 pread_write(suite) -> [];
 pread_write(doc) -> [];
 pread_write(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir, Config),
     ?line NewDir = filename:join(RootDir, 
 				 atom_to_list(?MODULE)
@@ -609,7 +603,6 @@ pread_write(Config) when is_list(Config) ->
     ?line {ok, Fd} = ?PRIM_FILE:open(Name, [read, write]),
     ?line pread_write_test(Fd),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 pread_write_test(File) ->
@@ -629,7 +622,6 @@ pread_write_test(File) ->
 append(doc) -> "Test appending to a file.";
 append(suite) -> [];
 append(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir, Config),
     ?line NewDir = filename:join(RootDir, 
 				 atom_to_list(?MODULE)
@@ -656,13 +648,11 @@ append(Config) when is_list(Config) ->
     ?line Expected = list_to_binary([First, Second, Third]),
     ?line {ok, Expected} = ?PRIM_FILE:read_file(Name1),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 exclusive(suite) -> [];
 exclusive(doc) -> "Test exclusive access to a file.";
 exclusive(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line NewDir = filename:join(RootDir,
 				 atom_to_list(?MODULE)
@@ -672,7 +662,6 @@ exclusive(Config) when is_list(Config) ->
     ?line {ok,Fd} = ?PRIM_FILE:open(Name, [write, exclusive]),
     ?line {error, eexist} = ?PRIM_FILE:open(Name, [write, exclusive]),
     ?line ok = ?PRIM_FILE:close(Fd),
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -681,7 +670,6 @@ exclusive(Config) when is_list(Config) ->
 pos1(suite) -> [];
 pos1(doc) -> [];
 pos1(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line Name = filename:join(RootDir, 
 			       atom_to_list(?MODULE)
@@ -738,13 +726,11 @@ pos1(Config) when is_list(Config) ->
     ?line {ok, 0}   = ?PRIM_FILE:position(Fd2,{eof,-8}), 
     ?line {ok, "A"} = ?PRIM_FILE:read(Fd2,1),
     ?line {error, einval} = ?PRIM_FILE:position(Fd2,{eof,-9}),
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 pos2(suite) -> [];
 pos2(doc) -> [];
 pos2(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line Name = filename:join(RootDir, 
 			       atom_to_list(?MODULE)
@@ -761,7 +747,6 @@ pos2(Config) when is_list(Config) ->
     ?line {ok, "D"} = ?PRIM_FILE:read(Fd2,1),
 
     ?line io:format("DONE"),
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 
@@ -779,7 +764,6 @@ file_info_basic_file_b(Config) when is_list(Config) ->
     Result.
 
 file_info_basic_file(Config, Handle, Suffix) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir, Config),
 
     %% Create a short file.
@@ -808,7 +792,6 @@ file_info_basic_file(Config, Handle, Suffix) ->
     ?line {MD, MT} = ModifyTime,
     ?line all_integers(tuple_to_list(MD) ++ tuple_to_list(MT)),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 file_info_basic_directory_a(suite) -> [];
@@ -825,8 +808,6 @@ file_info_basic_directory_b(Config) when is_list(Config) ->
     Result.
 
 file_info_basic_directory(Config, Handle) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
-
     %% Note: filename:join/1 removes any trailing slash,
     %% which is essential for ?PRIM_FILE:read_file_info/1 to work on
     %% platforms such as Windows95.
@@ -843,10 +824,10 @@ file_info_basic_directory(Config, Handle) ->
 		  ?line test_directory("/", read_write, Handle),
 		  ?line test_directory("c:/", read_write, Handle),
 		  ?line test_directory("c:\\", read_write, Handle);
-	      {unix, _} ->
+	      _ ->
 		  ?line test_directory("/", read, Handle)
 	  end,
-    ?line test_server:timetrap_cancel(Dog).
+    ok.
 
 test_directory(Name, ExpectedAccess, Handle) ->
     ?line {ok, FileInfo} = ?PRIM_FILE_call(read_file_info, Handle, [Name]),
@@ -887,14 +868,12 @@ file_info_bad_b(Config) when is_list(Config) ->
     Result.
 
 file_info_bad(Config, Handle) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = filename:join([?config(priv_dir, Config)]),
     ?line {error, enoent} = 
 	?PRIM_FILE_call(
 	   read_file_info, Handle, 
 	   [filename:join(RootDir,
 			  atom_to_list(?MODULE)++"_nonexistent")]),
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 %% Test that the file times behave as they should.
@@ -1189,7 +1168,6 @@ get_good_directory(Config) ->
 truncate(suite) -> [];
 truncate(doc) -> [];
 truncate(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line Name = filename:join(RootDir, 
 			       atom_to_list(?MODULE)
@@ -1215,14 +1193,12 @@ truncate(Config) when is_list(Config) ->
     ?line {ok, 5} = ?PRIM_FILE:position(Fd2, 5),
     ?line {error, _} = ?PRIM_FILE:truncate(Fd2),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 
 datasync(suite) -> [];
 datasync(doc) -> "Tests that ?PRIM_FILE:datasync/1 at least doesn't crash.";
 datasync(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line PrivDir = ?config(priv_dir, Config),
     ?line Sync = filename:join(PrivDir,
 			       atom_to_list(?MODULE)
@@ -1233,14 +1209,12 @@ datasync(Config) when is_list(Config) ->
     ?line ok = ?PRIM_FILE:datasync(Fd),
     ?line ok = ?PRIM_FILE:close(Fd),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 
 sync(suite) -> [];
 sync(doc) -> "Tests that ?PRIM_FILE:sync/1 at least doesn't crash.";
 sync(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line PrivDir = ?config(priv_dir, Config),
     ?line Sync = filename:join(PrivDir, 
 			       atom_to_list(?MODULE)
@@ -1251,14 +1225,12 @@ sync(Config) when is_list(Config) ->
     ?line ok = ?PRIM_FILE:sync(Fd),
     ?line ok = ?PRIM_FILE:close(Fd),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 
 advise(suite) -> [];
 advise(doc) -> "Tests that ?PRIM_FILE:advise/4 at least doesn't crash.";
 advise(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line PrivDir = ?config(priv_dir, Config),
     ?line Advise = filename:join(PrivDir,
 			       atom_to_list(?MODULE)
@@ -1322,7 +1294,6 @@ advise(Config) when is_list(Config) ->
     ?line eof = ?PRIM_FILE:read_line(Fd9),
     ?line ok = ?PRIM_FILE:close(Fd9),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1366,7 +1337,6 @@ check_large_write(Dog, Fd, _, _, []) ->
 allocate(suite) -> [];
 allocate(doc) -> "Tests that ?PRIM_FILE:allocate/3 at least doesn't crash.";
 allocate(Config) when is_list(Config) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line PrivDir = ?config(priv_dir, Config),
     ?line Allocate = filename:join(PrivDir,
 			       atom_to_list(?MODULE)
@@ -1399,7 +1369,6 @@ allocate(Config) when is_list(Config) ->
     ?line ok = ?PRIM_FILE:write(Fd4, Line2),
     ?line ok = ?PRIM_FILE:close(Fd4),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 allocate_and_assert(Fd, Offset, Length) ->
@@ -1447,7 +1416,6 @@ delete_b(Config) when is_list(Config) ->
     Result.
 
 delete(Config, Handle, Suffix) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line Name = filename:join(RootDir, 
 			       atom_to_list(?MODULE)
@@ -1463,7 +1431,6 @@ delete(Config, Handle, Suffix) ->
     ?line {error, _} = ?PRIM_FILE:open(Name, [read]),
     %% Try deleting a nonexistent file
     ?line {error, enoent} = ?PRIM_FILE_call(delete, Handle, [Name]),
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 rename_a(suite) ->[];
@@ -1480,7 +1447,6 @@ rename_b(Config) when is_list(Config) ->
     Result.
 
 rename(Config, Handle, Suffix) ->
-    ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = ?config(priv_dir,Config),
     ?line FileName1 = atom_to_list(?MODULE)++"_rename"++Suffix++".fil",
     ?line FileName2 = atom_to_list(?MODULE)++"_rename"++Suffix++".ful",
@@ -1533,7 +1499,6 @@ rename(Config, Handle, Suffix) ->
 	?PRIM_FILE_call(rename, Handle, [DirName2, Name2foo]),
     ?line io:format("Errmsg2: ~p",[Msg2]),
 
-    ?line test_server:timetrap_cancel(Dog),
     ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1568,15 +1533,15 @@ e_delete(Config) when is_list(Config) ->
 
     %% No permission.
     ?line case os:type() of
-	      {unix, _} ->
+	      {win32, _} ->
+		  %% Remove a character device.
+		  ?line {error, eacces} = ?PRIM_FILE:delete("nul");
+	      _ ->
 		  ?line ?PRIM_FILE:write_file_info(
 			   Base, #file_info {mode=0}),
 		  ?line {error, eacces} = ?PRIM_FILE:delete(Afile),
 		  ?line ?PRIM_FILE:write_file_info(
-			   Base, #file_info {mode=8#600});
-	      {win32, _} ->
-		  %% Remove a character device.
-		  ?line {error, eacces} = ?PRIM_FILE:delete("nul")
+			   Base, #file_info {mode=8#600})
 	  end,
 
     ?line test_server:timetrap_cancel(Dog),
@@ -1656,7 +1621,12 @@ e_rename(Config) when is_list(Config) ->
     %% XXX - Gross hack!
     ?line Comment = 
     case os:type() of
-	{unix, _} ->
+	{win32, _} ->
+	    %% At least Windows NT can
+	    %% successfully move a file to
+	    %% another drive.
+	    ok;
+	_ ->
 	    OtherFs = "/tmp",
 	    ?line NameOnOtherFs =
 	    filename:join(OtherFs, 
@@ -1680,12 +1650,7 @@ e_rename(Config) when is_list(Config) ->
 		Else ->
 		    Else
 	    end,
-	    Com;
-	{win32, _} ->
-	    %% At least Windows NT can 
-	    %% successfully move a file to
-	    %% another drive.
-	    ok
+	    Com
     end,
     ?line test_server:timetrap_cancel(Dog),
     Comment.
@@ -1714,14 +1679,14 @@ e_make_dir(Config) when is_list(Config) ->
 
     %% No permission (on Unix only).
     case os:type() of
-	{unix, _} ->
+	{win32, _} ->
+	    ok;
+	_ ->
 	    ?line ?PRIM_FILE:write_file_info(Base, #file_info {mode=0}),
 	    ?line {error, eacces} = 
 		?PRIM_FILE:make_dir(filename:join(Base, "xxxx")),
 	    ?line 
-		?PRIM_FILE:write_file_info(Base, #file_info {mode=8#600});
-	{win32, _} ->
-	    ok
+		?PRIM_FILE:write_file_info(Base, #file_info {mode=8#600})
     end,
     ?line test_server:timetrap_cancel(Dog),
     ok.
@@ -1767,15 +1732,15 @@ e_del_dir(Config) when is_list(Config) ->
 
     %% No permission.
     case os:type() of
-	{unix, _} ->
+	{win32, _} ->
+	    ok;
+	_ ->
 	    ?line ADirectory = filename:join(Base, "no_perm"),
 	    ?line ok = ?PRIM_FILE:make_dir(ADirectory),
 	    ?line ?PRIM_FILE:write_file_info(Base, #file_info {mode=0}),
 	    ?line {error, eacces} = ?PRIM_FILE:del_dir(ADirectory),
 	    ?line ?PRIM_FILE:write_file_info(
-		     Base, #file_info {mode=8#600});
-	{win32, _} ->
-	    ok
+		     Base, #file_info {mode=8#600})
     end,
     ?line test_server:timetrap_cancel(Dog),
     ok.
@@ -2023,6 +1988,9 @@ symlinks(Config, Handle, Suffix) ->
 	case ?PRIM_FILE_call(make_symlink, Handle, [Name, Alias]) of
 	    {error, enotsup} ->
 		{skipped, "Links not supported on this platform"};
+	    {error, eperm} ->
+		{win32,_} = os:type(),
+		{skipped, "Windows user not privileged to create links"};
 	    ok ->
 		?line {ok, Info1} = 
 		    ?PRIM_FILE_call(read_file_info, Handle, [Name]),
@@ -2039,6 +2007,8 @@ symlinks(Config, Handle, Suffix) ->
 		    ?PRIM_FILE_call(read_link, Handle, [Alias]),
 		{ok, Name} =
 		    ?PRIM_FILE_call(read_link_all, Handle, [Alias]),
+		%% If all is good, delete dir again (avoid hanging dir on windows)
+		rm_rf(?PRIM_FILE,NewDir),
 		ok
 	end,
     
@@ -2245,3 +2215,18 @@ zip_data([], Bs) ->
     Bs;
 zip_data(As, []) ->
     As.
+
+%%%-----------------------------------------------------------------
+%%% Utilities
+rm_rf(Mod,Dir) ->
+    case  Mod:read_link_info(Dir) of
+	{ok, #file_info{type = directory}} ->
+	    {ok, Content} = Mod:list_dir_all(Dir),
+	    [ rm_rf(Mod,filename:join(Dir,C)) || C <- Content ],
+	    Mod:del_dir(Dir),
+	    ok;
+	{ok, #file_info{}} ->
+	    Mod:delete(Dir);
+	_ ->
+	    ok
+    end.

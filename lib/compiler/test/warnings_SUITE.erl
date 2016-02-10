@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2003-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -37,7 +38,10 @@
 
 -export([pattern/1,pattern2/1,pattern3/1,pattern4/1,
 	 guard/1,bad_arith/1,bool_cases/1,bad_apply/1,
-         files/1,effect/1,bin_opt_info/1,bin_construction/1]).
+         files/1,effect/1,bin_opt_info/1,bin_construction/1,
+	 comprehensions/1,maps/1,maps_bin_opt_info/1,
+         redundant_boolean_clauses/1,
+	 latin1_fallback/1,underscore/1,no_warnings/1]).
 
 % Default timetrap timeout (set in init_per_testcase).
 -define(default_timeout, ?t:minutes(2)).
@@ -61,7 +65,10 @@ groups() ->
     [{p,test_lib:parallel(),
       [pattern,pattern2,pattern3,pattern4,guard,
        bad_arith,bool_cases,bad_apply,files,effect,
-       bin_opt_info,bin_construction]}].
+       bin_opt_info,bin_construction,comprehensions,maps,
+       maps_bin_opt_info,
+       redundant_boolean_clauses,latin1_fallback,
+       underscore,no_warnings]}].
 
 init_per_suite(Config) ->
     Config.
@@ -117,6 +124,7 @@ pattern2(Config) when is_list(Config) ->
 	   Source,
 	   [nowarn_unused_vars],
 	   {warnings,[{2,sys_core_fold,{nomatch_shadow,1}},
+		      {4,sys_core_fold,no_clause_match},
 		      {5,sys_core_fold,nomatch_clause_type},
 		      {6,sys_core_fold,nomatch_clause_type}]}}],
     ?line [] = run(Config, Ts),
@@ -199,6 +207,8 @@ pattern4(Config) when is_list(Config) ->
 	   [nowarn_unused_vars],
 	   {warnings,
 	    [{9,sys_core_fold,no_clause_match},
+             {11,sys_core_fold,nomatch_shadow},
+             {15,sys_core_fold,nomatch_shadow},
 	     {18,sys_core_fold,no_clause_match},
 	     {23,sys_core_fold,no_clause_match},
 	     {33,sys_core_fold,no_clause_match}
@@ -274,11 +284,12 @@ bad_arith(Config) when is_list(Config) ->
 	     {3,sys_core_fold,{eval_failure,badarith}},
 	     {9,sys_core_fold,nomatch_guard},
 	     {9,sys_core_fold,{eval_failure,badarith}},
+	     {9,sys_core_fold,{no_effect,{erlang,is_integer,1}}},
 	     {10,sys_core_fold,nomatch_guard},
 	     {10,sys_core_fold,{eval_failure,badarith}},
 	     {15,sys_core_fold,{eval_failure,badarith}}
 	    ] }}],
-    ?line [] = run(Config, Ts),
+    [] = run(Config, Ts),
     ok.
 
 bool_cases(Config) when is_list(Config) ->
@@ -362,7 +373,7 @@ files(Config) when is_list(Config) ->
 
 %% Test warnings for term construction and BIF calls in effect context.
 effect(Config) when is_list(Config) ->
-    Ts = [{lc,
+    Ts = [{effect,
 	   <<"
              t(X) ->
                case X of
@@ -389,6 +400,10 @@ effect(Config) when is_list(Config) ->
               	    <<X:8>>;
               	unused_fun ->
               	    fun() -> {ok,X} end;
+		unused_named_fun ->
+		    fun F(0) -> 1;
+                        F(N) -> N*F(N-1)
+                    end;
               	unused_atom ->
               	    ignore;				%no warning
               	unused_nil ->
@@ -464,6 +479,19 @@ effect(Config) when is_list(Config) ->
              m9(Bs) ->
                 [{B,ok} = {B,foo:bar(B)} || B <- Bs],
                 ok.
+
+             m10(ConfigTableSize) ->
+               case ConfigTableSize of
+                 apa ->
+                   CurrentConfig = {id(camel_phase3),id(sms)},
+                   case CurrentConfig of
+                     {apa, bepa} -> ok;
+		     _ -> ok
+	           end
+               end,
+               ok.
+
+             id(I) -> I.
              ">>,
 	   [],
 	   {warnings,[{5,sys_core_fold,{no_effect,{erlang,is_integer,1}}},
@@ -483,8 +511,9 @@ effect(Config) when is_list(Config) ->
 		      {22,sys_core_fold,{no_effect,{erlang,is_integer,1}}},
 		      {24,sys_core_fold,useless_building},
 		      {26,sys_core_fold,useless_building},
-		      {32,sys_core_fold,{no_effect,{erlang,'=:=',2}}},
-		      {34,sys_core_fold,{no_effect,{erlang,get_cookie,0}}}]}}],
+		      {28,sys_core_fold,useless_building},
+		      {36,sys_core_fold,{no_effect,{erlang,'=:=',2}}},
+		      {38,sys_core_fold,{no_effect,{erlang,get_cookie,0}}}]}}],
     ?line [] = run(Config, Ts),
     ok.
 
@@ -536,6 +565,224 @@ bin_construction(Config) when is_list(Config) ->
     
     ok.
 
+comprehensions(Config) when is_list(Config) ->
+    Ts = [{tautologic_guards,
+           <<"
+             f() -> [ true || true ].
+             g() -> << <<1>> || true >>.
+           ">>,
+           [], []}],
+    run(Config, Ts),
+    ok.
+
+maps(Config) when is_list(Config) ->
+    Ts = [{bad_map,
+           <<"
+             t() ->
+                 case maybe_map of
+                     #{} -> ok;
+                     not_map -> error
+                 end.
+             x() ->
+                 case true of
+                     #{}  -> error;
+                     true -> ok
+                 end.
+           ">>,
+           [],
+           {warnings,[{3,sys_core_fold,no_clause_match},
+                      {9,sys_core_fold,nomatch_clause_type}]}},
+	   {bad_map_src1,
+           <<"
+             t() ->
+		 M = {a,[]},
+		 {'EXIT',{badarg,_}} = (catch(M#{ a => 1 })),
+		 ok.
+           ">>,
+           [],
+	   {warnings,[{4,sys_core_fold,{eval_failure,badmap}}]}},
+	   {bad_map_src2,
+           <<"
+             t() ->
+		 M = id({a,[]}),
+		 {'EXIT',{badarg,_}} = (catch(M#{ a => 1})),
+		 ok.
+	     id(I) -> I.
+           ">>,
+	   [inline],
+	    []},
+	   {bad_map_src3,
+           <<"
+             t() ->
+		 {'EXIT',{badarg,_}} = (catch <<>>#{ a := 1}),
+		 ok.
+           ">>,
+           [],
+	   {warnings,[{3,v3_core,badmap}]}},
+	   {ok_map_literal_key,
+           <<"
+             t() ->
+		 V = id(1),
+		 M = id(#{ <<$h,$i>> => V }),
+		 V = case M of
+		    #{ <<0:257>> := Val } -> Val;
+		    #{ <<$h,$i>> := Val } -> Val
+		 end,
+		 ok.
+	     id(I) -> I.
+           ">>,
+           [],
+	   []}],
+    run(Config, Ts),
+    ok.
+
+maps_bin_opt_info(Config) when is_list(Config) ->
+    Ts = [{map_bsm,
+           <<"
+             t1(<<0:8,7:8,T/binary>>,#{val := I}=M) ->
+                 t1(T, M#{val := I+1});
+             t1(<<_:8>>,M) ->
+                 M.
+           ">>,
+           [bin_opt_info],
+           {warnings,[{2,beam_bsm,bin_opt}]}}],
+    [] = run(Config, Ts),
+    ok.
+
+redundant_boolean_clauses(Config) when is_list(Config) ->
+    Ts = [{redundant_boolean_clauses,
+           <<"
+             t(X) ->
+                 case X == 0 of
+                     false -> no;
+                     false -> no;
+                     true -> yes
+                 end.
+           ">>,
+           [],
+           {warnings,[{5,sys_core_fold,nomatch_shadow}]}}],
+    run(Config, Ts),
+    ok.
+
+latin1_fallback(Conf) when is_list(Conf) ->
+    DataDir = ?privdir,
+    IncFile = filename:join(DataDir, "include_me.hrl"),
+    file:write_file(IncFile, <<"%% ",246," in include file\n">>),
+    Ts1 = [{latin1_fallback1,
+	    %% Test that the compiler fall backs to latin-1 with
+	    %% a warning if a file has no encoding and does not
+	    %% contain correct UTF-8 sequences.
+	    <<"%% Bj",246,"rn
+              t(_) -> \"",246,"\";
+              t(x) -> ok.
+              ">>,
+	    [],
+	    {warnings,[{1,compile,reparsing_invalid_unicode},
+		       {3,sys_core_fold,{nomatch_shadow,2}}]}}],
+    [] = run(Conf, Ts1),
+
+    Ts2 = [{latin1_fallback2,
+	    %% Test that the compiler fall backs to latin-1 with
+	    %% a warning if a file has no encoding and does not
+	    %% contain correct UTF-8 sequences.
+	    <<"
+
+	      -include(\"include_me.hrl\").
+              ">>,
+	    [],
+	    {warnings,[{1,compile,reparsing_invalid_unicode}]}
+	   }],
+    [] = run(Conf, Ts2),
+
+    Ts3 = [{latin1_fallback3,
+	    %% Test that the compiler fall backs to latin-1 with
+	    %% a warning if a file has no encoding and does not
+	    %% contain correct UTF-8 sequences.
+	    <<"-ifdef(NOTDEFINED).
+              t(_) -> \"",246,"\";
+              t(x) -> ok.
+              -endif.
+              ">>,
+	    [],
+	    {warnings,[{2,compile,reparsing_invalid_unicode}]}}],
+    [] = run(Conf, Ts3),
+
+    ok.
+
+underscore(Config) when is_list(Config) ->
+    S0 = <<"f(A) ->
+              _VAR1 = <<A>>,
+              _VAR2 = {ok,A},
+              _VAR3 = [A],
+              ok.
+	    g(A) ->
+              _VAR1 = A/0,
+              _VAR2 = date(),
+	      ok.
+            h() ->
+               _VAR1 = fun() -> ok end,
+	      ok.
+            i(A) ->
+               _VAR1 = #{A=>42},
+	      ok.
+	 ">>,
+    Ts0 = [{underscore0,
+	    S0,
+	    [],
+	    {warnings,[{2,sys_core_fold,useless_building},
+		       {3,sys_core_fold,useless_building},
+		       {4,sys_core_fold,useless_building},
+		       {7,sys_core_fold,result_ignored},
+		       {8,sys_core_fold,{no_effect,{erlang,date,0}}},
+		       {11,sys_core_fold,useless_building},
+		       {14,sys_core_fold,useless_building}
+		      ]}}],
+    [] = run(Config, Ts0),
+
+    %% Replace all "_VAR<digit>" variables with a plain underscore.
+    %% Now there should be no warnings.
+    S1 = re:replace(S0, "_VAR\\d+", "_", [global]),
+    io:format("~s\n", [S1]),
+    Ts1 = [{underscore1,S1,[],[]}],
+    [] = run(Config, Ts1),
+
+    ok.
+
+no_warnings(Config) when is_list(Config) ->
+    Ts = [{no_warnings,
+           <<"-record(r, {s=ordsets:new(),a,b}).
+
+              a() ->
+                R = #r{},			%No warning expected.
+                {R#r.a,R#r.b}.
+
+              b(X) ->
+                T = true,
+                Var = [X],			%No warning expected.
+                case T of
+	          false -> Var;
+                  true -> []
+                end.
+
+              c() ->
+                R0 = {r,\"abc\",undefined,os:timestamp()}, %No warning.
+                case R0 of
+	          {r,V1,_V2,V3} -> {r,V1,\"def\",V3}
+                end.
+
+              d(In0, Bool) ->
+                {In1,Int} = case id(Bool) of
+                              false -> {In0,0}
+                            end,
+                [In1,Int].
+
+              id(I) -> I.
+           ">>,
+           [],
+           []}],
+    run(Config, Ts),
+    ok.
+
 %%%
 %%% End of test cases.
 %%%
@@ -557,10 +804,10 @@ run(Config, Tests) ->
 %% Compiles a test module and returns the list of errors and warnings.
 
 run_test(Conf, Test0, Warnings) ->
-    Mod = "warnings_"++test_lib:uniq(),
-    Filename = Mod ++ ".erl",
+    Module = "warnings_"++test_lib:uniq(),
+    Filename = Module ++ ".erl",
     ?line DataDir = ?privdir,
-    Test = ["-module(", Mod, "). ", Test0],
+    Test = ["-module(", Module, "). ", Test0],
     ?line File = filename:join(DataDir, Filename),
     ?line Opts = [binary,export_all,return|Warnings],
     ?line ok = file:write_file(File, Test),

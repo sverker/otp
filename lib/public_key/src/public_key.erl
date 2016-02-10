@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -34,8 +35,13 @@
 	 decrypt_private/2, decrypt_private/3, 
 	 encrypt_public/2, encrypt_public/3, 
 	 decrypt_public/2, decrypt_public/3,
+	 dh_gex_group/4,
+	 dh_gex_group_sizes/0,
 	 sign/3, verify/4,
+	 generate_key/1,
+	 compute_key/2, compute_key/3,
 	 pkix_sign/2, pkix_verify/2,	 
+	 pkix_sign_types/1,
 	 pkix_is_self_signed/1, 
 	 pkix_is_fixed_dh_cert/1,
 	 pkix_is_issuer/2,
@@ -43,16 +49,50 @@
 	 pkix_normalize_name/1,
 	 pkix_path_validation/3,
 	 ssh_decode/2, ssh_encode/2,
-	 pkix_crls_validate/3
+	 ssh_curvename2oid/1, oid2ssh_curvename/1,
+	 pkix_crls_validate/3,
+	 pkix_dist_point/1,
+	 pkix_dist_points/1,
+	 pkix_crl_verify/2,
+	 pkix_crl_issuer/1
 	]).
 
+-export_type([public_key/0, private_key/0, pem_entry/0,
+	      pki_asn1_type/0, asn1_type/0, ssh_file/0, der_encoded/0]).
+
+-type public_key()           ::  rsa_public_key() | dsa_public_key() | ec_public_key().
+-type private_key()          ::  rsa_private_key() | dsa_private_key() | ec_private_key().
+
+-type rsa_public_key()       ::  #'RSAPublicKey'{}.
+-type rsa_private_key()      ::  #'RSAPrivateKey'{}.
+-type dsa_private_key()      ::  #'DSAPrivateKey'{}.
+-type dsa_public_key()       :: {integer(), #'Dss-Parms'{}}.
+-type ec_public_key()        :: {#'ECPoint'{},{namedCurve, Oid::tuple()} | #'ECParameters'{}}.
+-type ec_private_key()       :: #'ECPrivateKey'{}.
+-type der_encoded()          :: binary().
+-type pki_asn1_type()        ::  'Certificate' | 'RSAPrivateKey' | 'RSAPublicKey'
+			       | 'DSAPrivateKey' | 'DSAPublicKey' | 'DHParameter'
+                               | 'SubjectPublicKeyInfo' | 'PrivateKeyInfo' | 
+				 'CertificationRequest' | 'CertificateList' |
+				 'ECPrivateKey' | 'EcpkParameters'.
+-type pem_entry()            :: {pki_asn1_type(), 
+				 binary(), %% DER or Encrypted DER
+				 not_encrypted | {Cipher :: string(), Salt :: binary()} |
+				 {Cipher :: string(), #'PBES2-params'{}} | 
+				 {Cipher :: string(), {#'PBEParameter'{}, atom()}} %% hash type
+				}.
+-type asn1_type()            :: atom(). %% see "OTP-PUB-KEY.hrl
+-type ssh_file()             :: openssh_public_key | rfc4716_public_key | known_hosts |
+				auth_keys.
 -type rsa_padding()          :: 'rsa_pkcs1_padding' | 'rsa_pkcs1_oaep_padding' 
 			      | 'rsa_no_padding'.
 -type public_crypt_options() :: [{rsa_pad, rsa_padding()}].
 -type rsa_digest_type()      :: 'md5' | 'sha'| 'sha224' | 'sha256' | 'sha384' | 'sha512'.
 -type dss_digest_type()      :: 'none' | 'sha'. %% None is for backwards compatibility
+-type ecdsa_digest_type()       :: 'sha'| 'sha224' | 'sha256' | 'sha384' | 'sha512'.
 -type crl_reason()           ::  unspecified | keyCompromise | cACompromise | affiliationChanged | superseded
 			       | cessationOfOperation | certificateHold | privilegeWithdrawn |  aACompromise.
+-type oid()                  :: tuple().
 
 -define(UINT32(X), X:32/unsigned-big-integer).
 -define(DER_NULL, <<5, 0>>).
@@ -78,13 +118,13 @@ pem_encode(PemEntries) when is_list(PemEntries) ->
     iolist_to_binary(pubkey_pem:encode(PemEntries)).
 
 %%--------------------------------------------------------------------
--spec pem_entry_decode(pem_entry(), [string()]) -> term().
+-spec pem_entry_decode(pem_entry(), string()) -> term().
 %
 %% Description: Decodes a pem entry. pem_decode/1 returns a list of
 %% pem entries.
 %%--------------------------------------------------------------------
 pem_entry_decode({'SubjectPublicKeyInfo', Der, _}) ->
-    {_, {'AlgorithmIdentifier', AlgId, Params}, {0, Key0}}
+    {_, {'AlgorithmIdentifier', AlgId, Params}, Key0}
         = der_decode('SubjectPublicKeyInfo', Der),
     KeyType = pubkey_cert_records:supportedPublicKeyAlgorithms(AlgId),
     case KeyType of
@@ -92,7 +132,9 @@ pem_entry_decode({'SubjectPublicKeyInfo', Der, _}) ->
             der_decode(KeyType, Key0);
         'DSAPublicKey' ->
             {params, DssParams} = der_decode('DSAParams', Params),
-            {der_decode(KeyType, Key0), DssParams}
+            {der_decode(KeyType, Key0), DssParams};
+        'ECPoint' ->
+            der_decode(KeyType, Key0)
     end;
 pem_entry_decode({Asn1Type, Der, not_encrypted}) when is_atom(Asn1Type),
 						      is_binary(Der) ->
@@ -105,13 +147,21 @@ pem_entry_decode({Asn1Type, CryptDer, {Cipher, #'PBES2-params'{}}} = PemEntry,
 				is_binary(CryptDer) andalso
 				is_list(Cipher) ->
     do_pem_entry_decode(PemEntry, Password);
+pem_entry_decode({Asn1Type, CryptDer, {Cipher, {#'PBEParameter'{},_}}} = PemEntry, 
+ 		 Password) when is_atom(Asn1Type) andalso
+ 				is_binary(CryptDer) andalso
+ 				is_list(Cipher) andalso
+				is_list(Password) ->
+    do_pem_entry_decode(PemEntry, Password);
 pem_entry_decode({Asn1Type, CryptDer, {Cipher, Salt}} = PemEntry, 
 		 Password) when is_atom(Asn1Type) andalso
 				is_binary(CryptDer) andalso
 				is_list(Cipher) andalso
 				is_binary(Salt) andalso
-				erlang:byte_size(Salt) == 8 ->
-    do_pem_entry_decode(PemEntry, Password).
+				((erlang:byte_size(Salt) == 8) or (erlang:byte_size(Salt) == 16)) andalso
+				is_list(Password) ->
+    do_pem_entry_decode(PemEntry, Password).	
+
 
 %%--------------------------------------------------------------------
 -spec pem_entry_encode(pki_asn1_type(), term()) -> pem_entry().
@@ -122,14 +172,14 @@ pem_entry_decode({Asn1Type, CryptDer, {Cipher, Salt}} = PemEntry,
 pem_entry_encode('SubjectPublicKeyInfo', Entity=#'RSAPublicKey'{}) ->
     Der = der_encode('RSAPublicKey', Entity),
     Spki = {'SubjectPublicKeyInfo',
-            {'AlgorithmIdentifier', ?'rsaEncryption', ?DER_NULL}, {0, Der}},
+            {'AlgorithmIdentifier', ?'rsaEncryption', ?DER_NULL}, Der},
     pem_entry_encode('SubjectPublicKeyInfo', Spki);
 pem_entry_encode('SubjectPublicKeyInfo',
                  {DsaInt, Params=#'Dss-Parms'{}}) when is_integer(DsaInt) ->
     KeyDer = der_encode('DSAPublicKey', DsaInt),
     ParamDer = der_encode('DSAParams', {params, Params}),
     Spki = {'SubjectPublicKeyInfo',
-            {'AlgorithmIdentifier', ?'id-dsa', ParamDer}, {0, KeyDer}},
+            {'AlgorithmIdentifier', ?'id-dsa', ParamDer}, KeyDer},
     pem_entry_encode('SubjectPublicKeyInfo', Spki);
 pem_entry_encode(Asn1Type, Entity)  when is_atom(Asn1Type) ->
     Der = der_encode(Asn1Type, Entity),
@@ -139,13 +189,19 @@ pem_entry_encode(Asn1Type, Entity, {{Cipher, #'PBES2-params'{}} = CipherInfo,
 						    is_list(Password) andalso
 						    is_list(Cipher) ->
     do_pem_entry_encode(Asn1Type, Entity, CipherInfo, Password);
-
+pem_entry_encode(Asn1Type, Entity, {{Cipher,
+ 				     {#'PBEParameter'{}, _}} = CipherInfo,
+ 				    Password}) when is_atom(Asn1Type) andalso
+ 						    is_list(Password) andalso
+ 						    is_list(Cipher) ->
+    do_pem_entry_encode(Asn1Type, Entity, CipherInfo, Password);
 pem_entry_encode(Asn1Type, Entity, {{Cipher, Salt} = CipherInfo, 
 				    Password}) when is_atom(Asn1Type) andalso
 						    is_list(Password) andalso
 						    is_list(Cipher) andalso
 						    is_binary(Salt) andalso
-						    erlang:byte_size(Salt) == 8 ->
+						    ((erlang:byte_size(Salt) == 8) or
+						     (erlang:byte_size(Salt) == 16)) ->
     do_pem_entry_encode(Asn1Type, Entity, CipherInfo, Password).
     
 %%--------------------------------------------------------------------
@@ -182,7 +238,7 @@ der_encode(Asn1Type, Entity) when (Asn1Type == 'PrivateKeyInfo') or
 				  (Asn1Type == 'EncryptedPrivateKeyInfo') ->
      try
 	{ok, Encoded} = 'PKCS-FRAME':encode(Asn1Type, Entity),
-	iolist_to_binary(Encoded)
+	Encoded
     catch
 	error:{badmatch, {error, _}} = Error ->
 	    erlang:error(Error)
@@ -191,7 +247,7 @@ der_encode(Asn1Type, Entity) when (Asn1Type == 'PrivateKeyInfo') or
 der_encode(Asn1Type, Entity) when is_atom(Asn1Type) ->
     try 
 	{ok, Encoded} = 'OTP-PUB-KEY':encode(Asn1Type, Entity),
-	iolist_to_binary(Encoded)
+	Encoded
     catch	    
 	error:{badmatch, {error, _}} = Error ->
 	    erlang:error(Error)
@@ -245,14 +301,12 @@ decrypt_private(CipherText, Key) ->
     decrypt_private(CipherText, Key, []).
 
 decrypt_private(CipherText,
-		#'RSAPrivateKey'{modulus = N, publicExponent = E,
-				 privateExponent = D} = Key,
+		#'RSAPrivateKey'{} = Key,
 		Options)
   when is_binary(CipherText),
-       is_integer(N), is_integer(E), is_integer(D),  
        is_list(Options) ->
     Padding = proplists:get_value(rsa_pad, Options, rsa_pkcs1_padding),
-    crypto:rsa_private_decrypt(CipherText, format_rsa_private_key(Key), Padding).
+    crypto:private_decrypt(rsa, CipherText, format_rsa_private_key(Key), Padding).
 
 %%--------------------------------------------------------------------
 -spec decrypt_public(CipherText :: binary(), rsa_public_key() | rsa_private_key()) ->
@@ -316,84 +370,151 @@ encrypt_private(PlainText,
 		Options)
   when is_binary(PlainText),
        is_integer(N), is_integer(E), is_integer(D),
-       is_list(Options) ->		
+       is_list(Options) ->
     Padding = proplists:get_value(rsa_pad, Options, rsa_pkcs1_padding),
-    crypto:rsa_private_encrypt(PlainText, format_rsa_private_key(Key), Padding).
-
-
-format_rsa_private_key(#'RSAPrivateKey'{modulus = N, publicExponent = E,
-					privateExponent = D,
-					prime1 = P1, prime2 = P2,
-					exponent1 = E1, exponent2 = E2,
-					coefficient = C})
-  when is_integer(P1), is_integer(P2), 
-       is_integer(E1), is_integer(E2), is_integer(C) ->
-   [crypto:mpint(K) || K <- [E, N, D, P1, P2, E1, E2, C]];
-
-format_rsa_private_key(#'RSAPrivateKey'{modulus = N, publicExponent = E,
-					privateExponent = D}) ->
-   [crypto:mpint(K) || K <- [E, N, D]].
+    crypto:private_encrypt(rsa, PlainText, format_rsa_private_key(Key), Padding).
 
 %%--------------------------------------------------------------------
--spec sign(binary() | {digest, binary()},  rsa_digest_type() | dss_digest_type(),
+dh_gex_group_sizes() ->
+    pubkey_ssh:dh_gex_group_sizes().
+
+dh_gex_group(Min, N, Max, Groups) ->
+    pubkey_ssh:dh_gex_group(Min, N, Max, Groups).
+
+%%--------------------------------------------------------------------
+-spec generate_key(#'DHParameter'{} | {namedCurve, Name ::oid()} |
+		   #'ECParameters'{}) -> {Public::binary(), Private::binary()} |
+					    #'ECPrivateKey'{}.
+%% Description: Generates a new keypair
+%%--------------------------------------------------------------------
+generate_key(#'DHParameter'{prime = P, base = G}) ->
+    crypto:generate_key(dh, [P, G]);
+generate_key({namedCurve, _} = Params) ->
+    ec_generate_key(Params);
+generate_key(#'ECParameters'{} = Params) ->
+    ec_generate_key(Params).
+
+%%--------------------------------------------------------------------
+-spec compute_key(#'ECPoint'{} , #'ECPrivateKey'{}) -> binary().
+-spec compute_key(OthersKey ::binary(), MyKey::binary(), #'DHParameter'{}) -> binary().
+%% Description: Compute shared secret
+%%--------------------------------------------------------------------
+compute_key(#'ECPoint'{point = Point}, #'ECPrivateKey'{privateKey = PrivKey,
+						       parameters = Param}) ->
+    ECCurve = ec_curve_spec(Param),
+    crypto:compute_key(ecdh, Point, PrivKey, ECCurve).
+
+compute_key(PubKey, PrivKey, #'DHParameter'{prime = P, base = G}) ->
+    crypto:compute_key(dh, PubKey, PrivKey, [P, G]).
+
+%%--------------------------------------------------------------------
+-spec pkix_sign_types(SignatureAlg::oid()) ->
+			     %% Relevant dsa digest type is subpart of rsa digest type
+			     { DigestType :: rsa_digest_type(),
+			       SignatureType :: rsa | dsa | ecdsa
+			     }.
+%% Description:
+%%--------------------------------------------------------------------
+pkix_sign_types(?sha1WithRSAEncryption) ->
+    {sha, rsa};
+pkix_sign_types(?'sha-1WithRSAEncryption') ->
+    {sha, rsa};
+pkix_sign_types(?sha224WithRSAEncryption) ->
+    {sha224, rsa};
+pkix_sign_types(?sha256WithRSAEncryption) ->
+    {sha256, rsa};
+pkix_sign_types(?sha384WithRSAEncryption) ->
+    {sha384, rsa};
+pkix_sign_types(?sha512WithRSAEncryption) ->
+    {sha512, rsa};
+pkix_sign_types(?md5WithRSAEncryption) ->
+    {md5, rsa};
+pkix_sign_types(?'id-dsa-with-sha1') ->
+    {sha, dsa};
+pkix_sign_types(?'id-dsaWithSHA1') ->
+    {sha, dsa};
+pkix_sign_types(?'ecdsa-with-SHA1') ->
+    {sha, ecdsa};
+pkix_sign_types(?'ecdsa-with-SHA256') ->
+    {sha256, ecdsa};
+pkix_sign_types(?'ecdsa-with-SHA384') ->
+    {sha384, ecdsa};
+pkix_sign_types(?'ecdsa-with-SHA512') ->
+    {sha512, ecdsa}.
+
+%%--------------------------------------------------------------------
+-spec sign(binary() | {digest, binary()},  rsa_digest_type() | dss_digest_type() | ecdsa_digest_type(),
 	   rsa_private_key() |
-	   dsa_private_key()) -> Signature :: binary().
+	   dsa_private_key() | ec_private_key()) -> Signature :: binary().
 %% Description: Create digital signature.
 %%--------------------------------------------------------------------
-sign({digest,_}=Digest, DigestType, Key = #'RSAPrivateKey'{}) ->
-    crypto:rsa_sign(DigestType, Digest, format_rsa_private_key(Key));
+sign(DigestOrPlainText, DigestType, Key = #'RSAPrivateKey'{}) ->
+    crypto:sign(rsa, DigestType, DigestOrPlainText, format_rsa_private_key(Key));
 
-sign(PlainText, DigestType, Key = #'RSAPrivateKey'{}) ->
-    crypto:rsa_sign(DigestType, sized_binary(PlainText), format_rsa_private_key(Key));
+sign(DigestOrPlainText, sha, #'DSAPrivateKey'{p = P, q = Q, g = G, x = X}) ->
+    crypto:sign(dss, sha, DigestOrPlainText, [P, Q, G, X]);
 
-sign({digest,_}=Digest, sha, #'DSAPrivateKey'{p = P, q = Q, g = G, x = X}) ->
-    crypto:dss_sign(Digest,
-		    [crypto:mpint(P), crypto:mpint(Q),
-		     crypto:mpint(G), crypto:mpint(X)]);
-
-sign(PlainText, sha, #'DSAPrivateKey'{p = P, q = Q, g = G, x = X}) ->
-    crypto:dss_sign(sized_binary(PlainText),
-          [crypto:mpint(P), crypto:mpint(Q),
-           crypto:mpint(G), crypto:mpint(X)]);
+sign(DigestOrPlainText, DigestType, #'ECPrivateKey'{privateKey = PrivKey,
+						    parameters = Param}) ->
+    ECCurve = ec_curve_spec(Param),
+    crypto:sign(ecdsa, DigestType, DigestOrPlainText, [PrivKey, ECCurve]);
 
 %% Backwards compatible
 sign(Digest, none, #'DSAPrivateKey'{} = Key) ->
     sign({digest,Digest}, sha, Key).
 
 %%--------------------------------------------------------------------
--spec verify(binary() | {digest, binary()}, rsa_digest_type() | dss_digest_type(),
+-spec verify(binary() | {digest, binary()}, rsa_digest_type() | dss_digest_type() | ecdsa_digest_type(),
 	     Signature :: binary(), rsa_public_key()
-	     | dsa_public_key()) -> boolean().
+	     | dsa_public_key() | ec_public_key()) -> boolean().
 %% Description: Verifies a digital signature.
 %%--------------------------------------------------------------------
-verify({digest,_}=Digest, DigestType, Signature,
-       #'RSAPublicKey'{modulus = Mod, publicExponent = Exp}) ->
-    crypto:rsa_verify(DigestType, Digest,
-		      sized_binary(Signature),
-		      [crypto:mpint(Exp), crypto:mpint(Mod)]);
+verify(DigestOrPlainText, DigestType, Signature, Key) when is_binary(Signature) ->
+    do_verify(DigestOrPlainText, DigestType, Signature, Key);
+verify(_,_,_,_) -> 
+    %% If Signature is a bitstring and not a binary we know already at this
+    %% point that the signature is invalid.
+    false.
 
-verify(PlainText, DigestType, Signature,
-       #'RSAPublicKey'{modulus = Mod, publicExponent = Exp}) ->
-    crypto:rsa_verify(DigestType,
-		      sized_binary(PlainText), 
-		      sized_binary(Signature), 
-		      [crypto:mpint(Exp), crypto:mpint(Mod)]);
+%%--------------------------------------------------------------------
+-spec pkix_dist_point(der_encoded() | #'OTPCertificate'{}) -> 
+			      #'DistributionPoint'{}.  
+%% Description:  Creates a distribution point for CRLs issued by the same issuer as <c>Cert</c>.
+%%--------------------------------------------------------------------
+pkix_dist_point(OtpCert) when is_binary(OtpCert) ->
+    pkix_dist_point(pkix_decode_cert(OtpCert, otp));
+pkix_dist_point(OtpCert) ->
+    Issuer = public_key:pkix_normalize_name(
+	       pubkey_cert_records:transform(
+		 OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.issuer, encode)),
+    
+    TBSCert = OtpCert#'OTPCertificate'.tbsCertificate,
+    Extensions = pubkey_cert:extensions_list(TBSCert#'OTPTBSCertificate'.extensions),
+    AltNames = case pubkey_cert:select_extension(?'id-ce-issuerAltName', Extensions) of 
+		   undefined ->
+		       [];
+		   #'Extension'{extnValue = Value} ->
+		       Value
+	       end,
+    Point = {fullName, [{directoryName, Issuer} | AltNames]},
+    #'DistributionPoint'{cRLIssuer = asn1_NOVALUE,
+			 reasons = asn1_NOVALUE,
+			 distributionPoint =  Point}.	
+%%--------------------------------------------------------------------
+-spec pkix_dist_points(der_encoded() | #'OTPCertificate'{}) -> 
+			      [#'DistributionPoint'{}].  
+%% Description:  Extracts distributionpoints specified in the certificates extensions.
+%%--------------------------------------------------------------------
+pkix_dist_points(OtpCert) when is_binary(OtpCert) ->
+    pkix_dist_points(pkix_decode_cert(OtpCert, otp));
+pkix_dist_points(OtpCert) ->
+    Value = pubkey_cert:distribution_points(OtpCert),
+    lists:foldl(fun(Point, Acc0) ->
+			DistPoint = pubkey_cert_records:transform(Point, decode),
+			[DistPoint | Acc0]
+		end, 
+		[], Value).
 
-verify({digest,_}=Digest, sha, Signature, {Key,  #'Dss-Parms'{p = P, q = Q, g = G}})
-  when is_integer(Key), is_binary(Signature) ->
-    crypto:dss_verify(Digest, sized_binary(Signature),
-		      [crypto:mpint(P), crypto:mpint(Q), 
-		       crypto:mpint(G), crypto:mpint(Key)]);
-%% Backwards compatibility
-verify(Digest, none, Signature, {_,  #'Dss-Parms'{}} = Key ) ->
-    verify({digest,Digest}, sha, Signature, Key);
-
-verify(PlainText, sha, Signature, {Key,  #'Dss-Parms'{p = P, q = Q, g = G}}) 
-  when is_integer(Key), is_binary(PlainText), is_binary(Signature) ->
-    crypto:dss_verify(sized_binary(PlainText), 
-		      sized_binary(Signature), 
-		      [crypto:mpint(P), crypto:mpint(Q), 
-		       crypto:mpint(G), crypto:mpint(Key)]).
 %%--------------------------------------------------------------------
 -spec pkix_sign(#'OTPTBSCertificate'{},
 		rsa_private_key() | dsa_private_key()) -> Der::binary().
@@ -406,17 +527,17 @@ pkix_sign(#'OTPTBSCertificate'{signature =
 			       = SigAlg} = TBSCert, Key) ->
 
     Msg = pkix_encode('OTPTBSCertificate', TBSCert, otp),
-    DigestType = pubkey_cert:digest_type(Alg),
+    {DigestType, _} = pkix_sign_types(Alg),
     Signature = sign(Msg, DigestType, Key),
     Cert = #'OTPCertificate'{tbsCertificate= TBSCert,
 			     signatureAlgorithm = SigAlg,
-			     signature = {0, Signature}
+			     signature = Signature
 			    },
     pkix_encode('OTPCertificate', Cert, otp).
 
 %%--------------------------------------------------------------------
 -spec pkix_verify(Cert::binary(), rsa_public_key()|
-		  dsa_public_key()) -> boolean().
+		  dsa_public_key() | ec_public_key()) -> boolean().
 %%
 %% Description: Verify pkix x.509 certificate signature.
 %%--------------------------------------------------------------------
@@ -428,7 +549,31 @@ pkix_verify(DerCert, {Key, #'Dss-Parms'{}} = DSAKey)
 pkix_verify(DerCert,  #'RSAPublicKey'{} = RSAKey) 
   when is_binary(DerCert) ->
     {DigestType, PlainText, Signature} = pubkey_cert:verify_data(DerCert),
-    verify(PlainText, DigestType, Signature, RSAKey).
+    verify(PlainText, DigestType, Signature, RSAKey);
+
+pkix_verify(DerCert, Key = {#'ECPoint'{}, _})
+  when is_binary(DerCert) ->
+    {DigestType, PlainText, Signature} = pubkey_cert:verify_data(DerCert),
+    verify(PlainText, DigestType, Signature,  Key).
+
+%%--------------------------------------------------------------------
+-spec pkix_crl_verify(CRL::binary() | #'CertificateList'{}, Cert::binary() | #'OTPCertificate'{}) -> boolean().
+%%
+%% Description: Verify that Cert is the CRL signer.
+%%--------------------------------------------------------------------
+pkix_crl_verify(CRL, Cert) when is_binary(CRL) ->
+    pkix_crl_verify(der_decode('CertificateList', CRL), Cert);
+pkix_crl_verify(CRL, Cert) when is_binary(Cert) ->
+    pkix_crl_verify(CRL, pkix_decode_cert(Cert, otp));
+pkix_crl_verify(#'CertificateList'{} = CRL, #'OTPCertificate'{} = Cert) ->
+    TBSCert = Cert#'OTPCertificate'.tbsCertificate, 
+    PublicKeyInfo = TBSCert#'OTPTBSCertificate'.subjectPublicKeyInfo,
+    PublicKey = PublicKeyInfo#'OTPSubjectPublicKeyInfo'.subjectPublicKey,
+    AlgInfo = PublicKeyInfo#'OTPSubjectPublicKeyInfo'.algorithm,
+    PublicKeyParams = AlgInfo#'PublicKeyAlgorithm'.parameters,
+    pubkey_crl:verify_crl_signature(CRL, 
+				    der_encode('CertificateList', CRL), 
+				    PublicKey, PublicKeyParams).
 
 %%--------------------------------------------------------------------
 -spec pkix_is_issuer(Cert :: der_encoded()| #'OTPCertificate'{} | #'CertificateList'{},
@@ -484,15 +629,25 @@ pkix_is_fixed_dh_cert(Cert) when is_binary(Cert) ->
 %
 %% Description: Returns the issuer id.
 %%--------------------------------------------------------------------
-pkix_issuer_id(#'OTPCertificate'{} = OtpCert, self) ->
-    pubkey_cert:issuer_id(OtpCert, self);
-
-pkix_issuer_id(#'OTPCertificate'{} = OtpCert, other) ->
-    pubkey_cert:issuer_id(OtpCert, other);
-
-pkix_issuer_id(Cert, Signed) when is_binary(Cert) ->
+pkix_issuer_id(#'OTPCertificate'{} = OtpCert, Signed) when (Signed == self) or 
+							   (Signed == other) ->
+    pubkey_cert:issuer_id(OtpCert, Signed);
+pkix_issuer_id(Cert, Signed) when is_binary(Cert) -> 
     OtpCert = pkix_decode_cert(Cert, otp),
     pkix_issuer_id(OtpCert, Signed).
+
+%%--------------------------------------------------------------------
+-spec pkix_crl_issuer(CRL::binary()| #'CertificateList'{}) -> 
+			     {rdnSequence,
+			      [#'AttributeTypeAndValue'{}]}.
+%
+%% Description: Returns the issuer.
+%%--------------------------------------------------------------------
+pkix_crl_issuer(CRL) when is_binary(CRL) ->
+    pkix_crl_issuer(der_decode('CertificateList', CRL));
+pkix_crl_issuer(#'CertificateList'{} = CRL) ->
+    pubkey_cert_records:transform(
+      CRL#'CertificateList'.tbsCertList#'TBSCertList'.issuer, decode).
 
 %%--------------------------------------------------------------------
 -spec pkix_normalize_name({rdnSequence,
@@ -546,11 +701,11 @@ pkix_path_validation(#'OTPCertificate'{} = TrustedCert, CertChain, Options)
 
 %--------------------------------------------------------------------
 -spec pkix_crls_validate(#'OTPCertificate'{},
-			 [{DP::#'DistributionPoint'{} ,CRL::#'CertificateList'{}}],
+			 [{DP::#'DistributionPoint'{}, {DerCRL::binary(), CRL::#'CertificateList'{}}}],
 			 Options :: proplists:proplist()) -> valid | {bad_cert, revocation_status_undetermined}
 								| {bad_cert, {revoked, crl_reason()}}.
 
-%% Description: Performs a basic path validation according to RFC 5280.
+%% Description: Performs a CRL validation according to RFC 5280.
 %%--------------------------------------------------------------------
 pkix_crls_validate(OtpCert, [{_,_,_} |_] = DPAndCRLs, Options) ->
     pkix_crls_validate(OtpCert, DPAndCRLs, DPAndCRLs,
@@ -566,7 +721,9 @@ pkix_crls_validate(OtpCert, DPAndCRLs0, Options) ->
 
 
 %%--------------------------------------------------------------------
--spec ssh_decode(binary(), public_key | ssh_file()) -> [{public_key(), Attributes::list()}].
+-spec ssh_decode(binary(), public_key | ssh_file()) -> [{public_key(), Attributes::list()}]
+	      ; (binary(), ssh2_pubkey) ->  public_key()
+	      .
 %%
 %% Description: Decodes a ssh file-binary. In the case of know_hosts
 %% or auth_keys the binary may include one or more lines of the
@@ -579,12 +736,15 @@ ssh_decode(SshBin, Type) when is_binary(SshBin),
 			      Type == rfc4716_public_key;
 			      Type == openssh_public_key;
 			      Type == auth_keys;
-			      Type == known_hosts ->
+			      Type == known_hosts;
+			      Type == ssh2_pubkey ->
     pubkey_ssh:decode(SshBin, Type).
 
 %%--------------------------------------------------------------------
--spec ssh_encode([{public_key(), Attributes::list()}], ssh_file()) ->
-			binary().
+-spec ssh_encode([{public_key(), Attributes::list()}], ssh_file()) -> binary()
+	      ; (public_key(), ssh2_pubkey) -> binary()
+	      .
+%%
 %% Description: Encodes a list of ssh file entries (public keys and
 %% attributes) to a binary. Possible attributes depends on the file
 %% type.
@@ -593,12 +753,49 @@ ssh_encode(Entries, Type) when is_list(Entries),
 			       Type == rfc4716_public_key;
 			       Type == openssh_public_key;
 			       Type == auth_keys;
-			       Type == known_hosts ->
+			       Type == known_hosts;
+			       Type == ssh2_pubkey ->
     pubkey_ssh:encode(Entries, Type).
+
+%%--------------------------------------------------------------------
+-spec ssh_curvename2oid(binary()) -> oid().
+
+%% Description: Converts from the ssh name of elliptic curves to
+%% the OIDs.
+%%--------------------------------------------------------------------
+ssh_curvename2oid(<<"nistp256">>) ->  ?'secp256r1';
+ssh_curvename2oid(<<"nistp384">>) ->  ?'secp384r1';
+ssh_curvename2oid(<<"nistp521">>) ->  ?'secp521r1'.
+
+%%--------------------------------------------------------------------
+-spec oid2ssh_curvename(oid()) -> binary().
+
+%% Description: Converts from elliptic curve OIDs to the ssh name.
+%%--------------------------------------------------------------------
+oid2ssh_curvename(?'secp256r1') -> <<"nistp256">>;
+oid2ssh_curvename(?'secp384r1') -> <<"nistp384">>;
+oid2ssh_curvename(?'secp521r1') -> <<"nistp521">>.
 
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+do_verify(DigestOrPlainText, DigestType, Signature,
+       #'RSAPublicKey'{modulus = Mod, publicExponent = Exp}) ->
+    crypto:verify(rsa, DigestType, DigestOrPlainText, Signature,
+		  [Exp, Mod]);
+
+do_verify(DigestOrPlaintext, DigestType, Signature, {#'ECPoint'{point = Point}, Param}) ->
+    ECCurve = ec_curve_spec(Param),
+    crypto:verify(ecdsa, DigestType, DigestOrPlaintext, Signature, [Point, ECCurve]);
+
+%% Backwards compatibility
+do_verify(Digest, none, Signature, {_,  #'Dss-Parms'{}} = Key ) ->
+    verify({digest,Digest}, sha, Signature, Key);
+
+do_verify(DigestOrPlainText, sha = DigestType, Signature, {Key,  #'Dss-Parms'{p = P, q = Q, g = G}})
+  when is_integer(Key), is_binary(Signature) ->
+    crypto:verify(dss, DigestType, DigestOrPlainText, Signature, [P, Q, G, Key]).
+
 do_pem_entry_encode(Asn1Type, Entity, CipherInfo, Password) ->
     Der = der_encode(Asn1Type, Entity),
     DecryptDer = pubkey_pem:cipher(Der, CipherInfo, Password),
@@ -610,13 +807,11 @@ do_pem_entry_decode({Asn1Type,_, _} = PemEntry, Password) ->
 
 encrypt_public(PlainText, N, E, Options)->
     Padding = proplists:get_value(rsa_pad, Options, rsa_pkcs1_padding),
-    crypto:rsa_public_encrypt(PlainText, [crypto:mpint(E),crypto:mpint(N)],
-			      Padding).
+    crypto:public_encrypt(rsa, PlainText, [E,N], Padding).
 
-decrypt_public(CipherText, N,E, Options) ->  
+decrypt_public(CipherText, N,E, Options) ->
     Padding = proplists:get_value(rsa_pad, Options, rsa_pkcs1_padding),
-    crypto:rsa_public_decrypt(CipherText,[crypto:mpint(E), crypto:mpint(N)], 
-			      Padding).
+    crypto:public_decrypt(rsa, CipherText,[E, N], Padding).
 
 path_validation([], #path_validation_state{working_public_key_algorithm
 					   = Algorithm,
@@ -701,10 +896,6 @@ validate(Cert, #path_validation_state{working_issuer_name = Issuer,
 	ValidationState1#path_validation_state{user_state = UserState},
 
     pubkey_cert:prepare_for_next_cert(OtpCert, ValidationState).
-
-sized_binary(Binary) ->
-    Size = size(Binary),
-    <<?UINT32(Size), Binary/binary>>.
 
 otp_cert(Der) when is_binary(Der) ->
     pkix_decode_cert(Der, otp);
@@ -812,3 +1003,39 @@ combine(CRL, DeltaCRLs) ->
 		end,
 	    lists:foldl(Fun,  hd(Deltas), tl(Deltas))
     end.
+
+format_rsa_private_key(#'RSAPrivateKey'{modulus = N, publicExponent = E,
+					privateExponent = D,
+					prime1 = P1, prime2 = P2,
+					exponent1 = E1, exponent2 = E2,
+					coefficient = C})
+  when is_integer(N), is_integer(E), is_integer(D),
+       is_integer(P1), is_integer(P2),
+       is_integer(E1), is_integer(E2), is_integer(C) ->
+   [E, N, D, P1, P2, E1, E2, C];
+
+format_rsa_private_key(#'RSAPrivateKey'{modulus = N, publicExponent = E,
+					privateExponent = D}) when is_integer(N),
+								   is_integer(E),
+								   is_integer(D) ->
+   [E, N, D].
+
+ec_generate_key(Params) ->
+    Curve = ec_curve_spec(Params),
+    Term = crypto:generate_key(ecdh, Curve),
+    ec_key(Term, Params).
+
+ec_curve_spec( #'ECParameters'{fieldID = FieldId, curve = PCurve, base = Base, order = Order, cofactor = CoFactor }) ->
+    Field = {pubkey_cert_records:supportedCurvesTypes(FieldId#'FieldID'.fieldType),
+	     FieldId#'FieldID'.parameters},
+    Curve = {PCurve#'Curve'.a, PCurve#'Curve'.b, none},
+    {Field, Curve, Base, Order, CoFactor};
+ec_curve_spec({namedCurve, OID}) ->
+    pubkey_cert_records:namedCurves(OID).
+
+ec_key({PubKey, PrivateKey}, Params) ->
+    #'ECPrivateKey'{version = 1,
+		    privateKey = PrivateKey,
+		    parameters = Params,
+		    publicKey = PubKey}.
+

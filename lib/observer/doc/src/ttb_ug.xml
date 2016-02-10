@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE chapter SYSTEM "chapter.dtd">
 
 <chapter>
   <header>
     <copyright>
-      <year>2002</year><year>2011</year>
+      <year>2002</year><year>2013</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
-    
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
+
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
     
     </legalnotice>
 
@@ -319,7 +320,7 @@ do_print(Out,{trace_ts,P,return_from,{M,F,A},R,Ts},N) ->
 </code>
         </section>
         <section>
-          <label>Overload protection</label>
+          <title>Overload protection</title>
           <p>When tracing live systems, special care needs to be always taken
             not to overload a node with too heavy tracing. <c>ttb</c> provides
             the <c>overload</c> option to help to address the problem.</p>
@@ -697,7 +698,7 @@ f3() ->
 (tiger@durin)6>ttb:stop({format, {handler, ttb:get_et_handler()}}).
 </code>
 
-      <p>This shoud render a result similar to the
+      <p>This should render a result similar to the
         following:
         </p>
       <p></p>
@@ -746,7 +747,7 @@ f3() ->
       of the <c>ttb</c> for setting trace flags on processes and trace
       patterns for call trace, i.e. the functions <c>p</c>, <c>tp</c>,
       <c>tpl</c>, <c>ctp</c>, <c>ctpl</c> and <c>ctpg</c>. There are only
-      two things added by <c>ttb</c> for these functions:
+      two things added by <c>ttb</c> for these functions:</p>
       <list type="bulleted">
         <item>all calls  are stored in the history buffer and can be
           recalled and stored in a configuration file. This makes it
@@ -755,9 +756,8 @@ f3() ->
           typing when using <c>ttb</c> from the erlang shell;</item>
         <item>shortcuts are provided for the most common match
           specifications (in order not to force the user to use
-          <c>dbg:fun2ms</c> continually</item>).
+          <c>dbg:fun2ms</c> continually).</item>
       </list>
-      </p>
     <p>Use <c>list_history/0</c> to see the content of the history
       buffer, and <c>run_history/1</c> to re-execute one of the entries.
       </p>

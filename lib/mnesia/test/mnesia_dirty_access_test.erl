@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -197,6 +198,11 @@ dirty_update_counter(Config, Storage) ->
  
     ?match(1,  mnesia:dirty_update_counter({Tab, foo}, 1)),
     ?match([{Tab, foo,1}], mnesia:dirty_read({Tab,foo})),
+
+    ?match({ok,_}, mnesia:subscribe({table, Tab, detailed})),
+
+    ?match(2, mnesia:dirty_update_counter({Tab, foo}, 1)),
+    ?match([{Tab, foo,2}], mnesia:dirty_read({Tab,foo})),
 
     ?verify_mnesia(Nodes, []).
 
@@ -395,8 +401,25 @@ dirty_index_read(Config, Storage) ->
     ?match({'EXIT', _},  mnesia:dirty_index_read(Tab, 2, BadValPos)), 
     ?match({'EXIT', _},  mnesia:dirty_index_read(foo, 2, ValPos)), 
     ?match({'EXIT', _},  mnesia:dirty_index_read([], 2, ValPos)), 
-    
+
+    mnesia:dirty_write({Tab, 5, 1}),
+    ?match(ok, index_read_loop(Tab, 0)),
+
     ?verify_mnesia(Nodes, []).
+
+
+index_read_loop(Tab, N) when N =< 1000 ->
+    spawn_link(fun() ->
+		       mnesia:transaction(fun() -> mnesia:write({Tab, 5, 1}) end)
+	       end),
+    case mnesia:dirty_match_object({Tab, '_', 1}) of
+	[{Tab, 5, 1}] ->
+	    index_read_loop(Tab, N+1);
+	Other -> {N, Other}
+    end;
+index_read_loop(_, _) ->
+    ok.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

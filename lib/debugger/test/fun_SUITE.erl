@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1999-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -24,7 +25,7 @@
 	 init_per_testcase/2,end_per_testcase/2,
 	 init_per_suite/1,end_per_suite/1,
 	 good_call/1,bad_apply/1,bad_fun_call/1,badarity/1,
-	 ext_badarity/1,otp_6061/1,external/1]).
+	 ext_badarity/1,otp_6061/1,external/1,eep37/1]).
 
 %% Internal exports.
 -export([nothing/0,call_me/1]).
@@ -48,7 +49,7 @@ end_per_group(_GroupName, Config) ->
 
 cases() -> 
     [good_call, bad_apply, bad_fun_call, badarity,
-     ext_badarity, otp_6061, external].
+     ext_badarity, otp_6061, external, eep37].
 
 init_per_testcase(_Case, Config) ->
     test_lib:interpret(?MODULE),
@@ -287,6 +288,19 @@ external(Config) when is_list(Config) ->
 
 call_me(I) ->
     {ok,I}.
+
+eep37(Config) when is_list(Config) ->
+    F = fun Fact(N) when N > 0 -> N * Fact(N - 1); Fact(0) -> 1 end,
+    Add = fun _(N) -> N + 1 end,
+    UnusedName = fun BlackAdder(N) -> N + 42 end,
+    720 = F(6),
+    10 = Add(9),
+    50 = UnusedName(8),
+    [1,1,2,6,24,120] = lists:map(F, lists:seq(0, 5)),
+    {'EXIT',{{badarity,_},_}} = (catch lists:map(fun G() -> G() end, [1])),
+    {'EXIT',{{badarity,_},_}} = (catch F()),
+
+    ok.
 
 id(I) ->
     I.

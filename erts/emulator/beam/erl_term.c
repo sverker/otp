@@ -3,16 +3,17 @@
  *
  * Copyright Ericsson AB 2000-2013. All Rights Reserved.
  *
- * The contents of this file are subject to the Erlang Public License,
- * Version 1.1, (the "License"); you may not use this file except in
- * compliance with the License. You should have received a copy of the
- * Erlang Public License along with this software. If not, it can be
- * retrieved online at http://www.erlang.org/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Software distributed under the License is distributed on an "AS IS"
- * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
- * the License for the specific language governing rights and limitations
- * under the License.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  *
  * %CopyrightEnd%
  */
@@ -23,8 +24,40 @@
 #include "sys.h"
 #include "erl_vm.h"
 #include "global.h"
+#include "erl_map.h"
 #include <stdlib.h>
 #include <stdio.h>
+
+void
+erts_set_literal_tag(Eterm *term, Eterm *hp_start, Eterm hsz)
+{
+#ifdef TAG_LITERAL_PTR
+    Eterm *hp_end, *hp;
+    
+    hp_end = hp_start + hsz;
+    hp = hp_start;
+
+    while (hp < hp_end) {
+	switch (primary_tag(*hp)) {
+	case TAG_PRIMARY_BOXED:
+	case TAG_PRIMARY_LIST:
+	    *hp |= TAG_LITERAL_PTR;
+	    break;
+	case TAG_PRIMARY_HEADER:
+	    if (header_is_thing(*hp)) {
+		hp += thing_arityval(*hp);
+	    }
+	    break;
+	default:
+	    break;
+	}
+	
+	hp++;
+    }
+    if (is_boxed(*term) || is_list(*term))
+	*term |= TAG_LITERAL_PTR;
+#endif
+}
 
 __decl_noreturn static void __noreturn
 et_abort(const char *expr, const char *file, unsigned line)
@@ -85,8 +118,13 @@ unsigned tag_val_def(Wterm x)
 	    case (_TAG_HEADER_EXTERNAL_PID >> _TAG_PRIMARY_SIZE):	return EXTERNAL_PID_DEF;
 	    case (_TAG_HEADER_EXTERNAL_PORT >> _TAG_PRIMARY_SIZE):	return EXTERNAL_PORT_DEF;
 	    case (_TAG_HEADER_EXTERNAL_REF >> _TAG_PRIMARY_SIZE):	return EXTERNAL_REF_DEF;
-	    default:						return BINARY_DEF;
+	    case (_TAG_HEADER_MAP >> _TAG_PRIMARY_SIZE):	return MAP_DEF;
+	    case (_TAG_HEADER_REFC_BIN >> _TAG_PRIMARY_SIZE):	return BINARY_DEF;
+	    case (_TAG_HEADER_HEAP_BIN >> _TAG_PRIMARY_SIZE):	return BINARY_DEF;
+	    case (_TAG_HEADER_SUB_BIN >> _TAG_PRIMARY_SIZE):	return BINARY_DEF;
+	    case (_TAG_HEADER_BIN_MATCHSTATE >> _TAG_PRIMARY_SIZE): return MATCHSTATE_DEF;
 	  }
+ 
 	  break;
       }
       case TAG_PRIMARY_IMMED1: {
@@ -123,10 +161,10 @@ FUNTY checked_##FUN(ARGTY x, const char *file, unsigned line) \
     return _unchecked_##FUN(x); \
 }
 
-ET_DEFINE_CHECKED(Eterm,make_boxed,Eterm*,_is_taggable_pointer);
+ET_DEFINE_CHECKED(Eterm,make_boxed,const Eterm*,_is_taggable_pointer);
 ET_DEFINE_CHECKED(int,is_boxed,Eterm,!is_header);
 ET_DEFINE_CHECKED(Eterm*,boxed_val,Wterm,_boxed_precond);
-ET_DEFINE_CHECKED(Eterm,make_list,Eterm*,_is_taggable_pointer);
+ET_DEFINE_CHECKED(Eterm,make_list,const Eterm*,_is_taggable_pointer);
 ET_DEFINE_CHECKED(int,is_not_list,Eterm,!is_header);
 ET_DEFINE_CHECKED(Eterm*,list_val,Wterm,_list_precond);
 ET_DEFINE_CHECKED(Uint,unsigned_val,Eterm,is_small);
@@ -167,9 +205,7 @@ ET_DEFINE_CHECKED(Uint,external_thing_data_words,ExternalThing*,is_thing_ptr);
 ET_DEFINE_CHECKED(Eterm,make_cp,UWord *,_is_taggable_pointer);
 ET_DEFINE_CHECKED(UWord *,cp_val,Eterm,is_CP);
 ET_DEFINE_CHECKED(Uint,catch_val,Eterm,is_catch);
-ET_DEFINE_CHECKED(Uint,x_reg_offset,Uint,_is_xreg);
-ET_DEFINE_CHECKED(Uint,y_reg_offset,Uint,_is_yreg);
-ET_DEFINE_CHECKED(Uint,x_reg_index,Uint,_is_xreg);
-ET_DEFINE_CHECKED(Uint,y_reg_index,Uint,_is_yreg);
+ET_DEFINE_CHECKED(Uint,loader_x_reg_index,Uint,_is_loader_x_reg);
+ET_DEFINE_CHECKED(Uint,loader_y_reg_index,Uint,_is_loader_y_reg);
 
 #endif	/* ET_DEBUG */

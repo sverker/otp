@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxglcanvas.html">wxGLCanvas</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxglcanvas.html">wxGLCanvas</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxWindow}
 %% <br />{@link wxEvtHandler}
@@ -83,7 +84,7 @@ new(Parent)
  when is_record(Parent, wx_ref) ->
   new(Parent, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxglcanvas.html#wxglcanvaswxglcanvas">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxglcanvas.html#wxglcanvaswxglcanvas">external documentation</a>.
 %% <br /> Also:<br />
 %% new(Parent, [Option]) -> wxGLCanvas() when<br />
 %% 	Parent::wxWindow:wxWindow(),<br />
@@ -126,7 +127,7 @@ new(#wx_ref{type=ParentT,ref=ParentRef}, Options)
   wxe_util:construct(?wxGLCanvas_new_2,
   <<ParentRef:32/?UI, 0:32,BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxglcanvas.html#wxglcanvaswxglcanvas">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxglcanvas.html#wxglcanvaswxglcanvas">external documentation</a>.
 -spec new(Parent, Shared, [Option]) -> wxGLCanvas() when
 	Parent::wxWindow:wxWindow(), Shared::wx:wx_object() | wxGLCanvas(),
 	Option :: {id, integer()}
@@ -158,7 +159,7 @@ new(#wx_ref{type=ParentT,ref=ParentRef},#wx_ref{type=SharedT,ref=SharedRef}, Opt
   wxe_util:construct(SharedOP,
   <<ParentRef:32/?UI,SharedRef:32/?UI, BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxglcanvas.html#wxglcanvasgetcontext">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxglcanvas.html#wxglcanvasgetcontext">external documentation</a>.
 -spec getContext(This) -> wx:wx_object() when
 	This::wxGLCanvas().
 getContext(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -166,7 +167,7 @@ getContext(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxGLCanvas_GetContext,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxglcanvas.html#wxglcanvassetcurrent">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxglcanvas.html#wxglcanvassetcurrent">external documentation</a>.
 -spec setCurrent(This) -> ok when
 	This::wxGLCanvas().
 setCurrent(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -176,7 +177,7 @@ setCurrent(#wx_ref{type=ThisT,ref=ThisRef}) ->
   {ok, _} = wxe_master:init_opengl(),
   _Result.
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxglcanvas.html#wxglcanvasswapbuffers">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxglcanvas.html#wxglcanvasswapbuffers">external documentation</a>.
 -spec swapBuffers(This) -> ok when
 	This::wxGLCanvas().
 swapBuffers(#wx_ref{type=ThisT,ref=ThisRef}) ->

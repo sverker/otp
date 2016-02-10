@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -29,14 +30,20 @@
 	 init_per_group/2,end_per_group/2, 
 	 init_per_testcase/2, 
 	 end_per_testcase/2, basic/1, reload/1, upgrade/1, heap_frag/1,
-	 types/1, many_args/1, binaries/1, get_string/1, get_atom/1, 
+	 types/1, many_args/1, binaries/1, get_string/1, get_atom/1,
+	 maps/1,
 	 api_macros/1,
 	 from_array/1, iolist_as_binary/1, resource/1, resource_binary/1, 
 	 resource_takeover/1,
 	 threading/1, send/1, send2/1, send3/1, send_threaded/1, neg/1, 
 	 is_checks/1,
 	 get_length/1, make_atom/1, make_string/1, reverse_list_test/1,
-	 otp_9668/1, consume_timeslice/1
+	 otp_9828/1,
+	 otp_9668/1, consume_timeslice/1, dirty_nif/1, dirty_nif_send/1,
+	 dirty_nif_exception/1, call_dirty_nif_exception/1, nif_schedule/1,
+	 nif_exception/1, call_nif_exception/1,
+	 nif_nan_and_inf/1, nif_atom_too_long/1,
+	 nif_monotonic_time/1, nif_time_offset/1, nif_convert_time_unit/1
 	]).
 
 -export([many_args_100/100]).
@@ -58,12 +65,16 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [basic, reload, upgrade, heap_frag, types, many_args,
-     binaries, get_string, get_atom, api_macros, from_array,
+     binaries, get_string, get_atom, maps, api_macros, from_array,
      iolist_as_binary, resource, resource_binary,
      resource_takeover, threading, send, send2, send3,
      send_threaded, neg, is_checks, get_length, make_atom,
      make_string,reverse_list_test,
-     otp_9668, consume_timeslice
+     otp_9828,
+     otp_9668, consume_timeslice,
+     nif_schedule, dirty_nif, dirty_nif_send, dirty_nif_exception,
+     nif_exception, nif_nan_and_inf, nif_atom_too_long,
+     nif_monotonic_time, nif_time_offset, nif_convert_time_unit
     ].
 
 groups() -> 
@@ -435,6 +446,54 @@ get_atom(Config) when is_list(Config) ->
     ?line {0, <<>>} = atom_to_bin('',0),
     ok.
 
+maps(doc) -> ["Test NIF maps handling."];
+maps(suite) -> [];
+maps(Config) when is_list(Config) ->
+    TmpMem = tmpmem(),
+    Pairs = [{adam, "bert"}] ++
+            [{I,I}||I <- lists:seq(1,10)] ++
+	    [{a,value},{"a","value"},{<<"a">>,<<"value">>}],
+    ok = ensure_lib_loaded(Config, 1),
+    M  = maps_from_list_nif(Pairs),
+    R = {RIs,Is} = sorted_list_from_maps_nif(M),
+    io:format("Pairs: ~p~nMap: ~p~nReturned: ~p~n", [lists:sort(Pairs),M,R]),
+    true = (lists:sort(Is) =:= lists:sort(Pairs)),
+    Is = lists:reverse(RIs),
+
+    #{} = maps_from_list_nif([]),
+    {[],[]} = sorted_list_from_maps_nif(#{}),
+
+    1 = is_map_nif(M),
+    0 = is_map_nif("no map"),
+
+    Msz = map_size(M),
+    {1,Msz} = get_map_size_nif(M),
+    {1,0} = get_map_size_nif(#{}),
+    {0,-123} = get_map_size_nif({#{}}),
+
+    #{} = M0 = make_new_map_nif(),
+
+    {1, #{key := value}=M1} = make_map_put_nif(M0, key, value),
+    {1, #{key := value, "key2" := "value2"}=M2} = make_map_put_nif(M1, "key2", "value2"),
+    {1, #{key := "value", "key2" := "value2"}=M3} = make_map_put_nif(M2, key, "value"),
+    {0, undefined} = make_map_put_nif(666, key, value),
+
+    {1, "value2"} = get_map_value_nif(M3,"key2"),
+    {0, undefined} = get_map_value_nif(M3,"key3"),
+    {0, undefined} = get_map_value_nif(false,key),
+
+    {0, undefined} = make_map_update_nif(M0, key, value),
+    {0, undefined} = make_map_update_nif(M1, "key2", "value2"),
+    {1, #{key := "value", "key2" := "value2"}} = make_map_update_nif(M2, key, "value"),
+    {0, undefined} = make_map_update_nif(666, key, value),
+
+    {1, #{}} = make_map_remove_nif(M1, key),
+    {1, M1} = make_map_remove_nif(M2, "key2"),
+    {1, M2} = make_map_remove_nif(M2, "key3"),
+    {0, undefined} = make_map_remove_nif(self(), key),
+
+    ok.
+ 
 api_macros(doc) -> ["Test macros enif_make_list<N> and enif_make_tuple<N>"];
 api_macros(suite) -> [];
 api_macros(Config) when is_list(Config) ->
@@ -801,6 +860,138 @@ resource_takeover(Config) when is_list(Config) ->
     ?line ok = forget_resource(AN4),
     ?line [] = nif_mod_call_history(),
 
+
+    %%
+    %% Test rollback after failed upgrade of same lib-version
+    %%
+
+    {A5,BinA5} = make_resource(2, Holder, "A5"),
+    {NA5,BinNA5} = make_resource(0, Holder, "NA5"),
+    {AN5,_BinAN5} = make_resource(1, Holder, "AN5"),
+
+    {A6,BinA6} = make_resource(2, Holder, "A6"),
+    {NA6,BinNA6} = make_resource(0, Holder, "NA6"),
+    {AN6,_BinAN6} = make_resource(1, Holder, "AN6"),
+
+    {module,nif_mod} = erlang:load_module(nif_mod,ModBin),
+    undefined = nif_mod:lib_version(),
+    {error,{upgrade,_}} =
+	nif_mod:load_nif_lib(Config, 1,
+			     [{resource_type, 4, ?RT_TAKEOVER, "resource_type_A",resource_dtor_B,
+			       ?RT_TAKEOVER},
+			      {resource_type, 4, ?RT_TAKEOVER bor ?RT_CREATE, "resource_type_null_A",null,
+			       ?RT_TAKEOVER},
+			      {resource_type, 4, ?RT_TAKEOVER, "resource_type_A_null",resource_dtor_A,
+			       ?RT_TAKEOVER},
+			      {resource_type, 4, ?RT_CREATE, "Mr Pink", resource_dtor_A,
+			       ?RT_CREATE},
+
+			      {return, 1}  % FAIL
+			     ]),
+
+    undefined = nif_mod:lib_version(),
+    [{upgrade,1,5,105}] = nif_mod_call_history(),
+
+    %% Make sure dtor was not changed (from A to B)
+    ok = forget_resource(A5),
+    [{{resource_dtor_A_v1,BinA5},1,6,106}] = nif_mod_call_history(),
+
+    %% Make sure dtor was not nullified (from A to null)
+    ok = forget_resource(NA5),
+    [{{resource_dtor_A_v1,BinNA5},1,7,107}] = nif_mod_call_history(),
+
+    %% Make sure dtor was not added (from null to A)
+    ok = forget_resource(AN5),
+    [] = nif_mod_call_history(),
+
+    %%
+    %% Test rollback after failed upgrade of other lib-version
+    %%
+
+    {error,{upgrade,_}} =
+	nif_mod:load_nif_lib(Config, 2,
+			     [{resource_type, 4, ?RT_TAKEOVER, "resource_type_A",resource_dtor_B,
+			       ?RT_TAKEOVER},
+			      {resource_type, 4, ?RT_TAKEOVER bor ?RT_CREATE, "resource_type_null_A",null,
+			       ?RT_TAKEOVER},
+			      {resource_type, 4, ?RT_TAKEOVER, "resource_type_A_null",resource_dtor_A,
+			       ?RT_TAKEOVER},
+			      {resource_type, null, ?RT_TAKEOVER, "Mr Pink", resource_dtor_A,
+			       ?RT_TAKEOVER},
+			      {resource_type, 4, ?RT_CREATE, "Mr Pink", resource_dtor_A,
+			       ?RT_CREATE},
+
+			      {return, 1}  % FAIL
+			     ]),
+
+    undefined = nif_mod:lib_version(),
+    [{upgrade,2,_,_}] = nif_mod_call_history(),
+
+    %% Make sure dtor was not changed (from A to B)
+    ok = forget_resource(A6),
+    [{{resource_dtor_A_v1,BinA6},1,_,_}] = nif_mod_call_history(),
+
+    %% Make sure dtor was not nullified (from A to null)
+    ok = forget_resource(NA6),
+    [{{resource_dtor_A_v1,BinNA6},1,_,_}] = nif_mod_call_history(),
+
+    %% Make sure dtor was not added (from null to A)
+    ok = forget_resource(AN6),
+    [] = nif_mod_call_history(),
+
+    %%
+    %% Test rolback after failed initial load
+    %%
+    false = code:purge(nif_mod),
+    [{unload,1,_,_}] = nif_mod_call_history(),
+    true = code:delete(nif_mod),
+    false = code:purge(nif_mod),
+    [] = nif_mod_call_history(),
+
+
+    {module,nif_mod} = erlang:load_module(nif_mod,ModBin),
+    undefined = nif_mod:lib_version(),
+    {error,{load,_}} =
+	nif_mod:load_nif_lib(Config, 1,
+			     [{resource_type, null, ?RT_TAKEOVER, "resource_type_A",resource_dtor_A,
+			       ?RT_TAKEOVER},
+			      {resource_type, 4, ?RT_TAKEOVER bor ?RT_CREATE, "resource_type_null_A",null,
+			       ?RT_CREATE},
+			      {resource_type, 4, ?RT_CREATE, "resource_type_A_null",resource_dtor_A,
+			       ?RT_CREATE},
+			      {resource_type, 4, ?RT_CREATE, "Mr Pink", resource_dtor_A,
+			       ?RT_CREATE},
+
+			      {return, 1}  % FAIL
+			     ]),
+
+    undefined = nif_mod:lib_version(),
+    ok = nif_mod:load_nif_lib(Config, 1,
+			      [{resource_type, null, ?RT_TAKEOVER, "resource_type_A",resource_dtor_A,
+				?RT_TAKEOVER},
+			       {resource_type, 0, ?RT_TAKEOVER bor ?RT_CREATE, "resource_type_null_A",
+				resource_dtor_A, ?RT_CREATE},
+
+			       {resource_type, 1, ?RT_CREATE, "resource_type_A_null", null,
+				?RT_CREATE},
+			       {resource_type, null, ?RT_TAKEOVER, "Mr Pink", resource_dtor_A,
+				?RT_TAKEOVER},
+
+			       {return, 0}  % SUCCESS
+			      ]),
+
+    ?line hold_nif_mod_priv_data(nif_mod:get_priv_data_ptr()),
+    ?line [{load,1,1,101},{get_priv_data_ptr,1,2,102}] = nif_mod_call_history(),
+
+    {NA7,BinNA7} = make_resource(0, Holder, "NA7"),
+    {AN7,BinAN7} = make_resource(1, Holder, "AN7"),
+
+    ok = forget_resource(NA7),
+    [{{resource_dtor_A_v1,BinNA7},1,_,_}] = nif_mod_call_history(),
+
+    ok = forget_resource(AN7),
+    [] = nif_mod_call_history(),
+
     ?line true = lists:member(?MODULE, erlang:system_info(taints)),
     ?line true = lists:member(nif_mod, erlang:system_info(taints)),
     ?line verify_tmpmem(TmpMem),    
@@ -1003,9 +1194,8 @@ send3(Config) when is_list(Config) ->
     %% Let a number of processes send random message blobs between each other
     %% using enif_send. Kill and spawn new ones randomly to keep a ~constant
     %% number of workers running.
-    Seed = now(),
-    io:format("seed: ~p\n",[Seed]), 
-    random:seed(Seed),    
+    rand:seed(exsplus),
+    io:format("seed: ~p\n",[rand:export_seed()]),
     ets:new(nif_SUITE,[named_table,public]),
     ?line true = ets:insert(nif_SUITE,{send3,0,0,0,0}),
     timer:send_after(10000, timeout), % Run for 10 seconds
@@ -1038,7 +1228,7 @@ send3_controller(SpawnCnt0, Mons0, Pids0, Tick) ->
     after Tick -> 
         Max = 20,
         N = length(Pids0),
-        PidN = random:uniform(Max),
+        PidN = rand:uniform(Max),
         %%io:format("N=~p PidN=~p Pids0=~p\n", [N,PidN,Pids0]), 
         case PidN > N of
             true ->
@@ -1102,7 +1292,7 @@ send3_proc(Pids0, Counters={Rcv,SndOk,SndFail}, State0) ->
     end.
 
 send3_proc_send(Pids, {Rcv,SndOk,SndFail}, State0) ->
-    To = lists:nth(random:uniform(length(Pids)),Pids),
+    To = lists:nth(rand:uniform(length(Pids)),Pids),
     Blob = send3_make_blob(),
     State1 = send3_new_state(State0,Blob), 
     case send3_send(To, Blob) of
@@ -1114,12 +1304,12 @@ send3_proc_send(Pids, {Rcv,SndOk,SndFail}, State0) ->
 
 
 send3_make_blob() ->    
-    case random:uniform(20)-1 of
+    case rand:uniform(20)-1 of
         0 -> {term,[]};
         N ->
             MsgEnv = alloc_msgenv(), 
             repeat(N bsr 1,
-                   fun(_) -> grow_blob(MsgEnv,other_term(),random:uniform(1 bsl 20))
+                   fun(_) -> grow_blob(MsgEnv,other_term(),rand:uniform(1 bsl 20))
                    end, void),
             case (N band 1) of
                 0 -> {term,copy_blob(MsgEnv)};
@@ -1129,7 +1319,7 @@ send3_make_blob() ->
 
 send3_send(Pid, Msg) ->
     %% 90% enif_send and 10% normal bang
-    case random:uniform(10) of
+    case rand:uniform(10) of
         1 -> send3_send_bang(Pid,Msg);
         _ -> send3_send_nif(Pid,Msg)
     end.
@@ -1150,7 +1340,7 @@ send3_send_bang(Pid, {msgenv,MsgEnv}) ->
     true.
 
 send3_new_state(State, Blob) ->
-    case random:uniform(5+2) of
+    case rand:uniform(5+2) of
         N when N =< 5-> setelement(N, State, Blob);
         _ -> State  % Don't store blob
     end.
@@ -1198,7 +1388,7 @@ is_checks(Config) when is_list(Config) ->
 			self(), hd(erlang:ports()), [], [1,9,9,8],
 			{hejsan, "hejsan", [$h,"ejs",<<"an">>]}, -18446744073709551616.2e2),
     try
-        ?line error = check_is_exception(),
+        ?line check_is_exception(),
         ?line throw(expected_badarg)
     catch
         error:badarg ->
@@ -1258,6 +1448,20 @@ otp_9668(Config) ->
 
     ?line verify_tmpmem(TmpMem),
     ok.
+
+otp_9828(doc) -> ["Copy of writable binary"];
+otp_9828(Config) ->
+    ensure_lib_loaded(Config, 1),
+
+    otp_9828_loop(<<"I'm alive!">>, 1000).
+
+otp_9828_loop(Bin, 0) ->
+    ok;
+otp_9828_loop(Bin, Val) ->
+    WrtBin = <<Bin/binary, Val:32>>,
+    ok = otp_9828_nif(WrtBin),
+    otp_9828_loop(WrtBin, Val-1).
+
 
 consume_timeslice(Config) when is_list(Config) ->
     CONTEXT_REDS = 2000,
@@ -1343,7 +1547,148 @@ consume_timeslice(Config) when is_list(Config) ->
 
     ok.
 
-next_msg(Pid) ->
+nif_schedule(Config) when is_list(Config) ->
+    ensure_lib_loaded(Config),
+    A = "this is a string",
+    B = {this,is,a,tuple},
+    {B,A} = call_nif_schedule(A, B),
+    ok = try call_nif_schedule(1, 2)
+	 catch
+	     error:badarg ->
+		 [{?MODULE,call_nif_schedule,[1,2],_}|_] =
+		     erlang:get_stacktrace(),
+		 ok
+	 end,
+    ok.
+
+dirty_nif(Config) when is_list(Config) ->
+    try erlang:system_info(dirty_cpu_schedulers) of
+	N when is_integer(N) ->
+	    ensure_lib_loaded(Config),
+	    Val1 = 42,
+	    Val2 = "Erlang",
+	    Val3 = list_to_binary([Val2, 0]),
+	    {Val1, Val2, Val3} = call_dirty_nif(Val1, Val2, Val3),
+	    LargeArray = lists:duplicate(1000, ok),
+	    LargeArray = call_dirty_nif_zero_args(),
+	    ok
+    catch
+	error:badarg ->
+	    {skipped,"No dirty scheduler support"}
+    end.
+
+dirty_nif_send(Config) when is_list(Config) ->
+    try erlang:system_info(dirty_cpu_schedulers) of
+	N when is_integer(N) ->
+	    ensure_lib_loaded(Config),
+	    Parent = self(),
+	    Pid = spawn_link(fun() ->
+				     Self = self(),
+				     {ok, Self} = receive_any(),
+				     Parent ! {ok, Self}
+			     end),
+	    {ok, Pid} = send_from_dirty_nif(Pid),
+	    {ok, Pid} = receive_any(),
+	    ok
+    catch
+	error:badarg ->
+	    {skipped,"No dirty scheduler support"}
+    end.
+
+dirty_nif_exception(Config) when is_list(Config) ->
+    try erlang:system_info(dirty_cpu_schedulers) of
+	N when is_integer(N) ->
+	    ensure_lib_loaded(Config),
+	    try
+		%% this checks that the expected exception occurs when the
+		%% dirty NIF returns the result of enif_make_badarg
+		%% directly
+	        call_dirty_nif_exception(1),
+	        ?t:fail(expected_badarg)
+	    catch
+	        error:badarg ->
+		    [{?MODULE,call_dirty_nif_exception,[1],_}|_] =
+			erlang:get_stacktrace(),
+		    ok
+	    end,
+	    try
+		%% this checks that the expected exception occurs when the
+		%% dirty NIF calls enif_make_badarg at some point but then
+		%% returns a value that isn't an exception
+	        call_dirty_nif_exception(0),
+	        ?t:fail(expected_badarg)
+	    catch
+	        error:badarg ->
+		    [{?MODULE,call_dirty_nif_exception,[0],_}|_] =
+			erlang:get_stacktrace(),
+		    ok
+	    end,
+	    %% this checks that a dirty NIF can raise various terms as
+	    %% exceptions
+	    ok = nif_raise_exceptions(call_dirty_nif_exception)
+    catch
+	error:badarg ->
+	    {skipped,"No dirty scheduler support"}
+    end.
+
+nif_exception(Config) when is_list(Config) ->
+    ensure_lib_loaded(Config),
+    try
+	%% this checks that the expected exception occurs when the NIF
+	%% calls enif_make_badarg at some point but then tries to return a
+	%% value that isn't an exception
+	call_nif_exception(0),
+	?t:fail(expected_badarg)
+    catch
+	error:badarg ->
+	    ok
+    end,
+    %% this checks that a NIF can raise various terms as exceptions
+    ok = nif_raise_exceptions(call_nif_exception),
+    ok.
+
+nif_nan_and_inf(Config) when is_list(Config) ->
+    ensure_lib_loaded(Config),
+    try
+	call_nif_nan_or_inf(nan),
+	?t:fail(expected_badarg)
+    catch
+	error:badarg ->
+	    ok
+    end,
+    try
+	call_nif_nan_or_inf(inf),
+	?t:fail(expected_badarg)
+    catch
+	error:badarg ->
+	    ok
+    end,
+    try
+	call_nif_nan_or_inf(tuple),
+	?t:fail(expected_badarg)
+    catch
+	error:badarg ->
+	    ok
+    end.
+
+nif_atom_too_long(Config) when is_list(Config) ->
+    ensure_lib_loaded(Config),
+    try
+	call_nif_atom_too_long(all),
+	?t:fail(expected_badarg)
+    catch
+	error:badarg ->
+	    ok
+    end,
+    try
+	call_nif_atom_too_long(len),
+	?t:fail(expected_badarg)
+    catch
+	error:badarg ->
+	    ok
+    end.
+
+next_msg(_Pid) ->
     receive
 	M -> M
     after 100 ->
@@ -1368,10 +1713,9 @@ tmpmem() ->
 	MemInfo ->
 	    MSBCS = lists:foldl(
 		      fun ({instance, _, L}, Acc) ->
-			      {value,{_,SBMBCS}} = lists:keysearch(sbmbcs, 1, L),
 			      {value,{_,MBCS}} = lists:keysearch(mbcs, 1, L),
 			      {value,{_,SBCS}} = lists:keysearch(sbcs, 1, L),
-			      [SBMBCS,MBCS,SBCS | Acc]
+			      [MBCS,SBCS | Acc]
 		      end,
 		      [],
 		      MemInfo),
@@ -1423,7 +1767,162 @@ check(Exp,Got,Line) ->
   	    io:format("CHECK at ~p: Expected ~p but got ~p\n",[Line,Exp,Got]),
  	    Got
     end.
-	    
+
+nif_raise_exceptions(NifFunc) ->
+    ExcTerms = [{error, test}, "a string", <<"a binary">>,
+		42, [1,2,3,4,5], [{p,1},{p,2},{p,3}]],
+    lists:foldl(fun(Term, ok) ->
+			try
+			    erlang:apply(?MODULE,NifFunc,[Term]),
+			    ?t:fail({expected,Term})
+			catch
+			    error:Term ->
+				[{?MODULE,NifFunc,[Term],_}|_] = erlang:get_stacktrace(),
+				ok
+			end
+		end, ok, ExcTerms).
+
+-define(ERL_NIF_TIME_ERROR, -9223372036854775808).
+-define(TIME_UNITS, [seconds, milli_seconds, micro_seconds, nano_seconds]).
+
+nif_monotonic_time(Config) ->
+    ?ERL_NIF_TIME_ERROR = monotonic_time(invalid_time_unit),
+    mtime_loop(1000000).
+
+mtime_loop(0) ->
+    ok;
+mtime_loop(N) ->
+    chk_mtime(?TIME_UNITS),
+    mtime_loop(N-1).
+
+chk_mtime([]) ->
+    ok;
+chk_mtime([TU|TUs]) ->
+    A = erlang:monotonic_time(TU),
+    B = monotonic_time(TU),
+    C = erlang:monotonic_time(TU),
+    try
+	true = A =< B,
+	true = B =< C
+    catch
+	_ : _ ->
+	    ?t:fail({monotonic_time_missmatch, TU, A, B, C})
+    end,
+    chk_mtime(TUs).
+
+nif_time_offset(Config) ->
+    ?ERL_NIF_TIME_ERROR = time_offset(invalid_time_unit),
+    toffs_loop(1000000).
+
+toffs_loop(0) ->
+    ok;
+toffs_loop(N) ->
+    chk_toffs(?TIME_UNITS),
+    toffs_loop(N-1).
+
+chk_toffs([]) ->
+    ok;
+chk_toffs([TU|TUs]) ->
+    TO = erlang:time_offset(TU),
+    NifTO = time_offset(TU),
+    case TO =:= NifTO of
+	true ->
+	    ok;
+	false ->
+	    case erlang:system_info(time_warp_mode) of
+		no_time_warp ->
+		    ?t:fail({time_offset_mismatch, TU, TO, NifTO});
+		_ ->
+		    %% Most frequent time offset change
+		    %% is currently only every 15:th
+		    %% second so this should currently
+		    %% work...
+		    NTO = erlang:time_offset(TU),
+		    case NifTO =:= NTO of
+			true ->
+			    ok;
+			false ->
+			    ?t:fail({time_offset_mismatch, TU, TO, NifTO, NTO})
+		    end
+	    end
+    end,
+    chk_toffs(TUs).
+
+nif_convert_time_unit(Config) ->
+    ?ERL_NIF_TIME_ERROR = convert_time_unit(0, seconds, invalid_time_unit),
+    ?ERL_NIF_TIME_ERROR = convert_time_unit(0, invalid_time_unit, seconds),
+    ?ERL_NIF_TIME_ERROR = convert_time_unit(0, invalid_time_unit, invalid_time_unit),
+    lists:foreach(fun (Offset) ->
+			  lists:foreach(fun (Diff) ->
+						chk_ctu(Diff+(Offset*1000*1000*1000))
+					end,
+					[999999999999,
+					 99999999999,
+					 9999999999,
+					 999999999,
+					 99999999,
+					 9999999,
+					 999999,
+					 99999,
+					 999,
+					 99,
+					 9,
+					 1,
+					 11,
+					 101,
+					 1001,
+					 10001,
+					 100001,
+					 1000001,
+					 10000001,
+					 100000001,
+					 1000000001,
+					 100000000001,
+					 1000000000001,
+					 5,
+					 50,
+					 500,
+					 5000,
+					 50000,
+					 500000,
+					 5000000,
+					 50000000,
+					 500000000,
+					 5000000000,
+					 50000000000,
+					 500000000000])
+		  end,
+		  [-4711, -1000, -475, -5, -4, -3, -2, -1, 0,
+		   1, 2, 3, 4, 5, 475, 1000, 4711]),
+    ctu_loop(1000000).
+
+ctu_loop(0) ->
+    ok;
+ctu_loop(N) ->
+    chk_ctu(erlang:monotonic_time(nano_seconds)),
+    ctu_loop(N-1).
+
+chk_ctu(Time) ->
+    chk_ctu(Time, ?TIME_UNITS).
+
+chk_ctu(_Time, []) ->
+    ok;
+chk_ctu(Time, [FromTU|FromTUs]) ->
+    chk_ctu(Time, FromTU, ?TIME_UNITS),
+    chk_ctu(Time, FromTUs).
+
+chk_ctu(_Time, _FromTU, []) ->
+    ok;
+chk_ctu(Time, FromTU, [ToTU|ToTUs]) ->
+    T = erlang:convert_time_unit(Time, nano_seconds, FromTU),
+    TE = erlang:convert_time_unit(T, FromTU, ToTU),
+    TN = convert_time_unit(T, FromTU, ToTU),
+    case TE =:= TN of
+	false ->
+	    ?t:fail({conversion_mismatch, FromTU, T, ToTU, TE, TN});
+	true ->
+	    chk_ctu(Time, FromTU, ToTUs)
+    end.
 
 %% The NIFs:
 lib_version() -> undefined.
@@ -1472,7 +1971,33 @@ reverse_list(_) -> ?nif_stub.
 echo_int(_) -> ?nif_stub.
 type_sizes() -> ?nif_stub.
 otp_9668_nif(_) -> ?nif_stub.
+otp_9828_nif(_) -> ?nif_stub.
 consume_timeslice_nif(_,_) -> ?nif_stub.
+call_nif_schedule(_,_) -> ?nif_stub.
+call_dirty_nif(_,_,_) -> ?nif_stub.
+send_from_dirty_nif(_) -> ?nif_stub.
+call_dirty_nif_exception(_) -> ?nif_stub.
+call_dirty_nif_zero_args() -> ?nif_stub.
+call_nif_exception(_) -> ?nif_stub.
+call_nif_nan_or_inf(_) -> ?nif_stub.
+call_nif_atom_too_long(_) -> ?nif_stub.
+
+%% maps
+is_map_nif(_) -> ?nif_stub.
+get_map_size_nif(_) -> ?nif_stub.
+make_new_map_nif() -> ?nif_stub.
+make_map_put_nif(_,_,_) -> ?nif_stub.
+get_map_value_nif(_,_) -> ?nif_stub.
+make_map_update_nif(_,_,_) -> ?nif_stub.
+make_map_remove_nif(_,_) -> ?nif_stub.
+maps_from_list_nif(_) -> ?nif_stub.
+sorted_list_from_maps_nif(_) -> ?nif_stub.
+
+%% Time
+monotonic_time(_) -> ?nif_stub.
+time_offset(_) -> ?nif_stub.
+convert_time_unit(_,_,_) -> ?nif_stub.
+    
 
 nif_stub_error(Line) ->
     exit({nif_not_loaded,module,?MODULE,line,Line}).

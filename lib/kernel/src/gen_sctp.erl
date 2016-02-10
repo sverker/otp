@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -36,10 +37,12 @@
 
 -type assoc_id() :: term().
 -type option() ::
-        {active, true | false | once} |
+        {active, true | false | once | -32768..32767} |
         {buffer, non_neg_integer()} |
         {dontroute, boolean()} |
+        {high_msgq_watermark, pos_integer()} |
         {linger, {boolean(), non_neg_integer()}} |
+        {low_msgq_watermark, pos_integer()} |
         {mode, list | binary} | list | binary |
         {priority, non_neg_integer()} |
         {recbuf, non_neg_integer()} |
@@ -68,7 +71,9 @@
         active |
         buffer |
         dontroute |
+        high_msgq_watermark |
         linger |
+        low_msgq_watermark |
         mode |
         priority |
         recbuf |
@@ -270,7 +275,7 @@ do_connect(S, Addr, Port, Opts, Timeout, ConnWait) when is_port(S), is_list(Opts
 				    Mod:connect(S, IP, Port, Opts, ConnectTimer);
 				Error -> Error
 			    after
-				inet:stop_timer(Timer)
+				_ = inet:stop_timer(Timer)
 			    end
 		    catch
 			error:badarg ->
@@ -419,7 +424,11 @@ error_string(9) ->
 error_string(10) ->
     "Cookie Received While Shutting Down";
 error_string(11) ->
+    "Restart of an Association with New Addresses";
+error_string(12) ->
     "User Initiated Abort";
+error_string(13) ->
+    "Protocol Violation";
 %% For more info on principal SCTP error codes: phone +44 7981131933
 error_string(N) when is_integer(N) ->
     unknown_error;

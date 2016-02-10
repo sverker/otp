@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2003-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -40,25 +41,26 @@ compile_asn1config(Config, Options) ->
 test(Erule,_Config) ->
 %    ?line OutDir = ?config(priv_dir,Config),
     %% testing OTP-4798, open type encoded with indefinite length
-    ?line {ok,_Res} = asn1_wrapper:decode('TCAPMessages-simple','MessageType', val_OTP_4798(Erule)),
+    {ok,_Res} = 'TCAPMessages-simple':decode('MessageType',
+					     val_OTP_4798(Erule)),
+
     %% testing OTP-4799, absent optional open type
-    ?line {ok,_Res2} = asn1_wrapper:decode('TCAPMessages-simple','MessageType',val_OTP_4799(Erule)),
+    {ok,_Res2} = 'TCAPMessages-simple':decode('MessageType',
+					      val_OTP_4799(Erule)),
+
     %% testing vance shipley's problems. Parameterized object sets.
     ?line Val3 = 'TCAPPackage_msg':val('PackageType',unidirectional),
-    ?line {ok,Bytes3} = asn1_wrapper:encode('TCAPPackage','PackageType',Val3),
-    ?line {ok,Res3} = asn1_wrapper:decode('TCAPPackage','PackageType',Bytes3),
+    Res3 = enc_dec('PackageType', Val3),
     ?line ok = 'TCAPPackage_msg':check_result('PackageType',unidirectional,Res3),
 %%    ?line io:format("Res3:~n~p~n~n",[Res3]),
     
     ?line Val4 = 'TCAPPackage_msg':val('PackageType',abort),
-    ?line {ok,Bytes4} = asn1_wrapper:encode('TCAPPackage','PackageType',Val4),
-    ?line {ok,Res4} = asn1_wrapper:decode('TCAPPackage','PackageType',Bytes4),
+    Res4 = enc_dec('PackageType', Val4),
     ?line ok = 'TCAPPackage_msg':check_result('PackageType',abort,Res4),
 %%    ?line io:format("Res4:~n~p~n~n",[Res4]),
 
     ?line Val5 = 'TCAPPackage_msg':val('PackageType',response),
-    ?line {ok,Bytes5} = asn1_wrapper:encode('TCAPPackage','PackageType',Val5),
-    ?line {ok,Res5} = asn1_wrapper:decode('TCAPPackage','PackageType',Bytes5),
+    Res5 = enc_dec('PackageType', Val5),
     ?line ok = 'TCAPPackage_msg':check_result('PackageType',response,Res5).
 %%    ?line io:format("Res5:~n~p~n~n",[Res5]).
 
@@ -73,21 +75,26 @@ val_OTP_4799(_) ->
     <<100,16,73,4,41,182,36,0,108,8,163,6,2,1,29,2,1,27>>.
 
 test_asn1config() ->
-    ?line Val = 'TCAPPackage_msg':val('PackageType',queryWithPerm),
-    ?line {ok,B} = asn1_wrapper:encode('TCAPPackage','PackageType',Val),
-    ?line {ok,ExMsg}='TCAPPackage':decode_PackageType(list_to_binary(B)),
-    ?line {_,{_,_,_,{Key,ExVal}}}=ExMsg,
-    ?line {ok,_Parts}='TCAPPackage':decode_part(Key,ExVal),
+    Val = 'TCAPPackage_msg':val('PackageType', queryWithPerm),
+    {ok,B} = 'TCAPPackage':encode('PackageType', Val),
+    {ok,ExMsg}='TCAPPackage':decode_PackageType(B),
+    {_,{_,_,_,{Key,ExVal}}} = ExMsg,
+    {ok,_Parts} = 'TCAPPackage':decode_part(Key, ExVal),
     
-    ?line Val2 = 'TCAPPackage_msg':val('TransactionPDU'),
-    ?line {ok,B2} = 'TCAPPackage':encode('TransactionPDU',Val2),
-    {ok,ExMsg2}='TCAPPackage':decode_TransactionPDU(B2),
-    ?line {_,_,_,{Key2,ExVal2}}=ExMsg2,
-    ?line {ok,_Parts2}='TCAPPackage':decode_part(Key2,ExVal2),
+    Val2 = 'TCAPPackage_msg':val('TransactionPDU'),
+    {ok,B2} = 'TCAPPackage':encode('TransactionPDU', Val2),
+    {ok,ExMsg2} = 'TCAPPackage':decode_TransactionPDU(B2),
+    {_,_,_,{Key2,ExVal2}} = ExMsg2,
+    {ok,_Parts2} = 'TCAPPackage':decode_part(Key2, ExVal2),
 
-    ?line Val3 = 'TCAPPackage_msg':val('PackageType',response),
-    ?line {ok,B3} = asn1_wrapper:encode('TCAPPackage','PackageType',Val3),
-    ?line {ok,ExMsg3}='TCAPPackage':decode_PackageType(list_to_binary(B3)),
-    ?line {_,{_,_,_,{Key3,ExVal3}}}=ExMsg3,
-    ?line {ok,_Parts3}='TCAPPackage':decode_part(Key3,ExVal3).
+    Val3 = 'TCAPPackage_msg':val('PackageType', response),
+    {ok,B3} = 'TCAPPackage':encode('PackageType', Val3),
+    {ok,ExMsg3} = 'TCAPPackage':decode_PackageType(B3),
+    {_,{_,_,_,{Key3,ExVal3}}} = ExMsg3,
+    {ok,_Parts3}='TCAPPackage':decode_part(Key3, ExVal3).
     
+enc_dec(T, V0) ->
+    M = 'TCAPPackage',
+    {ok,Enc} = M:encode(T, V0),
+    {ok,V} = M:decode(T, Enc),
+    V.

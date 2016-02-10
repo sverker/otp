@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -551,8 +552,7 @@ c(M, F, A, Flags) ->
 		    stop_clear(),
 		    {error, Reason};
 		{Pid, Res} ->
-		    erlang:demonitor(Mref),
-		    receive {'DOWN', Mref, _, _, _} -> ok after 0 -> ok end,
+		    erlang:demonitor(Mref, [flush]),
 		    %% 'sleep' prevents the tracer (recv_all_traces) from
 		    %% receiving garbage {'EXIT',...} when dbg i stopped.
 		    timer:sleep(1),
@@ -592,8 +592,7 @@ req(R) ->
 	{'DOWN', Mref, _, _, _} -> % If server died
 	    exit(dbg_server_crash);
 	{dbg, Reply} ->
-	    erlang:demonitor(Mref),
-	    receive {'DOWN', Mref, _, _, _} -> ok after 0 -> ok end,
+	    erlang:demonitor(Mref, [flush]),
 	    Reply
     end.
 
@@ -780,50 +779,50 @@ tracer_init(Handler, HandlerData) ->
     tracer_loop(Handler, HandlerData).
 
 tracer_loop(Handler, Hdata) ->
-    receive
-	Msg ->
-	    %% Don't match in receive to avoid giving EXIT message higher
-	    %% priority than the trace messages.
-	    case Msg of
-		{'EXIT',_Pid,_Reason} ->
-		    ok;
-		Trace ->
-		    NewData = recv_all_traces(Trace, Handler, Hdata),
-		    tracer_loop(Handler, NewData)
-	    end
+    {State, Suspended, Traces} =  recv_all_traces(),
+    NewHdata = handle_traces(Suspended, Traces, Handler, Hdata),
+    case State of
+	done ->
+	    exit(normal);
+	loop ->
+	    tracer_loop(Handler, NewHdata)
     end.
-    
-recv_all_traces(Trace, Handler, Hdata) ->
-    Suspended = suspend(Trace, []),
-    recv_all_traces(Suspended, Handler, Hdata, [Trace]).
 
-recv_all_traces(Suspended0, Handler, Hdata, Traces) ->
+recv_all_traces() ->
+    recv_all_traces([], [], infinity).
+
+recv_all_traces(Suspended0, Traces, Timeout) ->
     receive
 	Trace when is_tuple(Trace), element(1, Trace) == trace ->
 	    Suspended = suspend(Trace, Suspended0),
-	    recv_all_traces(Suspended, Handler, Hdata, [Trace|Traces]);
+	    recv_all_traces(Suspended, [Trace|Traces], 0);
 	Trace when is_tuple(Trace), element(1, Trace) == trace_ts ->
 	    Suspended = suspend(Trace, Suspended0),
-	    recv_all_traces(Suspended, Handler, Hdata, [Trace|Traces]);
+	    recv_all_traces(Suspended, [Trace|Traces], 0);
 	Trace when is_tuple(Trace), element(1, Trace) == seq_trace ->
 	    Suspended = suspend(Trace, Suspended0),
-	    recv_all_traces(Suspended, Handler, Hdata, [Trace|Traces]);
+	    recv_all_traces(Suspended, [Trace|Traces], 0);
 	Trace when is_tuple(Trace), element(1, Trace) == drop ->
 	    Suspended = suspend(Trace, Suspended0),
-	    recv_all_traces(Suspended, Handler, Hdata, [Trace|Traces]);
+	    recv_all_traces(Suspended, [Trace|Traces], 0);
+	{'EXIT', _Pid, _Reason} ->
+	    {done, Suspended0, Traces};
 	Other ->
 	    %%% Is this really a good idea?
 	    io:format(user,"** tracer received garbage: ~p~n", [Other]),
-	    recv_all_traces(Suspended0, Handler, Hdata, Traces)
-    after 0 ->
-	    case catch invoke_handler(Traces, Handler, Hdata) of
-		{'EXIT',Reason} -> 
-		    resume(Suspended0),
-		    exit({trace_handler_crashed,Reason});
-		NewHdata ->
-		    resume(Suspended0),
-		    NewHdata
-	    end
+	    recv_all_traces(Suspended0, Traces, Timeout)
+    after Timeout ->
+	    {loop, Suspended0, Traces}
+    end.
+
+handle_traces(Suspended, Traces, Handler, Hdata) ->
+    case catch invoke_handler(Traces, Handler, Hdata) of
+	{'EXIT',Reason} -> 
+	    resume(Suspended),
+	    exit({trace_handler_crashed,Reason});
+	NewHdata ->
+	    resume(Suspended),
+	    NewHdata
     end.
 
 invoke_handler([Tr|Traces], Handler, Hdata0) ->
@@ -1115,7 +1114,7 @@ transform_flags([sos|Tail],Acc) -> transform_flags(Tail,[set_on_spawn|Acc]);
 transform_flags([sol|Tail],Acc) -> transform_flags(Tail,[set_on_link|Acc]);
 transform_flags([sofs|Tail],Acc) -> transform_flags(Tail,[set_on_first_spawn|Acc]);
 transform_flags([sofl|Tail],Acc) -> transform_flags(Tail,[set_on_first_link|Acc]);
-transform_flags([all|_],_Acc) -> all();
+transform_flags([all|_],_Acc) -> all()--[silent];
 transform_flags([F|Tail]=List,Acc) when is_atom(F) ->
     case lists:member(F, all()) of
 	true -> transform_flags(Tail,[F|Acc]);
@@ -1126,7 +1125,7 @@ transform_flags(Bad,_Acc) -> {error,{bad_flags,Bad}}.
 all() ->
     [send,'receive',call,procs,garbage_collection,running,
      set_on_spawn,set_on_first_spawn,set_on_link,set_on_first_link,
-     timestamp,arity,return_to].
+     timestamp,arity,return_to,silent].
 
 display_info([Node|Nodes]) ->
     io:format("~nNode ~w:~n",[Node]),
@@ -1270,7 +1269,7 @@ gen_reader(follow_file, Filename) ->
 
 %% Opens a file and returns a reader (lazy list).
 gen_reader_file(ReadFun, Filename) ->
-    case file:open(Filename, [read, raw, binary]) of
+    case file:open(Filename, [read, raw, binary, read_ahead]) of
 	{ok, File} ->
 	    mk_reader(ReadFun, File);
 	Error ->
@@ -1295,7 +1294,7 @@ mk_reader(ReadFun, Source) ->
 mk_reader_wrap([]) ->
     [];
 mk_reader_wrap([Hd | _] = WrapFiles) ->
-    case file:open(wrap_name(Hd), [read, raw, binary]) of
+    case file:open(wrap_name(Hd), [read, raw, binary, read_ahead]) of
 	{ok, File} ->
 	    mk_reader_wrap(WrapFiles, File);
 	Error ->
@@ -1788,12 +1787,12 @@ h(get_tracer) ->
        " - Returns the process or port to which all trace messages are sent."]);
 h(stop) ->
     help_display(
-      ["stop() -> stopped",
+      ["stop() -> ok",
        " - Stops the dbg server and the tracing of all processes.",
        "   Does not clear any trace patterns."]);
 h(stop_clear) ->
     help_display(
-      ["stop_clear() -> stopped",
+      ["stop_clear() -> ok",
        " - Stops the dbg server and the tracing of all processes,",
        "   and clears all trace patterns."]).
 

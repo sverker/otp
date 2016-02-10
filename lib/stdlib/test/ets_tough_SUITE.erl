@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1996-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -91,7 +92,7 @@ ex1_sub(Config) ->
     ok.
 
 prep(Config) ->
-    random:seed(),
+    rand:seed(exsplus),
     put(dump_ticket,none),
     DumpDir = filename:join(?config(priv_dir,Config), "ets_tough"),
     file:make_dir(DumpDir),
@@ -220,19 +221,19 @@ random_class() ->
     random_element(Classes).
 
 random_key() ->
-    random:uniform(8).
+    rand:uniform(8).
 
 random_value() ->
-    case random:uniform(5) of
+    case rand:uniform(5) of
 	1 -> ok;
 	2 -> {data,random_key()};
 	3 -> {foo,bar,random_class()};
-	4 -> random:uniform(1000);
+	4 -> rand:uniform(1000);
 	5 -> {recursive,random_value()}
     end.
 
 random_element(T) ->
-    I = random:uniform(tuple_size(T)),
+    I = rand:uniform(tuple_size(T)),
     element(I,T).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

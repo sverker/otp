@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2009-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -191,7 +192,7 @@ conf1_end(Config) ->
     %% check 2s & 3s < 4s
     Ms = timer:now_diff(now(),?config(t0,Config)),
     test_server:comment(io_lib:format("~p",[now()])),
-    if Ms > 3500000 -> exit({bad_parallel_exec,Ms});
+    if Ms > 4000000 -> exit({bad_parallel_exec,Ms});
        Ms < 3000000 -> exit({bad_parallel_exec,Ms});
        true -> ok
     end.
@@ -204,7 +205,7 @@ conf2_end(Config) ->
     %% check 3s & 2s < 4s
     Ms = timer:now_diff(now(),?config(t0,Config)),
     test_server:comment(io_lib:format("~p",[now()])),
-    if Ms > 3500000 -> exit({bad_parallel_exec,Ms});
+    if Ms > 4000000 -> exit({bad_parallel_exec,Ms});
        Ms < 3000000 -> exit({bad_parallel_exec,Ms});
        true -> ok
     end.
@@ -217,7 +218,7 @@ conf3_end(Config) ->
     %% check 6s & 6s & (2s & 3s) & 1s = ~6s
     Ms = timer:now_diff(now(),?config(t0,Config)),
     test_server:comment(io_lib:format("~p",[now()])),
-    if Ms > 6500000 -> exit({bad_parallel_exec,Ms});
+    if Ms > 7000000 -> exit({bad_parallel_exec,Ms});
        Ms < 6000000 -> exit({bad_parallel_exec,Ms});
        true -> ok
     end.
@@ -230,7 +231,7 @@ conf4_end(Config) ->
     %% check 2s & 3s >= 5s
     Ms = timer:now_diff(now(),?config(t0,Config)),
     test_server:comment(io_lib:format("~p",[now()])),
-    if Ms > 5500000 -> exit({bad_parallel_exec,Ms});
+    if Ms > 6000000 -> exit({bad_parallel_exec,Ms});
        Ms < 5000000 -> exit({bad_parallel_exec,Ms});
        true -> ok
     end.
@@ -243,7 +244,7 @@ conf5_end(Config) ->
     %% check 1s & 1s & (3s & 2s) & 1s = ~6s
     Ms = timer:now_diff(now(),?config(t0,Config)),
     test_server:comment(io_lib:format("~p",[now()])),
-    if Ms > 7000000 -> exit({bad_parallel_exec,Ms});
+    if Ms > 7500000 -> exit({bad_parallel_exec,Ms});
        Ms < 6000000 -> exit({bad_parallel_exec,Ms});
        true -> ok
     end.
@@ -257,7 +258,7 @@ conf6_end(Config) ->
     %% check 3s & 2s < 5s
     Ms = timer:now_diff(now(),?config(t0,Config)),
     test_server:comment(io_lib:format("~p",[now()])),
-    if Ms > 3500000 -> exit({bad_parallel_exec,Ms});
+    if Ms > 4500000 -> exit({bad_parallel_exec,Ms});
        Ms < 3000000 -> exit({bad_parallel_exec,Ms});
        true -> ok
     end.
@@ -277,7 +278,7 @@ conf7_end(Config) ->
     %% check 1s & 1s & (2s & 2s) & 1s = ~3s 
     Ms = timer:now_diff(now(),?config(t0,Config)),
     test_server:comment(io_lib:format("~p",[now()])),
-    if Ms > 3500000 -> exit({bad_parallel_exec,Ms});
+    if Ms > 4000000 -> exit({bad_parallel_exec,Ms});
        Ms < 3000000 -> exit({bad_parallel_exec,Ms});
        true -> ok
     end.
@@ -291,7 +292,7 @@ conf8_end(Config) ->
     %% check 2s & 2s < 4s
     Ms = timer:now_diff(now(),?config(t0,Config)),
     test_server:comment(io_lib:format("~p",[now()])),
-    if Ms > 2500000 -> exit({bad_parallel_exec,Ms});
+    if Ms > 3000000 -> exit({bad_parallel_exec,Ms});
        Ms < 2000000 -> exit({bad_parallel_exec,Ms});
        true -> ok
     end.

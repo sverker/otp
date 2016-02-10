@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
-      <year>2001</year><year>2011</year>
+      <year>2001</year><year>2015</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -115,28 +116,34 @@
 
   <datatypes>
     <datatype>
-      <name><marker id="type-gb_set">gb_set()</marker></name>
+      <name name="set" n_vars="1"/>
       <desc><p>A GB set.</p></desc>
     </datatype>
     <datatype>
-      <name name="iter"/>
+      <name name="set" n_vars="0"/>
+    </datatype>
+    <datatype>
+      <name name="iter" n_vars="1"/>
       <desc><p>A GB set iterator.</p></desc>
+    </datatype>
+    <datatype>
+      <name name="iter" n_vars="0"/>
     </datatype>
   </datatypes>
   <funcs>
     <func>
       <name name="add" arity="2"/>
       <name name="add_element" arity="2"/>
-      <fsummary>Add a (possibly existing) element to a gb_set</fsummary>
+      <fsummary>Add a (possibly existing) element to a set</fsummary>
       <desc>
-        <p>Returns a new gb_set formed from <c><anno>Set1</anno></c> with
+        <p>Returns a new set formed from <c><anno>Set1</anno></c> with
           <c><anno>Element</anno></c> inserted. If <c><anno>Element</anno></c> is already an
           element in <c><anno>Set1</anno></c>, nothing is changed.</p>
       </desc>
     </func>
     <func>
       <name name="balance" arity="1"/>
-      <fsummary>Rebalance tree representation of a gb_set</fsummary>
+      <fsummary>Rebalance tree representation of a set</fsummary>
       <desc>
         <p>Rebalances the tree representation of <c><anno>Set1</anno></c>. Note that
           this is rarely necessary, but may be motivated when a large
@@ -148,9 +155,9 @@
     </func>
     <func>
       <name name="delete" arity="2"/>
-      <fsummary>Remove an element from a gb_set</fsummary>
+      <fsummary>Remove an element from a set</fsummary>
       <desc>
-        <p>Returns a new gb_set formed from <c><anno>Set1</anno></c> with
+        <p>Returns a new set formed from <c><anno>Set1</anno></c> with
           <c><anno>Element</anno></c> removed. Assumes that <c><anno>Element</anno></c> is present
           in <c><anno>Set1</anno></c>.</p>
       </desc>
@@ -158,9 +165,9 @@
     <func>
       <name name="delete_any" arity="2"/>
       <name name="del_element" arity="2"/>
-      <fsummary>Remove a (possibly non-existing) element from a gb_set</fsummary>
+      <fsummary>Remove a (possibly non-existing) element from a set</fsummary>
       <desc>
-        <p>Returns a new gb_set formed from <c><anno>Set1</anno></c> with
+        <p>Returns a new set formed from <c><anno>Set1</anno></c> with
           <c><anno>Element</anno></c> removed. If <c><anno>Element</anno></c> is not an element
           in <c><anno>Set1</anno></c>, nothing is changed.</p>
       </desc>
@@ -168,7 +175,7 @@
     <func>
       <name name="difference" arity="2"/>
       <name name="subtract" arity="2"/>
-      <fsummary>Return the difference of two gb_sets</fsummary>
+      <fsummary>Return the difference of two sets</fsummary>
       <desc>
         <p>Returns only the elements of <c><anno>Set1</anno></c> which are not also
           elements of <c><anno>Set2</anno></c>.</p>
@@ -177,14 +184,14 @@
     <func>
       <name name="empty" arity="0"/>
       <name name="new" arity="0"/>
-      <fsummary>Return an empty gb_set</fsummary>
+      <fsummary>Return an empty set</fsummary>
       <desc>
-        <p>Returns a new empty gb_set.</p>
+        <p>Returns a new empty set.</p>
       </desc>
     </func>
     <func>
       <name name="filter" arity="2"/>
-      <fsummary>Filter gb_set elements</fsummary>
+      <fsummary>Filter set elements</fsummary>
       <desc>
         <p>Filters elements in <c><anno>Set1</anno></c> using predicate function
           <c><anno>Pred</anno></c>.</p>
@@ -192,7 +199,7 @@
     </func>
     <func>
       <name name="fold" arity="3"/>
-      <fsummary>Fold over gb_set elements</fsummary>
+      <fsummary>Fold over set elements</fsummary>
       <desc>
         <p>Folds <c><anno>Function</anno></c> over every element in <c><anno>Set</anno></c>
           returning the final value of the accumulator.</p>
@@ -200,46 +207,46 @@
     </func>
     <func>
       <name name="from_list" arity="1"/>
-      <fsummary>Convert a list into a gb_set</fsummary>
+      <fsummary>Convert a list into a set</fsummary>
       <desc>
-        <p>Returns a gb_set of the elements in <c><anno>List</anno></c>, where
+        <p>Returns a set of the elements in <c><anno>List</anno></c>, where
           <c><anno>List</anno></c> may be unordered and contain duplicates.</p>
       </desc>
     </func>
     <func>
       <name name="from_ordset" arity="1"/>
-      <fsummary>Make a gb_set from an ordset list</fsummary>
+      <fsummary>Make a set from an ordset list</fsummary>
       <desc>
-        <p>Turns an ordered-set list <c><anno>List</anno></c> into a gb_set. The list
+        <p>Turns an ordered-set list <c><anno>List</anno></c> into a set. The list
           must not contain duplicates.</p>
       </desc>
     </func>
     <func>
       <name name="insert" arity="2"/>
-      <fsummary>Add a new element to a gb_set</fsummary>
+      <fsummary>Add a new element to a set</fsummary>
       <desc>
-        <p>Returns a new gb_set formed from <c><anno>Set1</anno></c> with
+        <p>Returns a new set formed from <c><anno>Set1</anno></c> with
           <c><anno>Element</anno></c> inserted. Assumes that <c><anno>Element</anno></c> is not
           present in <c><anno>Set1</anno></c>.</p>
       </desc>
     </func>
     <func>
       <name name="intersection" arity="2"/>
-      <fsummary>Return the intersection of two gb_sets</fsummary>
+      <fsummary>Return the intersection of two sets</fsummary>
       <desc>
         <p>Returns the intersection of <c><anno>Set1</anno></c> and <c><anno>Set2</anno></c>.</p>
       </desc>
     </func>
     <func>
       <name name="intersection" arity="1"/>
-      <fsummary>Return the intersection of a list of gb_sets</fsummary>
+      <fsummary>Return the intersection of a list of sets</fsummary>
       <desc>
-        <p>Returns the intersection of the non-empty list of gb_sets.</p>
+        <p>Returns the intersection of the non-empty list of sets.</p>
       </desc>
     </func>
     <func>
       <name name="is_disjoint" arity="2"/>
-      <fsummary>Check whether two gb_sets are disjoint</fsummary>
+      <fsummary>Check whether two sets are disjoint</fsummary>
       <desc>
         <p>Returns <c>true</c> if <c><anno>Set1</anno></c> and
           <c><anno>Set2</anno></c> are disjoint (have no elements in common),
@@ -248,7 +255,7 @@
     </func>
     <func>
       <name name="is_empty" arity="1"/>
-      <fsummary>Test for empty gb_set</fsummary>
+      <fsummary>Test for empty set</fsummary>
       <desc>
         <p>Returns <c>true</c> if <c><anno>Set</anno></c> is an empty set, and
           <c>false</c> otherwise.</p>
@@ -257,7 +264,7 @@
     <func>
       <name name="is_member" arity="2"/>
       <name name="is_element" arity="2"/>
-      <fsummary>Test for membership of a gb_set</fsummary>
+      <fsummary>Test for membership of a set</fsummary>
       <desc>
         <p>Returns <c>true</c> if <c><anno>Element</anno></c> is an element of
           <c><anno>Set</anno></c>, otherwise <c>false</c>.</p>
@@ -265,9 +272,9 @@
     </func>
     <func>
       <name name="is_set" arity="1"/>
-      <fsummary>Test for a gb_set</fsummary>
+      <fsummary>Test for a set</fsummary>
       <desc>
-        <p>Returns <c>true</c> if <c><anno>Term</anno></c> appears to be a gb_set,
+        <p>Returns <c>true</c> if <c><anno>Term</anno></c> appears to be a set,
           otherwise <c>false</c>.</p>
       </desc>
     </func>
@@ -281,7 +288,7 @@
     </func>
     <func>
       <name name="iterator" arity="1"/>
-      <fsummary>Return an iterator for a gb_set</fsummary>
+      <fsummary>Return an iterator for a set</fsummary>
       <desc>
         <p>Returns an iterator that can be used for traversing the
           entries of <c><anno>Set</anno></c>; see <c>next/1</c>. The implementation
@@ -294,6 +301,17 @@
       </desc>
     </func>
     <func>
+      <name name="iterator_from" arity="2"/>
+      <fsummary>Return an iterator for a set starting from a specified element</fsummary>
+      <desc>
+        <p>Returns an iterator that can be used for traversing the
+          entries of <c><anno>Set</anno></c>; see <c>next/1</c>.
+          The difference as compared to the iterator returned by
+          <c>iterator/1</c> is that the first element greater than
+          or equal to <c><anno>Element</anno></c> is returned.</p>
+      </desc>
+    </func>
+    <func>
       <name name="largest" arity="1"/>
       <fsummary>Return largest element</fsummary>
       <desc>
@@ -303,7 +321,7 @@
     </func>
     <func>
       <name name="next" arity="1"/>
-      <fsummary>Traverse a gb_set with an iterator</fsummary>
+      <fsummary>Traverse a set with an iterator</fsummary>
       <desc>
         <p>Returns <c>{<anno>Element</anno>, <anno>Iter2</anno>}</c> where <c><anno>Element</anno></c> is the
           smallest element referred to by the iterator <c><anno>Iter1</anno></c>,
@@ -314,14 +332,14 @@
     </func>
     <func>
       <name name="singleton" arity="1"/>
-      <fsummary>Return a gb_set with one element</fsummary>
+      <fsummary>Return a set with one element</fsummary>
       <desc>
-        <p>Returns a gb_set containing only the element <c><anno>Element</anno></c>.</p>
+        <p>Returns a set containing only the element <c><anno>Element</anno></c>.</p>
       </desc>
     </func>
     <func>
       <name name="size" arity="1"/>
-      <fsummary>Return the number of elements in a gb_set</fsummary>
+      <fsummary>Return the number of elements in a set</fsummary>
       <desc>
         <p>Returns the number of elements in <c><anno>Set</anno></c>.</p>
       </desc>
@@ -356,24 +374,24 @@
     </func>
     <func>
       <name name="to_list" arity="1"/>
-      <fsummary>Convert a gb_set into a list</fsummary>
+      <fsummary>Convert a set into a list</fsummary>
       <desc>
         <p>Returns the elements of <c><anno>Set</anno></c> as a list.</p>
       </desc>
     </func>
     <func>
       <name name="union" arity="2"/>
-      <fsummary>Return the union of two gb_sets</fsummary>
+      <fsummary>Return the union of two sets</fsummary>
       <desc>
-        <p>Returns the merged (union) gb_set of <c><anno>Set1</anno></c> and
+        <p>Returns the merged (union) set of <c><anno>Set1</anno></c> and
           <c><anno>Set2</anno></c>.</p>
       </desc>
     </func>
     <func>
       <name name="union" arity="1"/>
-      <fsummary>Return the union of a list of gb_sets</fsummary>
+      <fsummary>Return the union of a list of sets</fsummary>
       <desc>
-        <p>Returns the merged (union) gb_set of the list of gb_sets.</p>
+        <p>Returns the merged (union) set of the list of sets.</p>
       </desc>
     </func>
   </funcs>

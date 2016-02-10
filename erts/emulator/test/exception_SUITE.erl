@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 1997-2011. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -589,6 +590,13 @@ line_numbers(Config) when is_list(Config) ->
 	       [{file,ModFile},{line,_}]}|_]}} =
 	(catch build_binary2(8, bad_binary)),
 
+    <<"abc",357:16>> = build_binary3(<<"abc">>),
+    {'EXIT',{badarg,[{?MODULE,build_binary3,1,
+		      [{file,"bit_syntax.erl"},{line,72511}]},
+		     {?MODULE,line_numbers,1,
+		      [{file,ModFile},{line,_}]}|_]}} =
+	(catch build_binary3(no_binary)),
+
     {'EXIT',{function_clause,
 	     [{?MODULE,do_call_abs,[y,y],
 	       [{file,"gc_bif.erl"},{line,18}]},
@@ -690,6 +698,10 @@ build_binary1(Size) ->				%Line 72501
 build_binary2(Size, Bin) ->			%Line 72505
     id(0),					%Line 72506
     <<7:Size,Bin/binary>>.			%Line 72507
+
+build_binary3(Bin) ->			        %Line 72509
+    id(0),					%Line 72510
+    <<Bin/binary,357:16>>.			%Line 72511
 
 -file("gc_bif.erl", 17).
 do_call_abs(x, Arg) ->				%Line 18

@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -47,7 +48,7 @@
 -export([cur_dir_0/1, cur_dir_1/1, make_del_dir/1,
 	 list_dir/1,list_dir_error/1,
 	 untranslatable_names/1, untranslatable_names_error/1,
-	 pos1/1, pos2/1]).
+	 pos1/1, pos2/1, pos3/1]).
 -export([close/1, consult1/1, path_consult/1, delete/1]).
 -export([ eval1/1, path_eval/1, script1/1, path_script/1,
 	 open1/1,
@@ -79,6 +80,7 @@
 
 -export([interleaved_read_write/1]).
 
+-export([unicode/1]).
 -export([altname/1]).
 
 -export([large_file/1, large_write/1]).
@@ -90,6 +92,10 @@
 -export([allocate/1]).
 
 -export([standard_io/1,mini_server/1]).
+
+-export([old_io_protocol/1]).
+
+-export([unicode_mode/1]).
 
 %% Debug exports
 -export([create_file_slow/2, create_file/2, create_bin/2]).
@@ -103,18 +109,21 @@
 -include_lib("test_server/include/test_server.hrl").
 -include_lib("kernel/include/file.hrl").
 
+-define(THROW_ERROR(RES), throw({fail, ?LINE, RES})).
 
 
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [altname, read_write_file, {group, dirs},
+    [unicode, altname, read_write_file, {group, dirs},
      {group, files}, delete, rename, names, {group, errors},
      {group, compression}, {group, links}, copy,
      delayed_write, read_ahead, segment_read, segment_write,
      ipread, pid2name, interleaved_read_write, otp_5814, otp_10852,
      large_file, large_write, read_line_1, read_line_2, read_line_3,
-     read_line_4, standard_io].
+     read_line_4, standard_io, old_io_protocol,
+     unicode_mode
+    ].
 
 groups() -> 
     [{dirs, [], [make_del_dir, cur_dir_0, cur_dir_1,
@@ -128,7 +137,7 @@ groups() ->
       [open1, old_modes, new_modes, path_open, close, access,
        read_write, pread_write, append, open_errors,
        exclusive]},
-     {pos, [], [pos1, pos2]},
+     {pos, [], [pos1, pos2, pos3]},
      {file_info, [],
       [file_info_basic_file, file_info_basic_directory,
        file_info_bad, file_info_times, file_write_file_info]},
@@ -159,7 +168,8 @@ init_per_suite(Config) when is_list(Config) ->
 		     ok ->
 			 [{sasl,started}]
 		 end,
-    ok = application:start(os_mon),
+    application:start(os_mon),
+
     case os:type() of
 	{win32, _} ->
 	    Priv = ?config(priv_dir, Config),
@@ -183,6 +193,7 @@ end_per_suite(Config) when is_list(Config) ->
 	_ ->
 	    ok
     end,
+
     application:stop(os_mon),
     case proplists:get_value(sasl, Config) of
 	started ->
@@ -310,6 +321,176 @@ standard_io(Config) when is_list(Config) ->
     Pid ! die,
     receive after 1000 -> ok end.
 
+old_io_protocol(suite) ->
+    [];
+old_io_protocol(doc) ->
+    ["Test that the old file IO protocol =< R16B still works"];
+old_io_protocol(Config) when is_list(Config) ->
+    Dog = test_server:timetrap(test_server:seconds(5)),
+    RootDir = ?config(priv_dir,Config),
+    Name = filename:join(RootDir,
+			 atom_to_list(?MODULE)
+			 ++"old_io_protocol.fil"),
+    MyData = "0123456789abcdefghijklmnopqrstuvxyz",
+    ok = ?FILE_MODULE:write_file(Name, MyData),
+    {ok, Fd} = ?FILE_MODULE:open(Name, write),
+    Fd ! {file_request,self(),Fd,truncate},
+    receive
+	{file_reply,Fd,ok} -> ok
+    end,
+    ok = ?FILE_MODULE:close(Fd),
+    {ok, <<>>} = ?FILE_MODULE:read_file(Name),
+    test_server:timetrap_cancel(Dog),
+    [] = flush(),
+    ok.
+
+unicode_mode(suite) -> [];
+unicode_mode(doc) -> [""];
+unicode_mode(Config) ->
+    Dir = {dir, ?config(priv_dir,Config)},
+    OptVariants = [[Dir],
+		   [Dir, {encoding, utf8}],
+		   [Dir, binary],
+		   [Dir, binary, {encoding, utf8}]
+		  ],
+    ReadVariants = [{read, fun(Fd) -> um_read(Fd, fun(Fd1) -> file:read(Fd1, 1024) end) end},
+		    {read_line, fun(Fd) -> um_read(Fd, fun(Fd1) -> file:read_line(Fd1) end) end}
+		    %%{pread, fun(Fd) -> file:pread(Fd, 0, 1024) end},
+		    %%{preadl, fun(Fd) -> file:pread(Fd, [{0, 1024}]) end},
+		   ],
+
+    _ = [read_write_0("ASCII: list:  Hello World", Read, Opt) ||
+	    Opt <- OptVariants, Read <- ReadVariants],
+    _ = [read_write_0("LATIN1: list: åäöÅÄÖ", Read, Opt) ||
+	    Opt <- OptVariants, Read <- ReadVariants],
+    _ = [read_write_0(<<"ASCII: bin: Hello World">>, Read, Opt) ||
+	    Opt <- OptVariants, Read <- ReadVariants],
+    _ = [read_write_0(<<"LATIN1: bin: åäöÅÄÖ">>, Read, Opt) ||
+	    Opt <- OptVariants, Read <- ReadVariants],
+    %% These will be double encoded if option is encoding utf-8
+    _ = [read_write_0(<<"UTF8: bin: Ωß"/utf8>>, Read, Opt) ||
+	    Opt <- OptVariants, Read <- ReadVariants],
+    %% These should not work (with encoding set to utf-8)
+    %%   according to file's documentation
+    _ = [read_write_0("UTF8: list: Ωß", Read, Opt) ||
+	    Opt <- OptVariants, Read <- ReadVariants],
+    ok.
+
+read_write_0(Str, {Func, ReadFun}, Options) ->
+    try
+	Res = read_write_1(Str, ReadFun, Options),
+	io:format("~p: ~ts ~p '~p'~n", [Func, Str, tl(Options), Res]),
+	ok
+    catch {fail, Line, ReadBytes = [_|_]} ->
+	    io:format("~p:~p: ~p ERROR: ~w vs~n             ~w~n  - ~p~n",
+		      [?MODULE, Line, Func, Str, ReadBytes, Options]),
+	    exit({error, ?LINE});
+	  {fail, Line, ReadBytes} ->
+	    io:format("~p:~p: ~p ERROR: ~ts vs~n             ~w~n  - ~p~n",
+		      [?MODULE, Line, Func, Str, ReadBytes, Options]),
+	    exit({error, ?LINE});
+	  error:What ->
+	    io:format("~p:??: ~p ERROR: ~p from~n  ~w~n  ~p~n",
+		      [?MODULE, Func, What, Str, Options]),
+
+	    io:format("\t~p~n", [erlang:get_stacktrace()]),
+	    exit({error, ?LINE})
+    end.
+
+read_write_1(Str0, ReadFun, [{dir,Dir}|Options]) ->
+    File = um_filename(Str0, Dir, Options),
+    Pre = "line 1\n", Post = "\nlast line\n",
+    Str = case is_list(Str0) andalso lists:max(Str0) > 255 of
+	      false ->  %% Normal case Use options
+		  {ok, FdW} = file:open(File, [write|Options]),
+		  IO = [Pre, Str0, Post],
+		  ok = file:write(FdW, IO),
+		  case is_binary(Str0) of
+		      true -> iolist_to_binary(IO);
+		      false -> lists:append(IO)
+		  end;
+	      true -> %% Test unicode lists
+		  {ok, FdW} = file:open(File, [write]),
+		  Utf8 = unicode:characters_to_binary([Pre, Str0, Post]),
+		  file:write(FdW, Utf8),
+		  {unicode, Utf8}
+	  end,
+    file:close(FdW),
+    {ok, FdR} = file:open(File, [read|Options]),
+    ReadRes = ReadFun(FdR),
+    file:close(FdR),
+    Res = um_check(Str, ReadRes, Options),
+    file:delete(File),
+    Res.
+
+
+um_read(Fd, Fun) ->
+    um_read(Fd, Fun, []).
+
+um_read(Fd, Fun, Acc) ->
+    case Fun(Fd) of
+	eof ->
+	    case is_binary(hd(Acc)) of
+		true  -> {ok, iolist_to_binary(lists:reverse(Acc))};
+		false -> {ok, lists:append(lists:reverse(Acc))}
+	    end;
+	{ok, Data} ->
+	    um_read(Fd, Fun, [Data|Acc]);
+	Error ->
+	    Error
+    end.
+
+
+um_check(Str, {ok, Str}, _) -> ok;
+um_check(Bin, {ok, Res}, _Options) when is_binary(Bin), is_list(Res) ->
+    case list_to_binary(Res) of
+	Bin -> ok;
+	_ -> ?THROW_ERROR(Res)
+    end;
+um_check(Str, {ok, Res}, _Options) when is_list(Str), is_binary(Res) ->
+    case iolist_to_binary(Str) of
+	Res -> ok;
+	_ -> ?THROW_ERROR(Res)
+    end;
+um_check({unicode, Utf8Bin}, Res, Options) ->
+    um_check_unicode(Utf8Bin, Res,
+		     proplists:get_value(binary, Options, false),
+		     proplists:get_value(encoding, Options, none));
+um_check(_Str, Res, _Options) ->
+    ?THROW_ERROR(Res).
+
+um_check_unicode(Utf8Bin, {ok, Utf8Bin}, true, none) ->
+    ok;
+um_check_unicode(Utf8Bin, {ok, List = [_|_]}, false, none) ->
+    case binary_to_list(Utf8Bin) == List of
+	true -> ok;
+	false -> ?THROW_ERROR(List)
+    end;
+um_check_unicode(_Utf8Bin, {error, {no_translation, unicode, latin1}}, _, _) ->
+    no_translation;
+um_check_unicode(_Utf8Bin, Error = {error, _}, _, _Unicode) ->
+    ?THROW_ERROR(Error);
+um_check_unicode(_Utf8Bin, {ok, _ListOrBin}, _, _UTF8_) ->
+    %% List = if is_binary(ListOrBin) -> unicode:characters_to_list(ListOrBin);
+    %% 	      true -> ListOrBin
+    %% 	   end,
+    %% io:format("In: ~w~n", [binary_to_list(Utf8Bin)]),
+    %% io:format("Ut: ~w~n", [List]),
+    ?THROW_ERROR({shoud_be, no_translation}).
+
+um_filename(Bin, Dir, Options) when is_binary(Bin) ->
+    um_filename(binary_to_list(Bin), Dir, Options);
+um_filename(Str = [_|_], Dir, Options) ->
+    Name = hd(string:tokens(Str, ":")),
+    Enc = atom_to_list(proplists:get_value(encoding, Options, latin1)),
+    File = case lists:member(binary, Options) of
+	       true ->
+		   "test_" ++ Name ++ "_bin_enc_" ++ Enc;
+	       false ->
+		   "test_" ++ Name ++ "_list_enc_" ++ Enc
+	   end,
+    filename:join(Dir, File).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 read_write_file(suite) -> [];
@@ -385,11 +566,17 @@ make_del_dir(Config) when is_list(Config) ->
     ?line ok = ?FILE_MODULE:del_dir(NewDir),
     ?line {error, enoent} = ?FILE_MODULE:del_dir(NewDir),
     % Make sure we are not in a directory directly under test_server
-    % as that would result in eacess errors when trying to delere '..',
+    % as that would result in eacces errors when trying to delete '..',
     % because there are processes having that directory as current.
     ?line ok = ?FILE_MODULE:make_dir(NewDir),
     ?line {ok,CurrentDir} = file:get_cwd(),
-    ?line ok = ?FILE_MODULE:set_cwd(NewDir),
+    case {os:type(), length(NewDir) >= 260 } of
+	{{win32,_}, true} ->
+	    io:format("Skip set_cwd for windows path longer than 260 (MAX_PATH)\n", []),
+	    io:format("\nNewDir = ~p\n", [NewDir]);
+    	_ ->
+	    ?line ok = ?FILE_MODULE:set_cwd(NewDir)
+    end,
     try
 	%% Check that we get an error when trying to create...
 	%% a deep directory
@@ -446,32 +633,39 @@ cur_dir_0(Config) when is_list(Config) ->
 				 atom_to_list(?MODULE)
 				 ++"_curdir"),
     ?line ok = ?FILE_MODULE:make_dir(NewDir),
-    ?line io:format("cd to ~s",[NewDir]),
-    ?line ok = ?FILE_MODULE:set_cwd(NewDir),
+    case {os:type(), length(NewDir) >= 260} of
+	{{win32,_}, true} ->
+	    io:format("Skip set_cwd for windows path longer than 260 (MAX_PATH):\n"),
+	    io:format("\nNewDir = ~p\n", [NewDir]);
+	_ ->
+	    io:format("cd to ~s",[NewDir]),
+    	    ok = ?FILE_MODULE:set_cwd(NewDir),
 
-    %% Create a file in the new current directory, and check that it
-    %% really is created there
-    ?line UncommonName = "uncommon.fil",
-    ?line {ok,Fd} = ?FILE_MODULE:open(UncommonName,read_write),
-    ?line ok = ?FILE_MODULE:close(Fd),
-    ?line {ok,NewDirFiles} = ?FILE_MODULE:list_dir("."),
-    ?line true = lists:member(UncommonName,NewDirFiles),
+	    %% Create a file in the new current directory, and check that it
+	    %% really is created there
+	    UncommonName = "uncommon.fil",
+	    {ok,Fd} = ?FILE_MODULE:open(UncommonName,read_write),
+	    ok = ?FILE_MODULE:close(Fd),
+	    {ok,NewDirFiles} = ?FILE_MODULE:list_dir("."),
+	    true = lists:member(UncommonName,NewDirFiles),
 
-    %% Delete the directory and return to the old current directory
-    %% and check that the created file isn't there (too!)
-    ?line expect({error, einval}, {error, eacces}, 
-		 ?FILE_MODULE:del_dir(NewDir)),
-    ?line ?FILE_MODULE:delete(UncommonName),
-    ?line {ok,[]} = ?FILE_MODULE:list_dir("."),
-    ?line ok = ?FILE_MODULE:set_cwd(Dir1),
-    ?line io:format("cd back to ~s",[Dir1]),
-    ?line ok = ?FILE_MODULE:del_dir(NewDir),
-    ?line {error, enoent} = ?FILE_MODULE:set_cwd(NewDir),
-    ?line ok = ?FILE_MODULE:set_cwd(Dir1),
-    ?line io:format("cd back to ~s",[Dir1]),
-    ?line {ok,OldDirFiles} = ?FILE_MODULE:list_dir("."),
-    ?line false = lists:member(UncommonName,OldDirFiles),
+	    %% Delete the directory and return to the old current directory
+	    %% and check that the created file isn't there (too!)
+	    expect({error, einval}, {error, eacces}, 
+	    	   ?FILE_MODULE:del_dir(NewDir)),
+	    ?FILE_MODULE:delete(UncommonName),
+	    {ok,[]} = ?FILE_MODULE:list_dir("."),
+	    ok = ?FILE_MODULE:set_cwd(Dir1),
+	    io:format("cd back to ~s",[Dir1]),
 
+	    ok = ?FILE_MODULE:del_dir(NewDir),
+	    {error, enoent} = ?FILE_MODULE:set_cwd(NewDir),
+	    ok = ?FILE_MODULE:set_cwd(Dir1),
+	    io:format("cd back to ~s",[Dir1]),
+	    {ok,OldDirFiles} = ?FILE_MODULE:list_dir("."),
+	    false = lists:member(UncommonName,OldDirFiles)
+    end,
+	
     %% Try doing some bad things
     ?line {error, badarg} = ?FILE_MODULE:set_cwd({foo,bar}),
     ?line {error, enoent} = ?FILE_MODULE:set_cwd(""),
@@ -498,11 +692,11 @@ cur_dir_1(Config) when is_list(Config) ->
     ?line Dog = test_server:timetrap(test_server:seconds(5)),
 
     ?line case os:type() of
-	      {unix, _} ->
-		  ?line {error, enotsup} = ?FILE_MODULE:get_cwd("d:");
-	      {win32, _} ->
-		  win_cur_dir_1(Config)
-	  end,
+	   {win32, _} ->
+		  win_cur_dir_1(Config);
+	    _ ->
+		  ?line {error, enotsup} = ?FILE_MODULE:get_cwd("d:")
+      end,
     ?line [] = flush(),
     ?line test_server:timetrap_cancel(Dog),
     ok.
@@ -777,6 +971,20 @@ new_modes(Config) when is_list(Config) ->
     ?line {ok, Fd6} = ?FILE_MODULE:open(Name1, [read, raw]),
     ?line {ok, [$\[]} = ?FILE_MODULE:read(Fd6, 1),
     ?line ok = ?FILE_MODULE:close(Fd6),
+
+    %% write and sync
+    case ?FILE_MODULE:open(Name1, [write, sync]) of
+	{ok, Fd7} ->
+	    ok = io:write(Fd7, Marker),
+	    ok = io:put_chars(Fd7, ".\n"),
+	    ok = ?FILE_MODULE:close(Fd7),
+	    {ok, Fd8} = ?FILE_MODULE:open(Name1, [read]),
+	    {ok, Marker} = io:read(Fd8, prompt),
+	    ok = ?FILE_MODULE:close(Fd8);
+	{error, enotsup} ->
+	    %% for platforms that don't support the sync option
+	    ok
+    end,
 
     ?line [] = flush(),
     ?line test_server:timetrap_cancel(Dog),
@@ -1150,6 +1358,27 @@ pos2(Config) when is_list(Config) ->
     ?line test_server:timetrap_cancel(Dog),
     ok.
 
+pos3(suite) -> [];
+pos3(doc) -> ["When it does not use raw mode, file:position had a bug."];
+pos3(Config) when is_list(Config) ->
+    ?line Dog = test_server:timetrap(test_server:seconds(5)),
+    ?line RootDir = ?config(data_dir, Config),
+    ?line Name = filename:join(RootDir, "realmen.html.gz"),
+
+    ?line {ok, Fd} = ?FILE_MODULE:open(Name, [read, binary]),
+    ?line {ok, _}  = ?FILE_MODULE:read(Fd, 5),
+    ?line {error, einval} = ?FILE_MODULE:position(Fd, {bof, -1}),
+
+    %% Here ok had returned =(
+    ?line {error, einval} = ?FILE_MODULE:position(Fd, {cur, -10}),
+    %% That test is actually questionable since file:position/2
+    %% is documented to leave the file position undefined after
+    %% it has returned an error.  But on Posix systems the position
+    %% is guaranteed to be unchanged after an error return.  On e.g
+    %% Windows there is nothing stated about this in the documentation.
+
+    ?line test_server:timetrap_cancel(Dog),
+    ok.
 
 file_info_basic_file(suite) -> [];
 file_info_basic_file(doc) -> [];
@@ -1167,9 +1396,10 @@ file_info_basic_file(Config) when is_list(Config) ->
 
     %% Test that the file has the expected attributes.
     %% The times are tricky, so we will save them to a separate test case.
-    ?line {ok,#file_info{size=Size,type=Type,access=Access,
-			 atime=AccessTime,mtime=ModifyTime}} =
-	?FILE_MODULE:read_file_info(Name),
+    {ok,FileInfo} = ?FILE_MODULE:read_file_info(Name),
+    {ok,FileInfo} = ?FILE_MODULE:read_file_info(Name, [raw]),
+    #file_info{size=Size,type=Type,access=Access,
+                         atime=AccessTime,mtime=ModifyTime} = FileInfo,
     ?line io:format("Access ~p, Modify ~p", [AccessTime, ModifyTime]),
     ?line Size = 7,
     ?line Type = regular,
@@ -1205,15 +1435,16 @@ file_info_basic_directory(Config) when is_list(Config) ->
             ?line test_directory("/", read_write),
             ?line test_directory("c:/", read_write),
             ?line test_directory("c:\\", read_write);
-        {unix, _} ->
+        _ ->
             ?line test_directory("/", read)
     end,
     test_server:timetrap_cancel(Dog).
 
 test_directory(Name, ExpectedAccess) ->
-    ?line {ok,#file_info{size=Size,type=Type,access=Access,
-			 atime=AccessTime,mtime=ModifyTime}} =
-	?FILE_MODULE:read_file_info(Name),
+    {ok,FileInfo} = ?FILE_MODULE:read_file_info(Name),
+    {ok,FileInfo} = ?FILE_MODULE:read_file_info(Name, [raw]),
+    #file_info{size=Size,type=Type,access=Access,
+               atime=AccessTime,mtime=ModifyTime} = FileInfo,
     ?line io:format("Testing directory ~s", [Name]),
     ?line io:format("Directory size is ~p", [Size]),
     ?line io:format("Access ~p", [Access]),
@@ -1238,11 +1469,11 @@ file_info_bad(doc) -> [];
 file_info_bad(Config) when is_list(Config) ->
     ?line Dog = test_server:timetrap(test_server:seconds(5)),
     ?line RootDir = filename:join([?config(priv_dir, Config)]),
-    ?line {error, enoent} = 
-	?FILE_MODULE:read_file_info(
-	  filename:join(RootDir, 
-			atom_to_list(?MODULE)++ "_nonexistent")),
+    FileName = filename:join(RootDir, atom_to_list(?MODULE) ++ "_nonexistent"),
+    {error,enoent} = ?FILE_MODULE:read_file_info(FileName),
+    {error,enoent} = ?FILE_MODULE:read_file_info(FileName, [raw]),
     ?line {error, enoent} = ?FILE_MODULE:read_file_info(""),
+    {error, enoent} = ?FILE_MODULE:read_file_info("", [raw]),
     ?line [] = flush(),
     ?line test_server:timetrap_cancel(Dog),
     ok.
@@ -1277,8 +1508,16 @@ file_info_int(Config) ->
     ?line io:put_chars(Fd1,"foo"),
 
     %% check that the file got a modify date max a few seconds away from now
-    ?line {ok,#file_info{type=regular,atime=AccTime1,mtime=ModTime1}} =
-	?FILE_MODULE:read_file_info(Name),
+    {ok,FileInfo1} = ?FILE_MODULE:read_file_info(Name),
+    {ok,FileInfo1Raw} = ?FILE_MODULE:read_file_info(Name, [raw]),
+
+    %% We assert that everything but the size is the same, on some OSs the
+    %% size may not have been flushed to disc and we do not want to do a
+    %% sync to force it.
+    FileInfo1Raw = FileInfo1#file_info{ size = FileInfo1Raw#file_info.size },
+
+    #file_info{type=regular,atime=AccTime1,mtime=ModTime1} = FileInfo1,
+
     ?line Now = erlang:localtime(), %???
     ?line io:format("Now ~p",[Now]),
     ?line io:format("Open file Acc ~p Mod ~p",[AccTime1,ModTime1]),
@@ -1294,9 +1533,10 @@ file_info_int(Config) ->
 
     %% close the file, and watch the modify date change
     ?line ok = ?FILE_MODULE:close(Fd1),
-    ?line {ok,#file_info{size=Size,type=regular,access=Access,
-			 atime=AccTime2,mtime=ModTime2}} =
-	?FILE_MODULE:read_file_info(Name),
+    {ok,FileInfo2} = ?FILE_MODULE:read_file_info(Name),
+    {ok,FileInfo2} = ?FILE_MODULE:read_file_info(Name, [raw]),
+    #file_info{size=Size,type=regular,access=Access,
+               atime=AccTime2,mtime=ModTime2} = FileInfo2,
     ?line io:format("Closed file Acc ~p Mod ~p",[AccTime2,ModTime2]),
     ?line true = time_dist(ModTime1,ModTime2) >= 0,
 
@@ -1305,9 +1545,10 @@ file_info_int(Config) ->
     ?line Access = read_write,
 
     %% Do some directory checking
-    ?line {ok,#file_info{size=DSize,type=directory,access=DAccess,
-			 atime=AccTime3,mtime=ModTime3}} =
-	?FILE_MODULE:read_file_info(RootDir),
+    {ok,FileInfo3} = ?FILE_MODULE:read_file_info(RootDir),
+    {ok,FileInfo3} = ?FILE_MODULE:read_file_info(RootDir, [raw]),
+    #file_info{size=DSize,type=directory,access=DAccess,
+               atime=AccTime3,mtime=ModTime3} = FileInfo3,
     %% this dir was modified only a few secs ago
     ?line io:format("Dir Acc ~p; Mod ~p; Now ~p", [AccTime3, ModTime3, Now]),
     ?line true = abs(time_dist(Now,ModTime3)) < 5,
@@ -1379,6 +1620,12 @@ file_write_file_info(Config) when is_list(Config) ->
     %% And unwritable.
     ?line ?FILE_MODULE:write_file_info(Name1, #file_info{mode=8#400}),
     ?line {error, eacces} = ?FILE_MODULE:write_file(Name1, "hello again"),
+
+    %% Same with raw.
+    ?FILE_MODULE:write_file_info(Name1, #file_info{mode=8#600}, [raw]),
+    ok = ?FILE_MODULE:write_file(Name1, "hello again"),
+    ?FILE_MODULE:write_file_info(Name1, #file_info{mode=8#400}, [raw]),
+    {error,eacces} = ?FILE_MODULE:write_file(Name1, "hello again"),
 
     %% Write the times again.
     %% Note: Seconds must be even; see note in file_info_times/1.
@@ -1926,7 +2173,6 @@ names(Config) when is_list(Config) ->
     ?line Name1 = filename:join(RootDir, FileName),
     ?line Name2 = [RootDir,"/","foo1",".","fil"],
     ?line Name3 = [RootDir,"/",foo,$1,[[[],[],'.']],"f",il],
-    ?line Name4 = list_to_atom(Name1),
     ?line {ok,Fd0} = ?FILE_MODULE:open(Name1,write),
     ?line ok = ?FILE_MODULE:close(Fd0),
 
@@ -1939,23 +2185,33 @@ names(Config) when is_list(Config) ->
     ?line ok = ?FILE_MODULE:close(Fd2),
     ?line {ok,Fd3} = ?FILE_MODULE:open(Name3,read),
     ?line ok = ?FILE_MODULE:close(Fd3),
-    ?line {ok,Fd4} = ?FILE_MODULE:open(Name4,read),
-    ?line ok = ?FILE_MODULE:close(Fd4),
+	case length(Name1) > 255 of
+		true ->
+			io:format("Path too long for an atom:\n\n~p\n", [Name1]);
+		false ->
+			Name4 = list_to_atom(Name1),
+			{ok,Fd4} = ?FILE_MODULE:open(Name4,read),
+			ok = ?FILE_MODULE:close(Fd4)
+	end,
 
     %% Try some path names
     ?line Path1 = RootDir,
     ?line Path2 = [RootDir],
     ?line Path3 = ['',[],[RootDir,[[]]]],
-    ?line Path4 = list_to_atom(Path1),
     ?line {ok,Fd11,_} = ?FILE_MODULE:path_open([Path1],FileName,read),
     ?line ok = ?FILE_MODULE:close(Fd11),
     ?line {ok,Fd12,_} = ?FILE_MODULE:path_open([Path2],FileName,read),
     ?line ok = ?FILE_MODULE:close(Fd12),
     ?line {ok,Fd13,_} = ?FILE_MODULE:path_open([Path3],FileName,read),
     ?line ok = ?FILE_MODULE:close(Fd13),
-    ?line {ok,Fd14,_} = ?FILE_MODULE:path_open([Path4],FileName,read),
-    ?line ok = ?FILE_MODULE:close(Fd14),
-
+	case length(Path1) > 255 of
+		true->
+			io:format("Path too long for an atom:\n\n~p\n", [Path1]);
+		false ->
+			Path4 = list_to_atom(Path1),
+			{ok,Fd14,_} = ?FILE_MODULE:path_open([Path4],FileName,read),
+			ok = ?FILE_MODULE:close(Fd14)
+	end,
     ?line [] = flush(),
     ?line test_server:timetrap_cancel(Dog),
     ok.
@@ -1989,15 +2245,15 @@ e_delete(Config) when is_list(Config) ->
 
     %% No permission.
     ?line case os:type() of
-	      {unix, _} ->
+		{win32, _} ->
+		  %% Remove a character device.
+		  ?line {error, eacces} = ?FILE_MODULE:delete("nul");
+		_ ->
 		  ?line ?FILE_MODULE:write_file_info(
 			   Base, #file_info {mode=0}),
 		  ?line {error, eacces} = ?FILE_MODULE:delete(Afile),
 		  ?line ?FILE_MODULE:write_file_info(
-			   Base, #file_info {mode=8#600});
-	      {win32, _} ->
-		  %% Remove a character device.
-		  ?line {error, eacces} = ?FILE_MODULE:delete("nul")
+			   Base, #file_info {mode=8#600})
 	  end,
 
     ?line [] = flush(),
@@ -2130,13 +2386,13 @@ e_make_dir(Config) when is_list(Config) ->
 
     %% No permission (on Unix only).
     case os:type() of
-	{unix, _} ->
+	{win32, _} ->
+	    ok;
+	_ ->
 	    ?FILE_MODULE:write_file_info(Base, #file_info {mode=0}),
 	    {error, eacces} = ?FILE_MODULE:make_dir(filename:join(Base, "xxxx")),
 	    ?FILE_MODULE:write_file_info(
-		     Base, #file_info {mode=8#600});
-	{win32, _} ->
-	    ok
+		     Base, #file_info {mode=8#600})
     end,
     test_server:timetrap_cancel(Dog),
     ok.
@@ -2179,14 +2435,14 @@ e_del_dir(Config) when is_list(Config) ->
 
     %% No permission.
     case os:type() of
-	{unix, _} ->
+	{win32, _} ->
+	    ok;
+	_ ->
 	    ADirectory = filename:join(Base, "no_perm"),
 	    ok = ?FILE_MODULE:make_dir(ADirectory),
 	    ?FILE_MODULE:write_file_info( Base, #file_info {mode=0}),
 	    {error, eacces} = ?FILE_MODULE:del_dir(ADirectory),
-	    ?FILE_MODULE:write_file_info( Base, #file_info {mode=8#600});
-	{win32, _} ->
-	    ok
+	    ?FILE_MODULE:write_file_info( Base, #file_info {mode=8#600})
     end,
     [] = flush(),
     test_server:timetrap_cancel(Dog),
@@ -2511,6 +2767,40 @@ compress_async_crash_loop(N, Path, ExpectedData) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+unicode(Config) when is_list(Config) ->
+    Dir = ?config(priv_dir, Config),
+    Name = filename:join(Dir, "data-utf8.txt"),
+    Txt = lists:seq(128, 255),
+    D = unicode:characters_to_binary(Txt, latin1, latin1),
+    {ok,Fd1} =
+	?FILE_MODULE:open(Name, [write,read,binary,{encoding,unicode}]),
+    ok = ?FILE_MODULE:truncate(Fd1),
+    ok = ?FILE_MODULE:write(Fd1, Txt),
+    {ok,0} = ?FILE_MODULE:position(Fd1, bof),
+    {ok,D} = ?FILE_MODULE:read(Fd1, 129),
+    {ok,0} = ?FILE_MODULE:position(Fd1, bof),
+    {ok,D1} = ?FILE_MODULE:read(Fd1, 64),
+    {ok,Pos} = ?FILE_MODULE:position(Fd1, cur),
+    {ok,D2} = ?FILE_MODULE:pread(Fd1, {cur,0}, 65),
+    D = <<D1/binary, D2/binary>>,
+    {ok,D1} = ?FILE_MODULE:pread(Fd1, bof, 64),
+    {ok,Pos} = ?FILE_MODULE:position(Fd1, Pos),
+    {ok,D2} = ?FILE_MODULE:read(Fd1, 64),
+    ok = ?FILE_MODULE:close(Fd1),
+    %%
+    RawD = unicode:characters_to_binary(Txt, latin1, unicode),
+    {ok,RawD} = ?FILE_MODULE:read_file(Name),
+    %%
+    {ok,Fd2} = ?FILE_MODULE:open(Name, [read,{encoding,unicode}]),
+    {ok,Txt} = ?FILE_MODULE:read(Fd2, 129),
+    {Txt1,Txt2} = lists:split(64, Txt),
+    {ok,Txt2} = ?FILE_MODULE:pread(Fd2, Pos, 65),
+    {ok,0} = ?FILE_MODULE:position(Fd2, bof),
+    {ok,Txt1} = ?FILE_MODULE:read(Fd2, 64),
+    ok = ?FILE_MODULE:close(Fd2).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 altname(doc) ->
     "Test the file:altname/1 function";
 altname(suite) ->
@@ -2569,7 +2859,9 @@ make_link(Config) when is_list(Config) ->
 		%% since they are not used on symbolic links.
 		
 		?line {ok, Info} = ?FILE_MODULE:read_link_info(Name),
+                {ok,Info} = ?FILE_MODULE:read_link_info(Name, [raw]),
 		?line {ok, Info} = ?FILE_MODULE:read_link_info(Alias),
+                {ok,Info} = ?FILE_MODULE:read_link_info(Alias, [raw]),
 		?line #file_info{links = 2, type = regular} = Info,
 		?line {error, eexist} = 
 		    ?FILE_MODULE:make_link(Name, Alias),
@@ -2589,6 +2881,7 @@ read_link_info_for_non_link(Config) when is_list(Config) ->
 
     ?line {ok, #file_info{type=directory}} = 
 	?FILE_MODULE:read_link_info("."),
+    {ok, #file_info{type=directory}} = ?FILE_MODULE:read_link_info(".", [raw]),
 		  
     ?line [] = flush(),
     ?line test_server:timetrap_cancel(Dog),
@@ -2614,16 +2907,25 @@ symlinks(Config) when is_list(Config) ->
 	case ?FILE_MODULE:make_symlink(Name, Alias) of
 	    {error, enotsup} ->
 		{skipped, "Links not supported on this platform"};
+	    {error, eperm} ->
+		{win32,_} = os:type(),
+		{skipped, "Windows user not privileged to create symlinks"};
 	    ok ->
 		?line {ok, Info1} = ?FILE_MODULE:read_file_info(Name),
+                {ok,Info1} = ?FILE_MODULE:read_file_info(Name, [raw]),
 		?line {ok, Info1} = ?FILE_MODULE:read_file_info(Alias),
+                {ok,Info1} = ?FILE_MODULE:read_file_info(Alias, [raw]),
 		?line {ok, Info1} = ?FILE_MODULE:read_link_info(Name),
+                {ok,Info1} = ?FILE_MODULE:read_link_info(Name, [raw]),
 		?line #file_info{links = 1, type = regular} = Info1,
 		
 		?line {ok, Info2} = ?FILE_MODULE:read_link_info(Alias),
+                {ok,Info2} = ?FILE_MODULE:read_link_info(Alias, [raw]),
 		?line #file_info{links=1, type=symlink} = Info2,
 		?line {ok, Name} = ?FILE_MODULE:read_link(Alias),
 		{ok, Name} = ?FILE_MODULE:read_link_all(Alias),
+		%% If all is good, delete dir again (avoid hanging dir on windows)
+		rm_rf(?FILE_MODULE,NewDir),
 		ok
 	  end,
     
@@ -3538,7 +3840,11 @@ otp_10852(Config) when is_list(Config) ->
     ok = rpc_call(Node, list_dir_all, [B]),
     ok = rpc_call(Node, read_file, [B]),
     ok = rpc_call(Node, make_link, [B,B]),
-    ok = rpc_call(Node, make_symlink, [B,B]),
+    case rpc_call(Node, make_symlink, [B,B]) of
+		ok -> ok;
+		{error, E} when (E =:= enotsup) or (E =:= eperm) ->
+			{win32,_} = os:type()
+	end,
     ok = rpc_call(Node, delete, [B]),
     ok = rpc_call(Node, make_dir, [B]),
     ok = rpc_call(Node, del_dir, [B]),
@@ -3649,7 +3955,7 @@ response_analysis(Module, Function, Arguments) ->
 		  receive {Parent, start, Ts} -> ok end,
 		  Stat = 
 		      iterate(response_stat(response_stat(init, Ts),
-					    erlang:now()), 
+					    micro_ts()),
 			      done,
 			      fun (S) ->
 				      erlang:yield(),
@@ -3657,12 +3963,12 @@ response_analysis(Module, Function, Arguments) ->
 					  {Parent, stop} ->
 					      done
 				      after 0 ->
-					      response_stat(S, erlang:now())
+					      response_stat(S, micro_ts())
 				      end
 			      end),
-		  Parent ! {self(), stopped, response_stat(Stat, erlang:now())}
+		  Parent ! {self(), stopped, response_stat(Stat, micro_ts())}
 	  end),
-    ?line Child ! {Parent, start, erlang:now()},
+    Child ! {Parent, start, micro_ts()},
     ?line Result = apply(Module, Function, Arguments),
     ?line Child ! {Parent, stop},
     ?line {N, Sum, _, M, Max} = receive {Child, stopped, X} -> X end,
@@ -3676,12 +3982,13 @@ response_analysis(Module, Function, Arguments) ->
 	    [Mean_ms, Max_ms, M, (N-1)])),
     ?line {Result, Comment}.
     
-
+micro_ts() ->
+    erlang:monotonic_time(micro_seconds).
 
 response_stat(init, Ts) ->
     {0, 0, Ts, 0, 0};
-response_stat({N, Sum, {A1, B1, C1}, M, Max}, {A2, B2, C2} = Ts) ->
-    D = C2-C1 + 1000000*((B2-B1) + 1000000*(A2-A1)),
+response_stat({N, Sum, Ts0, M, Max}, Ts) ->
+    D = Ts - Ts0,
     if D > Max ->
 	    {N+1, Sum+D, Ts, N, D};
        true ->
@@ -4277,3 +4584,18 @@ disc_free(Path) ->
 memsize() ->
     {Tot,_Used,_}  = memsup:get_memory_data(),
     Tot.
+
+%%%-----------------------------------------------------------------
+%%% Utilities
+rm_rf(Mod,Dir) ->
+    case  Mod:read_link_info(Dir) of
+	{ok, #file_info{type = directory}} ->
+	    {ok, Content} = Mod:list_dir_all(Dir),
+	    [ rm_rf(Mod,filename:join(Dir,C)) || C <- Content ],
+	    Mod:del_dir(Dir),
+	    ok;
+	{ok, #file_info{}} ->
+	    Mod:delete(Dir);
+	_ ->
+	    ok
+    end.

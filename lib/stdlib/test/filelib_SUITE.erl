@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2005-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2005-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -23,7 +24,8 @@
 	 init_per_group/2,end_per_group/2,
 	 init_per_testcase/2,end_per_testcase/2,
 	 wildcard_one/1,wildcard_two/1,wildcard_errors/1,
-	 fold_files/1,otp_5960/1,ensure_dir_eexist/1]).
+	 fold_files/1,otp_5960/1,ensure_dir_eexist/1,ensure_dir_symlink/1,
+	 wildcard_symlink/1, is_file_symlink/1, file_props_symlink/1]).
 
 -import(lists, [foreach/2]).
 
@@ -43,7 +45,8 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [wildcard_one, wildcard_two, wildcard_errors,
-     fold_files, otp_5960, ensure_dir_eexist].
+     fold_files, otp_5960, ensure_dir_eexist, ensure_dir_symlink,
+     wildcard_symlink, is_file_symlink, file_props_symlink].
 
 groups() -> 
     [].
@@ -75,7 +78,8 @@ wildcard_one(Config) when is_list(Config) ->
 			  L = filelib:wildcard(Wc),
 			  L = filelib:wildcard(Wc, erl_prim_loader),
 			  L = filelib:wildcard(Wc, "."),
-			  L = filelib:wildcard(Wc, Dir)
+			  L = filelib:wildcard(Wc, Dir),
+			  L = filelib:wildcard(Wc, Dir++"/.")
 		  end),
     ?line file:set_cwd(OldCwd),
     ?line ok = file:del_dir(Dir),
@@ -86,6 +90,7 @@ wildcard_two(Config) when is_list(Config) ->
     ?line ok = file:make_dir(Dir),
     ?line do_wildcard_1(Dir, fun(Wc) -> io:format("~p~n",[{Wc,Dir, X = filelib:wildcard(Wc, Dir)}]),X  end),
     ?line do_wildcard_1(Dir, fun(Wc) -> filelib:wildcard(Wc, Dir++"/") end),
+    ?line do_wildcard_1(Dir, fun(Wc) -> filelib:wildcard(Wc, Dir++"/.") end),
     case os:type() of
 	{win32,_} ->
 	    ok;
@@ -313,7 +318,7 @@ same_lists(Expected0, Actual0, BaseDir) ->
 
 mkfiles([H|T], Dir) ->
     Name = filename:join(Dir, H),
-    Garbage = [31+random:uniform(95) || _ <- lists:seq(1, random:uniform(1024))],
+    Garbage = [31+rand:uniform(95) || _ <- lists:seq(1, rand:uniform(1024))],
     file:write_file(Name, Garbage),
     [Name|mkfiles(T, Dir)];
 mkfiles([], _) -> [].
@@ -366,3 +371,139 @@ ensure_dir_eexist(Config) when is_list(Config) ->
     ?line {error, eexist} = filelib:ensure_dir(NeedFile),
     ?line {error, eexist} = filelib:ensure_dir(NeedFileB),
     ok.
+
+ensure_dir_symlink(Config) when is_list(Config) ->
+    PrivDir = ?config(priv_dir, Config),
+    Dir = filename:join(PrivDir, "ensure_dir_symlink"),
+    Name = filename:join(Dir, "same_name_as_file_and_dir"),
+    ok = filelib:ensure_dir(Name),
+    ok = file:write_file(Name, <<"some string\n">>),
+    %% With a symlink to the directory.
+    Symlink = filename:join(PrivDir, "ensure_dir_symlink_link"),
+    case file:make_symlink(Dir, Symlink) of
+        {error,enotsup} ->
+            {skip,"Symlinks not supported on this platform"};
+        {error,eperm} ->
+            {win32,_} = os:type(),
+            {skip,"Windows user not privileged to create symlinks"};
+        ok ->
+            SymlinkedName = filename:join(Symlink, "same_name_as_file_and_dir"),
+            ok = filelib:ensure_dir(SymlinkedName)
+    end.
+
+wildcard_symlink(Config) when is_list(Config) ->
+    PrivDir = ?config(priv_dir, Config),
+    Dir = filename:join(PrivDir, ?MODULE_STRING++"_wildcard_symlink"),
+    SubDir = filename:join(Dir, "sub"),
+    AFile = filename:join(SubDir, "a_file"),
+    Alias = filename:join(Dir, "symlink"),
+    ok = file:make_dir(Dir),
+    ok = file:make_dir(SubDir),
+    ok = file:write_file(AFile, "not that big\n"),
+    case file:make_symlink(AFile, Alias) of
+	{error, enotsup} ->
+	    {skip, "Links not supported on this platform"};
+	{error, eperm} ->
+	    {win32,_} = os:type(),
+	    {skip, "Windows user not privileged to create symlinks"};
+	ok ->
+	    ["sub","symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "*"))),
+	    ["symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "symlink"))),
+	    ["sub","symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "*"),
+						erl_prim_loader)),
+	    ["symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "symlink"),
+						erl_prim_loader)),
+	    ["sub","symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "*"),
+						prim_file)),
+	    ["symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "symlink"),
+						prim_file)),
+	    ok = file:delete(AFile),
+	    %% The symlink should still be visible even when its target
+	    %% has been deleted.
+	    ["sub","symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "*"))),
+	    ["symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "symlink"))),
+	    ["sub","symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "*"),
+						erl_prim_loader)),
+	    ["symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "symlink"),
+						erl_prim_loader)),
+	    ["sub","symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "*"),
+						prim_file)),
+	    ["symlink"] =
+		basenames(Dir, filelib:wildcard(filename:join(Dir, "symlink"),
+						prim_file)),
+	    ok
+    end.
+
+basenames(Dir, Files) ->
+    [begin
+	 Dir = filename:dirname(F),
+	 filename:basename(F)
+     end || F <- Files].
+
+is_file_symlink(Config) ->
+    PrivDir = ?config(priv_dir, Config),
+    Dir = filename:join(PrivDir, ?MODULE_STRING++"_is_file_symlink"),
+    SubDir = filename:join(Dir, "sub"),
+    AFile = filename:join(SubDir, "a_file"),
+    DirAlias = filename:join(Dir, "dir_symlink"),
+    FileAlias = filename:join(Dir, "file_symlink"),
+    ok = file:make_dir(Dir),
+    ok = file:make_dir(SubDir),
+    ok = file:write_file(AFile, "not that big\n"),
+    case file:make_symlink(SubDir, DirAlias) of
+	{error, enotsup} ->
+	    {skip, "Links not supported on this platform"};
+	{error, eperm} ->
+	    {win32,_} = os:type(),
+	    {skip, "Windows user not privileged to create symlinks"};
+	ok ->
+	    true = filelib:is_dir(DirAlias),
+	    true = filelib:is_dir(DirAlias, erl_prim_loader),
+	    true = filelib:is_dir(DirAlias, prim_file),
+	    true = filelib:is_file(DirAlias),
+	    true = filelib:is_file(DirAlias, erl_prim_loader),
+	    true = filelib:is_file(DirAlias, prim_file),
+	    ok = file:make_symlink(AFile,FileAlias),
+	    true = filelib:is_file(FileAlias),
+	    true = filelib:is_file(FileAlias, erl_prim_loader),
+	    true = filelib:is_file(FileAlias, prim_file),
+	    true = filelib:is_regular(FileAlias),
+	    true = filelib:is_regular(FileAlias, erl_prim_loader),
+	    true = filelib:is_regular(FileAlias, prim_file),
+	    ok
+    end.
+
+file_props_symlink(Config) ->
+    PrivDir = ?config(priv_dir, Config),
+    Dir = filename:join(PrivDir, ?MODULE_STRING++"_file_props_symlink"),
+    AFile = filename:join(Dir, "a_file"),
+    Alias = filename:join(Dir, "symlink"),
+    ok = file:make_dir(Dir),
+    ok = file:write_file(AFile, "not that big\n"),
+    case file:make_symlink(AFile, Alias) of
+	{error, enotsup} ->
+	    {skip, "Links not supported on this platform"};
+	{error, eperm} ->
+	    {win32,_} = os:type(),
+	    {skip, "Windows user not privileged to create symlinks"};
+	ok ->
+	    {_,_} = LastMod = filelib:last_modified(AFile),
+	    LastMod = filelib:last_modified(Alias),
+	    LastMod = filelib:last_modified(Alias, erl_prim_loader),
+	    LastMod = filelib:last_modified(Alias, prim_file),
+	    FileSize = filelib:file_size(AFile),
+	    FileSize = filelib:file_size(Alias),
+	    FileSize = filelib:file_size(Alias, erl_prim_loader),
+	    FileSize = filelib:file_size(Alias, prim_file)
+    end.

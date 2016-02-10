@@ -3,35 +3,39 @@
 %%
 %% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
 -module(os_SUITE).
 
--export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
-	 init_per_group/2,end_per_group/2]).
--export([space_in_cwd/1, quoting/1, space_in_name/1, bad_command/1,
-	 find_executable/1, unix_comment_in_command/1, evil/1]).
+-export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1,
+	 init_per_group/2,end_per_group/2,
+	 init_per_testcase/2,end_per_testcase/2]).
+-export([space_in_cwd/1, quoting/1, cmd_unicode/1, space_in_name/1, bad_command/1,
+	 find_executable/1, unix_comment_in_command/1, deep_list_command/1,
+         large_output_command/1, perf_counter_api/1]).
 
 -include_lib("test_server/include/test_server.hrl").
 
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
-all() -> 
-    [space_in_cwd, quoting, space_in_name, bad_command,
-     find_executable, unix_comment_in_command, evil].
+all() ->
+    [space_in_cwd, quoting, cmd_unicode, space_in_name, bad_command,
+     find_executable, unix_comment_in_command, deep_list_command,
+     large_output_command, perf_counter_api].
 
-groups() -> 
+groups() ->
     [].
 
 init_per_suite(Config) ->
@@ -46,6 +50,11 @@ init_per_group(_GroupName, Config) ->
 end_per_group(_GroupName, Config) ->
     Config.
 
+init_per_testcase(_TC,Config) ->
+    Config.
+
+end_per_testcase(_,_Config) ->
+    ok.
 
 space_in_cwd(doc) ->
     "Test that executing a command in a current working directory "
@@ -94,6 +103,21 @@ quoting(Config) when is_list(Config) ->
     ?line [] = receive_all(),
     ok.
 
+
+cmd_unicode(doc) -> "Test that unicode arguments work.";
+cmd_unicode(suite) -> [];
+cmd_unicode(Config) when is_list(Config) ->
+    ?line DataDir = ?config(data_dir, Config),
+    ?line Echo = filename:join(DataDir, "my_echo"),
+
+    ?line comp("one", os:cmd(Echo ++ " one")),
+    ?line comp("one::two", os:cmd(Echo ++ " one two")),
+    ?line comp("åäö::ϼΩ", os:cmd(Echo ++ " åäö " ++ [1020, 937])),
+    ?t:sleep(5),
+    ?line [] = receive_all(),
+    ok.
+
+
 space_in_name(doc) ->
     "Test that program with a space in its name can be executed.";
 space_in_name(suite) -> [];
@@ -117,9 +141,9 @@ space_in_name(Config) when is_list(Config) ->
     ?line ok = file:change_mode(Echo, 8#777),	% Make it executable on Unix.
 
     %% Run the echo program.
-    %% Quoting on windows depends on if the full path of the executable 
+    %% Quoting on windows depends on if the full path of the executable
     %% contains special characters. Paths when running common_tests always
-    %% include @, why Windows would always fail if we do not double the 
+    %% include @, why Windows would always fail if we do not double the
     %% quotes (this is the behaviour of cmd.exe, not Erlang's idea).
     Quote = case os:type() of
                 {win32,_} ->
@@ -135,7 +159,7 @@ space_in_name(Config) when is_list(Config) ->
     ?t:sleep(5),
     ?line [] = receive_all(),
     ok.
-    
+
 bad_command(doc) ->
     "Check that a bad command doesn't crasch the server or the emulator (it used to).";
 bad_command(suite) -> [];
@@ -153,17 +177,17 @@ find_executable(suite) -> [];
 find_executable(doc) -> [];
 find_executable(Config) when is_list(Config) ->
     case os:type() of
-	{win32, _} -> 
+	{win32, _} ->
 	    ?line DataDir = filename:join(?config(data_dir, Config), "win32"),
 	    ?line ok = file:set_cwd(filename:join([DataDir, "current"])),
 	    ?line Bin = filename:join(DataDir, "bin"),
 	    ?line Abin = filename:join(DataDir, "abin"),
 	    ?line UsrBin = filename:join([DataDir, "usr", "bin"]),
 	    ?line {ok, Current} = file:get_cwd(),
-	    
+
 	    ?line Path = lists:concat([Bin, ";", Abin, ";", UsrBin]),
 	    ?line io:format("Path = ~s", [Path]),
-	    
+
 	    %% Search for programs in Bin (second element in PATH).
 	    ?line find_exe(Abin, "my_ar", ".exe", Path),
 	    ?line find_exe(Abin, "my_ascii", ".com", Path),
@@ -175,18 +199,18 @@ find_executable(Config) when is_list(Config) ->
 	    ?line find_exe(Abin, "my_ar.EXE", "", Path),
 	    ?line find_exe(Abin, "my_ascii.COM", "", Path),
 	    ?line find_exe(Abin, "MY_ADB.BAT", "", Path),
-	    
+
 	    %% Search for programs in Abin (second element in PATH).
 	    ?line find_exe(Abin, "my_ar", ".exe", Path),
 	    ?line find_exe(Abin, "my_ascii", ".com", Path),
 	    ?line find_exe(Abin, "my_adb", ".bat", Path),
-	    
+
 	    %% Search for programs in the current working directory.
 	    ?line find_exe(Current, "my_program", ".exe", Path),
 	    ?line find_exe(Current, "my_command", ".com", Path),
 	    ?line find_exe(Current, "my_batch", ".bat", Path),
 	    ok;
-	{unix, _}  -> 
+	{unix, _}  ->
 	    DataDir = ?config(data_dir, Config),
 
 	    %% Smoke test.
@@ -237,57 +261,70 @@ unix_comment_in_command(Config) when is_list(Config) ->
     ?line test_server:timetrap_cancel(Dog),
     ok.
 
--define(EVIL_PROCS, 100).
--define(EVIL_LOOPS, 100).
--define(PORT_CREATOR, os_cmd_port_creator).
-evil(Config) when is_list(Config) ->
-    Dog = test_server:timetrap(test_server:minutes(5)),
-    Parent = self(),
-    Ps = lists:map(fun (N) ->
-			   spawn_link(fun () ->
-					      evil_loop(Parent, ?EVIL_LOOPS,N)
-				      end)
-		   end, lists:seq(1, ?EVIL_PROCS)),
-    Devil = spawn_link(fun () -> devil(hd(Ps), hd(lists:reverse(Ps))) end),
-    lists:foreach(fun (P) -> receive {P, done} -> ok end end, Ps),
-    unlink(Devil),
-    exit(Devil, kill),
-    test_server:timetrap_cancel(Dog),
+deep_list_command(doc) ->
+    "Check that a deep list in command works equally on unix and on windows.";
+deep_list_command(suite) -> [];
+deep_list_command(Config) when is_list(Config) ->
+    %% As a 'io_lib' module description says: "There is no guarantee that the
+    %% character lists returned from some of the functions are flat, they can
+    %% be deep lists."
+    %% That's why os:cmd/1 can have arguments that are deep lists.
+    %% It is not a problem for unix, but for windows it is (in R15B02 for ex.).
+    Echo = os:cmd([$e, $c, "ho"]),
+    true = erlang:is_list(Echo),
+    %% FYI: [$e, $c, "ho"] =:= io_lib:format("ec~s", ["ho"])
     ok.
 
-devil(P1, P2) ->
-    erlang:display({?PORT_CREATOR, whereis(?PORT_CREATOR)}),
-    (catch ?PORT_CREATOR ! lists:seq(1,1000000)),
-    (catch ?PORT_CREATOR ! lists:seq(1,666)),
-    (catch ?PORT_CREATOR ! grrrrrrrrrrrrrrrr),
-    (catch ?PORT_CREATOR ! {'EXIT', P1, buhuuu}),
-    (catch ?PORT_CREATOR ! {'EXIT', hd(erlang:ports()), buhuuu}),
-    (catch ?PORT_CREATOR ! {'EXIT', P2, arggggggg}),
-    receive after 500 -> ok end,
-    (catch exit(whereis(?PORT_CREATOR), kill)),
-    (catch ?PORT_CREATOR ! ">8|"),
-    receive after 500 -> ok end,
-    (catch exit(whereis(?PORT_CREATOR), diiiiiiiiiiiiiiiiiiiie)),
-    receive after 100 -> ok end,
-    devil(P1, P2).
+large_output_command(doc) ->
+    "Test to take sure that the correct data is"
+    "received when doing large commands";
+large_output_command(suite) -> [];
+large_output_command(Config) when is_list(Config) ->
+    %% Maximum allowed on windows is 8192, so we test well below that
+    AAA = lists:duplicate(7000, $a),
+    comp(AAA,os:cmd("echo " ++ AAA)).
 
-evil_loop(Parent, Loops, N) ->
-    Res = integer_to_list(N),
-    evil_loop(Parent, Loops, Res, "echo " ++ Res).
+%% Test that the os:perf_counter api works as expected
+perf_counter_api(_Config) ->
 
-evil_loop(Parent, 0, _Res, _Cmd) ->
-    Parent ! {self(), done};
-evil_loop(Parent, Loops, Res, Cmd) ->
-    comp(Res, os:cmd(Cmd)),
-    evil_loop(Parent, Loops-1, Res, Cmd).
+    true = is_integer(os:perf_counter()),
+    true = os:perf_counter() > 0,
+
+    T1 = os:perf_counter(),
+    timer:sleep(100),
+    T2 = os:perf_counter(),
+    TsDiff = erlang:convert_time_unit(T2 - T1, perf_counter, nano_seconds),
+    ct:pal("T1: ~p~n"
+           "T2: ~p~n"
+           "TsDiff: ~p~n",
+           [T1,T2,TsDiff]),
+
+    %% We allow a 15% diff
+    true = TsDiff < 115000000,
+    true = TsDiff > 85000000,
+
+    T1Ms = os:perf_counter(1000),
+    timer:sleep(100),
+    T2Ms = os:perf_counter(1000),
+    MsDiff = T2Ms - T1Ms,
+    ct:pal("T1Ms: ~p~n"
+           "T2Ms: ~p~n"
+           "MsDiff: ~p~n",
+           [T1Ms,T2Ms,MsDiff]),
+
+    %% We allow a 15% diff
+    true = MsDiff < 115,
+    true = MsDiff > 85.
+
+%% Util functions
 
 comp(Expected, Got) ->
     case strip_nl(Got) of
 	Expected ->
 	    ok;
 	Other ->
-	    ok = io:format("Expected: ~s\n", [Expected]),
-	    ok = io:format("Got:      ~s\n", [Other]),
+	    ok = io:format("Expected: ~ts\n", [Expected]),
+	    ok = io:format("Got:      ~ts\n", [Other]),
 	    test_server:fail()
     end.
 
@@ -303,4 +340,3 @@ receive_all() ->
 	X -> [X|receive_all()]
     after 0 -> []
     end.
-	    

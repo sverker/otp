@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -68,6 +69,8 @@ test_ei_decode_encode(Config) when is_list(Config) ->
     Port  = case os:type() of
 		{win32,_} ->
 		    open_port({spawn,"sort"},[]);
+		{unix, darwin} ->
+		    open_port({spawn,"/usr/bin/true"},[]);
 		_ ->
 		    open_port({spawn,"/bin/true"},[])
 	    end,
@@ -125,6 +128,15 @@ test_ei_decode_encode(Config) when is_list(Config) ->
 	   send_rec(P, mk_ref({Atom,1}, [262143, 8723648, 24097245])),
 	   void
      end || Atom <- unicode_atom_data()],
+
+    send_rec(P, {}),
+    send_rec(P, {atom, Pid, Port, Ref}),
+    send_rec(P, [atom, Pid, Port, Ref]),
+    send_rec(P, [atom | Fun]),
+    send_rec(P, #{}),
+    send_rec(P, #{key => value}),
+    send_rec(P, maps:put(Port, Ref, #{key => value, key2 => Pid})),
+
     ?line runner:recv_eot(P),
     ok.
 

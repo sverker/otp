@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2010-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -181,7 +182,7 @@ start_diameter(_Config) ->
     ok = diameter:start().
 
 make_certs() ->
-    [{timetrap, {seconds, 30}}].
+    [{timetrap, {minutes, 2}}].
 
 make_certs(Config) ->
     Dir = proplists:get_value(priv_dir, Config),
@@ -302,9 +303,7 @@ set([H|T], Vs) ->
 
 disconnect({{LRef, _PortNr}, CRef}) ->
     ok = diameter:remove_transport(?CLIENT, CRef),
-    ok = receive #diameter_event{info = {down, LRef, _, _}} -> ok
-         after 2000 -> false
-         end.
+    receive #diameter_event{info = {down, LRef, _, _}} -> ok end.
 
 realm(Host) ->
     tl(lists:dropwhile(fun(C) -> C /= $. end, Host)).
@@ -321,19 +320,19 @@ make_cert(Dir, Base) ->
     make_cert(Dir, Base ++ "_key.pem", Base ++ "_ca.pem").
 
 make_cert(Dir, Keyfile, Certfile) ->
-    [K,C] = Paths = [filename:join([Dir, F]) || F <- [Keyfile, Certfile]],
+    [KP,CP] = [filename:join([Dir, F]) || F <- [Keyfile, Certfile]],
 
-    KCmd = join(["openssl genrsa -out", K, "2048"]),
-    CCmd = join(["openssl req -new -x509 -key", K, "-out", C, "-days 7",
-                 "-subj /C=SE/ST=./L=Stockholm/CN=www.erlang.org"]),
+    KC = join(["openssl genrsa -out", KP, "2048"]),
+    CC = join(["openssl req -new -x509 -key", KP, "-out", CP, "-days 7",
+               "-subj /C=SE/ST=./L=Stockholm/CN=www.erlang.org"]),
 
     %% Hope for the best and only check that files are written.
-    os:cmd(KCmd),
-    os:cmd(CCmd),
+    [{_, _, {ok,_}},{_, _, {ok,_}}]
+        = [{P,O,T} || {P,C} <- [{KP,KC}, {CP,CC}],
+                      O <- [os:cmd(C)],
+                      T <- [file:read_file_info(P)]],
 
-    [_,_] = [T || P <- Paths, {ok, T} <- [file:read_file_info(P)]],
-
-    {K,C}.
+    {KP,CP}.
 
 join(Strs) ->
     string:join(Strs, " ").
@@ -343,7 +342,7 @@ join(Strs) ->
 server(Host, {Caps, Opts}) ->
     ok = diameter:start_service(Host, ?SERVICE(Host, ?DICT_COMMON)),
     {ok, LRef} = diameter:add_transport(Host, ?LISTEN(Caps, Opts)),
-    {LRef, hd([_] = ?util:lport(tcp, LRef, 20))}.
+    {LRef, hd([_] = ?util:lport(tcp, LRef))}.
 
 sopts(?SERVER1, Dir) ->
     {inband_security([?TLS]),
@@ -365,13 +364,11 @@ ssl([{ssl_options = T, Opts}]) ->
 
 connect(Host, {_LRef, PortNr}, {Caps, Opts}) ->
     {ok, Ref} = diameter:add_transport(Host, ?CONNECT(PortNr, Caps, Opts)),
-    ok = receive
-             #diameter_event{service = Host,
-                             info = {up, Ref, _, _, #diameter_packet{}}} ->
-                 ok
-         after 2000 ->
-                 false
-         end,
+    receive
+        #diameter_event{service = Host,
+                        info = {up, Ref, _, _, #diameter_packet{}}} ->
+            ok
+    end,
     Ref.
 
 copts(S, Opts)

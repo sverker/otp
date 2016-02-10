@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxdirdialog.html">wxDirDialog</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxdirdialog.html">wxDirDialog</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxDialog}
 %% <br />{@link wxTopLevelWindow}
@@ -94,7 +95,7 @@ new(Parent)
  when is_record(Parent, wx_ref) ->
   new(Parent, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxdirdialog.html#wxdirdialogwxdirdialog">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxdirdialog.html#wxdirdialogwxdirdialog">external documentation</a>.
 -spec new(Parent, [Option]) -> wxDirDialog() when
 	Parent::wxWindow:wxWindow(),
 	Option :: {title, unicode:chardata()}
@@ -115,7 +116,7 @@ new(#wx_ref{type=ParentT,ref=ParentRef}, Options)
   wxe_util:construct(?wxDirDialog_new,
   <<ParentRef:32/?UI, 0:32,BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxdirdialog.html#wxdirdialoggetpath">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxdirdialog.html#wxdirdialoggetpath">external documentation</a>.
 -spec getPath(This) -> unicode:charlist() when
 	This::wxDirDialog().
 getPath(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -123,7 +124,7 @@ getPath(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxDirDialog_GetPath,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxdirdialog.html#wxdirdialoggetmessage">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxdirdialog.html#wxdirdialoggetmessage">external documentation</a>.
 -spec getMessage(This) -> unicode:charlist() when
 	This::wxDirDialog().
 getMessage(#wx_ref{type=ThisT,ref=ThisRef}) ->
@@ -131,7 +132,7 @@ getMessage(#wx_ref{type=ThisT,ref=ThisRef}) ->
   wxe_util:call(?wxDirDialog_GetMessage,
   <<ThisRef:32/?UI>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxdirdialog.html#wxdirdialogsetmessage">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxdirdialog.html#wxdirdialogsetmessage">external documentation</a>.
 -spec setMessage(This, Message) -> ok when
 	This::wxDirDialog(), Message::unicode:chardata().
 setMessage(#wx_ref{type=ThisT,ref=ThisRef},Message)
@@ -141,7 +142,7 @@ setMessage(#wx_ref{type=ThisT,ref=ThisRef},Message)
   wxe_util:cast(?wxDirDialog_SetMessage,
   <<ThisRef:32/?UI,(byte_size(Message_UC)):32/?UI,(Message_UC)/binary, 0:(((8- ((0+byte_size(Message_UC)) band 16#7)) band 16#7))/unit:8>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxdirdialog.html#wxdirdialogsetpath">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxdirdialog.html#wxdirdialogsetpath">external documentation</a>.
 -spec setPath(This, Path) -> ok when
 	This::wxDirDialog(), Path::unicode:chardata().
 setPath(#wx_ref{type=ThisT,ref=ThisRef},Path)

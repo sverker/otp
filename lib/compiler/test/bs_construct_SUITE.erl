@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 2004-2012. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -39,7 +40,7 @@ all() ->
     [{group,p}].
 
 groups() -> 
-    [{p,test_lib:parallel(),
+    [{p,[parallel],
       [two,test1,fail,float_bin,in_guard,in_catch,
        nasty_literals,side_effect,opt,otp_7556,float_arith,
        otp_8054]}].
@@ -319,6 +320,8 @@ in_guard(Config) when is_list(Config) ->
     ?line 1 = in_guard_1(<<16#74ad:16>>, 16#e95, 5),
     ?line 2 = in_guard_1(<<16#3A,16#F7,"hello">>, 16#3AF7, <<"hello">>),
     ?line 3 = in_guard_1(<<16#FBCD:14,3.1415/float,3:2>>, 16#FBCD, 3.1415),
+    ?line 3 = in_guard_1(<<16#FBCD:14,3/float,3:2>>, 16#FBCD, 3),
+    ?line 3 = in_guard_1(<<16#FBCD:14,(2 bsl 226)/float,3:2>>, 16#FBCD, 2 bsl 226),
     ?line nope = in_guard_1(<<1>>, 42, b),
     ?line nope = in_guard_1(<<1>>, a, b),
     ?line nope = in_guard_1(<<1,2>>, 1, 1),

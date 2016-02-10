@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2003-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 
@@ -39,7 +40,8 @@
          otp_8133/1,
          funs/1,
 	 try_catch/1,
-	 eval_expr_5/1]).
+	 eval_expr_5/1,
+         eep37/1]).
 
 %%
 %% Define to run outside of test server
@@ -63,6 +65,7 @@ config(priv_dir,_) ->
 % Default timetrap timeout (set in init_per_testcase).
 -define(default_timeout, ?t:minutes(1)).
 init_per_testcase(_Case, Config) ->
+    test_lib:interpret(?MODULE),
     ?line Dog = ?t:timetrap(?default_timeout),
     [{watchdog, Dog} | Config].
 end_per_testcase(_Case, Config) ->
@@ -78,7 +81,7 @@ all() ->
      pattern_expr, match_bin, guard_3, guard_4, lc,
      simple_cases, unary_plus, apply_atom, otp_5269,
      otp_6539, otp_6543, otp_6787, otp_6977, otp_7550,
-     otp_8133, funs, try_catch, eval_expr_5].
+     otp_8133, funs, try_catch, eval_expr_5, eep37].
 
 groups() -> 
     [].
@@ -1322,6 +1325,27 @@ eval_expr_5(Config) when is_list(Config) ->
 	error:function_clause ->
 	    ok
     end.
+
+eep37(Config) when is_list(Config) ->
+    check(fun () -> (fun _(X) -> X end)(42) end,
+          "(fun _(X) -> X end)(42).",
+          42),
+    check(fun () -> (fun _Id(X) -> X end)(42) end,
+          "(fun _Id(X) -> X end)(42).", 42),
+    check(fun () -> is_function((fun Self() -> Self end)(), 0) end,
+          "is_function((fun Self() -> Self end)(), 0).",
+          true),
+    check(fun () ->
+                  F = fun Fact(N) when N > 0 ->
+                              N * Fact(N - 1);
+                          Fact(0) ->
+                              1
+                       end,
+                  F(6)
+          end,
+          "(fun Fact(N) when N > 0 -> N * Fact(N - 1); Fact(0) -> 1 end)(6).",
+          720),
+    ok.
 
 %% Check the string in different contexts: as is; in fun; from compiled code.
 check(F, String, Result) ->

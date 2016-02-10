@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2002-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -44,9 +45,6 @@ help() ->
       "  sort        runtime | reductions | memory | msg_q~n"
       "                         What information to sort by~n"
       "                         Default: runtime (reductions if tracing=off)~n"
-      "  output      graphical | text~n"
-      "                         How to present results~n"
-      "                         Default: graphical~n"
       "  tracing     on | off   etop uses the erlang trace facility, and thus~n"
       "                         no other tracing is possible on the node while~n"
       "                         etop is running, unless this option is set to~n"
@@ -317,7 +315,7 @@ handle_args([_| R], C) ->
 handle_args([], C) ->
     C.
 
-output(graphical) -> etop_gui;
+output(graphical) -> exit({deprecated, "Use observer instead"});
 output(text) -> etop_txt.
 
 
@@ -325,12 +323,39 @@ loadinfo(SysI) ->
     #etop_info{n_procs = Procs, 
 	       run_queue = RQ, 
 	       now = Now,
-	       wall_clock = {_, WC}, 
-	       runtime = {_, RT}} = SysI,
-    Cpu = round(100*RT/WC),
+	       wall_clock = WC,
+	       runtime = RT} = SysI,
+    Cpu = calculate_cpu_utilization(WC,RT),
     Clock = io_lib:format("~2.2.0w:~2.2.0w:~2.2.0w",
 			 tuple_to_list(element(2,calendar:now_to_datetime(Now)))),
     {Cpu,Procs,RQ,Clock}.
+
+calculate_cpu_utilization({_,WC},{_,RT}) ->
+    %% Old version of observer_backend, using statistics(wall_clock)
+    %% and statistics(runtime)
+    case {WC,RT} of
+	{0,0} ->
+	    0;
+	{0,_} ->
+	    100;
+	_ ->
+	    round(100*RT/WC)
+    end;
+calculate_cpu_utilization(_,undefined) ->
+    %% First time collecting - no cpu utilization has been measured
+    %% since scheduler_wall_time flag is not yet on
+    0;
+calculate_cpu_utilization(_,RTInfo) ->
+    %% New version of observer_backend, using statistics(scheduler_wall_time)
+    Sum = lists:foldl(fun({_,A,T},{AAcc,TAcc}) -> {A+AAcc,T+TAcc} end,
+		      {0,0},
+		      RTInfo),
+    case Sum of
+	{0,0} ->
+	    0;
+	{Active,Total} ->
+	    round(100*Active/Total)
+    end.
 
 meminfo(MemI, [Tag|Tags]) -> 
     [round(get_mem(Tag, MemI)/1024)|meminfo(MemI, Tags)];

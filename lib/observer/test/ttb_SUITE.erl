@@ -1,18 +1,20 @@
+%%
 %% %CopyrightBegin%
 %%
 %%
-%% Copyright Ericsson AB 2002-2010. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -57,7 +59,7 @@ init_per_testcase(Case, Config) ->
     catch error:undef -> ok
     end,
     [{watchdog, Dog}|Config].
-end_per_testcase(Case, Config) ->
+end_per_testcase(_Case, Config) ->
     %% try apply(?MODULE,Case,[cleanup,Config])
     %% catch error:undef -> ok
     %% end,
@@ -1482,12 +1484,19 @@ logic(N, M, TracingType) ->
     ?t:stop_node(ttb_helper:get_node(client)),
     timer:sleep(2500),
     ?line {ok,_ClientNode} = ?t:start_node(client,slave,[]),
+    ct:log("client started",[]),
     ?line ok = ttb_helper:c(code, add_paths, [code:get_path()]),
+    ct:log("paths added",[]),
     ?line ttb_helper:c(client, init, []),
+    ct:log("client initiated",[]),
     ?line helper_msgs(N, TracingType),
+    ct:log("helper msgs sent and flushed",[]),
     ?line {_, D} = ttb:stop([return_fetch_dir]),
+    ct:log("stopped ~p",[D]),
     ?line ttb:format(D, [{out, ?OUTPUT}, {handler, ret_caller_call_handler2()}]),
+    ct:log("formatted ~p",[{D,?OUTPUT}]),
     ?line {ok, Ret} = file:consult(?OUTPUT),
+    ct:log("consulted: ~p",[Ret]),
     ?line M = length(Ret).
 
 begin_trace_with_resume(ServerNode, ClientNode, Dest) ->

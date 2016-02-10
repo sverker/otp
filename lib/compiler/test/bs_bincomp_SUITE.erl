@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2006-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2006-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -25,7 +26,7 @@
 	 init_per_group/2,end_per_group/2,
 	 byte_aligned/1,bit_aligned/1,extended_byte_aligned/1,
 	 extended_bit_aligned/1,mixed/1,filters/1,trim_coverage/1,
-	 nomatch/1,sizes/1,tail/1]).
+	 nomatch/1,sizes/1]).
 
 -include_lib("test_server/include/test_server.hrl").
 
@@ -35,7 +36,7 @@ all() ->
     test_lib:recompile(?MODULE),
     [byte_aligned, bit_aligned, extended_byte_aligned,
      extended_bit_aligned, mixed, filters, trim_coverage,
-     nomatch, sizes, tail].
+     nomatch, sizes].
 
 groups() -> 
     [].
@@ -282,44 +283,13 @@ sizes(Config) when is_list(Config) ->
     ?line <<1,2,3,0>> = Fun13(7),
     ?line <<1,2,3,0,0>> = Fun13(8),
 
+    <<0:3>> = cs_default(<< <<0:S>> || S <- [0,1,2] >>),
+    <<0:3>> = cs_default(<< <<0:S>> || <<S>> <= <<0,1,2>> >>),
+
     ?line {'EXIT',_} = (catch << <<C:4>> || <<C:8>> <= {1,2,3} >>),
 
     ?line cs_end(),
     ok.
-
-tail(Config) when is_list(Config) ->
-    ?line [] = tail_1(<<0:7>>),
-    ?line [0] = tail_1(<<0>>),
-    ?line [0] = tail_1(<<0:12>>),
-    ?line [0,0] = tail_1(<<0:20>>),
-
-    ?line [] = tail_2(<<0:7>>),
-    ?line [42] = tail_2(<<0>>),
-    ?line [] = tail_2(<<0:12>>),
-    ?line [42,42] = tail_2(<<0,1>>),
-
-    ?line <<>> = tail_3(<<0:7>>),
-    ?line <<42>> = tail_3(<<0>>),
-    ?line <<42>> = tail_3(<<0:12>>),
-    ?line <<42,42>> = tail_3(<<0:20>>),
-
-    ?line [] = tail_4(<<0:15>>),
-    ?line [7] = tail_4(<<7,8>>),
-    ?line [9] = tail_4(<<9,17:12>>),
-    ok.
-
-tail_1(Bits) ->
-    [X || <<X:8/integer, _/bits>> <= Bits].
-
-tail_2(Bits) ->
-    [42 || <<_:8/integer, _/bytes>> <= Bits].
-
-tail_3(Bits) ->
-    << <<42>> || <<_:8/integer, _/bits>> <= Bits >>.
-
-tail_4(Bits) ->
-    [X || <<X:8/integer, Tail/bits>> <= Bits, bit_size(Tail) >= 8].
-
 
 cs_init() ->
     erts_debug:set_internal_state(available_internal_state, true),

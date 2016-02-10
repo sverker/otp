@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2001-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -21,7 +22,8 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2,
 	 t_case/1,t_and_or/1,t_andalso/1,t_orelse/1,inside/1,overlap/1,
-	 combined/1,in_case/1,before_and_inside_if/1]).
+	 combined/1,in_case/1,before_and_inside_if/1,
+	 slow_compilation/1]).
 	 
 -include_lib("test_server/include/test_server.hrl").
 
@@ -32,7 +34,7 @@ all() ->
     [{group,p}].
 
 groups() -> 
-    [{p,test_lib:parallel(),
+    [{p,[parallel],
       [t_case,t_and_or,t_andalso,t_orelse,inside,overlap,
        combined,in_case,before_and_inside_if]}].
 
@@ -128,6 +130,10 @@ t_case_y(X, Y, Z) ->
 	    Y =:= 100
     end.
 
+-define(GUARD(E), if E -> true;
+             true -> false
+          end).
+
 t_and_or(Config) when is_list(Config) ->
     ?line true = true and true,
     ?line false = true and false,
@@ -159,11 +165,22 @@ t_and_or(Config) when is_list(Config) ->
     ?line true = false or id(true),
     ?line false = false or id(false),
 
-   ok.
+    True = id(true),
 
--define(GUARD(E), if E -> true;
-		     true -> false
-		  end).
+    false = ?GUARD(erlang:'and'(bar, True)),
+    false = ?GUARD(erlang:'or'(bar, True)),
+    false = ?GUARD(erlang:'not'(erlang:'and'(bar, True))),
+    false = ?GUARD(erlang:'not'(erlang:'not'(erlang:'and'(bar, True)))),
+
+    true = (fun (X = true) when X or true or X -> true end)(True),
+
+    Tuple = id({a,b}),
+    case Tuple of
+	{_,_} ->
+	    {'EXIT',{badarg,_}} = (catch true and Tuple)
+    end,
+
+    ok.
 
 t_andalso(Config) when is_list(Config) ->
     Bs = [true,false],
@@ -192,6 +209,9 @@ t_andalso(Config) when is_list(Config) ->
     ?line {'EXIT',{badarg,_}} = (catch not id(false) andalso not id(glurf)),
     ?line false = id(false) andalso not id(glurf),
     ?line false = false andalso not id(glurf),
+
+    true = begin (X1 = true) andalso X1, X1 end,
+    false = false = begin (X2 = false) andalso X2, X2 end,
 
     ok.
 
@@ -222,6 +242,9 @@ t_orelse(Config) when is_list(Config) ->
     ?line {'EXIT',{badarg,_}} = (catch not id(true) orelse not id(glurf)),
     ?line true = id(true) orelse not id(glurf),
     ?line true = true orelse not id(glurf),
+
+    true = begin (X1 = true) orelse X1, X1 end,
+    false = begin (X2 = false) orelse X2, X2 end,
 
     ok.
 
@@ -348,6 +371,11 @@ combined(Config) when is_list(Config) ->
     ?line true = ?COMB(false, blurf, true),
     ?line true = ?COMB(true, true, blurf),
 
+    false = simple_comb(false, false),
+    false = simple_comb(false, true),
+    false = simple_comb(true, false),
+    true = simple_comb(true, true),
+
     ok.
 -undef(COMB).
 
@@ -373,6 +401,13 @@ comb(A, B, C) ->
 	      true -> false
 	  end,
     id(Res).
+
+simple_comb(A, B) ->
+    %% Use Res twice, to ensure that a careless optimization of 'not'
+    %% doesn't leave Res as a free variable.
+    Res = A andalso B,
+    _ = id(not Res),
+    Res.
 
 %% Test that a boolean expression in a case expression is properly
 %% optimized (in particular, that the error behaviour is correct).
@@ -471,6 +506,36 @@ before_and_inside_if_2(XDo1, XDo2, Do3) ->
 		  no
 	  end,
     {CH1,CH2}.
+
+
+-record(state, {stack = []}).
+
+slow_compilation(_) ->
+    %% The function slow_compilation_1 used to compile very slowly.
+    ok = slow_compilation_1({a}, #state{}).
+
+slow_compilation_1(T1, #state{stack = [T2|_]})
+    when element(1, T2) == a, element(1, T1) == b, element(1, T1) == c ->
+    ok;
+slow_compilation_1(T, _)
+    when element(1, T) == a1; element(1, T) == b1; element(1, T) == c1 ->
+    ok;
+slow_compilation_1(T, _)
+    when element(1, T) == a2; element(1, T) == b2; element(1, T) == c2 ->
+    ok;
+slow_compilation_1(T, _) when element(1, T) == a ->
+    ok;
+slow_compilation_1(T, _)
+    when
+        element(1, T) == a,
+        (element(1, T) == b) and (element(1, T) == c) ->
+    ok;
+slow_compilation_1(_, T) when element(1, T) == a ->
+    ok;
+slow_compilation_1(_, T) when element(1, T) == b ->
+    ok;
+slow_compilation_1(T, _) when element(1, T) == a ->
+    ok.
 
 %% Utilities.
 

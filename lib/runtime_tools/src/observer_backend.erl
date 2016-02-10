@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2002-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2002-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -49,6 +50,17 @@ vsn() ->
 %% observer backend
 %%
 sys_info() ->
+    MemInfo = try erlang:memory() of
+		  Mem -> Mem
+	      catch _:_ -> []
+	      end,
+
+    SchedulersOnline = erlang:system_info(schedulers_online),
+    SchedulersAvailable = case erlang:system_info(multi_scheduling) of
+			      enabled -> SchedulersOnline;
+			      _ -> 1
+			  end,
+
     {{_,Input},{_,Output}} = erlang:statistics(io),
     [{process_count, erlang:system_info(process_count)},
      {process_limit, erlang:system_info(process_limit)},
@@ -56,9 +68,13 @@ sys_info() ->
      {run_queue, erlang:statistics(run_queue)},
      {io_input, Input},
      {io_output,  Output},
+
      {logical_processors, erlang:system_info(logical_processors)},
-     {logical_processors_available, erlang:system_info(logical_processors_available)},
      {logical_processors_online, erlang:system_info(logical_processors_online)},
+     {logical_processors_available, erlang:system_info(logical_processors_available)},
+     {schedulers, erlang:system_info(schedulers)},
+     {schedulers_online, SchedulersOnline},
+     {schedulers_available, SchedulersAvailable},
 
      {otp_release, erlang:system_info(otp_release)},
      {version, erlang:system_info(version)},
@@ -68,9 +84,16 @@ sys_info() ->
      {threads, erlang:system_info(threads)},
      {thread_pool_size, erlang:system_info(thread_pool_size)},
      {wordsize_internal, erlang:system_info({wordsize, internal})},
-     {wordsize_external, erlang:system_info({wordsize, external})} |
-     erlang:memory()
-    ].
+     {wordsize_external, erlang:system_info({wordsize, external})},
+     {alloc_info, alloc_info()}
+     | MemInfo].
+
+alloc_info() ->
+    AlcuAllocs = erlang:system_info(alloc_util_allocators),
+    try erlang:system_info({allocator_sizes, AlcuAllocs}) of
+	Allocators -> Allocators
+    catch _:_ -> []
+    end.
 
 get_table(Parent, Table, Module) ->
     spawn(fun() ->
@@ -199,34 +222,57 @@ get_table_list(mnesia, Opts) ->
     lists:foldl(Info, [], mnesia:system_info(tables)).
 
 fetch_stats(Parent, Time) ->
-    erlang:system_flag(scheduler_wall_time, true),
     process_flag(trap_exit, true),
-    fetch_stats_loop(Parent, Time),
-    erlang:system_flag(scheduler_wall_time, false).
+    fetch_stats_loop(Parent, Time).
 
 fetch_stats_loop(Parent, Time) ->
+    erlang:system_flag(scheduler_wall_time, true),
     receive
-	_Msg -> normal
+	_Msg ->
+	    %% erlang:system_flag(scheduler_wall_time, false)
+	    ok
     after Time ->
 	    _M = Parent ! {stats, 1,
 			   erlang:statistics(scheduler_wall_time),
 			   erlang:statistics(io),
-			   erlang:memory()},
-	    fetch_stats(Parent, Time)
+			   try erlang:memory() catch _:_ -> [] end},
+	    fetch_stats_loop(Parent, Time)
     end.
 %%
 %% etop backend
 %%
 etop_collect(Collector) ->
+    %% If this is the first time and the scheduler_wall_time flag is
+    %% false, SchedulerWallTime will be 'undefined' (and show 0 cpu
+    %% utilization in etop). Next time the flag will be true and then
+    %% there will be a measurement.
+    SchedulerWallTime = erlang:statistics(scheduler_wall_time),
     ProcInfo = etop_collect(processes(), []),
-    Collector ! {self(),#etop_info{now = now(),
+
+    Collector ! {self(),#etop_info{now = erlang:timestamp(),
 				   n_procs = length(ProcInfo),
 				   run_queue = erlang:statistics(run_queue),
-				   wall_clock = erlang:statistics(wall_clock),
-				   runtime = erlang:statistics(runtime),
+				   runtime = SchedulerWallTime,
 				   memi = etop_memi(),
 				   procinfo = ProcInfo
-				  }}.
+				  }},
+
+    case SchedulerWallTime of
+	undefined ->
+	    spawn(fun() -> flag_holder_proc(Collector) end);
+	_ ->
+	    ok
+    end,
+
+    erlang:system_flag(scheduler_wall_time,true).
+
+flag_holder_proc(Collector) ->
+    Ref = erlang:monitor(process,Collector),
+    receive
+	{'DOWN',Ref,_,_,_} ->
+	    %% erlang:system_flag(scheduler_wall_time,false)
+	    ok
+    end.
 
 etop_memi() ->
     try
@@ -251,7 +297,7 @@ etop_collect([P|Ps], Acc) ->
 	[{registered_name,Reg},{initial_call,Initial},{memory,Mem},
 	 {reductions,Reds},{current_function,Current},{message_queue_len,Qlen}] ->
 	    Name = case Reg of
-		       [] -> Initial;
+		       [] -> initial_call(Initial, P);
 		       _ -> Reg
 		   end,
 	    Info = #etop_proc_info{pid=P,mem=Mem,reds=Reds,name=Name,
@@ -259,6 +305,11 @@ etop_collect([P|Ps], Acc) ->
 	    etop_collect(Ps, [Info|Acc])
     end;
 etop_collect([], Acc) -> Acc.
+
+initial_call({proc_lib, init_p, _}, Pid) ->
+    proc_lib:translate_initial_call(Pid);
+initial_call(Initial, _Pid) ->
+    Initial.
 
 %%
 %% ttb backend

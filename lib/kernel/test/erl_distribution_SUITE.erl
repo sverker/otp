@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -26,7 +27,8 @@
 
 -export([tick/1, tick_change/1, illegal_nodenames/1, hidden_node/1,
 	 table_waste/1, net_setuptime/1,
-	
+	 inet_dist_options_options/1,
+
 	 monitor_nodes_nodedown_reason/1,
 	 monitor_nodes_complex_nodedown_reason/1,
 	 monitor_nodes_node_type/1,
@@ -38,7 +40,8 @@
 	 monitor_nodes_many/1]).
 
 %% Performs the test at another node.
--export([tick_cli_test/1, tick_cli_test1/1,
+-export([get_socket_priorities/0,
+	 tick_cli_test/1, tick_cli_test1/1,
 	 tick_serv_test/2, tick_serv_test1/1,
 	 keep_conn/1, time_ping/1]).
 
@@ -62,7 +65,8 @@ suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
     [tick, tick_change, illegal_nodenames, hidden_node,
-     table_waste, net_setuptime, {group, monitor_nodes}].
+     table_waste, net_setuptime, inet_dist_options_options,
+     {group, monitor_nodes}].
 
 groups() -> 
     [{monitor_nodes, [],
@@ -232,11 +236,10 @@ do_test_setuptime(Setuptime) when is_list(Setuptime) ->
     Res.
 
 time_ping(Node) ->
-    T0 = erlang:now(),
+    T0 = erlang:monotonic_time(),
     pang = net_adm:ping(Node),
-    T1 = erlang:now(),
-    time_diff(T0,T1).
-    
+    T1 = erlang:monotonic_time(),
+    erlang:convert_time_unit(T1 - T0, native, milli_seconds).
 
 %% Keep the connection with the client node up.
 %% This is neccessary as the client node runs with much shorter
@@ -273,13 +276,15 @@ tick_cli_test1(Node) ->
     erlang:monitor_node(Node, true),
     sleep(2),
     rpc:call(Node, erlang, time, []), %% simulate action on the connection
-    T1 = now(),
+    T1 = erlang:monotonic_time(),
     receive
 	{nodedown, Node} ->
-	    T2 = now(),
+	    T2 = erlang:monotonic_time(),
 	    receive
 		{whats_the_result, From} ->
-		    case time_diff(T1, T2) of
+		    Diff = erlang:convert_time_unit(T2-T1, native,
+						    milli_seconds),
+		    case Diff of
 			T when T > 8000, T < 16000 ->
 			    From ! {tick_test, T};
 			T ->
@@ -552,6 +557,71 @@ check_monitor_nodes_res(Pid, Node) ->
 	{Ref, MNs} ->
 	    ?line false = lists:keysearch(Node, 2, MNs)
     end.
+
+
+
+inet_dist_options_options(suite) -> [];
+inet_dist_options_options(doc) ->
+    ["Check the kernel inet_dist_{listen,connect}_options options"];
+inet_dist_options_options(Config) when is_list(Config) ->
+    Prio = 1,
+    case gen_udp:open(0, [{priority,Prio}]) of
+	{ok,Socket} ->
+	    case inet:getopts(Socket, [priority]) of
+		{ok,[{priority,Prio}]} ->
+		    ok = gen_udp:close(Socket),
+		    do_inet_dist_options_options(Prio);
+		      _ ->
+		    ok = gen_udp:close(Socket),
+		    {skip,
+		     "Can not set priority "++integer_to_list(Prio)++
+			 " on socket"}
+	    end;
+	{error,_} ->
+	    {skip, "Can not set priority on socket"}
+    end.
+
+do_inet_dist_options_options(Prio) ->
+    PriorityString0 = "[{priority,"++integer_to_list(Prio)++"}]",
+    PriorityString =
+	case os:cmd("echo [{a,1}]") of
+	    "[{a,1}]"++_ ->
+		PriorityString0;
+	    _ ->
+		%% Some shells need quoting of [{}]
+		"'"++PriorityString0++"'"
+	end,
+    InetDistOptions =
+	"-hidden "
+	"-kernel inet_dist_connect_options "++PriorityString++" "
+	"-kernel inet_dist_listen_options "++PriorityString,
+    ?line {ok,Node1} =
+	start_node(inet_dist_options_1, InetDistOptions),
+    ?line {ok,Node2} =
+	start_node(inet_dist_options_2, InetDistOptions),
+    %%
+    ?line pong =
+	rpc:call(Node1, net_adm, ping, [Node2]),
+    ?line PrioritiesNode1 =
+	rpc:call(Node1, ?MODULE, get_socket_priorities, []),
+    ?line PrioritiesNode2 =
+	rpc:call(Node2, ?MODULE, get_socket_priorities, []),
+    ?line ?t:format("PrioritiesNode1 = ~p", [PrioritiesNode1]),
+    ?line ?t:format("PrioritiesNode2 = ~p", [PrioritiesNode2]),
+    ?line Elevated = [P || P <- PrioritiesNode1, P =:= Prio],
+    ?line Elevated = [P || P <- PrioritiesNode2, P =:= Prio],
+    ?line [_|_] = Elevated,
+    %%
+    ?line stop_node(Node2),
+    ?line stop_node(Node1),
+    ok.
+
+get_socket_priorities() ->
+    [Priority ||
+	{ok,[{priority,Priority}]} <-
+	    [inet:getopts(Port, [priority]) ||
+		Port <- erlang:ports(),
+		element(2, erlang:port_info(Port, name)) =:= "tcp_inet"]].
 
 
 	    
@@ -1140,19 +1210,6 @@ print_my_messages() ->
     ?line ?t:format("Messages: ~p~n", [Messages]),
     ?line ok.
 
-%% Time difference in milliseconds !!
-time_diff({TimeM, TimeS, TimeU}, {CurM, CurS, CurU}) when CurM > TimeM ->
-    ((CurM - TimeM) * 1000000000) + sec_diff({TimeS, TimeU}, {CurS, CurU});
-time_diff({_, TimeS, TimeU}, {_, CurS, CurU}) ->
-    sec_diff({TimeS, TimeU}, {CurS, CurU}).
-
-sec_diff({TimeS, TimeU}, {CurS, CurU}) when CurS > TimeS ->
-    ((CurS - TimeS) * 1000) + micro_diff(TimeU, CurU);
-sec_diff({_, TimeU}, {_, CurU}) ->
-    micro_diff(TimeU, CurU).
-
-micro_diff(TimeU, CurU) ->
-    trunc(CurU/1000) - trunc(TimeU/1000).
 
 sleep(T) -> receive after T * 1000 -> ok end.	
 
@@ -1199,16 +1256,12 @@ get_nodenames(N, T) ->
 get_nodenames(0, _, Acc) ->
     Acc;
 get_nodenames(N, T, Acc) ->
-    {A, B, C} = now(),
+    U = erlang:unique_integer([positive]),
     get_nodenames(N-1, T, [list_to_atom(atom_to_list(T)
 					++ "-"
-					++ atom_to_list(?MODULE)
+					++ ?MODULE_STRING
 					++ "-"
-					++ integer_to_list(A)
-					++ "-"
-					++ integer_to_list(B)
-					++ "-"
-					++ integer_to_list(C)) | Acc]).
+					++ integer_to_list(U)) | Acc]).
 
 get_numbered_nodenames(N, T) ->
     get_numbered_nodenames(N, T, []).
@@ -1216,16 +1269,12 @@ get_numbered_nodenames(N, T) ->
 get_numbered_nodenames(0, _, Acc) ->
     Acc;
 get_numbered_nodenames(N, T, Acc) ->
-    {A, B, C} = now(),
+    U = erlang:unique_integer([positive]),
     NL = [list_to_atom(atom_to_list(T) ++ integer_to_list(N)
 		       ++ "-"
-		       ++ atom_to_list(?MODULE)
+		       ++ ?MODULE_STRING
 		       ++ "-"
-		       ++ integer_to_list(A)
-		       ++ "-"
-		       ++ integer_to_list(B)
-		       ++ "-"
-		       ++ integer_to_list(C)) | Acc],
+		       ++ integer_to_list(U)) | Acc],
     get_numbered_nodenames(N-1, T, NL).
 
 wait_until(Fun) ->

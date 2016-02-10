@@ -6,12 +6,17 @@
 %%%           draft-ietf-asid-ldap-c-api-00.txt
 %%%
 %%% Copyright (c) 2010 Torbjorn Tornkvist
+%%% Copyright Ericsson AB 2011-2013. All Rights Reserved.
 %%% See MIT-LICENSE at the top dir for licensing information.
 %%% --------------------------------------------------------------------
 -vc('$Id$ ').
 -export([open/1,open/2,simple_bind/3,controlling_process/2,
+	 start_tls/2, start_tls/3,
+         modify_password/3, modify_password/4,
+	 getopts/2,
 	 baseObject/0,singleLevel/0,wholeSubtree/0,close/1,
 	 equalityMatch/2,greaterOrEqual/2,lessOrEqual/2,
+	 extensibleMatch/2,
 	 approxMatch/2,search/2,substrings/2,present/1,
 	 'and'/1,'or'/1,'not'/1,modify/3, mod_add/2, mod_delete/2,
 	 mod_replace/2, add/3, delete/2, modify_dn/5,parse_dn/1,
@@ -36,14 +41,17 @@
 		host,                % Host running LDAP server
 		port = ?LDAP_PORT,   % The LDAP server port
 		fd,                  % Socket filedescriptor.
+		prev_fd,	     % Socket that was upgraded by start_tls
 		binddn = "",         % Name of the entry to bind as
 		passwd,              % Password for (above) entry
 		id = 0,              % LDAP Request ID
 		log,                 % User provided log function
 		timeout = infinity,  % Request timeout
 		anon_auth = false,   % Allow anonymous authentication
-		use_tls = false,      % LDAP/LDAPS
-		tls_opts = [] % ssl:ssloptsion()
+		ldaps = false,       % LDAP/LDAPS
+		using_tls = false,   % true if LDAPS or START_TLS executed
+		tls_opts = [],       % ssl:ssloption()
+		tcp_opts = []        % inet6 support
 	       }).
 
 %%% For debug purposes
@@ -77,11 +85,48 @@ open(Hosts, Opts) when is_list(Hosts), is_list(Opts) ->
     recv(Pid).
 
 %%% --------------------------------------------------------------------
+%%% Upgrade an existing connection to tls
+%%% --------------------------------------------------------------------
+start_tls(Handle, TlsOptions) ->
+    start_tls(Handle, TlsOptions, infinity).
+
+start_tls(Handle, TlsOptions, Timeout) ->
+    send(Handle, {start_tls,TlsOptions,Timeout}),
+    recv(Handle).
+
+%%% --------------------------------------------------------------------
+%%% Modify the password of a user.
+%%%
+%%% Dn        - Name of the entry to modify. If empty, the session user.
+%%% NewPasswd - New password. If empty, the server returns a new password.
+%%% OldPasswd - Original password for server verification, may be empty.
+%%%
+%%% Returns: ok | {ok, GenPasswd} | {error, term()}
+%%% --------------------------------------------------------------------
+modify_password(Handle, Dn, NewPasswd) ->
+    modify_password(Handle, Dn, NewPasswd, []).
+
+modify_password(Handle, Dn, NewPasswd, OldPasswd)
+  when is_pid(Handle), is_list(Dn), is_list(NewPasswd), is_list(OldPasswd) ->
+    send(Handle, {passwd_modify,optional(Dn),optional(NewPasswd),optional(OldPasswd)}),
+    recv(Handle).
+
+%%% --------------------------------------------------------------------
+%%% Ask for option values on the socket.
+%%% Warning: This is an undocumented function for testing purposes only.
+%%%          Use at own risk...
+%%% --------------------------------------------------------------------
+getopts(Handle, OptNames) when is_pid(Handle), is_list(OptNames) ->
+    send(Handle, {getopts, OptNames}),
+    recv(Handle).
+
+%%% --------------------------------------------------------------------
 %%% Shutdown connection (and process) asynchronous.
 %%% --------------------------------------------------------------------
 
 close(Handle) when is_pid(Handle) ->
-    send(Handle, close).
+    send(Handle, close),
+    ok.
 
 %%% --------------------------------------------------------------------
 %%% Set who we should link ourselves to
@@ -197,7 +242,7 @@ modify_dn(Handle, Entry, NewRDN, DelOldRDN, NewSup)
 
 %%% Sanity checks !
 
-bool_p(Bool) when Bool==true;Bool==false -> Bool.
+bool_p(Bool) when is_boolean(Bool) -> Bool.
 
 optional([])    -> asn1_NOVALUE;
 optional(Value) -> Value.
@@ -325,6 +370,27 @@ substrings(Type, SubStr) when is_list(Type), is_list(SubStr) ->
     {substrings,#'SubstringFilter'{type = Type,
 				   substrings = Ss}}.
 
+%%%
+%%% Filter for extensibleMatch
+%%%
+extensibleMatch(MatchValue, OptArgs) ->
+    MatchingRuleAssertion =  
+	mra(OptArgs, #'MatchingRuleAssertion'{matchValue = MatchValue}),
+    {extensibleMatch, MatchingRuleAssertion}.
+
+mra([{matchingRule,Val}|T], Ack) when is_list(Val) ->
+    mra(T, Ack#'MatchingRuleAssertion'{matchingRule=Val});
+mra([{type,Val}|T], Ack) when is_list(Val) ->
+    mra(T, Ack#'MatchingRuleAssertion'{type=Val});
+mra([{dnAttributes,true}|T], Ack) ->
+    mra(T, Ack#'MatchingRuleAssertion'{dnAttributes="TRUE"});
+mra([{dnAttributes,false}|T], Ack) ->
+    mra(T, Ack#'MatchingRuleAssertion'{dnAttributes="FALSE"});
+mra([H|_], _) ->
+    throw({error,{extensibleMatch_arg,H}});
+mra([], Ack) -> 
+    Ack.
+
 %%% --------------------------------------------------------------------
 %%% Worker process. We keep track of a controlling process to
 %%% be able to terminate together with it.
@@ -347,26 +413,47 @@ parse_args([{port, Port}|T], Cpid, Data) when is_integer(Port) ->
 parse_args([{timeout, Timeout}|T], Cpid, Data) when is_integer(Timeout),Timeout>0 ->
     parse_args(T, Cpid, Data#eldap{timeout = Timeout});
 parse_args([{anon_auth, true}|T], Cpid, Data) ->
-    parse_args(T, Cpid, Data#eldap{anon_auth = false});
+    parse_args(T, Cpid, Data#eldap{anon_auth = true});
 parse_args([{anon_auth, _}|T], Cpid, Data) ->
     parse_args(T, Cpid, Data);
 parse_args([{ssl, true}|T], Cpid, Data) ->
-    parse_args(T, Cpid, Data#eldap{use_tls = true});
+    parse_args(T, Cpid, Data#eldap{ldaps = true, using_tls=true});
 parse_args([{ssl, _}|T], Cpid, Data) ->
     parse_args(T, Cpid, Data);
 parse_args([{sslopts, Opts}|T], Cpid, Data) when is_list(Opts) ->
-    parse_args(T, Cpid, Data#eldap{use_tls = true, tls_opts = Opts ++ Data#eldap.tls_opts});
+    parse_args(T, Cpid, Data#eldap{ldaps = true, using_tls=true, tls_opts = Opts ++ Data#eldap.tls_opts});
 parse_args([{sslopts, _}|T], Cpid, Data) ->
     parse_args(T, Cpid, Data);
+parse_args([{tcpopts, Opts}|T], Cpid, Data) when is_list(Opts) ->
+    parse_args(T, Cpid, Data#eldap{tcp_opts = tcp_opts(Opts,Cpid,Data#eldap.tcp_opts)});
 parse_args([{log, F}|T], Cpid, Data) when is_function(F) ->
     parse_args(T, Cpid, Data#eldap{log = F});
 parse_args([{log, _}|T], Cpid, Data) ->
     parse_args(T, Cpid, Data);
 parse_args([H|_], Cpid, _) ->
     send(Cpid, {error,{wrong_option,H}}),
+    unlink(Cpid),
     exit(wrong_option);
 parse_args([], _, Data) ->
     Data.
+
+tcp_opts([Opt|Opts], Cpid, Acc) -> 
+    Key = if is_atom(Opt) -> Opt;
+	     is_tuple(Opt) -> element(1,Opt)
+	  end,
+    case lists:member(Key,[active,binary,deliver,list,mode,packet]) of
+	false ->
+	    tcp_opts(Opts, Cpid, [Opt|Acc]);
+	true ->
+	    tcp_opts_error(Opt, Cpid)
+    end;
+tcp_opts([], _Cpid, Acc) -> Acc.
+    
+tcp_opts_error(Opt, Cpid) ->
+    send(Cpid, {error, {{forbidden_tcp_option,Opt}, 
+			"This option affects the eldap functionality and can't be set by user"}}),
+    unlink(Cpid),
+    exit(forbidden_tcp_option).
 
 %%% Try to connect to the hosts in the listed order,
 %%% and stop with the first one to which a successful
@@ -386,11 +473,13 @@ try_connect([Host|Hosts], Data) ->
 try_connect([],_) ->
     {error,"connect failed"}.
 
-do_connect(Host, Data, Opts) when Data#eldap.use_tls == false ->
-    gen_tcp:connect(Host, Data#eldap.port, Opts, Data#eldap.timeout);
-do_connect(Host, Data, Opts) when Data#eldap.use_tls == true ->
-    SslOpts = [{verify,0} | Opts ++ Data#eldap.tls_opts],
-    ssl:connect(Host, Data#eldap.port, SslOpts).
+do_connect(Host, Data, Opts) when Data#eldap.ldaps == false ->
+    gen_tcp:connect(Host, Data#eldap.port, Opts ++ Data#eldap.tcp_opts,
+		    Data#eldap.timeout);
+do_connect(Host, Data, Opts) when Data#eldap.ldaps == true ->
+    ssl:connect(Host, Data#eldap.port,
+		Opts ++ Data#eldap.tls_opts ++ Data#eldap.tcp_opts,
+		Data#eldap.timeout).
 
 loop(Cpid, Data) ->
     receive
@@ -431,9 +520,49 @@ loop(Cpid, Data) ->
 	    ?PRINT("New Cpid is: ~p~n",[NewCpid]),
 	    ?MODULE:loop(NewCpid, Data);
 
+	{From, {start_tls,TlsOptions,Timeout}} ->
+	    {Res,NewData} = do_start_tls(Data, TlsOptions, Timeout),
+	    send(From,Res),
+	    ?MODULE:loop(Cpid, NewData);
+
+        {From, {passwd_modify,Dn,NewPasswd,OldPasswd}} ->
+            {Res,NewData} = do_passwd_modify(Data, Dn, NewPasswd, OldPasswd),
+            send(From, Res),
+            ?MODULE:loop(Cpid, NewData);
+
 	{_From, close} ->
 	    unlink(Cpid),
 	    exit(closed);
+
+	{From, {getopts, OptNames}} ->
+	    Result = 
+		try
+		    [case OptName of
+			 port ->    {port,    Data#eldap.port};
+			 log ->     {log,     Data#eldap.log};
+			 timeout -> {timeout, Data#eldap.timeout};
+			 ssl ->     {ssl,     Data#eldap.ldaps};
+			 {sslopts, SslOptNames} when Data#eldap.using_tls==true -> 
+			     case ssl:getopts(Data#eldap.fd, SslOptNames) of
+				 {ok,SslOptVals} -> {sslopts, SslOptVals};
+				 {error,Reason} -> throw({error,Reason})
+			     end;
+			 {sslopts, _} ->
+			     throw({error,no_tls});
+			 {tcpopts, TcpOptNames} -> 
+			     case inet:getopts(Data#eldap.fd, TcpOptNames) of
+				 {ok,TcpOptVals} -> {tcpopts, TcpOptVals};
+				 {error,Posix} -> throw({error,Posix})
+			     end
+		     end || OptName <- OptNames]
+		of
+		    OptsList -> {ok,OptsList}
+		catch
+		    throw:Error -> Error;
+		    Class:Error -> {error,{Class,Error}}
+		end,
+	    send(From, Result),
+	    ?MODULE:loop(Cpid, Data);
 
 	{Cpid, 'EXIT', Reason} ->
 	    ?PRINT("Got EXIT from Cpid, reason=~p~n",[Reason]),
@@ -444,6 +573,51 @@ loop(Cpid, Data) ->
 	    ?MODULE:loop(Cpid, Data)
 
     end.
+
+
+%%% --------------------------------------------------------------------
+%%% startTLS Request
+%%% --------------------------------------------------------------------
+
+do_start_tls(Data=#eldap{using_tls=true}, _, _) ->
+    {{error,tls_already_started}, Data};
+do_start_tls(Data=#eldap{fd=FD} , TlsOptions, Timeout) ->
+    case catch exec_start_tls(Data) of
+	{ok,NewData} ->
+	    case ssl:connect(FD,TlsOptions,Timeout) of
+		{ok, SslSocket} ->
+		    {ok, NewData#eldap{prev_fd = FD,
+				       fd = SslSocket,
+				       using_tls = true
+				      }};
+		{error,Error} ->
+		    {{error,Error}, Data}
+	    end;
+	{error,Error} -> {{error,Error},Data};
+	Else         -> {{error,Else},Data}
+    end.
+
+-define(START_TLS_OID, "1.3.6.1.4.1.1466.20037").
+
+exec_start_tls(Data) ->
+    Req = #'ExtendedRequest'{requestName = ?START_TLS_OID},
+    Reply = request(Data#eldap.fd, Data, Data#eldap.id, {extendedReq, Req}),
+    exec_extended_req_reply(Data, Reply).
+
+exec_extended_req_reply(Data, {ok,Msg}) when
+  Msg#'LDAPMessage'.messageID == Data#eldap.id ->
+    case Msg#'LDAPMessage'.protocolOp of
+	{extendedResp, Result} ->
+	    case Result#'ExtendedResponse'.resultCode of
+		success ->
+		    {ok,Data};
+		Error ->
+		    {error, {response,Error}}
+	    end;
+	Other -> {error, Other}
+    end;
+exec_extended_req_reply(_, Error) ->
+    {error, Error}.
 
 %%% --------------------------------------------------------------------
 %%% bindRequest
@@ -646,6 +820,60 @@ do_modify_0(Data, Obj, Mod) ->
     check_reply(Data#eldap{id = Id}, Resp, modifyResponse).
 
 %%% --------------------------------------------------------------------
+%%% PasswdModifyRequest
+%%% --------------------------------------------------------------------
+
+-define(PASSWD_MODIFY_OID, "1.3.6.1.4.1.4203.1.11.1").
+
+do_passwd_modify(Data, Dn, NewPasswd, OldPasswd) ->
+    case catch do_passwd_modify_0(Data, Dn, NewPasswd, OldPasswd) of
+	{error,Emsg}        -> {ldap_closed_p(Data, Emsg),Data};
+	{'EXIT',Error}      -> {ldap_closed_p(Data, Error),Data};
+	{ok,NewData}        -> {ok,NewData};
+        {ok,Passwd,NewData} -> {{ok, Passwd},NewData};
+	Else                -> {ldap_closed_p(Data, Else),Data}
+    end.
+
+do_passwd_modify_0(Data, Dn, NewPasswd, OldPasswd) ->
+    Req = #'PasswdModifyRequestValue'{userIdentity = Dn,
+                                      oldPasswd = OldPasswd,
+                                      newPasswd = NewPasswd},
+    log2(Data, "modify password request = ~p~n", [Req]),
+    {ok, Bytes} = 'ELDAPv3':encode('PasswdModifyRequestValue', Req),
+    ExtReq = #'ExtendedRequest'{requestName = ?PASSWD_MODIFY_OID,
+                             requestValue = Bytes},
+    Id = bump_id(Data),
+    log2(Data, "extended request = ~p~n", [ExtReq]),
+    Reply = request(Data#eldap.fd, Data, Id, {extendedReq, ExtReq}),
+    log2(Data, "modify password reply = ~p~n", [Reply]),
+    exec_passwd_modify_reply(Data#eldap{id = Id}, Reply).
+
+exec_passwd_modify_reply(Data, {ok,Msg}) when
+  Msg#'LDAPMessage'.messageID == Data#eldap.id ->
+    case Msg#'LDAPMessage'.protocolOp of
+	{extendedResp, Result} ->
+	    case Result#'ExtendedResponse'.resultCode of
+		success ->
+                    case Result#'ExtendedResponse'.responseValue of
+                        asn1_NOVALUE ->
+                            {ok, Data};
+                        Value ->
+                            case 'ELDAPv3':decode('PasswdModifyResponseValue', Value) of
+                                {ok,#'PasswdModifyResponseValue'{genPasswd = Passwd}} ->
+                                    {ok, Passwd, Data};
+                                Error ->
+                                    throw(Error)
+                            end
+                    end;
+		Error ->
+		    {error, {response,Error}}
+	    end;
+	Other -> {error, Other}
+    end;
+exec_passwd_modify_reply(_, Error) ->
+    {error, Error}.
+
+%%% --------------------------------------------------------------------
 %%% modifyDNRequest
 %%% --------------------------------------------------------------------
 
@@ -680,26 +908,26 @@ request(S, Data, ID, Request) ->
 send_request(S, Data, ID, Request) ->
     Message = #'LDAPMessage'{messageID  = ID,
 			     protocolOp = Request},
-    {ok,Bytes} = asn1rt:encode('ELDAPv3', 'LDAPMessage', Message),
+    {ok,Bytes} = 'ELDAPv3':encode('LDAPMessage', Message),
     case do_send(S, Data, Bytes) of
 	{error,Reason} -> throw({gen_tcp_error,Reason});
 	Else           -> Else
     end.
 
-do_send(S, Data, Bytes) when Data#eldap.use_tls == false ->
+do_send(S, Data, Bytes) when Data#eldap.using_tls == false ->
     gen_tcp:send(S, Bytes);
-do_send(S, Data, Bytes) when Data#eldap.use_tls == true ->
+do_send(S, Data, Bytes) when Data#eldap.using_tls == true ->
     ssl:send(S, Bytes).
 
-do_recv(S, #eldap{use_tls=false, timeout=Timeout}, Len) ->
+do_recv(S, #eldap{using_tls=false, timeout=Timeout}, Len) ->
     gen_tcp:recv(S, Len, Timeout);
-do_recv(S, #eldap{use_tls=true, timeout=Timeout}, Len) ->
+do_recv(S, #eldap{using_tls=true, timeout=Timeout}, Len) ->
     ssl:recv(S, Len, Timeout).
 
 recv_response(S, Data) ->
     case do_recv(S, Data, 0) of
 	{ok, Packet} ->
-	    case asn1rt:decode('ELDAPv3', 'LDAPMessage', Packet) of
+	    case 'ELDAPv3':decode('LDAPMessage', Packet) of
 		{ok,Resp} -> {ok,Resp};
 		Error     -> throw(Error)
 	    end;
@@ -735,6 +963,7 @@ v_filter({lessOrEqual,AV})    -> {lessOrEqual,AV};
 v_filter({approxMatch,AV})    -> {approxMatch,AV};
 v_filter({present,A})         -> {present,A};
 v_filter({substrings,S}) when is_record(S,'SubstringFilter') -> {substrings,S};
+v_filter({extensibleMatch,S}) when is_record(S,'MatchingRuleAssertion') -> {extensibleMatch,S};
 v_filter(_Filter) -> throw({error,concat(["unknown filter: ",_Filter])}).
 
 v_modifications(Mods) ->
@@ -793,15 +1022,18 @@ log(_, _, _, _) ->
 %%% Misc. routines
 %%% --------------------------------------------------------------------
 
-send(To,Msg) -> To ! {self(),Msg}.
+send(To,Msg) ->
+    To ! {self(), Msg},
+    ok.
+
 recv(From)   ->
     receive
-	{From,Msg} -> Msg;
+	{From, Msg} -> Msg;
 	{'EXIT', From, Reason} ->
 	    {error, {internal_error, Reason}}
     end.
 
-ldap_closed_p(Data, Emsg) when Data#eldap.use_tls == true ->
+ldap_closed_p(Data, Emsg) when Data#eldap.using_tls == true ->
     %% Check if the SSL socket seems to be alive or not
     case catch ssl:sockname(Data#eldap.fd) of
 	{error, _} ->

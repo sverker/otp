@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -29,11 +30,13 @@
          run/1,
          fold/3,
          foldl/3,
-         scramble/1]).
+         scramble/1,
+         seed/0,
+         unique_string/0,
+         have_sctp/0]).
 
 %% diameter-specific
 -export([lport/2,
-         lport/3,
          listen/2, listen/3,
          connect/3, connect/4,
          disconnect/4,
@@ -175,7 +178,7 @@ scramble(L) ->
           [[fun s/1, L]]).
 
 s(L) ->
-    random:seed(now()),
+    random:seed(seed()),
     s([], L).
 
 s(Acc, []) ->
@@ -183,6 +186,32 @@ s(Acc, []) ->
 s(Acc, L) ->
     {H, [T|Rest]} = lists:split(random:uniform(length(L)) - 1, L),
     s([T|Acc], H ++ Rest).
+
+%% ---------------------------------------------------------------------------
+%% seed/0
+
+seed() ->
+    {_,T} = diameter_lib:seed(),
+    T.
+
+%% ---------------------------------------------------------------------------
+%% unique_string/0
+
+unique_string() ->
+    integer_to_list(erlang:unique_integer()).
+
+%% ---------------------------------------------------------------------------
+%% have_sctp/0
+
+have_sctp() ->
+    case gen_sctp:open() of
+        {ok, Sock} ->
+            gen_sctp:close(Sock),
+            true;
+        {error, E} when E == eprotonosupport;
+                        E == esocktnosupport -> %% fail on any other reason
+            false
+    end.
 
 %% ---------------------------------------------------------------------------
 %% eval/1
@@ -251,24 +280,16 @@ path(Config, Name) ->
     filename:join([Dir, Name]).
 
 %% ---------------------------------------------------------------------------
-%% lport/2-3
+%% lport/2
 %%
 %% Lookup the port number of a tcp/sctp listening transport.
 
-lport(M, Ref) ->
-    lport(M, Ref, 1).
+lport(Prot, {Node, Ref}) ->
+    rpc:call(Node, ?MODULE, lport, [Prot, Ref]);
 
-lport(M, Ref, Tries) ->
-    lp(tmod(M), Ref, Tries).
-
-lp(M, Ref, T) ->
-    L = [N || {listen, N, _} <- M:ports(Ref)],
-    if [] /= L orelse T =< 1 ->
-            L;
-       true ->
-            receive after 50 -> ok end,
-            lp(M, Ref, T-1)
-    end.
+lport(Prot, Ref) ->
+    [_] = diameter_reg:wait({'_', listener, {Ref, '_'}}),
+    [N || M <- tmod(Prot), {listen, N, _} <- M:ports(Ref)].
 
 %% ---------------------------------------------------------------------------
 %% listen/2-3
@@ -294,18 +315,22 @@ connect(Client, Prot, LRef) ->
     connect(Client, Prot, LRef, []).
 
 connect(Client, Prot, LRef, Opts) ->
-    [PortNr] = lport(Prot, LRef, 20),
+    [PortNr] = lport(Prot, LRef),
     Client = diameter:service_info(Client, name),  %% assert
     true = diameter:subscribe(Client),
     Ref = add_transport(Client, {connect, opts(Prot, PortNr) ++ Opts}),
     true = transport(Client, Ref),                 %% assert
 
-    ok = receive
-             {diameter_event, Client, {up, Ref, _, _, _}} -> ok
-         after 10000 ->
-                 {Client, Prot, PortNr, process_info(self(), messages)}
-         end,
+    diameter_lib:for_n(fun(_) -> ok = up(Client, Ref, Prot, PortNr) end,
+                       proplists:get_value(pool_size, Opts, 1)),
     Ref.
+
+up(Client, Ref, Prot, PortNr) ->
+    receive
+        {diameter_event, Client, {up, Ref, _, _, _}} -> ok
+    after 10000 ->
+            {Client, Prot, PortNr, process_info(self(), messages)}
+    end.
 
 transport(SvcName, Ref) ->
     [Ref] == [R || [{ref, R} | _] <- diameter:service_info(SvcName, transport),
@@ -335,17 +360,45 @@ add_transport(SvcName, T) ->
     Ref.
 
 tmod(tcp) ->
-    diameter_tcp;
+    [diameter_tcp];
 tmod(sctp) ->
-    diameter_sctp.
+    [diameter_sctp];
+tmod(any) ->
+    [diameter_sctp, diameter_tcp].
 
 opts(Prot, T) ->
-    [{transport_module, tmod(Prot)},
-     {transport_config, [{ip, ?ADDR}, {port, 0} | opts(T)]}].
+    tmo(T, lists:append([[{transport_module, M}, {transport_config, C}]
+                         || M <- tmod(Prot),
+                            C <- [cfg(M,T) ++ cfg(M) ++ cfg(T)]])).
 
-opts(listen) ->
-    [];
-opts(PortNr) ->
+tmo(listen, Opts) ->
+    Opts;
+tmo(_, Opts) ->
+    tmo(Opts).
+
+%% Timeout on all but the last alternative.
+tmo([_,_] = Opts) ->
+    Opts;
+tmo([M, C | Opts]) ->
+    {transport_config = K, Cfg} = C,
+    [M, {K, Cfg, 5000} | tmo(Opts)].
+
+%% Listening SCTP socket need larger-than-default buffers to avoid
+%% resends on some platforms (eg. SLES 11).
+cfg(diameter_sctp, listen) ->
+    [{recbuf, 1 bsl 16}, {sndbuf, 1 bsl 16}];
+
+cfg(_, _) ->
+    [].
+
+cfg(M)
+  when M == diameter_tcp;
+       M == diameter_sctp ->
+    [{ip, ?ADDR}, {port, 0}];
+
+cfg(listen) ->
+    [{accept, M} || M <- [{256,0,0,1}, ["256.0.0.1", ["^.+$"]]]];
+cfg(PortNr) ->
     [{raddr, ?ADDR}, {rport, PortNr}].
 
 %% ---------------------------------------------------------------------------

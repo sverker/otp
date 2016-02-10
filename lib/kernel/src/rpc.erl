@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -22,7 +23,7 @@
 %% facility
 
 %% This code used to reside in net.erl, but has now been moved to
-%% a searate module.
+%% a separate module.
 
 -define(NAME, rex).
 
@@ -66,7 +67,7 @@
 
 %%------------------------------------------------------------------------
 
--type state() :: gb_tree().
+-type state() :: gb_trees:tree(pid(), {pid(), reference()}).
 
 %%------------------------------------------------------------------------
 
@@ -158,20 +159,20 @@ handle_info({Caller, {reply, Reply}}, S) ->
 	    {noreply, S}
     end;
 handle_info({From, {sbcast, Name, Msg}}, S) ->
-    case catch Name ! Msg of  %% use catch to get the printout
-	{'EXIT', _} ->
-	    From ! {?NAME, node(), {nonexisting_name, Name}};
-	_ -> 
-	    From ! {?NAME, node(), node()}
-    end,
+    _ = case catch Name ! Msg of  %% use catch to get the printout
+            {'EXIT', _} ->
+                From ! {?NAME, node(), {nonexisting_name, Name}};
+            _ ->
+                From ! {?NAME, node(), node()}
+        end,
     {noreply, S};
 handle_info({From, {send, Name, Msg}}, S) ->
-    case catch Name ! {From, Msg} of %% use catch to get the printout
-	{'EXIT', _} ->
-	    From ! {?NAME, node(), {nonexisting_name, Name}};
-	_ ->
-	    ok    %% It's up to Name to respond !!!!!
-    end,
+    _ = case catch Name ! {From, Msg} of %% use catch to get the printout
+            {'EXIT', _} ->
+                From ! {?NAME, node(), {nonexisting_name, Name}};
+            _ ->
+                ok    %% It's up to Name to respond !!!!!
+        end,
     {noreply, S};
 handle_info({From, {call,Mod,Fun,Args,Gleader}}, S) ->
     %% Special for hidden C node's, uugh ...
@@ -388,13 +389,8 @@ server_call(Node, Name, ReplyWrapper, Msg)
 		{'DOWN', Ref, _, _, _} ->
 		    {error, nodedown};
 		{ReplyWrapper, Node, Reply} ->
-		    erlang:demonitor(Ref),
-		    receive
-			{'DOWN', Ref, _, _, _} ->
-			    Reply
-		    after 0 ->
-			    Reply
-		    end
+		    erlang:demonitor(Ref, [flush]),
+		    Reply
 	    end
     end.
 
@@ -412,7 +408,7 @@ cast(Node, Mod, Fun, Args) ->
     true.
 
 
-%% Asynchronous broadcast, returns nothing, it's just send'n prey
+%% Asynchronous broadcast, returns nothing, it's just send 'n' pray
 -spec abcast(Name, Msg) -> abcast when
       Name :: atom(),
       Msg :: term().
@@ -428,7 +424,7 @@ abcast(Name, Mess) ->
 abcast([Node|Tail], Name, Mess) ->
     Dest = {Name,Node},
     case catch erlang:send(Dest, Mess, [noconnect]) of
-	noconnect -> spawn(erlang, send, [Dest,Mess]);
+	noconnect -> spawn(erlang, send, [Dest,Mess]), ok;
 	_ -> ok
     end,
     abcast(Tail, Name, Mess);
@@ -499,17 +495,6 @@ start_monitor(Node, Name) ->
 	    {Node, Ref};
        true ->
 	    {Node,erlang:monitor(process, {Name, Node})}
-    end.
-
-%% Cancels a monitor started with Ref=erlang:monitor(_, _),
-%% i.e return value {Node, Ref} from start_monitor/2 above.
-unmonitor(Ref) when is_reference(Ref) ->
-    erlang:demonitor(Ref),
-    receive
-	{'DOWN', Ref, _, _, _} ->
-	    true
-    after 0 ->
-	    true
     end.
 
 
@@ -635,10 +620,10 @@ rec_nodes(Name, [{N,R} | Tail], Badnodes, Replies) ->
 	    rec_nodes(Name, Tail, [N|Badnodes], Replies);
 	{?NAME, N, {nonexisting_name, _}} ->  
 	    %% used by sbcast()
-	    unmonitor(R),
+	    erlang:demonitor(R, [flush]),
 	    rec_nodes(Name, Tail, [N|Badnodes], Replies);
 	{Name, N, Reply} ->  %% Name is bound !!!
-	    unmonitor(R),
+	    erlang:demonitor(R, [flush]),
 	    rec_nodes(Name, Tail, Badnodes, [Reply|Replies])
     end.
 

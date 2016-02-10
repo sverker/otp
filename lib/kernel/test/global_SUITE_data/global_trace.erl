@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2009. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -122,12 +123,12 @@ state(Else) ->
 %%%                              {ops,Ops}]
 %%%    NewKnown = Known ++ AddedNodes
 %%%    AddedNodes = NewNodes -- Known
-%%%    NewNodes är här den man förhandlat med plus de noder den känner till.
+%%%    NewNodes Ã¤r hÃ¤r den man fÃ¶rhandlat med plus de noder den kÃ¤nner till.
 %%% {added, AddedNodes}, Extra = [{ops,Ops}]
 %%%    NewKnown = Known ++ AddedNodes
-%%%    Den (passiva) noden får Nodes som är NewNodes
-%%%    hos den förhandlande. Sedan: AddedNodes = (Nodes -- Known) -- [node()].
-%%%    Det är som hos förhandlaren.
+%%%    Den (passiva) noden fÃ¥r Nodes som Ã¤r NewNodes
+%%%    hos den fÃ¶rhandlande. Sedan: AddedNodes = (Nodes -- Known) -- [node()].
+%%%    Det Ã¤r som hos fÃ¶rhandlaren.
 %%% {nodes_changed, {New,Old}}
 %%%    Every now and then the list [node() | nodes()] is checked for updates.
 %%%    New are the nodes that global does not know of (yet).

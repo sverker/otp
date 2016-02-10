@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1998-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -74,7 +75,7 @@ end_per_testcase(_Func, Config) ->
     ok.    
 
 erlsrv() ->
-    os:find_executable(erlsrv).
+    "\"" ++ os:find_executable(erlsrv) ++ "\"".
 
 
 recv_prog_output(Port) -> 
@@ -270,8 +271,11 @@ service_prio(Config) when is_list(Config) ->
     ?line {ok, OldProcs} = get_current_procs(Config),
     ?line start_service(Name),
     ?line {ok, NewProcs} = get_current_procs(Config),
+    timer:sleep(2000),
+    ?line {ok, NewProcs2} = get_current_procs(Config),
     ?line remove_service(Name),
     ?line Diff = arrived_procs(OldProcs,NewProcs),
+    io:format("NewProcs ~p~n after sleep~n ~p~n",[Diff, arrived_procs(OldProcs,NewProcs2)]),
     %% Not really correct, could fail if another heart is
     %% started at the same time...
     ?line {value, {"heart.exe",_,"high"}} = 
@@ -539,7 +543,7 @@ get_current_procs(Config) ->
     ?line erl_parse:parse_term(Tok).
 
 nt_info(Config) when is_list(Config) ->
-    ?line filename:join(?config(data_dir, Config), "nt_info").
+    ?line "\"" ++ filename:join(?config(data_dir, Config), "nt_info") ++ "\"".
 
 
 logdir(Config) ->

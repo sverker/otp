@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -613,11 +614,11 @@ unbound2(Config) when is_list(Config) ->
     ?match_receive({B, continuing}),
 
     %% B should now be in lock queue.
-    A ! continue,    
-    ?match_receive({A, {atomic, ok}}),    
-    ?match_receive({B, {atomic, [{ul,{key,{17,42}},val}]}}),
+    A ! continue,
+    ?match_multi_receive([{A, {atomic, ok}},
+			  {B, {atomic, [{ul,{key,{17,42}},val}]}}]),
     ok.
-    
+
 receiver() ->
     receive 
 	{_Pid, begin_trans} ->
@@ -1126,7 +1127,9 @@ update_shared(Tab, Me, Acc) ->
 	0 -> 
 	    case mnesia:transaction(Update) of
 		{atomic, {ok,Term,W2}} ->
-		    io:format("~p:~p:(~p,~p) ~w@~w~n", [erlang:now(),node(),Me,Acc,Term,W2]),
+		    io:format("~p:~p:(~p,~p) ~w@~w~n",
+			      [erlang:unique_integer([monotonic,positive]),
+			       node(),Me,Acc,Term,W2]),
 		    update_shared(Tab, Me, Acc+1);
 		Else -> 
 		    ?error("Trans failed on ~p with ~p~n"
@@ -1584,7 +1587,8 @@ write_shadows(Config) when is_list(Config) ->
 
 		  ?match([RecA2], mnesia:read({Tab, a})), 
 		  ?match([RecA2], mnesia:wread({Tab, a})), 
-		  ?match([RecA2], mnesia:match_object(PatA2)), 		  %% delete shadow old but not new write - is the new value visable
+		   ?match([],      mnesia:match_object(PatA1)), %% delete shadow old but not new write
+		   ?match([RecA2], mnesia:match_object(PatA2)), %% is the new value visable
 
 		  ?match([a], mnesia:all_keys(Tab)), 
 		  ?match([RecA2], mnesia:index_match_object(PatA2, ValPos)), 
@@ -1643,6 +1647,7 @@ delete_shadows(Config) when is_list(Config) ->
 
 		  ?match([RecA2], mnesia:read({Tab, a})), 
 		  ?match([RecA2], mnesia:wread({Tab, a})), 
+		  ?match([],  mnesia:match_object(PatA1)),
 		  ?match([RecA2], mnesia:match_object(PatA2)), 
 		  ?match([a], mnesia:all_keys(Tab)), 
 		  ?match([RecA2], mnesia:index_match_object(PatA2, ValPos)), 

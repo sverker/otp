@@ -22,6 +22,10 @@ BEGIN
 
   Enum ::=  ENUMERATED {monday(1),tuesday(2),wednesday(3),thursday(4),
                         friday(5),saturday(6),sunday(7)}
+  SingleEnumVal ::= ENUMERATED {true}
+  SingleEnumValExt ::= ENUMERATED {true, ...}
+  NegEnumVal ::= ENUMERATED {neg(-1), ..., zero(0)}
+  EnumVal128 ::= ENUMERATED {val(128)}
 
   ObjId ::= OBJECT IDENTIFIER
   
@@ -34,5 +38,33 @@ BEGIN
                         mantissa (-16777215..16777215),
 			base (2),
 			exponent (-125..128) } )
+
+  Seq ::= SEQUENCE {
+    n Null,
+    i1 INTEGER (0..63),
+    e1 SingleEnumVal,
+    i2 INTEGER (0..63),
+    e2 SingleEnumVal,
+    i3 INTEGER (0..63),
+    b Bool,
+    i4 INTEGER (0..63)
+  }    
+
+  ASeq ::= SEQUENCE {
+    e254 BOOLEAN,
+    i254 INTEGER (0..254),
+    e255 BOOLEAN,
+    i255 INTEGER (0..255),
+    e256 BOOLEAN,
+    i256 INTEGER (0..256),
+    e BOOLEAN,
+    magic INTEGER
+  }
+
+  Longitude ::= INTEGER {
+        oneMicrodegreeEast(10),
+        oneMicrodegreeWest(-10),
+        unavailable(1800000001)
+  } (-1799999999..1800000001)
 
 END

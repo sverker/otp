@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2012-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -182,7 +183,7 @@ test_events(_) ->
      {?eh,test_stats,{1,1,{1,0}}},
      {?eh,tc_start,{surefire_SUITE,tc_autoskip_require}},
      {?eh,tc_done,{surefire_SUITE,tc_autoskip_require,
-		   {skipped,{require_failed,'_'}}}},
+		   {auto_skipped,{require_failed,'_'}}}},
      {?eh,test_stats,{1,1,{1,1}}},
      [{?eh,tc_start,{surefire_SUITE,{init_per_group,g,[]}}},
       {?eh,tc_done,{surefire_SUITE,{init_per_group,g,[]},ok}},
@@ -198,19 +199,19 @@ test_events(_) ->
       {?eh,test_stats,{2,2,{2,1}}},
       {?eh,tc_start,{surefire_SUITE,tc_autoskip_require}},
       {?eh,tc_done,{surefire_SUITE,tc_autoskip_require,
-		    {skipped,{require_failed,'_'}}}},
+		    {auto_skipped,{require_failed,'_'}}}},
       {?eh,test_stats,{2,2,{2,2}}},
       {?eh,tc_start,{surefire_SUITE,{end_per_group,g,[]}}},
       {?eh,tc_done,{surefire_SUITE,{end_per_group,g,[]},ok}}],
      [{?eh,tc_start,{surefire_SUITE,{init_per_group,g_fail,[]}}},
       {?eh,tc_done,{surefire_SUITE,{init_per_group,g_fail,[]},
 		    {failed,{error,all_cases_should_be_skipped}}}},
-      {?eh,tc_auto_skip,{surefire_SUITE,tc_ok,
+      {?eh,tc_auto_skip,{surefire_SUITE,{tc_ok,g_fail},
 			 {failed,
 			  {surefire_SUITE,init_per_group,
 			   {'EXIT',all_cases_should_be_skipped}}}}},
       {?eh,test_stats,{2,2,{2,3}}},
-      {?eh,tc_auto_skip,{surefire_SUITE,end_per_group,
+      {?eh,tc_auto_skip,{surefire_SUITE,{end_per_group,g_fail},
 			 {failed,
 			  {surefire_SUITE,init_per_group,
 			   {'EXIT',all_cases_should_be_skipped}}}}}],
@@ -328,6 +329,7 @@ events_to_result([]) ->
 
 result(ok) ->[];
 result({skipped,_}) -> [s];
+result({auto_skipped,_}) -> [s];
 result({failed,_}) -> [f].
 
 %% Using the expected events' last test_stats element to produce the

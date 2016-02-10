@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -22,12 +23,13 @@
 %%% the parser. It does not always produce pretty code.
 
 -export([form/1,form/2,
-         attribute/1,attribute/2,function/1,function/2,rule/1,rule/2,
+         attribute/1,attribute/2,function/1,function/2,
          guard/1,guard/2,exprs/1,exprs/2,exprs/3,expr/1,expr/2,expr/3,expr/4]).
 
 -import(lists, [append/1,foldr/3,mapfoldl/3,reverse/1,reverse/2]).
 -import(io_lib, [write/1,format/2]).
--import(erl_parse, [inop_prec/1,preop_prec/1,func_prec/0,max_prec/0]).
+-import(erl_parse, [inop_prec/1,preop_prec/1,func_prec/0,max_prec/0,
+                    type_inop_prec/1, type_preop_prec/1]).
 
 -define(MAXLINE, 72).
 
@@ -35,7 +37,7 @@
                        | fun((Expr :: erl_parse:abstract_expr(),
                               CurrentIndentation :: integer(),
                               CurrentPrecedence :: non_neg_integer(),
-                              HookFunction :: hook_function()) ->
+                              Options :: options()) ->
                                    io_lib:chars())).
 
 -type(option() :: {hook, hook_function()}
@@ -45,6 +47,23 @@
 -record(pp, {string_fun, char_fun}).
 
 -record(options, {hook, encoding, opts}).
+
+%-define(DEBUG, true).
+
+-ifdef(DEBUG).
+-define(TEST(T),
+        %% Assumes that erl_anno has been compiled with DEBUG=true.
+        %% erl_pp does not use the annoations, but test it anyway.
+        %% Note: hooks are not handled.
+        _ = try
+                erl_parse:map_anno(fun(A) when is_list(A) -> A end, T)
+            catch
+                _:_ ->
+                    erlang:error(badarg, [T])
+            end).
+-else.
+-define(TEST(T), ok).
+-endif.
 
 %%%
 %%% Exported functions
@@ -61,6 +80,7 @@ form(Thing) ->
       Options :: options()).
 
 form(Thing, Options) ->
+    ?TEST(Thing),
     State = state(Options),
     frmt(lform(Thing, options(Options), State), State).
 
@@ -75,6 +95,7 @@ attribute(Thing) ->
       Options :: options()).
 
 attribute(Thing, Options) ->
+    ?TEST(Thing),
     State = state(Options),
     frmt(lattribute(Thing, options(Options), State), State).
 
@@ -89,13 +110,8 @@ function(F) ->
       Options :: options()).
 
 function(F, Options) ->
+    ?TEST(F),
     frmt(lfunction(F, options(Options)), state(Options)).
-
-rule(R) ->
-    rule(R, none).
-
-rule(R, Options) ->
-    frmt(lrule(R, options(Options)), state(Options)).
 
 -spec(guard(Guard) -> io_lib:chars() when
       Guard :: [erl_parse:abstract_expr()]).
@@ -108,6 +124,7 @@ guard(Gs) ->
       Options :: options()).
 
 guard(Gs, Options) ->
+    ?TEST(Gs),
     frmt(lguard(Gs, options(Options)), state(Options)).
 
 -spec(exprs(Expressions) -> io_lib:chars() when
@@ -129,12 +146,14 @@ exprs(Es, Options) ->
       Options :: options()).
 
 exprs(Es, I, Options) ->
+    ?TEST(Es),
     frmt({seq,[],[],[$,],lexprs(Es, options(Options))}, I, state(Options)).
 
 -spec(expr(Expression) -> io_lib:chars() when
       Expression :: erl_parse:abstract_expr()).
 
 expr(E) ->
+    ?TEST(E),
     frmt(lexpr(E, 0, options(none)), state(none)).
 
 -spec(expr(Expression, Options) -> io_lib:chars() when
@@ -142,6 +161,7 @@ expr(E) ->
       Options :: options()).
 
 expr(E, Options) ->
+    ?TEST(E),
     frmt(lexpr(E, 0, options(Options)), state(Options)).
 
 -spec(expr(Expression, Indent, Options) -> io_lib:chars() when
@@ -150,6 +170,7 @@ expr(E, Options) ->
       Options :: options()).
 
 expr(E, I, Options) ->
+    ?TEST(E),
     frmt(lexpr(E, 0, options(Options)), I, state(Options)).
 
 -spec(expr(Expression, Indent, Precedence, Options) -> io_lib:chars() when
@@ -159,6 +180,7 @@ expr(E, I, Options) ->
       Options :: options()).
 
 expr(E, I, P, Options) ->
+    ?TEST(E),
     frmt(lexpr(E, P, options(Options)), I, state(Options)).
 
 %%%
@@ -199,8 +221,6 @@ lform({attribute,Line,Name,Arg}, Opts, State) ->
     lattribute({attribute,Line,Name,Arg}, Opts, State);
 lform({function,Line,Name,Arity,Clauses}, Opts, _State) ->
     lfunction({function,Line,Name,Arity,Clauses}, Opts);
-lform({rule,Line,Name,Arity,Clauses}, Opts, _State) ->
-    lrule({rule,Line,Name,Arity,Clauses}, Opts);
 %% These are specials to make it easier for the compiler.
 lform({error,E}, _Opts, _State) ->
     leaf(format("~p\n", [{error,E}]));
@@ -214,111 +234,146 @@ lattribute({attribute,_Line,type,Type}, Opts, _State) ->
 lattribute({attribute,_Line,opaque,Type}, Opts, _State) ->
     [typeattr(opaque, Type, Opts),leaf(".\n")];
 lattribute({attribute,_Line,spec,Arg}, _Opts, _State) ->
-    [specattr(Arg),leaf(".\n")];
+    [specattr(spec, Arg),leaf(".\n")];
+lattribute({attribute,_Line,callback,Arg}, _Opts, _State) ->
+    [specattr(callback, Arg),leaf(".\n")];
 lattribute({attribute,_Line,Name,Arg}, Opts, State) ->
     [lattribute(Name, Arg, Opts, State),leaf(".\n")].
 
 lattribute(module, {M,Vs}, _Opts, _State) ->
-    attr("module",[{var,0,pname(M)},
-                   foldr(fun(V, C) -> {cons,0,{var,0,V},C}
-                         end, {nil,0}, Vs)]);
+    A = a0(),
+    attr("module",[{var,A,pname(M)},
+                   foldr(fun(V, C) -> {cons,A,{var,A,V},C}
+                         end, {nil,A}, Vs)]);
 lattribute(module, M, _Opts, _State) ->
-    attr("module", [{var,0,pname(M)}]);
+    attr("module", [{var,a0(),pname(M)}]);
 lattribute(export, Falist, _Opts, _State) ->
-    call({var,0,"-export"}, [falist(Falist)], 0, none);
+    call({var,a0(),"-export"}, [falist(Falist)], 0, options(none));
 lattribute(import, Name, _Opts, _State) when is_list(Name) ->
-    attr("import", [{var,0,pname(Name)}]);
+    attr("import", [{var,a0(),pname(Name)}]);
 lattribute(import, {From,Falist}, _Opts, _State) ->
-    attr("import",[{var,0,pname(From)},falist(Falist)]);
+    attr("import",[{var,a0(),pname(From)},falist(Falist)]);
+lattribute(export_type, Talist, _Opts, _State) ->
+    call({var,a0(),"-export_type"}, [falist(Talist)], 0, options(none));
+lattribute(optional_callbacks, Falist, Opts, _State) ->
+    ArgL = try falist(Falist)
+           catch _:_ -> abstract(Falist, Opts)
+           end,
+    call({var,a0(),"-optional_callbacks"}, [ArgL], 0, options(none));
 lattribute(file, {Name,Line}, _Opts, State) ->
-    attr("file", [{var,0,(State#pp.string_fun)(Name)},{integer,0,Line}]);
+    attr("file", [{var,a0(),(State#pp.string_fun)(Name)},{integer,a0(),Line}]);
 lattribute(record, {Name,Is}, Opts, _State) ->
     Nl = leaf(format("-record(~w,", [Name])),
     [{first,Nl,record_fields(Is, Opts)},$)];
-lattribute(Name, Arg, #options{encoding = Encoding}, _State) ->
-    attr(write(Name), [erl_parse:abstract(Arg, [{encoding,Encoding}])]).
+lattribute(Name, Arg, Options, _State) ->
+    attr(write(Name), [abstract(Arg, Options)]).
+
+abstract(Arg, #options{encoding = Encoding}) ->
+    erl_parse:abstract(Arg, [{encoding,Encoding}]).
 
 typeattr(Tag, {TypeName,Type,Args}, _Opts) ->
     {first,leaf("-"++atom_to_list(Tag)++" "),
-     typed(call({atom,0,TypeName}, Args, 0, none), Type)}.
+     typed(call({atom,a0(),TypeName}, Args, 0, options(none)), Type)}.
 
-ltype({ann_type,_Line,[V,T]}) ->
-    typed(lexpr(V, none), T);
-ltype({paren_type,_Line,[T]}) ->
-    [$(,ltype(T),$)];
-ltype({type,_Line,union,Ts}) ->
-    {seq,[],[],[' |'],ltypes(Ts)};
-ltype({type,_Line,list,[T]}) ->
+ltype(T) ->
+    ltype(T, 0).
+
+ltype({ann_type,_Line,[V,T]}, Prec) ->
+    {_L,P,_R} = type_inop_prec('::'),
+    E = typed(lexpr(V, options(none)), T),
+    maybe_paren(P, Prec, E);
+ltype({paren_type,_Line,[T]}, P) ->
+    %% Generated before Erlang/OTP 18.
+    ltype(T, P);
+ltype({type,_Line,union,Ts}, Prec) ->
+    {_L,P,R} = type_inop_prec('|'),
+    E = {seq,[],[],[' |'],ltypes(Ts, R)},
+    maybe_paren(P, Prec, E);
+ltype({type,_Line,list,[T]}, _) ->
     {seq,$[,$],$,,[ltype(T)]};
-ltype({type,_Line,nonempty_list,[T]}) ->
+ltype({type,_Line,nonempty_list,[T]}, _) ->
     {seq,$[,$],[$,],[ltype(T),leaf("...")]};
-ltype({type,Line,nil,[]}) ->
-    lexpr({nil,Line}, 0, none);
-ltype({type,Line,tuple,any}) ->
+ltype({type,Line,nil,[]}, _) ->
+    lexpr({nil,Line}, options(none));
+ltype({type,Line,map,any}, _) ->
+    simple_type({atom,Line,map}, []);
+ltype({type,_Line,map,Pairs}, Prec) ->
+    {P,_R} = type_preop_prec('#'),
+    E = map_type(Pairs),
+    maybe_paren(P, Prec, E);
+ltype({type,Line,tuple,any}, _) ->
     simple_type({atom,Line,tuple}, []);
-ltype({type,_Line,tuple,Ts}) ->
-    tuple_type(Ts, fun ltype/1);
-ltype({type,_Line,record,[{atom,_,N}|Fs]}) ->
-    record_type(N, Fs);
-ltype({type,_Line,range,[_I1,_I2]=Es}) ->
-    expr_list(Es, '..', fun lexpr/2, none);
-ltype({type,_Line,binary,[I1,I2]}) ->
+ltype({type,_Line,tuple,Ts}, _) ->
+    tuple_type(Ts, fun ltype/2);
+ltype({type,_Line,record,[{atom,_,N}|Fs]}, Prec) ->
+    {P,_R} = type_preop_prec('#'),
+    E = record_type(N, Fs),
+    maybe_paren(P, Prec, E);
+ltype({type,_Line,range,[_I1,_I2]=Es}, Prec) ->
+    {_L,P,R} = type_inop_prec('..'),
+    F = fun(E, Opts) -> lexpr(E, R, Opts) end,
+    E = expr_list(Es, '..', F, options(none)),
+    maybe_paren(P, Prec, E);
+ltype({type,_Line,binary,[I1,I2]}, _) ->
     binary_type(I1, I2); % except binary()
-ltype({type,_Line,'fun',[]}) ->
+ltype({type,_Line,'fun',[]}, _) ->
     leaf("fun()");
-ltype({type,_,'fun',[{type,_,any},_]}=FunType) ->
+ltype({type,_,'fun',[{type,_,any},_]}=FunType, _) ->
     [fun_type(['fun',$(], FunType),$)];
-ltype({type,_Line,'fun',[{type,_,product,_},_]}=FunType) ->
+ltype({type,_Line,'fun',[{type,_,product,_},_]}=FunType, _) ->
     [fun_type(['fun',$(], FunType),$)];
-ltype({type,Line,T,Ts}) ->
+ltype({type,Line,T,Ts}, _) ->
     simple_type({atom,Line,T}, Ts);
-ltype({remote_type,Line,[M,F,Ts]}) ->
+ltype({user_type,Line,T,Ts}, _) ->
+    simple_type({atom,Line,T}, Ts);
+ltype({remote_type,Line,[M,F,Ts]}, _) ->
     simple_type({remote,Line,M,F}, Ts);
-ltype({atom,_,T}) ->
+ltype({atom,_,T}, _) ->
     leaf(write(T));
-ltype(E) ->
-    lexpr(E, 0, none).
+ltype(E, P) ->
+    lexpr(E, P, options(none)).
 
 binary_type(I1, I2) ->
     B = [[] || {integer,_,0} <- [I1]] =:= [],
     U = [[] || {integer,_,0} <- [I2]] =:= [],
     P = max_prec(),
-    E1 = [[leaf("_:"),lexpr(I1, P, none)] || B],
-    E2 = [[leaf("_:_*"),lexpr(I2, P, none)] || U],
+    E1 = [[leaf("_:"),lexpr(I1, P, options(none))] || B],
+    E2 = [[leaf("_:_*"),lexpr(I2, P, options(none))] || U],
     {seq,'<<','>>',[$,],E1++E2}.
+
+map_type(Fs) ->
+    {first,[$#],map_pair_types(Fs)}.
+
+map_pair_types(Fs) ->
+    tuple_type(Fs, fun map_pair_type/2).
+
+map_pair_type({type,_Line,map_field_assoc,[KType,VType]}, Prec) ->
+    {list,[{cstep,[ltype(KType, Prec),leaf(" =>")],ltype(VType, Prec)}]}.
 
 record_type(Name, Fields) ->
     {first,[record_name(Name)],field_types(Fields)}.
 
 field_types(Fs) ->
-    tuple_type(Fs, fun field_type/1).
+    tuple_type(Fs, fun field_type/2).
 
-field_type({type,_Line,field_type,[Name,Type]}) ->
-    typed(lexpr(Name, none), Type).
+field_type({type,_Line,field_type,[Name,Type]}, _Prec) ->
+    typed(lexpr(Name, options(none)), Type).
 
-typed(B, {type,_,union,Ts}) ->
-    %% Special layout for :: followed by union.
-    {first,[B,$\s],{seq,[],[],[],union_type(Ts)}};
 typed(B, Type) ->
-    {list,[{cstep,[B,' ::'],ltype(Type)}]}.
-
-union_type([T|Ts]) ->
-    [[leaf(":: "),ltype(T)] | ltypes(Ts, fun union_elem/1)].
-
-union_elem(T) ->
-    [leaf(" | "),ltype(T)].
+    {_L,_P,R} = type_inop_prec('::'),
+    {list,[{cstep,[B,' ::'],ltype(Type, R)}]}.
 
 tuple_type(Ts, F) ->
-    {seq,${,$},[$,],ltypes(Ts, F)}.
+    {seq,${,$},[$,],ltypes(Ts, F, 0)}.
 
-specattr({FuncSpec,TypeSpecs}) ->
+specattr(SpecKind, {FuncSpec,TypeSpecs}) ->
     Func = case FuncSpec of
                {F,_A} ->
                    format("~w", [F]);
                {M,F,_A} ->
                    format("~w:~w", [M, F])
            end,
-    {first,leaf("-spec "),
+    {first,leaf(lists:concat(["-", SpecKind, " "])),
      {list,[{first,leaf(Func),spec_clauses(TypeSpecs)}]}}.
 
 spec_clauses(TypeSpecs) ->
@@ -330,9 +385,13 @@ sig_type(FunType) ->
     fun_type([], FunType).
 
 guard_type(Before, Gs) ->
-    Gl = {list,[{step,'when',expr_list(Gs, [$,], fun constraint/2, none)}]},
+    Opts = options(none),
+    Gl = {list,[{step,'when',expr_list(Gs, [$,], fun constraint/2, Opts)}]},
     {list,[{step,Before,Gl}]}.
 
+constraint({type,_Line,constraint,[{atom,_,is_subtype},[{var,_,_}=V,Type]]},
+           _Opts) ->
+    typed(lexpr(V, options(none)), Type);
 constraint({type,_Line,constraint,[Tag,As]}, _Opts) ->
     simple_type(Tag, As).
 
@@ -345,19 +404,19 @@ type_args({type,_line,product,Ts}) ->
     targs(Ts).
 
 simple_type(Tag, Types) ->
-    {first,lexpr(Tag, 0, none),targs(Types)}.
+    {first,lexpr(Tag, options(none)),targs(Types)}.
 
 targs(Ts) ->
-    {seq,$(,$),[$,],ltypes(Ts)}.
+    {seq,$(,$),[$,],ltypes(Ts, 0)}.
 
-ltypes(Ts) ->
-    ltypes(Ts, fun ltype/1).
+ltypes(Ts, Prec) ->
+    ltypes(Ts, fun ltype/2, Prec).
 
-ltypes(Ts, F) ->
-    [F(T) || T <- Ts].
+ltypes(Ts, F, Prec) ->
+    [F(T, Prec) || T <- Ts].
 
 attr(Name, Args) ->
-    call({var,0,format("-~s", [Name])}, Args, 0, none).
+    call({var,a0(),format("-~s", [Name])}, Args, 0, options(none)).
 
 pname(['' | As]) ->
     [$. | pname(As)];
@@ -369,9 +428,10 @@ pname(A) when is_atom(A) ->
     write(A).
 
 falist([]) ->
-    {nil,0};
+    {nil,a0()};
 falist([{Name,Arity}|Falist]) ->
-    {cons,0,{var,0,format("~w/~w", [Name,Arity])},falist(Falist)}.
+    A = a0(),
+    {cons,A,{var,A,format("~w/~w", [Name,Arity])},falist(Falist)}.
 
 lfunction({function,_Line,Name,_Arity,Cs}, Opts) ->
     Cll = nl_clauses(fun (C, H) -> func_clause(Name, C, H) end, $;, Opts, Cs),
@@ -382,19 +442,6 @@ func_clause(Name, {clause,Line,Head,Guard,Body}, Opts) ->
     Gl = guard_when(Hl, Guard, Opts),
     Bl = body(Body, Opts),
     {step,Gl,Bl}.
-
-lrule({rule,_Line,Name,_Arity,Cs}, Opts) ->
-    Cll = nl_clauses(fun (C, H) -> rule_clause(Name, C, H) end, $;, Opts, Cs),
-    [Cll,leaf(".\n")].
-
-rule_clause(Name, {clause,Line,Head,Guard,Body}, Opts) ->
-    Hl = call({atom,Line,Name}, Head, 0, Opts),
-    Gl = guard_when(Hl, Guard, Opts, leaf(" :-")),
-    Bl = rule_body(Body, Opts),
-    {step,Gl,Bl}.
-
-rule_body(Es, Opts) ->
-    lc_quals(Es, Opts).
 
 guard_when(Before, Guard, Opts) ->
     guard_when(Before, Guard, Opts, ' ->').
@@ -476,6 +523,15 @@ lexpr({record_field, _, Rec, F}, Prec, Opts) ->
     {L,P,R} = inop_prec('.'),
     El = [lexpr(Rec, L, Opts),$.,lexpr(F, R, Opts)],
     maybe_paren(P, Prec, El);
+lexpr({map, _, Fs}, Prec, Opts) ->
+    {P,_R} = preop_prec('#'),
+    El = {first,leaf("#"),map_fields(Fs, Opts)},
+    maybe_paren(P, Prec, El);
+lexpr({map, _, Map, Fs}, Prec, Opts) ->
+    {L,P,_R} = inop_prec('#'),
+    Rl = lexpr(Map, L, Opts),
+    El = {first,[Rl,leaf("#")],map_fields(Fs, Opts)},
+    maybe_paren(P, Prec, El);
 lexpr({block,_,Es}, _, Opts) ->
     {list,[{step,'begin',body(Es, Opts)},'end']};
 lexpr({'if',_,Cs}, _, Opts) ->
@@ -508,10 +564,17 @@ lexpr({'fun',_,{function,M,F,A}}, _Prec, Opts) ->
     ArityItem = lexpr(A, Opts),
     ["fun ",NameItem,$:,CallItem,$/,ArityItem];
 lexpr({'fun',_,{clauses,Cs}}, _Prec, Opts) ->
-    {list,[{first,'fun',fun_clauses(Cs, Opts)},'end']};
+    {list,[{first,'fun',fun_clauses(Cs, Opts, unnamed)},'end']};
+lexpr({named_fun,_,Name,Cs}, _Prec, Opts) ->
+    {list,[{first,['fun', " "],fun_clauses(Cs, Opts, {named, Name})},'end']};
 lexpr({'fun',_,{clauses,Cs},Extra}, _Prec, Opts) ->
     {force_nl,fun_info(Extra),
-     {list,[{first,'fun',fun_clauses(Cs, Opts)},'end']}};
+     {list,[{first,'fun',fun_clauses(Cs, Opts, unnamed)},'end']}};
+lexpr({named_fun,_,Name,Cs,Extra}, _Prec, Opts) ->
+    {force_nl,fun_info(Extra),
+     {list,[{first,['fun', " "],fun_clauses(Cs, Opts, {named, Name})},'end']}};
+lexpr({'query',_,Lc}, _Prec, Opts) ->
+    {list,[{step,leaf("query"),lexpr(Lc, 0, Opts)},'end']};
 lexpr({call,_,{remote,_,{atom,_,M},{atom,_,F}=N}=Name,Args}, Prec, Opts) ->
     case erl_internal:bif(M, F, length(Args)) of
         true ->
@@ -632,11 +695,11 @@ bit_elem_types([T | Rest]) ->
     [bit_elem_type(T), $-|bit_elem_types(Rest)].
 
 bit_elem_type({A,B}) ->
-    [lexpr(erl_parse:abstract(A), none),
+    [lexpr(erl_parse:abstract(A), options(none)),
      $:,
-     lexpr(erl_parse:abstract(B), none)];
+     lexpr(erl_parse:abstract(B), options(none))];
 bit_elem_type(T) ->
-    lexpr(erl_parse:abstract(T), none).
+    lexpr(erl_parse:abstract(T), options(none)).
 
 %% end of BITS
 
@@ -660,6 +723,16 @@ record_field({typed_record_field,Field,Type}, Opts) ->
     typed(record_field(Field, Opts), Type);
 record_field({record_field,_,F}, Opts) ->
     lexpr(F, 0, Opts).
+
+map_fields(Fs, Opts) ->
+    tuple(Fs, fun map_field/2, Opts).
+
+map_field({map_field_assoc,_,K,V}, Opts) ->
+    Pl = lexpr(K, 0, Opts),
+    {list,[{step,[Pl,leaf(" =>")],lexpr(V, 0, Opts)}]};
+map_field({map_field_exact,_,K,V}, Opts) ->
+    Pl = lexpr(K, 0, Opts),
+    {list,[{step,[Pl,leaf(" :=")],lexpr(V, 0, Opts)}]}.
 
 list({cons,_,H,T}, Es, Opts) ->
     list(T, [H|Es], Opts);
@@ -726,8 +799,13 @@ stack_backtrace(S, El, Opts) ->
 %% fun_clauses(Clauses, Opts) -> [Char].
 %%  Print 'fun' clauses.
 
-fun_clauses(Cs, Opts) ->
-    nl_clauses(fun fun_clause/2, [$;], Opts, Cs).
+fun_clauses(Cs, Opts, unnamed) ->
+    nl_clauses(fun fun_clause/2, [$;], Opts, Cs);
+fun_clauses(Cs, Opts, {named, Name}) ->
+    nl_clauses(fun (C, H) ->
+                       {step,Gl,Bl} = fun_clause(C, H),
+                       {step,[atom_to_list(Name),Gl],Bl}
+               end, [$;], Opts, Cs).
 
 fun_clause({clause,_,A,G,B}, Opts) ->
     El = args(A, Opts),
@@ -1065,6 +1143,9 @@ write_char(C, PP) ->
 %%
 %% Utilities
 %%
+
+a0() ->
+    erl_anno:new(0).
 
 chars_size([C | Es]) when is_integer(C) ->
     1 + chars_size(Es);

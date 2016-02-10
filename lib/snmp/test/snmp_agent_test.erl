@@ -1,30 +1,422 @@
-%% -*- coding: utf-8 -*-
 %% 
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2003-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2003-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% 
 
 -module(snmp_agent_test).
 
-%% TODO
-%% * Test fault-tolerance (kill master etc)
-%%
+-export([
+	 all/0, 
+	 groups/0, 
+	 init_per_suite/1,    end_per_suite/1, 
+	 init_per_group/2,    end_per_group/2, 
+	 init_per_testcase/2, end_per_testcase/2, 
 
--compile(export_all).
+	 %% all_tcs - misc
+	 app_info/1, 
+	 info_test/1, 
+         create_local_db_dir/1,
+
+	 %% all_tcs - test_v1
+	 simple/1, 
+	 db_notify_client/1, 
+	 v1_processing/1, 
+	 big/1, 
+	 big2/1,
+	 loop_mib_1/1,
+	 api/1, 
+	 subagent/1, 
+	 mnesia/1, 
+	 sa_register/1, 
+	 v1_trap/1, 
+	 sa_error/1, 
+	 next_across_sa/1, 
+	 undo/1,
+	 sparse_table/1, 
+	 cnt_64/1, 
+	 opaque/1, 
+	 change_target_addr_config/1, 
+
+	 %% all_tcs - test_v1 - multiple_reqs
+	 mul_get/1, 
+	 mul_get_err/1, 
+	 mul_next/1, 
+	 mul_next_err/1,
+	 mul_set/1, 
+	 mul_set_err/1, 
+
+	 %% all_tcs - test_v1 - reported_bugs
+	 otp_1128/1, 
+	 otp_1129/1, 
+	 otp_1131/1, 
+	 otp_1162/1, 
+	 otp_1222/1,
+	 otp_1298/1, 
+	 otp_1331/1, 
+	 otp_1338/1, 
+	 otp_1342/1, 
+	 otp_1366/1, 
+	 otp_2776/1,
+	 otp_2979/1, 
+	 otp_3187/1, 
+	 otp_3725/1, 
+
+	 %% all_tcs - test_v1 - standard_mibs
+	 snmp_standard_mib/1, 
+	 snmp_community_mib/1,
+	 snmp_framework_mib/1, 
+	 snmp_target_mib/1,
+	 snmp_notification_mib/1, 
+	 snmp_view_based_acm_mib/1, 
+
+	 %% all_tcs - test_v2
+	 simple_2/1, 
+	 v2_processing/1, 
+	 big_2/1, 
+	 big2_2/1, 
+	 loop_mib_2/1,
+	 api_2/1, 
+	 subagent_2/1, 
+	 mnesia_2/1, 
+	 sa_register_2/1, 
+	 v2_trap/1, 
+	 sa_error_2/1,
+	 next_across_sa_2/1, 
+	 undo_2/1, 
+	 v2_types/1, 
+	 implied/1,
+	 sparse_table_2/1, 
+	 cnt_64_2/1, 
+	 opaque_2/1, 
+	 v2_caps/1,
+
+	 %% all_tcs - test_v2 - multiple_reqs_2
+	 mul_get_2/1, 
+	 mul_get_err_2/1, 
+	 mul_next_2/1, 
+	 mul_next_err_2/1,
+	 mul_set_2/1, 
+	 mul_set_err_2/1, 
+
+	 %% all_tcs - test_v2 - v2_inform
+	 v2_inform_i/1, 
+
+	 %% all_tcs - test_v2 - reported_bugs_2
+	 otp_1128_2/1, 
+	 otp_1129_2/1, 
+	 otp_1131_2/1, 
+	 otp_1162_2/1,
+	 otp_1222_2/1, 
+	 otp_1298_2/1, 
+	 otp_1331_2/1, 
+	 otp_1338_2/1,
+	 otp_1342_2/1, 
+	 otp_1366_2/1, 
+	 otp_2776_2/1, 
+	 otp_2979_2/1, 
+	 otp_3187_2/1, 
+
+	 %% all_tcs - test_v2 - standard_mibs_2
+	 snmpv2_mib_2/1, 
+	 snmp_community_mib_2/1,
+	 snmp_framework_mib_2/1, 
+	 snmp_target_mib_2/1,
+	 snmp_notification_mib_2/1, 
+	 snmp_view_based_acm_mib_2/1,
+
+	 %% all_tcs - test_v1_v2
+	 simple_bi/1, 
+
+	 %% all_tcs - test_v3
+	 simple_3/1, 
+	 v3_processing/1, 
+	 big_3/1, 
+	 big2_3/1, 
+	 api_3/1,
+	 subagent_3/1, 
+	 mnesia_3/1, 
+	 loop_mib_3/1, 
+	 sa_register_3/1, 
+	 v3_trap/1, 
+	 sa_error_3/1,
+	 next_across_sa_3/1, 
+	 undo_3/1, 
+	 v2_types_3/1, 
+	 implied_3/1, 
+	 sparse_table_3/1, 
+	 cnt_64_3/1,
+	 opaque_3/1, 
+	 v2_caps_3/1, 
+
+	 %% all_tcs - test_v3 - multiple_reqs_3
+	 mul_get_3/1, 
+	 mul_get_err_3/1, 
+	 mul_next_3/1, 
+	 mul_next_err_3/1, 
+	 mul_set_3/1,
+	 mul_set_err_3/1,
+
+	 %% all_tcs - test_v3 - v3_inform
+	 v3_inform_i/1, 
+
+	 %% all_tcs - test_v3 - reported_bugs_3
+	 otp_1128_3/1, 
+	 otp_1129_3/1, 
+	 otp_1131_3/1, 
+	 otp_1162_3/1,
+	 otp_1222_3/1, 
+	 otp_1298_3/1, 
+	 otp_1331_3/1, 
+	 otp_1338_3/1,
+	 otp_1342_3/1, 
+	 otp_1366_3/1, 
+	 otp_2776_3/1, 
+	 otp_2979_3/1, 
+	 otp_3187_3/1,
+	 otp_3542/1,
+
+	 %% all_tcs - test_v3 - standard_mibs_3
+	 snmpv2_mib_3/1, 
+	 snmp_framework_mib_3/1, 
+	 snmp_mpd_mib_3/1,
+	 snmp_target_mib_3/1, 
+	 snmp_notification_mib_3/1,
+	 snmp_view_based_acm_mib_3/1, 
+	 snmp_user_based_sm_mib_3/1,
+
+	 %% all_tcs - test_v3 - v3_security
+	 v3_crypto_basic/1, 
+	 v3_md5_auth/1, 
+	 v3_sha_auth/1,
+	 v3_des_priv/1, 
+
+	 %% all_tcs - test_multi_threaded
+	 multi_threaded/1, 
+	 mt_trap/1, 
+	 
+	 %% all_tcs - mib_storage - mib_storage_ets
+	 mse_simple/1, 
+	 mse_v1_processing/1, 
+	 mse_big/1, 
+	 mse_big2/1,
+	 mse_loop_mib/1, 
+	 mse_api/1, 
+	 mse_sa_register/1, 
+	 mse_v1_trap/1,
+	 mse_sa_error/1, 
+	 mse_next_across_sa/1, 
+	 mse_undo/1,
+	 mse_standard_mib/1, 
+	 mse_community_mib/1, 
+	 mse_framework_mib/1,
+	 mse_target_mib/1, 
+	 mse_notification_mib/1,
+	 mse_view_based_acm_mib/1, 
+	 mse_sparse_table/1, 
+	 mse_me_of/1,
+	 mse_mib_of/1, 
+
+	 %% all_tcs - mib_storage - mib_storage_dets
+	 msd_simple/1, 
+	 msd_v1_processing/1, 
+	 msd_big/1, 
+	 msd_big2/1,
+	 msd_loop_mib/1, 
+	 msd_api/1, 
+	 msd_sa_register/1, 
+	 msd_v1_trap/1,
+	 msd_sa_error/1, 
+	 msd_next_across_sa/1, 
+	 msd_undo/1,
+	 msd_standard_mib/1, 
+	 msd_community_mib/1, 
+	 msd_framework_mib/1,
+	 msd_target_mib/1, 
+	 msd_notification_mib/1,
+	 msd_view_based_acm_mib/1, 
+	 msd_sparse_table/1, 
+	 msd_me_of/1,
+	 msd_mib_of/1, 
+
+	 %% all_tcs - mib_storage - mib_storage_mnesia
+	 msm_simple/1, 
+	 msm_v1_processing/1, 
+	 msm_big/1, 
+	 msm_big2/1,
+	 msm_loop_mib/1, 
+	 msm_api/1, 
+	 msm_sa_register/1, 
+	 msm_v1_trap/1,
+	 msm_sa_error/1, 
+	 msm_next_across_sa/1, 
+	 msm_undo/1,
+	 msm_standard_mib/1, 
+	 msm_community_mib/1, 
+	 msm_framework_mib/1,
+	 msm_target_mib/1, 
+	 msm_notification_mib/1,
+	 msm_view_based_acm_mib/1, 
+	 msm_sparse_table/1, 
+	 msm_me_of/1,
+	 msm_mib_of/1, 
+
+	 %% all_tcs - mib_storage - mse_size_check
+	 mse_size_check/1, 
+
+	 %% all_tcs - mib_storage - msd_size_check
+	 msd_size_check/1, 
+
+	 %% all_tcs - mib_storage - msm_size_check
+	 msm_size_check/1, 
+
+	 %% all_tcs - mib_storage - varm_mib_storage_dets
+	 msd_varm_mib_start/1, 
+
+	 %% all_tcs - mib_storage - varm_mib_storage_mnesia
+	 msm_varm_mib_start/1, 
+
+	 %% all_tcs - tickets1 - otp4394
+	 otp_4394/1, 
+
+	 %% all_tcs - tickets1 - otp7157
+	 otp_7157/1, 
+
+	 %% tickets2
+	 otp8395/1, 
+	 otp9884/1
+	]).
+
+%% Internal exports
+-export([dummy_manager_init/2, 
+	 v3_sync/1, 
+	 v3_inform_sync/1, 
+	 v2_caps_i/1, 
+	 v1_proc/0, 
+	 v2_proc/0, 
+	 big_test/0, 
+	 big_test_2/0, 
+	 simple_standard_test/0, 
+	 db_notify_client_test/0, 
+	 notify/2, 
+	 multi_threaded_test/0, 
+	 mt_trap_test/1, 
+	 types_v2_test/0, 
+	 implied_test/1, 
+	 sparse_table_test/0, 
+	 cnt_64_test/1, 
+	 opaque_test/0, 
+	 api_test/1, 
+	 unreg_test/0, 
+	 load_test/0, 
+	 load_test_sa/0, 
+	 api_test2/0, 
+	 api_test3/0, 
+	 do_mul_get/0, 
+	 do_mul_get_err/0, 
+	 do_mul_next/0, 
+	 do_mul_next_err/0, 
+	 do_mul_set/0, 
+	 do_mul_set_err/0, 
+	 sa_mib/0, 
+	 ma_trap1/1, 
+	 ma_trap2/1, 
+	 ma_v2_2_v1_trap/1, 
+	 ma_v2_2_v1_trap2/1, 
+	 sa_trap1/1, 
+	 sa_trap2/1, 
+	 sa_trap3/1, 
+	 ma_v2_trap1/1, 
+	 ma_v2_trap2/1, 
+	 ma_v2_inform1/1, 
+	 ma_v2_inform2/1, 
+	 ma_v2_inform3/1, 
+	 delivery_targets/3,  
+	 delivery_info/4, 
+	 ma_v1_2_v2_trap/1, 
+	 ma_v1_2_v2_trap2/1, 
+	 sa_v1_2_v2_trap1/1, 
+	 sa_v1_2_v2_trap2/1, 
+	 sa_v1_2_v2_trap3/1, 
+	 sa_errs_bad_value/0, 
+	 sa_errs_gen_err/0, 
+	 sa_too_big/0, 
+	 next_across_sa_test/0, 
+	 undo_test/0, 
+	 bad_return/0, 
+	 standard_mib_a/0, 
+	 std_mib_read/0, 
+	 std_mib_write/0, 
+	 std_mib_init/0, 
+	 std_mib_finish/0, 
+	 standard_mib_test_finish/0, 
+	 std_mib_asn_err/0, 
+	 snmpv2_mib_test_finish/0, 
+	 std_mib_a/0, 
+	 std_mib_b/1, 
+	 std_mib_c/1, 
+	 snmpv2_mib_a/0, 
+	 snmp_community_mib_test/0, 
+	 snmp_framework_mib_test/0, 
+	 snmp_mpd_mib_a/0, 
+	 snmp_mpd_mib_b/0, 
+	 snmp_mpd_mib_c/1, 
+	 snmp_target_mib_test/0, 
+	 snmp_notification_mib_test/0, 
+	 do_set/1, 
+	 add_row/1, 
+	 del_row/1, 
+	 use_no_rights/0, 
+	 use_rights/0, 
+	 usm_add_user1/0, 
+	 usm_use_user/0, 
+	 usm_key_change1/2, 
+	 usm_key_change2/4, 
+	 usm_key_change3/4, 
+	 usm_read/0, 
+	 usm_del_user/0, 
+	 usm_bad/0, 
+	 loop_mib_1_test/0,
+	 loop_mib_2_test/0,
+	 loop_mib_3_test/0,
+	 otp_1129_i/1, 
+	 otp_1162_test/0, 
+	 otp_1131_test/0, 
+	 otp_1222_test/0, 
+	 otp_1298_test/0, 
+	 otp_1331_test/0, 
+	 otp_1338_test/0, 
+	 otp_1342_test/0, 
+	 otp_1366_test/0, 
+	 otp_1128_test/0, 
+	 otp_2776_test/0, 
+	 otp_2979_test/0, 
+	 otp_3542_test/0, 
+	 otp_3725_test/1, 
+	 otp_4394_test/0, 
+	 otp_7157_test/1, 
+	 otp9884_backup/4, 
+	 agent_log_validation/0, 
+	 mnesia_init/1, 
+	 mnesia_start/0, 
+	 mnesia_stop/0, 
+	 start_stdalone_agent/1, 
+	 do_info/1
+	]).
 
 -define(application, snmp).
 
@@ -34,10 +426,6 @@
 -define(SNMP_USE_V3, true).
 -include_lib("snmp/include/snmp_types.hrl").
 -include_lib("snmp/src/agent/snmpa_atl.hrl").
-
-%% -include_lib("snmp/include/SNMP-COMMUNITY-MIB.hrl").
-%% -include_lib("snmp/include/SNMP-VIEW-BASED-ACM-MIB.hrl").
-%% -include_lib("snmp/include/SNMP-USER-BASED-SM-MIB.hrl").
 
 
 -define(klas1, [1,3,6,1,2,1,7]).
@@ -86,6 +474,26 @@
 	       end).
 
 
+-define(expect1(What), 
+	snmp_agent_test_lib:expect(?MODULE, ?LINE, 
+				   What)).
+-define(expect2(What, ExpVBs), 
+	snmp_agent_test_lib:expect(?MODULE, ?LINE, 
+				   What, ExpVBs)).
+-define(expect3(Err, Idx, ExpVBs), 
+	snmp_agent_test_lib:expect(?MODULE, ?LINE, 
+				   Err, Idx, ExpVBs)).
+-define(expect4(Err, Idx, ExpVBs, To), 
+	snmp_agent_test_lib:expect(?MODULE, ?LINE, 
+				   Err, Idx, ExpVBs, To)).
+-define(expect5(Type, Ent, Gen, Spec, ExpVBs), 
+	snmp_agent_test_lib:expect(?MODULE, ?LINE, 
+				   Type, Ent, Gen, Spec, ExpVBs)).
+-define(expect6(Type, Ent, Gen, Spec, ExpVBs, To), 
+	snmp_agent_test_lib:expect(?MODULE, ?LINE, 
+				   Type, Ent, Gen, Spec, ExpVBs, To)).
+
+
 all() -> 
     %% Reqs  = [mnesia, distribution, {local_slave_nodes, 2}, {time, 360}],
     Conf1 = [{group, all_tcs}],
@@ -94,19 +502,8 @@ all() ->
 
 groups() -> 
     [
-     {all_tcs, [], cases()},
-     {mib_storage, [],
-      [
-       {group, mib_storage_ets}, 
-       {group, mib_storage_dets},
-       {group, mib_storage_mnesia},
-       {group, mib_storage_size_check_ets},
-       {group, mib_storage_size_check_dets},
-       {group, mib_storage_size_check_mnesia},
-       {group, mib_storage_varm_dets},
-       {group, mib_storage_varm_mnesia}
-      ]
-     },
+     {all_tcs,                       [], cases()},
+     {mib_storage,                   [], mib_storage_cases()}, 
      {mib_storage_ets,               [], mib_storage_ets_cases()},
      {mib_storage_dets,              [], mib_storage_dets_cases()},
      {mib_storage_mnesia,            [], mib_storage_mnesia_cases()},
@@ -117,156 +514,93 @@ groups() ->
      {mib_storage_varm_mnesia,       [], varm_mib_storage_mnesia_cases()},
      {misc,                          [], misc_cases()}, 
      {test_v1,                       [], v1_cases()},
+     {test_v1_ipv6,                  [], v1_cases_ipv6()},
      {test_v2,                       [], v2_cases()},
+     {test_v2_ipv6,                  [], v2_cases_ipv6()},
      {test_v1_v2,                    [], v1_v2_cases()},
+     {test_v1_v2_ipv6,               [], v1_v2_cases()},
      {test_v3,                       [], v3_cases()},
+     {test_v3_ipv6,                  [], v3_cases_ipv6()},
      {test_multi_threaded,           [], mt_cases()},
      {multiple_reqs,                 [], mul_cases()},
      {multiple_reqs_2,               [], mul_cases_2()},
-     {v2_inform, [], 
-      [
-       v2_inform_i
-      ]
-     },
-     {v3_security, [],
-      [
-       v3_crypto_basic, 
-       v3_md5_auth, 
-       v3_sha_auth,
-       v3_des_priv
-      ]
-     },
-     {standard_mibs, [],
-      [
-       snmp_standard_mib, 
-       snmp_community_mib,
-       snmp_framework_mib, 
-       snmp_target_mib,
-       snmp_notification_mib, 
-       snmp_view_based_acm_mib
-      ]
-     },
-     {standard_mibs_2, [],
-      [
-       snmpv2_mib_2, 
-       snmp_community_mib_2,
-       snmp_framework_mib_2, 
-       snmp_target_mib_2,
-       snmp_notification_mib_2, 
-       snmp_view_based_acm_mib_2
-      ]
-     },
-     {standard_mibs_3, [],
-      [
-       snmpv2_mib_3, 
-       snmp_framework_mib_3, 
-       snmp_mpd_mib_3,
-       snmp_target_mib_3, 
-       snmp_notification_mib_3,
-       snmp_view_based_acm_mib_3, 
-       snmp_user_based_sm_mib_3
-      ]
-     },
-     {reported_bugs, [],
-      [
-       otp_1128, 
-       otp_1129, 
-       otp_1131, 
-       otp_1162, 
-       otp_1222,
-       otp_1298, 
-       otp_1331, 
-       otp_1338, 
-       otp_1342, 
-       otp_2776,
-       otp_2979, 
-       otp_3187, 
-       otp_3725
-      ]
-     },
-     {reported_bugs_2, [],
-      [
-       otp_1128_2, 
-       otp_1129_2, 
-       otp_1131_2, 
-       otp_1162_2,
-       otp_1222_2, 
-       otp_1298_2, 
-       otp_1331_2, 
-       otp_1338_2,
-       otp_1342_2, 
-       otp_2776_2, 
-       otp_2979_2, 
-       otp_3187_2
-      ]
-     },
-     {reported_bugs_3, [],
-      [
-       otp_1128_3, 
-       otp_1129_3, 
-       otp_1131_3, 
-       otp_1162_3,
-       otp_1222_3, 
-       otp_1298_3, 
-       otp_1331_3, 
-       otp_1338_3,
-       otp_1342_3, 
-       otp_2776_3, 
-       otp_2979_3, 
-       otp_3187_3,
-       otp_3542
-      ]
-     },
-     {tickets1, [], 
-      [
-       {group, otp_4394}, 
-       {group, otp_7157}
-      ]
-     },
-     {tickets2, [], [otp8395, otp9884]},
-     {otp_4394, [], [otp_4394_test]},
-     {otp_7157, [], [otp_7157_test]}
+     {multiple_reqs_3,               [], mul_cases_3()},
+     {v2_inform,                     [], v2_inform_cases()}, 
+     {v3_inform,                     [], v3_inform_cases()}, 
+     {v3_security,                   [], v3_security_cases()}, 
+     {standard_mibs,                 [], standard_mibs_cases()}, 
+     {standard_mibs_ipv6,            [], standard_mibs_cases_ipv6()},
+     {standard_mibs_2,               [], standard_mibs2_cases()}, 
+     {standard_mibs_3,               [], standard_mibs3_cases()}, 
+     {reported_bugs,                 [], reported_bugs_cases()}, 
+     {reported_bugs_2,               [], reported_bugs2_cases()}, 
+     {reported_bugs_3,               [], reported_bugs3_cases()}, 
+     {tickets1,                      [], tickets1_cases()}, 
+     {tickets2,                      [], tickets2_cases()}, 
+     {otp4394,                       [], [otp_4394]},
+     {otp7157,                       [], [otp_7157]}
     ].
 
 
 init_per_suite(Config0) when is_list(Config0) ->
 
-    ?DBG("init_per_suite -> entry with"
-	 "~n   Config0: ~p", [Config0]),
+    p("init_per_suite -> entry with"
+      "~n      Config: ~p"
+      "~n      Nodes:  ~p", [Config0, erlang:nodes()]),
 
     Config1   = snmp_test_lib:init_suite_top_dir(?MODULE, Config0), 
     Config2   = snmp_test_lib:fix_data_dir(Config1),
 
     %% Mib-dirs
     MibDir    = snmp_test_lib:lookup(data_dir, Config2),
-    StdMibDir = filename:join([code:priv_dir(snmp), "mibs"]),
+    StdMibDir = join([code:priv_dir(snmp), "mibs"]),
 
     Config3 = [{mib_dir, MibDir}, {std_mib_dir, StdMibDir} | Config2],
 
-    ?DBG("init_per_suite -> end with"
-	 "~n   Config3: ~p", [Config3]),
+    snmp_test_mgr_counter_server:start(), 
+
+    p("init_per_suite -> end when"
+      "~n      Config: ~p"
+      "~n      Nodes:  ~p", [Config3, erlang:nodes()]),
 
     Config3.
 
 end_per_suite(Config) when is_list(Config) ->
 
-    ?DBG("end_per_suite -> entry with"
-	 "~n   Config: ~p", [Config]),
+    p("end_per_suite -> entry with"
+      "~n      Config: ~p"
+      "~n      Nodes:  ~p", [Config, erlang:nodes()]),
 
+    case snmp_test_mgr_counter_server:stop() of
+    	{ok, _Counters} ->
+    	    p("end_per_suite -> sucessfully stopped counter server"
+	      "~n      Counters: ~p", [_Counters]);
+    
+    	{error, Reason} ->
+    	    p("end_per_suite -> failed stopping counter server"
+	      "~n      Reason: ~p", [Reason])
+    end,
+
+    p("end_per_suite -> end when"
+      "~n      Nodes:  ~p", [erlang:nodes()]),
     Config.
 
 
 init_per_group(all_tcs = GroupName, Config) ->
     init_all(snmp_test_lib:init_group_top_dir(GroupName, Config));
-init_per_group(otp_7157 = GroupName, Config) -> 
-    init_otp_7157(snmp_test_lib:init_group_top_dir(GroupName, Config));
-init_per_group(otp_4394 = GroupName, Config) -> 
-    init_otp_4394(snmp_test_lib:init_group_top_dir(GroupName, Config));
+init_per_group(otp7157 = GroupName, Config) -> 
+    otp_7157_init(snmp_test_lib:init_group_top_dir(GroupName, Config));
+init_per_group(otp4394 = GroupName, Config) -> 
+    otp_4394_init(snmp_test_lib:init_group_top_dir(GroupName, Config));
 init_per_group(v2_inform = GroupName, Config) -> 
     init_v2_inform(snmp_test_lib:init_group_top_dir(GroupName, Config));
+init_per_group(v3_inform = GroupName, Config) -> 
+    init_v3_inform(snmp_test_lib:init_group_top_dir(GroupName, Config));
+init_per_group(multiple_reqs = GroupName, Config) -> 
+    init_mul(snmp_test_lib:init_group_top_dir(GroupName, Config));
 init_per_group(multiple_reqs_2 = GroupName, Config) -> 
     init_mul(snmp_test_lib:init_group_top_dir(GroupName, Config));
-init_per_group(multiple_reqs = GroupName, Config) -> 
+init_per_group(multiple_reqs_3 = GroupName, Config) -> 
     init_mul(snmp_test_lib:init_group_top_dir(GroupName, Config));
 init_per_group(test_multi_threaded = GroupName, Config) -> 
     init_mt(snmp_test_lib:init_group_top_dir(GroupName, Config));
@@ -278,14 +612,24 @@ init_per_group(test_v2 = GroupName, Config) ->
     init_v2(snmp_test_lib:init_group_top_dir(GroupName, Config));
 init_per_group(test_v1 = GroupName, Config) -> 
     init_v1(snmp_test_lib:init_group_top_dir(GroupName, Config));
+init_per_group(test_v1_ipv6 = GroupName, Config) ->
+    init_per_group_ipv6(GroupName, Config, fun init_v1/1);
+init_per_group(test_v2_ipv6 = GroupName, Config) ->
+    init_per_group_ipv6(GroupName, Config, fun init_v2/1);
+init_per_group(test_v1_v2_ipv6 = GroupName, Config) ->
+    init_per_group_ipv6(GroupName, Config, fun init_v1_v2/1);
+init_per_group(test_v3_ipv6 = GroupName, Config) ->
+    init_per_group_ipv6(GroupName, Config, fun init_v3/1);
 init_per_group(misc = GroupName, Config) -> 
     init_misc(snmp_test_lib:init_group_top_dir(GroupName, Config));
 init_per_group(mib_storage_varm_mnesia = GroupName, Config) -> 
     init_varm_mib_storage_mnesia(snmp_test_lib:init_group_top_dir(GroupName, 
 								  Config));
 init_per_group(mib_storage_varm_dets = GroupName, Config) -> 
-    init_varm_mib_storage_dets(snmp_test_lib:init_group_top_dir(GroupName, 
-								Config));
+    ?DBG("init_per_group(mib_storage_varm_dets) -> entry with"
+	 "~n   Config: ~p", [Config]),    
+    init_varm_mib_storage_dets(
+      snmp_test_lib:init_group_top_dir(GroupName, Config));
 init_per_group(mib_storage_size_check_mnesia = GroupName, Config) -> 
     init_size_check_msm(snmp_test_lib:init_group_top_dir(GroupName, Config));
 init_per_group(mib_storage_size_check_dets = GroupName, Config) -> 
@@ -302,45 +646,76 @@ init_per_group(mib_storage_ets = GroupName, Config) ->
 init_per_group(GroupName, Config) ->
     snmp_test_lib:init_group_top_dir(GroupName, Config).
 
+init_per_group_ipv6(GroupName, Config, Init) ->
+    case ct:require(ipv6_hosts) of
+	ok ->
+	    case gen_udp:open(0, [inet6]) of
+		{ok, S} ->
+		    ok = gen_udp:close(S),
+		    Init(
+		      snmp_test_lib:init_group_top_dir(
+			GroupName,
+			[{ipfamily, inet6},
+			 {ip, ?LOCALHOST(inet6)}
+			 | lists:keydelete(ip, 1, Config)]));
+		{error, _} ->
+		    {skip, "Host seems to not support IPv6"}
+	    end;
+	_ ->
+	    {skip, "Host does not support IPV6"}
+    end.
+
 end_per_group(all_tcs, Config) ->
     finish_all(Config);
-end_per_group(otp_7157, Config) -> 
-	finish_otp_7157(Config);
-end_per_group(otp_4394, Config) -> 
-	finish_otp_4394(Config);
+end_per_group(otp7157, Config) -> 
+    otp_7157_finish(Config);
+end_per_group(otp4394, Config) -> 
+    otp_4394_finish(Config);
 end_per_group(v2_inform, Config) -> 
-	finish_v2_inform(Config);
-end_per_group(multiple_reqs_2, Config) -> 
-	finish_mul(Config);
+    finish_v2_inform(Config);
+end_per_group(v3_inform, Config) -> 
+    finish_v3_inform(Config);
 end_per_group(multiple_reqs, Config) -> 
 	finish_mul(Config);
+end_per_group(multiple_reqs_2, Config) -> 
+    finish_mul(Config);
+end_per_group(multiple_reqs_3, Config) -> 
+    finish_mul(Config);
 end_per_group(test_multi_threaded, Config) -> 
 	finish_mt(Config);
-end_per_group(test_v3, Config) -> 
+end_per_group(test_v3_ipv6, Config) ->
 	finish_v3(Config);
-end_per_group(test_v1_v2, Config) -> 
+end_per_group(test_v1_v2_ipv6, Config) ->
 	finish_v1_v2(Config);
-end_per_group(test_v2, Config) -> 
+end_per_group(test_v2_ipv6, Config) ->
 	finish_v2(Config);
-end_per_group(test_v1, Config) -> 
+end_per_group(test_v1_ipv6, Config) ->
 	finish_v1(Config);
-end_per_group(misc, Config) -> 
+end_per_group(test_v3, Config) ->
+	finish_v3(Config);
+end_per_group(test_v1_v2, Config) ->
+	finish_v1_v2(Config);
+end_per_group(test_v2, Config) ->
+	finish_v2(Config);
+end_per_group(test_v1, Config) ->
+	finish_v1(Config);
+end_per_group(misc, Config) ->
 	finish_misc(Config);
-end_per_group(mib_storage_varm_mnesia, Config) -> 
+end_per_group(mib_storage_varm_mnesia, Config) ->
 	finish_varm_mib_storage_mnesia(Config);
-end_per_group(mib_storage_varm_dets, Config) -> 
+end_per_group(mib_storage_varm_dets, Config) ->
 	finish_varm_mib_storage_dets(Config);
-end_per_group(mib_storage_size_check_mnesia, Config) -> 
+end_per_group(mib_storage_size_check_mnesia, Config) ->
 	finish_size_check_msm(Config);
-end_per_group(mib_storage_size_check_dets, Config) -> 
+end_per_group(mib_storage_size_check_dets, Config) ->
 	finish_size_check_msd(Config);
-end_per_group(mib_storage_size_check_ets, Config) -> 
+end_per_group(mib_storage_size_check_ets, Config) ->
 	finish_size_check_mse(Config);
-end_per_group(mib_storage_mnesia, Config) -> 
+end_per_group(mib_storage_mnesia, Config) ->
 	finish_mib_storage_mnesia(Config);
-end_per_group(mib_storage_dets, Config) -> 
+end_per_group(mib_storage_dets, Config) ->
 	finish_mib_storage_dets(Config);
-end_per_group(mib_storage_ets, Config) -> 
+end_per_group(mib_storage_ets, Config) ->
 	finish_mib_storage_ets(Config);
 end_per_group(_GroupName, Config) ->
 	Config.
@@ -350,13 +725,16 @@ end_per_group(_GroupName, Config) ->
 %% ---- Init Per TestCase ---- 
 
 init_per_testcase(Case, Config) when is_list(Config) ->
-    ?DBG("init_per_testcase -> entry with"
-	 "~n   Config: ~p", [Config]),
+    p("init_per_testcase -> entry with"
+      "~n   Config: ~p"
+      "~n   Nodes:  ~p", [Config, erlang:nodes()]),
 
-    p("Agent Info: "
-      "~n   ~p", [snmpa:info()]),
+    Result = init_per_testcase1(Case, Config),
 
-    init_per_testcase1(Case, Config).
+    p("init_per_testcase -> done when"
+      "~n      Result: ~p"
+      "~n      Nodes:  ~p", [Result, erlang:nodes()]),
+    Result.
 
 init_per_testcase1(otp8395 = Case, Config) when is_list(Config) ->
     ?DBG("init_per_testcase1 -> entry with"
@@ -368,7 +746,7 @@ init_per_testcase1(otp9884 = Case, Config) when is_list(Config) ->
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [Case, Config]),
     otp9884({init, init_per_testcase2(Case, Config)});
-init_per_testcase1(otp_7157_test = _Case, Config) when is_list(Config) ->
+init_per_testcase1(otp_7157 = _Case, Config) when is_list(Config) ->
     ?DBG("init_per_testcase1 -> entry with"
 	 "~n   Case:   ~p"
 	 "~n   Config: ~p", [_Case, Config]),
@@ -397,15 +775,18 @@ init_per_testcase1(_Case, Config) when is_list(Config) ->
 %% ---- End Per TestCase ---- 
 
 end_per_testcase(Case, Config) when is_list(Config) ->
-    ?DBG("end_per_testcase -> entry with"
-	 "~n   Config: ~p", [Config]),
-
-    p("Agent Info: "
-      "~n   ~p", [snmpa:info()]),
+    p("end_per_testcase -> entry with"
+      "~n   Config: ~p"
+      "~n   Nodes:  ~p", [Config, erlang:nodes()]),
 
     display_log(Config),
     
-    end_per_testcase1(Case, Config).
+    Result = end_per_testcase1(Case, Config),
+
+    p("end_per_testcase -> done with"
+      "~n   Result: ~p"
+      "~n   Nodes:  ~p", [Result, erlang:nodes()]),
+    Result.
 
 end_per_testcase1(otp8395, Config) when is_list(Config) ->
     otp8395({fin, Config});
@@ -429,21 +810,21 @@ init_per_testcase2(Case, Config) ->
     CaseTopDir = snmp_test_lib:init_testcase_top_dir(Case, Config), 
 
     %% Create agent top-dir(s)
-    AgentTopDir = filename:join([CaseTopDir, agent]),
+    AgentTopDir = join([CaseTopDir, agent]),
     ok = file:make_dir(AgentTopDir),
-    AgentConfDir = filename:join([AgentTopDir, config]),
+    AgentConfDir = join([AgentTopDir, config]),
     ok = file:make_dir(AgentConfDir),
-    AgentDbDir = filename:join([AgentTopDir, db]),
+    AgentDbDir = join([AgentTopDir, db]),
     ok = file:make_dir(AgentDbDir),
-    AgentLogDir = filename:join([AgentTopDir, log]),
+    AgentLogDir = join([AgentTopDir, log]),
     ok = file:make_dir(AgentLogDir),
 
     %% Create sub-agent top-dir(s)
-    SubAgentTopDir = filename:join([CaseTopDir, sub_agent]),
+    SubAgentTopDir = join([CaseTopDir, sub_agent]),
     ok = file:make_dir(SubAgentTopDir),
 
     %% Create manager top-dir(s)
-    ManagerTopDir = filename:join([CaseTopDir, manager]),
+    ManagerTopDir = join([CaseTopDir, manager]),
     ok = file:make_dir(ManagerTopDir),
 
     [{case_top_dir,      CaseTopDir}, 
@@ -454,20 +835,24 @@ init_per_testcase2(Case, Config) ->
      {sub_agent_top_dir, SubAgentTopDir}, 
      {manager_top_dir,   ManagerTopDir} | Config].
 
-end_per_testcase2(_Case, Config) ->
-    Config.
+%% end_per_testcase2(_Case, Config) ->
+%%     Config.
 
 
 cases() -> 
     [
-	{group, misc}, 
-	{group, test_v1}, 
-	{group, test_v2},
-	{group, test_v1_v2}, 
-	{group, test_v3},
-	{group, test_multi_threaded}, 
-	{group, mib_storage},
-	{group, tickets1}
+     {group, misc}, 
+     {group, test_v1}, 
+     {group, test_v2},
+     {group, test_v1_v2}, 
+     {group, test_v3},
+     {group, test_v1_ipv6},
+     {group, test_v2_ipv6},
+     {group, test_v1_v2_ipv6},
+     {group, test_v3_ipv6},
+     {group, test_multi_threaded}, 
+     {group, mib_storage},
+     {group, tickets1}
     ].
 
 
@@ -520,8 +905,8 @@ start_v2_agent(Config) ->
 start_v2_agent(Config, Opts) ->
     snmp_agent_test_lib:start_v2_agent(Config, Opts).
 
-start_v3_agent(Config) ->
-    snmp_agent_test_lib:start_v3_agent(Config).
+%% start_v3_agent(Config) ->
+%%     snmp_agent_test_lib:start_v3_agent(Config).
 
 start_v3_agent(Config, Opts) ->
     snmp_agent_test_lib:start_v3_agent(Config, Opts).
@@ -553,7 +938,7 @@ delete_tables() ->
     mnesia:delete_table(kompissTable2),
     mnesia:delete_table(snmp_variables).
 
-%% Creation is done in runtime!
+%% Tables are created in runtime!
 delete_mib_storage_mnesia_tables() ->
     mnesia:delete_table(snmpa_mib_data),
     mnesia:delete_table(snmpa_mib_tree),
@@ -576,40 +961,89 @@ delete_mib_storage_mnesia_tables() ->
 %% versions as well, <base>_N.
 %%-----------------------------------------------------------------
 
-
-
-
-
-
-
-
-
+mib_storage_cases() ->
+    [
+     {group, mib_storage_ets}, 
+     {group, mib_storage_dets},
+     {group, mib_storage_mnesia},
+     {group, mib_storage_size_check_ets},
+     {group, mib_storage_size_check_dets},
+     {group, mib_storage_size_check_mnesia},
+     {group, mib_storage_varm_dets},
+     {group, mib_storage_varm_mnesia}
+    ].
+    
 mib_storage_ets_cases() -> 
-[mse_simple, mse_v1_processing, mse_big, mse_big2,
- mse_loop_mib, mse_api, mse_sa_register, mse_v1_trap,
- mse_sa_error, mse_next_across_sa, mse_undo,
- mse_standard_mib, mse_community_mib, mse_framework_mib,
- mse_target_mib, mse_notification_mib,
- mse_view_based_acm_mib, mse_sparse_table, mse_me_of,
- mse_mib_of].
+    [
+     mse_simple, 
+     mse_v1_processing, 
+     mse_big, 
+     mse_big2,
+     mse_loop_mib, 
+     mse_api, 
+     mse_sa_register, 
+     mse_v1_trap,
+     mse_sa_error, 
+     mse_next_across_sa, 
+     mse_undo,
+     mse_standard_mib, 
+     mse_community_mib, 
+     mse_framework_mib,
+     mse_target_mib, 
+     mse_notification_mib,
+     mse_view_based_acm_mib, 
+     mse_sparse_table, 
+     mse_me_of,
+     mse_mib_of
+    ].
 
 mib_storage_dets_cases() -> 
-[msd_simple, msd_v1_processing, msd_big, msd_big2,
- msd_loop_mib, msd_api, msd_sa_register, msd_v1_trap,
- msd_sa_error, msd_next_across_sa, msd_undo,
- msd_standard_mib, msd_community_mib, msd_framework_mib,
- msd_target_mib, msd_notification_mib,
- msd_view_based_acm_mib, msd_sparse_table, msd_me_of,
- msd_mib_of].
+    [
+     msd_simple, 
+     msd_v1_processing, 
+     msd_big, 
+     msd_big2,
+     msd_loop_mib, 
+     msd_api, 
+     msd_sa_register, 
+     msd_v1_trap,
+     msd_sa_error, 
+     msd_next_across_sa, 
+     msd_undo,
+     msd_standard_mib, 
+     msd_community_mib, 
+     msd_framework_mib,
+     msd_target_mib, 
+     msd_notification_mib,
+     msd_view_based_acm_mib, 
+     msd_sparse_table, 
+     msd_me_of,
+     msd_mib_of
+    ].
 
 mib_storage_mnesia_cases() -> 
-[msm_simple, msm_v1_processing, msm_big, msm_big2,
- msm_loop_mib, msm_api, msm_sa_register, msm_v1_trap,
- msm_sa_error, msm_next_across_sa, msm_undo,
- msm_standard_mib, msm_community_mib, msm_framework_mib,
- msm_target_mib, msm_notification_mib,
- msm_view_based_acm_mib, msm_sparse_table, msm_me_of,
- msm_mib_of].
+    [
+     msm_simple, 
+     msm_v1_processing, 
+     msm_big, 
+     msm_big2,
+     msm_loop_mib, 
+     msm_api, 
+     msm_sa_register, 
+     msm_v1_trap,
+     msm_sa_error, 
+     msm_next_across_sa, 
+     msm_undo,
+     msm_standard_mib, 
+     msm_community_mib, 
+     msm_framework_mib,
+     msm_target_mib, 
+     msm_notification_mib,
+     msm_view_based_acm_mib, 
+     msm_sparse_table, 
+     msm_me_of,
+     msm_mib_of
+    ].
 
 mse_size_check_cases() -> 
     [mse_size_check].
@@ -628,22 +1062,27 @@ varm_mib_storage_mnesia_cases() ->
 
 init_mib_storage_ets(Config) when is_list(Config) ->
     ?LOG("init_mib_storage_ets -> entry", []),
-    MibStorage = {snmp_mib_storage,ets},
+    MibStorage = {mib_storage, [{module, snmpa_mib_storage_ets}]},
     init_ms(Config, [MibStorage]).
 
 init_mib_storage_dets(Config) when is_list(Config) ->
-    ?LOG("init_mib_storage_ets -> entry", []),
+    ?LOG("init_mib_storage_dets -> entry", []),
     ?line AgentDbDir = ?GCONF(agent_db_dir, Config),
-    MibStorage = {snmp_mib_storage, {dets, AgentDbDir}},
+    MibStorage = {mib_storage, [{module,  snmpa_mib_storage_dets}, 
+				{options, [{dir, AgentDbDir}]}]},
     init_ms(Config, [MibStorage]).
 
 init_mib_storage_mnesia(Config) when is_list(Config) ->
-    ?LOG("init_mib_storage_ets -> entry", []),
-    MibStorage = {snmp_mib_storage, {mnesia,[]}},
+    ?LOG("init_mib_storage_mnesia -> entry", []),
+    ?line AgentNode = ?GCONF(snmp_master, Config),
+    MibStorage = {mib_storage, [{module, snmpa_mib_storage_mnesia}, 
+				{options, [{nodes, [AgentNode]}]}]},
     init_ms(Config, [MibStorage]).
 
 init_ms(Config, Opts) when is_list(Config) ->
-    ?LOG("init_mib_storage_ets -> entry", []),
+    ?LOG("init_ms -> entry with"
+	 "~n   Config: ~p"
+	 "~n   Opts:   ~p", [Config, Opts]),
     ?line SaNode       = ?GCONF(snmp_sa, Config),
     ?line create_tables(SaNode),
     ?line AgentConfDir = ?GCONF(agent_conf_dir, Config),
@@ -651,23 +1090,26 @@ init_ms(Config, Opts) when is_list(Config) ->
     ?line Ip           = ?GCONF(ip, Config),
     ?line config([v1], MgrDir, AgentConfDir, 
 		 tuple_to_list(Ip), tuple_to_list(Ip)),
-    MasterAgentVerbosity = {snmp_master_agent_verbosity,   trace},
-    MibsVerbosity        = {snmp_mibserver_verbosity,      trace},
-    SymStoreVerbosity    = {snmp_symbolic_store_verbosity, trace},
+    MasterAgentVerbosity = {agent_verbosity, trace},
+    MibsVerbosity        = {mib_server,      [{verbosity, trace}]},
+    SymStoreVerbosity    = {symbolic_store,  [{verbosity, trace}]},
     Opts1 = [MasterAgentVerbosity, MibsVerbosity, SymStoreVerbosity | Opts],
     [{vsn, v1} | start_v1_agent(Config, Opts1)].
 
 init_size_check_mse(Config) when is_list(Config) ->
-    MibStorage = {snmp_mib_storage, ets},
+    MibStorage = {mib_storage, [{module, snmpa_mib_storage_ets}]},
     init_size_check_ms(Config, [MibStorage]).
 
 init_size_check_msd(Config) when is_list(Config) ->
     AgentDbDir = ?GCONF(agent_db_dir, Config),
-    MibStorage = {snmp_mib_storage, {dets, AgentDbDir}},
+    MibStorage = {mib_storage, [{module,  snmpa_mib_storage_dets}, 
+				{options, [{dir, AgentDbDir}]}]},
     init_size_check_ms(Config, [MibStorage]).
 
 init_size_check_msm(Config) when is_list(Config) ->
-    MibStorage = {snmp_mib_storage, {mnesia,[]}},
+    ?line AgentNode = ?GCONF(snmp_master, Config),
+    MibStorage = {mib_storage, [{module, snmpa_mib_storage_mnesia}, 
+				{options, [{nodes, [AgentNode]}]}]},
     init_size_check_ms(Config, [MibStorage]).
 
 init_size_check_ms(Config, Opts) when is_list(Config) ->
@@ -702,12 +1144,16 @@ init_varm_mib_storage_dets(Config) when is_list(Config) ->
     ?line Ip           = ?GCONF(ip, Config),
     ?line config([v1], MgrDir, AgentConfDir, 
 		 tuple_to_list(Ip), tuple_to_list(Ip)),
-    MibStorage           = {snmp_mib_storage, {dets, AgentDbDir}},
-    MasterAgentVerbosity = {snmp_master_agent_verbosity,   trace},
-    MibsVerbosity        = {snmp_mibserver_verbosity,      trace},
-    SymStoreVerbosity    = {snmp_symbolic_store_verbosity, trace},
-    Opts = [MibStorage,MasterAgentVerbosity,MibsVerbosity,SymStoreVerbosity],
-    [{vsn, v1}, {agent_opts,Opts} | Config].
+    MibStorage = {mib_storage, [{module,  snmpa_mib_storage_dets}, 
+				{options, [{dir, AgentDbDir}]}]},
+    MasterAgentVerbosity = {agent_verbosity, trace},
+    MibsVerbosity        = {mib_server,      [{verbosity, trace}]},
+    SymStoreVerbosity    = {symbolic_store,  [{verbosity, trace}]},
+    Opts = [MibStorage, 
+	    MasterAgentVerbosity, 
+	    MibsVerbosity, 
+	    SymStoreVerbosity],
+    [{vsn, v1}, {agent_opts, Opts} | Config].
 
 init_varm_mib_storage_mnesia(Config) when is_list(Config) ->
     ?LOG("init_varm_mib_storage_mnesia -> entry", []),
@@ -718,12 +1164,17 @@ init_varm_mib_storage_mnesia(Config) when is_list(Config) ->
     ?line Ip           = ?GCONF(ip, Config),
     ?line config([v1], MgrDir, AgentConfDir, 
 		 tuple_to_list(Ip), tuple_to_list(Ip)),
-    MibStorage           = {snmp_mib_storage,{mnesia,[]}},
-    MasterAgentVerbosity = {snmp_master_agent_verbosity,   trace},
-    MibsVerbosity        = {snmp_mibserver_verbosity,      trace},
-    SymStoreVerbosity    = {snmp_symbolic_store_verbosity, trace},
-    Opts = [MibStorage,MasterAgentVerbosity,MibsVerbosity,SymStoreVerbosity],
-    [{vsn, v1}, {agent_opts,Opts} | Config].
+    ?line AgentNode = ?GCONF(snmp_master, Config),
+    MibStorage = {mib_storage, [{module, snmpa_mib_storage_mnesia}, 
+				{options, [{nodes, [AgentNode]}]}]},
+    MasterAgentVerbosity = {agent_verbosity, trace},
+    MibsVerbosity        = {mib_server,      [{verbosity, trace}]},
+    SymStoreVerbosity    = {symbolic_store,  [{verbosity, trace}]},
+    Opts = [MibStorage,
+	    MasterAgentVerbosity,
+	    MibsVerbosity,
+	    SymStoreVerbosity],
+    [{vsn, v1}, {agent_opts, Opts} | Config].
 
 finish_mib_storage_ets(Config) when is_list(Config) ->
     ?LOG("finish_mib_storage_ets -> entry", []),
@@ -788,7 +1239,7 @@ mse_simple(X)         -> ?P(mse_simple), simple(X).
 mse_v1_processing(X)  -> ?P(mse_v1_processing), v1_processing(X).
 mse_big(X)            -> ?P(mse_big), big(X).
 mse_big2(X)           -> ?P(mse_big2), big2(X).
-mse_loop_mib(X)       -> ?P(mse_loop_mib), loop_mib(X).
+mse_loop_mib(X)       -> ?P(mse_loop_mib), loop_mib_1(X).
 mse_api(X)            -> ?P(mse_api), api(X).
 mse_sa_register(X)    -> ?P(mse_sa_register), sa_register(X).
 mse_v1_trap(X)        -> ?P(mse_v1_trap), v1_trap(X).
@@ -809,7 +1260,7 @@ msd_simple(X)         -> ?P(msd_simple), simple(X).
 msd_v1_processing(X)  -> ?P(msd_v1_processing), v1_processing(X).
 msd_big(X)            -> ?P(msd_big), big(X).
 msd_big2(X)           -> ?P(msd_big2), big2(X).
-msd_loop_mib(X)       -> ?P(msd_loop_mib), loop_mib(X).
+msd_loop_mib(X)       -> ?P(msd_loop_mib), loop_mib_1(X).
 msd_api(X)            -> ?P(msd_api), api(X).
 msd_sa_register(X)    -> ?P(msd_sa_register), sa_register(X).
 msd_v1_trap(X)        -> ?P(msd_v1_trap), v1_trap(X).
@@ -830,7 +1281,7 @@ msm_simple(X)         -> ?P(msm_simple), simple(X).
 msm_v1_processing(X)  -> ?P(msm_v1_processing), v1_processing(X).
 msm_big(X)            -> ?P(msm_big2), big(X).
 msm_big2(X)           -> ?P(msm_loop_mib), big2(X).
-msm_loop_mib(X)       -> ?P(msm_loop_mib), loop_mib(X).
+msm_loop_mib(X)       -> ?P(msm_loop_mib), loop_mib_1(X).
 msm_api(X)            -> ?P(msm_api), api(X).
 msm_sa_register(X)    -> ?P(msm_sa_register), sa_register(X).
 msm_v1_trap(X)        -> ?P(msm_v1_trap), v1_trap(X).
@@ -956,10 +1407,10 @@ varm_mib_start(Config) when is_list(Config) ->
 
     %% Perform the test(s)
     ?DBG("varm_mib_start -> perform the tests", []),
-    try_test(snmp_community_mib),
-    try_test(snmp_framework_mib),
-    try_test(snmp_target_mib),
-    try_test(snmp_notification_mib),
+    try_test(snmp_community_mib_test),
+    try_test(snmp_framework_mib_test),
+    try_test(snmp_target_mib_test),
+    try_test(snmp_notification_mib_test),
 
     %% Stop the agent (without deleting the stored files)
     ?DBG("varm_mib_start -> stop the agent", []),
@@ -1119,7 +1570,11 @@ finish_misc(Config) ->
     finish_v1(Config).
 
 misc_cases() -> 
-[app_info, info_test].
+    [
+     app_info, 
+     info_test,
+     create_local_db_dir
+    ].
 
 app_info(suite) -> [];
 app_info(Config) when is_list(Config) ->
@@ -1135,11 +1590,11 @@ app_info(Config) when is_list(Config) ->
 	    false ->
 		"undefined"
 	end,
-    io:format("Root dir: ~s~n"
-	      "SNMP:   Application dir: ~s~n"
-	      "        Application ver: ~s~n"
-	      "SSL:    Application dir: ~s~n"
-	      "CRYPTO: Application dir: ~s~n", 
+    io:format("Root dir: ~ts~n"
+	      "SNMP:   Application dir: ~ts~n"
+	      "        Application ver: ~ts~n"
+	      "SSL:    Application dir: ~ts~n"
+	      "CRYPTO: Application dir: ~ts~n",
 	      [code:root_dir(), SnmpDir, AppVsn, SslDir, CryptoDir]),
     ok.
 
@@ -1151,9 +1606,78 @@ app_dir(App) ->
 	    "undefined"
     end.
 
+create_local_db_dir(Config) when is_list(Config) ->
+    ?P(create_local_db_dir),
+    DataDir = snmp_test_lib:lookup(data_dir, Config),
+    UName = erlang:unique_integer([positive]),
+    T = {UName, UName, UName},
+    [As,Bs,Cs] = [integer_to_list(I) || I <- tuple_to_list(T)],
+    DbDir = filename:join([DataDir, As, Bs, Cs]),
+    ok = del_dir(DbDir, 3),
+    Name = list_to_atom(atom_to_list(create_local_db_dir)
+                        ++"-"++As++"-"++Bs++"-"++Cs),
+    Pa = filename:dirname(code:which(?MODULE)),
+    {ok,Node} = ?t:start_node(Name, slave, [{args, "-pa "++Pa}]),
 
+    %% first start with a nonexisting DbDir
+    Fun1 = fun() ->
+                   false = filelib:is_dir(DbDir),
+                   process_flag(trap_exit,true),
+                   {error, {error, {failed_open_dets, {file_error, _, _}}}} =
+                       snmpa_local_db:start_link(normal, DbDir, [{verbosity,trace}]),
+                   false = filelib:is_dir(DbDir),
+                   {ok, not_found}
+           end,
+    {ok, not_found} = nodecall(Node, Fun1),
+    %% now start with a nonexisting DbDir but pass the
+    %% create_local_db_dir option as well
+    Fun2 = fun() ->
+                   false = filelib:is_dir(DbDir),
+                   process_flag(trap_exit,true),
+                   {ok, _Pid} =
+                       snmpa_local_db:start_link(normal, DbDir,
+                                                 create_db_and_dir, [{verbosity,trace}]),
+                   snmpa_local_db:stop(),
+                   true = filelib:is_dir(DbDir),
+                   {ok, found}
+           end,
+    {ok, found} = nodecall(Node, Fun2),
+    %% cleanup
+    ?t:stop_node(Node),
+    ok = del_dir(DbDir, 3),
+    ok.
 
-%v1_cases() -> [loop_mib];
+nodecall(Node, Fun) ->
+    Parent = self(),
+    Ref = make_ref(),
+    spawn_link(Node,
+               fun() ->
+                       Res = Fun(),
+                       unlink(Parent),
+                       Parent ! {Ref, Res}
+               end),
+    receive
+        {Ref, Res} ->
+            Res
+    end.
+
+del_dir(_Dir, 0) ->
+    ok;
+del_dir(Dir, Depth) ->
+    case filelib:is_dir(Dir) of
+        true ->
+            {ok, Files} = file:list_dir(Dir),
+            lists:map(fun(F) ->
+                              Nm = filename:join(Dir,F),
+                              ok = file:delete(Nm)
+                      end, Files),
+            ok = file:del_dir(Dir),
+            del_dir(filename:dirname(Dir), Depth-1);
+        false ->
+            ok
+    end.
+
+%v1_cases() -> [loop_mib_1];
 v1_cases() -> 
     [
      simple, 
@@ -1161,7 +1685,7 @@ v1_cases() ->
      v1_processing, 
      big, 
      big2,
-     loop_mib, 
+     loop_mib_1,
      api, 
      subagent, 
      mnesia, 
@@ -1179,14 +1703,40 @@ v1_cases() ->
      change_target_addr_config
     ].  
 
+v1_cases_ipv6() ->
+    [
+     simple,
+     v1_processing,
+     loop_mib_1,
+%%     big,
+%%     big2,
+     api,
+     subagent,
+%%     mnesia,
+%%     {group, multiple_reqs},
+     sa_register,
+%%     v1_trap, % sends v1 trap
+%%     sa_error,
+     next_across_sa,
+     undo,
+%%     {group, reported_bugs},
+     {group, standard_mibs_ipv6},
+     sparse_table,
+%%     cnt_64, % sends v1 trap
+     opaque
+%%     change_target_addr_config % sends v1 trap
+    ].
+
 init_v1(Config) when is_list(Config) ->
     ?line SaNode = ?config(snmp_sa, Config),
     ?line create_tables(SaNode),
     ?line AgentConfDir = ?config(agent_conf_dir, Config),
     ?line MgrDir = ?config(mgr_dir, Config),
     ?line Ip = ?config(ip, Config),
-    ?line config([v1], MgrDir, AgentConfDir, 
-		 tuple_to_list(Ip), tuple_to_list(Ip)),
+    ?line IpFamily = config_ipfamily(Config),
+    ?line config(
+	    [v1], MgrDir, AgentConfDir,
+	    tuple_to_list(Ip), tuple_to_list(Ip), IpFamily),
     [{vsn, v1} | start_v1_agent(Config)].
 
 finish_v1(Config) when is_list(Config) ->
@@ -1223,14 +1773,43 @@ v2_cases() ->
      v2_caps
     ].
 
+v2_cases_ipv6() ->
+    [
+     simple_2,
+     v2_processing,
+%%     big_2,
+%%     big2_2,
+     loop_mib_2,
+     api_2,
+     subagent_2,
+%%     mnesia_2,
+%%     {group, multiple_reqs_2},
+     sa_register_2,
+     v2_trap,
+     {group, v2_inform},
+%%     sa_error_2,
+     next_across_sa_2,
+     undo_2,
+%%     {group, reported_bugs_2},
+     {group, standard_mibs_2},
+     v2_types,
+     implied,
+     sparse_table_2,
+     cnt_64_2,
+     opaque_2,
+     v2_caps
+    ].
+
 init_v2(Config) when is_list(Config) ->
     SaNode = ?config(snmp_sa, Config),
     create_tables(SaNode),
     AgentConfDir = ?config(agent_conf_dir, Config),
     MgrDir = ?config(mgr_dir, Config),
     Ip = ?config(ip, Config),
-    config([v2], MgrDir, AgentConfDir, 
-	   tuple_to_list(Ip), tuple_to_list(Ip)),
+    IpFamily = config_ipfamily(Config),
+    config(
+      [v2], MgrDir, AgentConfDir,
+      tuple_to_list(Ip), tuple_to_list(Ip), IpFamily),
     [{vsn, v2} | start_v2_agent(Config)].
 
 finish_v2(Config) when is_list(Config) ->
@@ -1249,8 +1828,9 @@ init_v1_v2(Config) when is_list(Config) ->
     AgentConfDir = ?config(agent_conf_dir, Config),
     MgrDir = ?config(mgr_dir, Config),
     Ip = ?config(ip, Config),
+    IpFamily = config_ipfamily(Config),
     config([v1,v2], MgrDir, AgentConfDir, 
-	   tuple_to_list(Ip), tuple_to_list(Ip)),
+	   tuple_to_list(Ip), tuple_to_list(Ip), IpFamily),
     [{vsn, bilingual} | start_bilingual_agent(Config)].
 
 finish_v1_v2(Config) when is_list(Config) ->
@@ -1270,10 +1850,10 @@ v3_cases() ->
      subagent_3, 
      mnesia_3, 
      loop_mib_3, 
-     multiple_reqs_3,
+     {group, multiple_reqs_3},
      sa_register_3, 
      v3_trap, 
-     v3_inform, 
+     {group, v3_inform}, 
      sa_error_3,
      next_across_sa_3, 
      undo_3, 
@@ -1285,6 +1865,34 @@ v3_cases() ->
      sparse_table_3, 
      cnt_64_3,
      opaque_3, 
+     v2_caps_3
+    ].
+
+v3_cases_ipv6() ->
+    [
+     simple_3,
+     v3_processing,
+%%     big_3,
+%%     big2_3,
+     api_3,
+     subagent_3,
+%%     mnesia_3,
+     loop_mib_3,
+%%     {group, multiple_reqs_3},
+     sa_register_3,
+     v3_trap,
+     {group, v3_inform},
+%%     sa_error_3,
+     next_across_sa_3,
+     undo_3,
+%%     {group, reported_bugs_3},
+     {group, standard_mibs_3},
+     {group, v3_security},
+     v2_types_3,
+     implied_3,
+     sparse_table_3,
+     cnt_64_3,
+     opaque_3,
      v2_caps_3
     ].
 
@@ -1309,9 +1917,16 @@ init_v3(Config) when is_list(Config) ->
     AgentConfDir = ?config(agent_conf_dir, Config),
     MgrDir = ?config(mgr_dir, Config),
     Ip = ?config(ip, Config),
-    ?line ok = config([v3], MgrDir, AgentConfDir, 
-		      tuple_to_list(Ip), tuple_to_list(Ip)),
-    [{vsn, v3} | start_v3_agent(Config)].
+    IpFamily = config_ipfamily(Config),
+    ?line ok =
+	config(
+	  [v3], MgrDir, AgentConfDir,
+	  tuple_to_list(Ip), tuple_to_list(Ip), IpFamily),
+    Opts =
+	[{master_agent_verbosity, trace},
+	 {agent_verbosity, trace},
+	 {net_if_verbosity, trace}],
+    [{vsn, v3} | start_v3_agent(Config, Opts)].
 
 finish_v3(Config) when is_list(Config) ->
     delete_tables(),
@@ -1350,19 +1965,19 @@ init_case(Config) ->
 load_master(Mib) ->
     ?DBG("load_master -> entry with"
 	"~n   Mib: ~p", [Mib]),
-    snmpa:unload_mibs(snmp_master_agent, [Mib]),	% Unload for safety
-    ok = snmpa:load_mibs(snmp_master_agent, [get(mib_dir) ++ Mib]).
+    snmpa:unload_mib(snmp_master_agent, Mib),	% Unload for safety
+    ok = snmpa:load_mib(snmp_master_agent, join(get(mib_dir), Mib)).
 
 load_master_std(Mib) ->
     ?DBG("load_master_std -> entry with"
 	"~n   Mib: ~p", [Mib]),
-    snmpa:unload_mibs(snmp_master_agent, [Mib]),	% Unload for safety
-    ok = snmpa:load_mibs(snmp_master_agent, [get(std_mib_dir) ++ Mib]).
+    snmpa:unload_mib(snmp_master_agent, Mib),	% Unload for safety
+    ok = snmpa:load_mib(snmp_master_agent, join(get(std_mib_dir), Mib)).
 
 unload_master(Mib) ->
     ?DBG("unload_master -> entry with"
 	"~n   Mib: ~p", [Mib]),
-    ok = snmpa:unload_mibs(snmp_master_agent, [Mib]).
+    ok = snmpa:unload_mib(snmp_master_agent, Mib).
 
 loaded_mibs() ->
     ?DBG("loaded_mibs -> entry",[]),
@@ -1626,7 +2241,7 @@ change_target_addr_config(Config) when is_list(Config) ->
 
 dummy_manager_start(MA) ->
     ?DBG("dummy_manager_start -> entry",[]),
-    Pid = spawn(get(mgr_node), ?MODULE,dummy_manager_init,[self(),MA]),
+    Pid = spawn(get(mgr_node), ?MODULE, dummy_manager_init, [self(), MA]),
     ?DBG("dummy_manager_start -> Pid: ~p",[Pid]),
     await_dummy_manager_started(Pid).
 
@@ -1638,9 +2253,9 @@ await_dummy_manager_started(Pid) ->
 	    {ok,Pid,Port};
 	{'EXIT', Pid, Reason} ->
 	    {error, Pid, Reason};
-	O ->
+	_O ->
 	    ?LOG("dummy_manager_start -> received unknown message:"
-		 "~n   ~p",[O]),
+		 "~n   ~p",[_O]),
 	    await_dummy_manager_started(Pid)
     end.
 
@@ -1663,16 +2278,16 @@ dummy_manager_send_trap2(Pid) ->
 dummy_manager_await_trap2_ack() ->
     ?DBG("dummy_manager_await_trap2 -> entry",[]),
     receive
-	{received_trap,Trap} ->
-	    ?LOG("dummy_manager_await_trap2 -> received trap: ~p",[Trap]),
+	{received_trap, _Trap} ->
+	    ?LOG("dummy_manager_await_trap2 -> received trap: ~p", [_Trap]),
 	    %% Note: 
 	    %% Without this sleep the v2_inform_i testcase failes! There
 	    %% is no relation between these two test cases as far as I
 	    %% able to figure out...
 	    ?SLEEP(60000),
 	    ok;
-	O ->
-	    ?ERR("dummy_manager_await_trap2 -> unexpected message: ~p",[O]),
+	_O ->
+	    ?ERR("dummy_manager_await_trap2 -> unexpected message: ~p",[_O]),
 	    ok
     after 10000 ->
 	    ?ERR("dummy_manager_await_trap2 -> timeout",[]),
@@ -1698,32 +2313,34 @@ dummy_manager_loop(P,S,MA) ->
 		 "~n   Trap: ~p",[Trap]),
 	    snmpa:send_trap(MA, Trap, "standard trap"),
 	    dummy_manager_loop(P,S,MA);
-	{udp, _UdpId, Ip, UdpPort, Bytes} ->
+	{udp, _UdpId, _Ip, _UdpPort, Bytes} ->
 	    ?LOG("dummy_manager_loop -> received upd message"
 		 "~n   from: ~p:~p"
 		 "~n   size: ~p",
-		 [Ip, UdpPort, dummy_manager_message_sz(Bytes)]),
+		 [_Ip, _UdpPort, dummy_manager_message_sz(Bytes)]),
 	    R = dummy_manager_handle_message(Bytes),
-	    ?DBG("dummy_manager_loop -> R: ~p",[R]),
+	    ?DBG("dummy_manager_loop -> R: ~p", [R]),
 	    P ! R,
-	    dummy_manager_loop(P,S,MA);
+	    dummy_manager_loop(P, S, MA);
 	stop ->
 	    ?DBG("dummy_manager_loop -> received stop request",[]),
 	    P ! {dummy_manager_stopping, self()},
 	    gen_udp:close(S),
 	    exit(normal);
-	O ->
+	_O ->
 	    ?LOG("dummy_manager_loop -> received unknown message:"
-		 "~n   ~p",[O]),
-	    dummy_manager_loop(P,S,MA)
+		 "~n   ~p", [_O]),
+	    dummy_manager_loop(P, S, MA)
     end.
 
+-ifdef(snmp_log).
 dummy_manager_message_sz(B) when is_binary(B) ->
     size(B);
 dummy_manager_message_sz(L) when is_list(L) ->
     length(L);
 dummy_manager_message_sz(_) ->
     undefined.
+-endif.
 
 dummy_manager_handle_message(Bytes) ->
     case (catch snmp_pdus:dec_message(Bytes)) of
@@ -1767,11 +2384,11 @@ subagent(Config) when is_list(Config) ->
     try_test(unreg_test),
 
     ?P1("Loading previous subagent mib in master and testing..."),
-    ?line ok = snmpa:load_mibs(MA, [MibDir ++ "Klas1"]),
+    ?line ok = snmpa:load_mib(MA, join(MibDir, "Klas1")),
     try_test(load_test),
 
     ?P1("Unloading previous subagent mib in master and testing..."),
-    ?line ok = snmpa:unload_mibs(MA, [MibDir ++ "Klas1"]),
+    ?line ok = snmpa:unload_mib(MA, join(MibDir, "Klas1")),
     try_test(unreg_test),
     ?P1("Testing register subagent..."),
     rpc:call(SaNode, snmp, register_subagent,
@@ -1818,23 +2435,37 @@ mnesia_2(X) -> ?P(mnesia_2), mnesia(X).
 mnesia_3(X) -> ?P(mnesia_3), mnesia(X).
 
 
-
 mul_cases() -> 
-[mul_get, mul_get_err, mul_next, mul_next_err,
- mul_set_err].
-    
-
-multiple_reqs_3(_X) -> 
-    {req, [], {conf, init_mul, mul_cases_3(), finish_mul}}.
+    [
+     mul_get, 
+     mul_get_err, 
+     mul_next, 
+     mul_next_err,
+     mul_set,
+     mul_set_err
+    ].
 
 
 mul_cases_2() -> 
-[mul_get_2, mul_get_err_2, mul_next_2, mul_next_err_2,
- mul_set_err_2].
-    
+    [
+     mul_get_2, 
+     mul_get_err_2, 
+     mul_next_2, 
+     mul_next_err_2,
+     mul_set_2,
+     mul_set_err_2
+    ].
+
 
 mul_cases_3() ->
-    [mul_get_3, mul_get_err_3, mul_next_3, mul_next_err_3, mul_set_err_3].
+    [
+     mul_get_3, 
+     mul_get_err_3, 
+     mul_next_3, 
+     mul_next_err_3, 
+     mul_set_3,
+     mul_set_err_3
+    ].
     
 
 init_mul(Config) when is_list(Config) ->
@@ -1949,11 +2580,11 @@ sa_register(Config) when is_list(Config) ->
 
     ?P1("Unloading Klas1..."),
     ?DBG("sa_register -> unload mibs", []),
-    snmpa:unload_mibs(SA, [MibDir ++ "Klas1"]),
+    snmpa:unload_mib(SA, join(MibDir, "Klas1")),
 
     ?P1("Loading SA-MIB..."),
     ?DBG("sa_register -> unload mibs", []),
-    snmpa:load_mibs(SA, [MibDir ++ "SA-MIB"]),
+    snmpa:load_mib(SA, join(MibDir, "SA-MIB")),
     
     ?P1("register subagent..."),
     ?DBG("sa_register -> register subagent", []),
@@ -2056,27 +2687,32 @@ v3_trap(Config) when is_list(Config) ->
     trap2(Config).
 
 
-v3_inform(_X) ->
-    %% v2_inform(X).
-    {req, [], {conf, init_v3_inform, [v3_inform_i], finish_v3_inform}}. 
+v3_inform_cases() ->
+    [
+     v3_inform_i
+    ].
+
+init_v3_inform(X) ->
+    init_v2_inform(X).
+
+finish_v3_inform(X) ->
+    finish_v2_inform(X).
+
 
 init_v2_inform(Config) when is_list(Config) ->
     _Dir = ?config(agent_conf_dir, Config),
     %% snmp_internal_mib:configure(Dir),
     Config.
 
-init_v3_inform(X) ->
-    init_v2_inform(X).
-
 finish_v2_inform(Config) when is_list(Config) ->
     _Dir = ?config(agent_conf_dir, Config),
     %% snmp_internal_mib:configure(Dir),
     Config.
 
-finish_v3_inform(X) ->
-    finish_v2_inform(X).
-
-
+v2_inform_cases() ->
+    [
+     v2_inform_i
+    ].
 
 v2_inform_i(suite) -> [];
 v2_inform_i(Config) when is_list(Config) ->
@@ -2167,7 +2803,7 @@ next_across_sa(Config) when is_list(Config) ->
     ?line {ok, SA} = start_subagent(SaNode, ?sa, "SA-MIB"),
 
     ?P1("Loading another subagent mib (Klas1)..."),
-    ?line ok = snmpa:load_mibs(SA, [MibDir ++ "Klas1"]),
+    ?line ok = snmpa:load_mib(SA, MibDir ++ "Klas1"),
 
     ?P1("register subagent..."), 
     rpc:call(SaNode, snmp, register_subagent, [MA, ?klas1, SA]),
@@ -2176,17 +2812,17 @@ next_across_sa(Config) when is_list(Config) ->
     try_test(load_test_sa),
     
     ?P1("Testing next across subagent (endOfMibView from SA)..."),
-    try_test(next_across_sa),
+    try_test(next_across_sa_test),
 
     ?P1("Unloading mib (Klas1)"),
-    snmpa:unload_mibs(SA, [MibDir ++ "Klas1"]),
+    snmpa:unload_mib(SA, join(MibDir, "Klas1")),
     rpc:call(SaNode, snmp, unregister_subagent, [MA, ?klas1]),
     try_test(unreg_test),
 
     ?P1("Starting another subagent (2) "),
     ?line {ok, SA2} = start_subagent(SaNode, ?klas1, "Klas1"),
     ?P1("Testing next across subagent (wrong prefix from SA)..."),
-    try_test(next_across_sa),
+    try_test(next_across_sa_test),
     
     ?P1("stop subagent (1)..."),
     stop_subagent(SA),
@@ -2220,25 +2856,25 @@ undo(Config) when is_list(Config) ->
     ?line {ok, SA} = start_subagent(SaNode, ?sa, "SA-MIB"),
 
     ?P1("Load Klas3 & Klas4..."),
-    ?line ok = snmpa:load_mibs(MA, [MibDir ++ "Klas3"]),
-    ?line ok = snmpa:load_mibs(MA, [MibDir ++ "Klas4"]),
+    ?line ok = snmpa:load_mib(MA, join(MibDir, "Klas3")),
+    ?line ok = snmpa:load_mib(MA, join(MibDir, "Klas4")),
 
     ?P1("Testing undo phase at master agent..."),
     try_test(undo_test),
     try_test(api_test2),
 
     ?P1("Unload Klas3..."),
-    ?line ok = snmpa:unload_mibs(MA, [MibDir ++ "Klas3"]),
+    ?line ok = snmpa:unload_mib(MA, join(MibDir, "Klas3")),
 
     ?P1("Testing bad return values from instrum. funcs..."),
     try_test(bad_return),
 
     ?P1("Unload Klas4..."),
-    ?line ok = snmpa:unload_mibs(MA, [MibDir ++ "Klas4"]),
+    ?line ok = snmpa:unload_mib(MA, join(MibDir, "Klas4")),
 
     ?P1("Testing undo phase at subagent..."),
-    ?line ok = snmpa:load_mibs(SA, [MibDir ++ "Klas3"]),
-    ?line ok = snmpa:load_mibs(SA, [MibDir ++ "Klas4"]),
+    ?line ok = snmpa:load_mib(SA, join(MibDir, "Klas3")),
+    ?line ok = snmpa:load_mib(SA, join(MibDir, "Klas4")),
     ?line ok = snmpa:register_subagent(MA, ?klas3, SA),
     ?line ok = snmpa:register_subagent(MA, ?klas4, SA),
     try_test(undo_test),
@@ -2314,6 +2950,15 @@ v3_processing(Config) when is_list(Config) ->
 %% accomplished by the first inform sent.  That one will generate a
 %% report, which makes it in sync.  The notification-generating
 %% application times out, and send again.  This time it'll work.
+
+v3_security_cases() ->
+    [
+     v3_crypto_basic, 
+     v3_md5_auth, 
+     v3_sha_auth,
+     v3_des_priv
+    ].
+
 
 v3_crypto_basic(suite) -> [];
 v3_crypto_basic(_Config) ->
@@ -2453,9 +3098,9 @@ v3_des_priv(Config) when is_list(Config) ->
 v3_sync(Funcs) ->
     ?DBG("v3_sync -> entry with Funcs: ~p",[Funcs]),
     g([[sysDescr, 0]]),
-    expect(432, report, [{?usmStatsNotInTimeWindows_instance, any}]),
+    ?expect2(report, [{?usmStatsNotInTimeWindows_instance, any}]),
     g([[sysDescr, 0]]),
-    expect(433, [{[sysDescr,0], any}]),
+    ?expect1([{[sysDescr,0], any}]),
     lists:foreach(fun({Func, Args}) -> apply(?MODULE, Func, Args) end, Funcs).
 
 v3_inform_sync(MA) ->
@@ -2466,9 +3111,9 @@ v3_inform_sync(MA) ->
     ?DBG("v3_sync -> wait some time: ",[]),
     ?SLEEP(20000), % more than 1500*10 in target_addr.conf
     ?DBG("v3_sync -> await response",[]),
-    ?line expect(1, {inform, true},
-		 [{[sysUpTime, 0], any},
-		  {[snmpTrapOID, 0], ?system ++ [0,1]}]).
+    ?line ?expect2({inform, true},
+		   [{[sysUpTime, 0], any},
+		    {[snmpTrapOID, 0], ?system ++ [0,1]}]).
 
 
 v2_caps(suite) -> [];
@@ -2484,11 +3129,11 @@ v2_caps_3(X) -> ?P(v2_caps_3), v2_caps(X).
 v2_caps_i(Node) ->
     ?line Idx = rpc:call(Node, snmp, add_agent_caps, [[1,2,3,4,5], "test cap"]),
     g([[sysORID, Idx], [sysORDescr, Idx]]),
-    ?line expect(1, [{[sysORID, Idx], [1,2,3,4,5]},
-		     {[sysORDescr, Idx], "test cap"}]),
+    ?line ?expect1([{[sysORID, Idx], [1,2,3,4,5]}, 
+		    {[sysORDescr, Idx], "test cap"}]),
     ?line rpc:call(Node, snmp, del_agent_caps, [Idx]),
     g([[sysORID, Idx]]),
-    ?line expect(2, [{[sysORID, Idx], noSuchInstance}]).
+    ?line ?expect1([{[sysORID, Idx], noSuchInstance}]).
     
 
 %% Req. Test2
@@ -2504,86 +3149,85 @@ v1_proc() ->
 v1_get_p() ->
     %% 4.1.2:1
     g([[test2]]),
-    ?line expect(10, noSuchName, 1, [{[test2], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[test2], 'NULL'}]),
     g([[tDescr]]),
-    ?line expect(11, noSuchName, 1, [{[tDescr], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr], 'NULL'}]),
     g([[tDescr2,0]]),
-    ?line expect(12, noSuchName, 1, [{[tDescr2,0], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr2,0], 'NULL'}]),
     g([[tDescr3,0]]),
-    ?line expect(131, noSuchName, 1, [{[tDescr3,0], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr3,0], 'NULL'}]),
     g([[tDescr4,0]]),
-    ?line expect(132, noSuchName, 1, [{[tDescr4,0], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr4,0], 'NULL'}]),
     g([[sysDescr, 0], [tDescr,0]]), % Outside mibview
-    ?line expect(14, noSuchName, 2, [{[sysDescr, 0], 'NULL'},
-				     {[tDescr,0], 'NULL'}]),
+    ?line ?expect3(noSuchName, 2, [{[sysDescr, 0], 'NULL'},
+				   {[tDescr,0], 'NULL'}]),
     g([[sysDescr,3]]),
-    ?line expect(15, noSuchName, 1, [{[sysDescr, 3], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[sysDescr, 3], 'NULL'}]),
     
     %% 4.1.2:2
     g([[tTable]]),
-    ?line expect(20, noSuchName, 1, [{[tTable], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[tTable], 'NULL'}]),
     g([[tEntry]]),
-    ?line expect(21, noSuchName, 1, [{[tEntry], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[tEntry], 'NULL'}]),
     
     %% 4.1.2:3
     g([[tTooBig, 0]]),
-    ?line expect(30, tooBig, 0, [{[tTooBig, 0], 'NULL'}]),
+    ?line ?expect3(tooBig, 0, [{[tTooBig, 0], 'NULL'}]),
 
     %% 4.1.2:4
     g([[tGenErr1, 0]]),
-    ?line expect(40, genErr, 1, [{[tGenErr1, 0], 'NULL'}]),
+    ?line ?expect3(genErr, 1, [{[tGenErr1, 0], 'NULL'}]),
     g([[tGenErr2, 0]]),
-    ?line expect(41, genErr, 1, [{[tGenErr2, 0], 'NULL'}]),
+    ?line ?expect3(genErr, 1, [{[tGenErr2, 0], 'NULL'}]),
     g([[sysDescr, 0], [tGenErr3, 0]]),
-    ?line expect(42, genErr, 2, [{[sysDescr, 0], 'NULL'},
-				 {[tGenErr3, 0], 'NULL'}]).
+    ?line ?expect3(genErr, 2, [{[sysDescr, 0], 'NULL'},
+			       {[tGenErr3, 0], 'NULL'}]).
     
     
 v1_get_next_p() ->
     %% 4.1.3:1
     gn([[1,3,7,1]]),
-    ?line expect(10, noSuchName, 1, [{[1,3,7,1], 'NULL'}]),
+    ?line ?expect3(noSuchName, 1, [{[1,3,7,1], 'NULL'}]),
     gn([[tDescr2]]),
-    ?line expect(11, tooBig, 0, any),
+    ?line ?expect3(tooBig, 0, any),
     
     %% 4.1.3:2
     gn([[tTooBig]]),
     io:format("We currently don't handle tooBig correct!!!\n"),
-%    ?line expect(20, tooBig, 0, [{[tTooBig], 'NULL'}]),
-    ?line expect(20, tooBig, 0, any),
+
+    ?line ?expect3(tooBig, 0, any),
 
     %% 4.1.3:3
     gn([[tGenErr1]]),
-%    ?line expect(40, genErr, 1, [{[tGenErr1], 'NULL'}]),
-    ?line expect(40, genErr, 1, any),
+
+    ?line ?expect3(genErr, 1, any),
     gn([[tGenErr2]]),
-%    ?line expect(41, genErr, 1, [{[tGenErr2], 'NULL'}]),
-    ?line expect(41, genErr, 1, any),
+
+    ?line ?expect3(genErr, 1, any),
     gn([[sysDescr], [tGenErr3]]),
-%    ?line expect(42, genErr, 2, [{[sysDescr], 'NULL'},
-%				 {[tGenErr3], 'NULL'}]).
-    ?line expect(42, genErr, 2, any).
+
+    ?line ?expect3(genErr, 2, any).
     
 v1_set_p() ->
     %% 4.1.5:1
     s([{[1,3,7,0], i, 4}]),
-    ?line expect(10, noSuchName, 1, [{[1,3,7,0], 4}]),
+    ?line ?expect3(noSuchName, 1, [{[1,3,7,0], 4}]),
     s([{[tDescr,0], s, "outside mibview"}]),
-    ?line expect(11, noSuchName, 1, [{[tDescr,0], "outside mibview"}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr,0], "outside mibview"}]),
     s([{[tDescr3,0], s, "read-only"}]),
-    ?line expect(12, noSuchName, 1, [{[tDescr3,0], "read-only"}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr3,0], "read-only"}]),
     s([{[tDescr3], s, "noSuchObject"}]),
-    ?line expect(13, noSuchName, 1, [{[tDescr3], "noSuchObject"}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr3], "noSuchObject"}]),
     s([{[tDescr3,1], s, "noSuchInstance"}]),
-    ?line expect(14, noSuchName, 1, [{[tDescr3,1], "noSuchInstance"}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr3,1], "noSuchInstance"}]),
     s([{[tDescr2,0], s, "inconsistentName"}]),
-    ?line expect(15, noSuchName, 1, [{[tDescr2,0], "inconsistentName"}]),
+    ?line ?expect3(noSuchName, 1, [{[tDescr2,0], "inconsistentName"}]),
 
     %% 4.1.5:2
     s([{[tDescr2, 0], i, 4}]),
-    ?line expect(20, badValue, 1, [{[tDescr2, 0], 4}]),
+    ?line ?expect3(badValue, 1, [{[tDescr2, 0], 4}]),
     s([{[tDescr2, 0], s, "badValue"}]),
-    ?line expect(21, badValue, 1, [{[tDescr2, 0], "badValue"}]),
+    ?line ?expect3(badValue, 1, [{[tDescr2, 0], "badValue"}]),
     
     %% 4.1.5:3
     %% The standard is quite incorrect here.  The resp pdu was too big.  In
@@ -2593,14 +3237,14 @@ v1_set_p() ->
     %% of the std-like original value.
     s([{[tTooBig, 0], s, ?tooBigStr}]),
     %% according to std:
-%    ?line expect(30, tooBig, 0, [{[tTooBig, 0], ?tooBigStr}]),
-    ?line expect(30, tooBig, 0, [{[tTooBig, 0], 'NULL'}]),
+%    ?line ?expect3(tooBig, 0, [{[tTooBig, 0], ?tooBigStr}]),
+    ?line ?expect3(tooBig, 0, [{[tTooBig, 0], 'NULL'}]),
     
     %% 4.1.5:4
     s([{[tDescr2, 0], s, "is_set_ok_fail"}]),
-    ?line expect(40, genErr, 1, [{[tDescr2, 0], "is_set_ok_fail"}]),
+    ?line ?expect3(genErr, 1, [{[tDescr2, 0], "is_set_ok_fail"}]),
     s([{[tDescr2, 0], s, "commit_fail"}]),
-    ?line expect(41, genErr, 1, [{[tDescr2, 0], "commit_fail"}]).
+    ?line ?expect3(genErr, 1, [{[tDescr2, 0], "commit_fail"}]).
     
 %% Req. Test2
 v2_proc() ->
@@ -2616,183 +3260,183 @@ v2_get_p() ->
     %% 4.2.1:2
     ?DBG("v2_get_p -> entry",[]),
     g([[test2]]),
-    ?line expect(10, [{[test2], noSuchObject}]),
+    ?line ?expect1([{[test2], noSuchObject}]),
     g([[tDescr]]),
-    ?line expect(11, [{[tDescr], noSuchObject}]),
+    ?line ?expect1([{[tDescr], noSuchObject}]),
     g([[tDescr4,0]]),
-    ?line expect(12, [{[tDescr4,0], noSuchObject}]),
+    ?line ?expect1([{[tDescr4,0], noSuchObject}]),
     g([[sysDescr, 0], [tDescr,0]]), % Outside mibview
-    ?line expect(13, [{[sysDescr,0], "Erlang SNMP agent"},
-		      {[tDescr,0], noSuchObject}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+		    {[tDescr,0], noSuchObject}]),
     g([[tTable]]),
-    ?line expect(14, [{[tTable], noSuchObject}]),
+    ?line ?expect1([{[tTable], noSuchObject}]),
     g([[tEntry]]),
-    ?line expect(15, [{[tEntry], noSuchObject}]),
+    ?line ?expect1([{[tEntry], noSuchObject}]),
     
     %% 4.2.1:3
     g([[tDescr2,0]]), %% instrum ret noSuchName!!!
-    ?line expect(20, [{[tDescr2,0], noSuchInstance}]), 
+    ?line ?expect1([{[tDescr2,0], noSuchInstance}]), 
     g([[tDescr3,0]]),
-    ?line expect(21, [{[tDescr3,0], noSuchInstance}]),
+    ?line ?expect1([{[tDescr3,0], noSuchInstance}]),
     g([[sysDescr,3]]),
-    ?line expect(22, [{[sysDescr, 3], noSuchInstance}]),
+    ?line ?expect1([{[sysDescr, 3], noSuchInstance}]),
     g([[tIndex,1]]),
-    ?line expect(23, [{[tIndex, 1], noSuchInstance}]),
+    ?line ?expect1([{[tIndex, 1], noSuchInstance}]),
 
     %% 4.2.1 - any other error: genErr
     g([[tGenErr1, 0]]),
-    ?line expect(30, genErr, 1, [{[tGenErr1, 0], 'NULL'}]),
+    ?line ?expect3(genErr, 1, [{[tGenErr1, 0], 'NULL'}]),
     g([[tGenErr2, 0]]),
-    ?line expect(31, genErr, 1, [{[tGenErr2, 0], 'NULL'}]),
+    ?line ?expect3(genErr, 1, [{[tGenErr2, 0], 'NULL'}]),
     g([[sysDescr, 0], [tGenErr3, 0]]),
-    ?line expect(32, genErr, 2, [{[sysDescr, 0], 'NULL'},
-				 {[tGenErr3, 0], 'NULL'}]),
+    ?line ?expect3(genErr, 2, [{[sysDescr, 0], 'NULL'},
+			       {[tGenErr3, 0], 'NULL'}]),
     
     %% 4.2.1 - tooBig
     g([[tTooBig, 0]]),
-    ?line expect(40, tooBig, 0, []).
+    ?line ?expect3(tooBig, 0, []).
 
     
 v2_get_next_p() ->
     %% 4.2.2:2
     ?DBG("v2_get_next_p -> entry",[]),
     gn([[1,3,7,1]]),
-    ?line expect(10, [{[1,3,7,1], endOfMibView}]),
+    ?line ?expect1([{[1,3,7,1], endOfMibView}]),
     gn([[sysDescr], [1,3,7,1]]),
-    ?line expect(11, [{[sysDescr, 0], "Erlang SNMP agent"},
-		      {[1,3,7,1], endOfMibView}]),
+    ?line ?expect1([{[sysDescr, 0], "Erlang SNMP agent"},
+		    {[1,3,7,1], endOfMibView}]),
     gn([[tCnt2, 1]]),
-    ?line expect(12, [{[tCnt2,2], 100}]),
+    ?line ?expect1([{[tCnt2,2], 100}]),
     gn([[tCnt2, 2]]),
-    ?line expect(12, [{[tCnt2,2], endOfMibView}]),
+    ?line ?expect1([{[tCnt2,2], endOfMibView}]),
     
     %% 4.2.2 - any other error: genErr
     gn([[tGenErr1]]),
-    ?line expect(20, genErr, 1, [{[tGenErr1], 'NULL'}]),
+    ?line ?expect3(genErr, 1, [{[tGenErr1], 'NULL'}]),
     gn([[tGenErr2]]),
-    ?line expect(21, genErr, 1, [{[tGenErr2], 'NULL'}]),
+    ?line ?expect3(genErr, 1, [{[tGenErr2], 'NULL'}]),
     gn([[sysDescr], [tGenErr3]]),
-    ?line expect(22, genErr, 2, [{[sysDescr], 'NULL'},
-				 {[tGenErr3], 'NULL'}]),
+    ?line ?expect3(genErr, 2, [{[sysDescr], 'NULL'},
+			       {[tGenErr3], 'NULL'}]),
     
     %% 4.2.2 - tooBig
     gn([[tTooBig]]),
-    ?line expect(20, tooBig, 0, []).
+    ?line ?expect3(tooBig, 0, []).
 
 v2_get_bulk_p() ->
     %% 4.2.3
     ?DBG("v2_get_bulk_p -> entry",[]),
     gb(1, 1, []),
-    ?line expect(10, []),
+    ?line ?expect1([]),
     gb(-1, 1, []),
-    ?line expect(11, []),
+    ?line ?expect1([]),
     gb(-1, -1, []),
-    ?line expect(12, []),
+    ?line ?expect1([]),
     gb(-1, -1, []),
-    ?line expect(13, []),
+    ?line ?expect1([]),
     gb(2, 0, [[sysDescr], [1,3,7,1]]),
-    ?line expect(14, [{[sysDescr, 0], "Erlang SNMP agent"},
-		      {[1,3,7,1], endOfMibView}]),
+    ?line ?expect1([{[sysDescr, 0], "Erlang SNMP agent"},
+		    {[1,3,7,1], endOfMibView}]),
     gb(1, 2, [[sysDescr], [1,3,7,1]]),
-    ?line expect(15, [{[sysDescr, 0], "Erlang SNMP agent"},
-		      {[1,3,7,1], endOfMibView}]),
+    ?line ?expect1([{[sysDescr, 0], "Erlang SNMP agent"},
+		    {[1,3,7,1], endOfMibView}]),
     gb(0, 2, [[sysDescr], [1,3,7,1]]),
-    ?line expect(16, [{[sysDescr, 0], "Erlang SNMP agent"},
-		      {[1,3,7,1], endOfMibView},
-		      {[sysObjectID, 0], [1,2,3]},
-		      {[1,3,7,1], endOfMibView}]),
+    ?line ?expect1([{[sysDescr, 0], "Erlang SNMP agent"},
+		    {[1,3,7,1], endOfMibView},
+		    {[sysObjectID, 0], [1,2,3]},
+		    {[1,3,7,1], endOfMibView}]),
     
     gb(2, 2, [[sysDescr], [1,3,7,1], [sysDescr], [1,3,7,1]]),
-    ?line expect(17, [{[sysDescr, 0], "Erlang SNMP agent"},
-		      {[1,3,7,1], endOfMibView},
-		      {[sysDescr, 0], "Erlang SNMP agent"},		      
-		      {[1,3,7,1], endOfMibView},
-		      {[sysObjectID, 0], [1,2,3]},
-		      {[1,3,7,1], endOfMibView}]),
+    ?line ?expect1([{[sysDescr, 0], "Erlang SNMP agent"},
+		    {[1,3,7,1], endOfMibView},
+		    {[sysDescr, 0], "Erlang SNMP agent"},		      
+		    {[1,3,7,1], endOfMibView},
+		    {[sysObjectID, 0], [1,2,3]},
+		    {[1,3,7,1], endOfMibView}]),
     
     gb(1, 2, [[sysDescr], [sysDescr], [tTooBig]]),
-    ?line expect(18, [{[sysDescr, 0], "Erlang SNMP agent"},
-		      {[sysDescr, 0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr, 0], "Erlang SNMP agent"},
+		    {[sysDescr, 0], "Erlang SNMP agent"}]),
     
     gb(1,12, [[tDescr2], [sysDescr]]), % next one after tDescr2 is tTooBig.
-    ?line expect(19, []),
+    ?line ?expect1([]),
     
     gb(2,2, [[sysDescr], [sysObjectID], [tGenErr1], [sysDescr]]),
-    ?line expect(20, genErr, 3, [{[sysDescr], 'NULL'},
-				 {[sysObjectID], 'NULL'},
-				 {[tGenErr1], 'NULL'},
-				 {[sysDescr], 'NULL'}]),
+    ?line ?expect3(genErr, 3, [{[sysDescr], 'NULL'},
+			       {[sysObjectID], 'NULL'},
+			       {[tGenErr1], 'NULL'},
+			       {[sysDescr], 'NULL'}]),
     gb(0, 2, [[tCnt2, 1]]),
-    ?line expect(21, [{[tCnt2,2], 100},
-		      {[tCnt2,2], endOfMibView}]).
+    ?line ?expect1([{[tCnt2,2], 100},
+		    {[tCnt2,2], endOfMibView}]).
     
     
 v2_set_p() ->
     %% 4.2.5:1
     ?DBG("v2_set_p -> entry",[]),
     s([{[1,3,7,0], i, 4}]),
-    ?line expect(10, noAccess, 1, [{[1,3,7,0], 4}]),
+    ?line ?expect3(noAccess, 1, [{[1,3,7,0], 4}]),
     s([{[tDescr,0], s, "outside mibview"}]),
-    ?line expect(11, noAccess, 1, [{[tDescr,0], "outside mibview"}]),
+    ?line ?expect3(noAccess, 1, [{[tDescr,0], "outside mibview"}]),
     
     %% 4.2.5:2
     s([{[1,3,6,1,0], s, "noSuchObject"}]),
-    ?line expect(20, notWritable, 1, [{[1,3,6,1,0], "noSuchObject"}]),
+    ?line ?expect3(notWritable, 1, [{[1,3,6,1,0], "noSuchObject"}]),
     
     %% 4.2.5:3
     s([{[tDescr2, 0], i, 4}]),
-    ?line expect(30, wrongType, 1, [{[tDescr2, 0], 4}]),
+    ?line ?expect3(wrongType, 1, [{[tDescr2, 0], 4}]),
     s([{[tDescr2, 0], s, "badValue"}]),
-    ?line expect(31, badValue, 1, [{[tDescr2, 0], "badValue"}]),
+    ?line ?expect3(badValue, 1, [{[tDescr2, 0], "badValue"}]),
 
     %% 4.2.5:4
     s([{[tStr, 0], s, ""}]),
-    ?line expect(40, wrongLength, 1, [{[tStr, 0], ""}]),
+    ?line ?expect3(wrongLength, 1, [{[tStr, 0], ""}]),
     s([{[tStr, 0], s, "12345"}]),
-    ?line expect(40, wrongLength, 1, [{[tStr, 0], "12345"}]),
+    ?line ?expect3(wrongLength, 1, [{[tStr, 0], "12345"}]),
     
     %% 4.2.5:5 - N/A
 
     %% 4.2.5:6
     s([{[tInt1, 0], i, 0}]),
-    ?line expect(60, wrongValue, 1, [{[tInt1, 0], 0}]),
+    ?line ?expect3(wrongValue, 1, [{[tInt1, 0], 0}]),
     s([{[tInt1, 0], i, 5}]),
-    ?line expect(61, wrongValue, 1, [{[tInt1, 0], 5}]),
+    ?line ?expect3(wrongValue, 1, [{[tInt1, 0], 5}]),
     s([{[tInt2, 0], i, 0}]),
-    ?line expect(62, wrongValue, 1, [{[tInt2, 0], 0}]),
+    ?line ?expect3(wrongValue, 1, [{[tInt2, 0], 0}]),
     s([{[tInt2, 0], i, 5}]),
-    ?line expect(63, wrongValue, 1, [{[tInt2, 0], 5}]),
+    ?line ?expect3(wrongValue, 1, [{[tInt2, 0], 5}]),
     s([{[tInt3, 0], i, 5}]),
-    ?line expect(64, wrongValue, 1, [{[tInt3, 0], 5}]),
+    ?line ?expect3(wrongValue, 1, [{[tInt3, 0], 5}]),
     
     %% 4.2.5:7
     s([{[tDescrX, 1, 1], s, "noCreation"}]),
-    ?line expect(70, noCreation, 1, [{[tDescrX, 1, 1], "noCreation"}]),
+    ?line ?expect3(noCreation, 1, [{[tDescrX, 1, 1], "noCreation"}]),
 
     %% 4.2.5:8
     s([{[tDescrX, 1, 2], s, "inconsistentName"}]),
-    ?line expect(80, inconsistentName, 1,
-		 [{[tDescrX, 1, 2], "inconsistentName"}]),
+    ?line ?expect3(inconsistentName, 1,
+		   [{[tDescrX, 1, 2], "inconsistentName"}]),
     
     %% 4.2.5:9
     s([{[tCnt, 1, 2], i, 5}]),
-    ?line expect(90, notWritable, 1, [{[tCnt, 1, 2], 5}]),
+    ?line ?expect3(notWritable, 1, [{[tCnt, 1, 2], 5}]),
     s([{[tDescr3,0], s, "read-only"}]),
-    ?line expect(90, notWritable, 1, [{[tDescr3,0], "read-only"}]),
+    ?line ?expect3(notWritable, 1, [{[tDescr3,0], "read-only"}]),
 
     %% 4.2.5:10
     s([{[tDescr2,0], s, "inconsistentValue"}]),
-    ?line expect(100, inconsistentValue, 1,
-		 [{[tDescr2,0], "inconsistentValue"}]),
+    ?line ?expect3(inconsistentValue, 1,
+		   [{[tDescr2,0], "inconsistentValue"}]),
     
     %% 4.2.5:11
     s([{[tDescr2,0], s, "resourceUnavailable"}]),
-    ?line expect(110, resourceUnavailable, 1,
-		 [{[tDescr2,0],"resourceUnavailable"}]),
+    ?line ?expect3(resourceUnavailable, 1,
+		   [{[tDescr2,0],"resourceUnavailable"}]),
     
     %% 4.2.5:12
     s([{[tDescr2, 0], s, "is_set_ok_fail"}]),
-    ?line expect(120, genErr, 1, [{[tDescr2, 0], "is_set_ok_fail"}]).
+    ?line ?expect3(genErr, 1, [{[tDescr2, 0], "is_set_ok_fail"}]).
     
     %% commitFailed and undoFailed is tested by the 'undo' case.
     
@@ -2800,108 +3444,107 @@ v2_set_p() ->
 %% Req. OLD-SNMPEA-MIB
 table_test() ->
     io:format("Testing simple get, next and set on communityTable...~n"),
-%% {[147,214,36,45], "public", 2, readWrite}.
-%% {[147,214,36,45], "standard trap", 2, read}.
+
     Key1c3 = [intCommunityViewIndex,get(mip),is("public")],
     Key2c3 = [intCommunityViewIndex,get(mip),is("standard trap")],
     Key1c4 = [intCommunityAccess,get(mip),is("public")],
     EndKey = [intCommunityEntry,[9],get(mip),is("public")],
     gn([[intCommunityEntry]]),
-    ?line expect(7, [{Key1c3, 2}]),
+    ?line ?expect1([{Key1c3, 2}]),
     gn([[intCommunityTable]]),
-    ?line expect(71, [{Key1c3, 2}]),
+    ?line ?expect1([{Key1c3, 2}]),
     gn([[community]]),
-    ?line expect(72, [{Key1c3, 2}]),
+    ?line ?expect1([{Key1c3, 2}]),
     gn([[otpSnmpeaMIB]]),
-    ?line expect(73, [{Key1c3, 2}]),
+    ?line ?expect1([{Key1c3, 2}]),
     gn([[ericsson]]),
-    ?line expect(74, [{Key1c3, 2}]),
+    ?line ?expect1([{Key1c3, 2}]),
     gn([Key1c3]),
-    ?line expect(8, [{Key2c3, 2}]),
+    ?line ?expect1([{Key2c3, 2}]),
     gn([Key2c3]),
-    ?line expect(9, [{Key1c4, 2}]),
+    ?line ?expect1([{Key1c4, 2}]),
     gn([EndKey]),
     AgentIp = [intAgentIpAddress,0], 
-    ?line expect(10, [{AgentIp, any}]),
+    ?line ?expect1([{AgentIp, any}]),
     g([Key1c3]),
-    ?line expect(11, [{Key1c3, 2}]),
+    ?line ?expect1([{Key1c3, 2}]),
     g([EndKey]),
-    ?line ?v1_2(expect(12, noSuchName, 1, any),
-		expect(12, [{EndKey, noSuchObject}])),
+    ?line ?v1_2(?expect3(noSuchName, 1, any),
+		?expect1([{EndKey, noSuchObject}])),
 
     io:format("Testing row creation/deletion on communityTable...~n"),
     NewKeyc3 = [intCommunityViewIndex,get(mip),is("test")],
     NewKeyc4 = [intCommunityAccess,get(mip),is("test")],
     NewKeyc5 = [intCommunityStatus,get(mip),is("test")],
     s([{NewKeyc5, ?createAndGo}]),
-    ?line expect(14, ?v1_2(badValue, inconsistentValue), 1,any),
+    ?line ?expect3(?v1_2(badValue, inconsistentValue), 1, any),
     s([{NewKeyc5, ?createAndGo}, {NewKeyc3, 2}, {NewKeyc4, 2}]),
-    ?line expect(15, [{NewKeyc5, ?createAndGo},{NewKeyc3, 2}, {NewKeyc4, 2}]),
+    ?line ?expect1([{NewKeyc5, ?createAndGo},{NewKeyc3, 2}, {NewKeyc4, 2}]),
     g([NewKeyc4]),
-    ?line expect(16, [{NewKeyc4, 2}]),
+    ?line ?expect1([{NewKeyc4, 2}]),
     s([{NewKeyc5, ?destroy}]),
-    ?line expect(17, [{NewKeyc5, ?destroy}]),
+    ?line ?expect1([{NewKeyc5, ?destroy}]),
     s([{NewKeyc4, 2}]),
-    ?line expect(18, ?v1_2(noSuchName, inconsistentName), 1,[{NewKeyc4, 2}]),
+    ?line ?expect3(?v1_2(noSuchName, inconsistentName), 1, [{NewKeyc4, 2}]),
     s([{NewKeyc5, ?createAndWait}]),
-    ?line expect(19, [{NewKeyc5, ?createAndWait}]),
+    ?line ?expect1([{NewKeyc5, ?createAndWait}]),
     g([NewKeyc5]),
-    ?line expect(20, [{NewKeyc5, ?notReady}]),
+    ?line ?expect1([{NewKeyc5, ?notReady}]),
     s([{NewKeyc4, 2}]),
-    ?line expect(21, [{NewKeyc4, 2}]),
+    ?line ?expect1([{NewKeyc4, 2}]),
     g([NewKeyc5]),
-    ?line expect(22, [{NewKeyc5, ?notReady}]),
+    ?line ?expect1([{NewKeyc5, ?notReady}]),
     s([{NewKeyc3, 2}]),
-    ?line expect(23, [{NewKeyc3, 2}]),
+    ?line ?expect1([{NewKeyc3, 2}]),
     g([NewKeyc5]),
-    ?line expect(24, [{NewKeyc5, ?notInService}]),
+    ?line ?expect1([{NewKeyc5, ?notInService}]),
     s([{NewKeyc5, ?active}]),
-    ?line expect(25, [{NewKeyc5, ?active}]),
+    ?line ?expect1([{NewKeyc5, ?active}]),
     s([{NewKeyc5, ?destroy}]),
-    ?line expect(26, [{NewKeyc5, ?destroy}]),
+    ?line ?expect1([{NewKeyc5, ?destroy}]),
     s([{NewKeyc3, 3}]),
-    ?line expect(27, ?v1_2(noSuchName, inconsistentName), 1,[{NewKeyc3, 3}]),
-    otp_1128().
+    ?line ?expect3(?v1_2(noSuchName, inconsistentName), 1, [{NewKeyc3, 3}]),
+    otp_1128_test().
 
 %% Req. system group
 simple_standard_test() ->
     ?DBG("simple_standard_test -> entry",[]),
     gn([[1,1]]),
-    ?line expect(1, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     gn([[1,3]]),
-    ?line expect(11, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     gn([[1,3,6]]),
-    ?line expect(12, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     gn([[1,3,6,1]]),
-    ?line expect(13, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     gn([[1,3,6,1,2]]),
-    ?line expect(14, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     gn([[1,3,6,1,2,1]]),
-    ?line expect(15, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     gn([[1,3,6,1,2,1,1]]),
-    ?line expect(16, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     gn([[sysDescr]]),
-    ?line expect(17, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     g([[sysDescr,0]]),
-    ?line expect(2, [{[sysDescr,0], "Erlang SNMP agent"}]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"}]),
     g([[sysDescr]]),
-    ?line ?v1_2(expect(3, noSuchName, 1, any),
-		expect(3, [{[sysDescr], noSuchObject}])),
+    ?line ?v1_2(?expect3(noSuchName, 1, any),
+		?expect1([{[sysDescr], noSuchObject}])),
     g([[1,6,7,0]]),
-    ?line ?v1_2(expect(41, noSuchName, 1, any),
-		expect(3, [{[1,6,7,0], noSuchObject}])),
+    ?line ?v1_2(?expect3(noSuchName, 1, any),
+		?expect1([{[1,6,7,0], noSuchObject}])),
     gn([[1,13]]),
-    ?line ?v1_2(expect(4, noSuchName,1, any),
-		expect(4, [{[1,13], endOfMibView}])),
+    ?line ?v1_2(?expect3(noSuchName,1, any),
+		?expect1([{[1,13], endOfMibView}])),
     s([{[sysLocation, 0], "new_value"}]),
-    ?line expect(5, [{[sysLocation, 0], "new_value"}]),
+    ?line ?expect1([{[sysLocation, 0], "new_value"}]),
     g([[sysLocation, 0]]),
-    ?line expect(6, [{[sysLocation, 0], "new_value"}]),
+    ?line ?expect1([{[sysLocation, 0], "new_value"}]),
     io:format("Testing noSuchName and badValue...~n"),
     s([{[sysServices,0], 3}]),
-    ?line expect(61, ?v1_2(noSuchName, notWritable), 1, any),
+    ?line ?expect3(?v1_2(noSuchName, notWritable), 1, any),
     s([{[sysLocation, 0], i, 3}]),
-    ?line expect(62, ?v1_2(badValue, wrongType), 1, any),
+    ?line ?expect3(?v1_2(badValue, wrongType), 1, any),
     ?DBG("simple_standard_test -> done",[]),
     ok.
 
@@ -2909,16 +3552,16 @@ simple_standard_test() ->
 db_notify_client(suite) -> [];
 db_notify_client(Config) when is_list(Config) ->
     ?P(db_notify_client), 
-    {SaNode, MgrNode, MibDir} = init_case(Config),
+    {_SaNode, _MgrNode, _MibDir} = init_case(Config),
     ?DBG("db_notify_client -> case initiated: "
 	 "~n   SaNode:  ~p"
 	 "~n   MgrNode: ~p"
-	 "~n   MibDir:  ~p", [SaNode, MgrNode, MibDir]),
+	 "~n   MibDir:  ~p", [_SaNode, _MgrNode, _MibDir]),
     ?DBG("db_notify_client -> maximize verbosity", []),
     snmpa_local_db:verbosity(trace),
     Self = self(), 
     ?DBG("db_notify_client -> register self (~p) notify client", [Self]),
-    snmpa_local_db:register_notify_client(self(),?MODULE),
+    snmpa_local_db:register_notify_client(Self, ?MODULE),
 
     %% This call (to the manager) will issue to set operations, so
     %% we expect to receive to notify(insert) calls.
@@ -2943,7 +3586,7 @@ db_notify_client(Config) when is_list(Config) ->
     end,
 
     ?DBG("db_notify_client -> unregister self (~p) notify client", [Self]),
-    snmpa_local_db:unregister_notify_client(self()),
+    snmpa_local_db:unregister_notify_client(Self),
     ?DBG("db_notify_client -> minimize verbosity", []),
     snmpa_local_db:verbosity(silence),
 
@@ -2955,12 +3598,13 @@ db_notify_client(Config) when is_list(Config) ->
 db_notify_client_test() ->
     ?DBG("set first new sysLocation",[]),
     s([{[sysLocation, 0], "new_value"}]),
-    ?line expect(5, [{[sysLocation, 0], "new_value"}]),
+    ?line ?expect1([{[sysLocation, 0], "new_value"}]),
 
     ?DBG("set second new sysLocation",[]),
     s([{[sysLocation, 0], "new_value"}]),
-    ?line expect(5, [{[sysLocation, 0], "new_value"}]).
+    ?line ?expect1([{[sysLocation, 0], "new_value"}]).
 
+%% Callback function
 notify(Pid, What) -> 
     ?DBG("notify(~p,~p) -> called",[Pid,What]),
     Pid ! {db_notify_test_reply, What}.
@@ -2968,32 +3612,29 @@ notify(Pid, What) ->
 
 %% Req: system group, OLD-SNMPEA-MIB, Klas1
 big_test() ->
-    %% put(sname, {?MODULE, big_test}),
-    %% put(verbosity, trace),
 
     ?DBG("big_test -> testing simple next/get/set @ master agent...",[]),
     simple_standard_test(),
     
     ?DBG("big_test -> testing simple next/get/set @ subagent...",[]),
     gn([[klas1]]),
-    ?line expect(1, [{[fname,0], ""}]),
+    ?line ?expect1([{[fname,0], ""}]),
     g([[fname,0]]),
-    ?line expect(2, [{[fname,0], ""}]),
+    ?line ?expect1([{[fname,0], ""}]),
     s([{[fname,0], s, "test set"}]),
-    ?line expect(3, [{[fname,0], "test set"}]),
+    ?line ?expect1([{[fname,0], "test set"}]),
     g([[fname,0]]),
-    ?line expect(4, [{[fname,0], "test set"}]),
+    ?line ?expect1([{[fname,0], "test set"}]),
     
     ?DBG("big_test -> "
 	"testing next from last instance in master to subagent...",[]),
     gn([[?v1_2(sysServices, sysORLastChange),0]]),
-    ?line expect(5, [{[fname,0], "test set"}]),
-    gn([[1,1],
-	[?v1_2(sysServices, sysORLastChange),0]]),
-    ?line expect(51, [{[sysDescr,0], "Erlang SNMP agent"},
-		{[fname,0], "test set"}]),
+    ?line ?expect1([{[fname,0], "test set"}]),
+    gn([[1,1], [?v1_2(sysServices, sysORLastChange),0]]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+		    {[fname,0], "test set"}]),
     s([{[fname,0], s, ""}]),
-    ?line expect(52, [{[fname,0], ""}]),
+    ?line ?expect1([{[fname,0], ""}]),
     
     table_test(),
 
@@ -3001,43 +3642,43 @@ big_test() ->
     _FTab = [friendsEntry],
     s([{[friendsEntry, [2, 3]], s, "kompis3"},
        {[friendsEntry, [3, 3]], i, ?createAndGo}]),
-    ?line expect(6, [{[friendsEntry, [2, 3]], "kompis3"},
-	       {[friendsEntry, [3, 3]], ?createAndGo}]),
+    ?line ?expect1([{[friendsEntry, [2, 3]], "kompis3"},
+		    {[friendsEntry, [3, 3]], ?createAndGo}]),
     g([[friendsEntry, [2, 3]],
        [friendsEntry, [3, 3]]]),
-    ?line expect(7, [{[friendsEntry, [2, 3]], "kompis3"},
-	       {[friendsEntry, [3, 3]], ?active}]),
+    ?line ?expect1([{[friendsEntry, [2, 3]], "kompis3"},
+		    {[friendsEntry, [3, 3]], ?active}]),
     s([{[friendsEntry, [3, 3]], i, ?destroy}]),
-    ?line expect(8, [{[friendsEntry, [3, 3]], ?destroy}]),
+    ?line ?expect1([{[friendsEntry, [3, 3]], ?destroy}]),
     
-    otp_1131(),
+    otp_1131_test(),
 
     ?DBG("big_test -> adding two rows in subagent table with special INDEX",
        []),
     s([{[kompissEntry, [1, 3]], s, "kompis3"},
        {[kompissEntry, [2, 3]], i, ?createAndGo}]),
-    ?line expect(9, [{[kompissEntry, [1, 3]], "kompis3"},
-	       {[kompissEntry, [2, 3]], ?createAndGo}]),
+    ?line ?expect1([{[kompissEntry, [1, 3]], "kompis3"},
+		    {[kompissEntry, [2, 3]], ?createAndGo}]),
     g([[kompissEntry, [1, 3]],
        [kompissEntry, [2, 3]]]),
-    ?line expect(10, [{[kompissEntry, [1, 3]], "kompis3"},
-		{[kompissEntry, [2, 3]], ?active}]),
+    ?line ?expect1([{[kompissEntry, [1, 3]], "kompis3"},
+		    {[kompissEntry, [2, 3]], ?active}]),
     gn([[kompissEntry, [1]],
 	[kompissEntry, [2]]]),
-    ?line expect(11, [{[kompissEntry, [1, 3]], "kompis3"},
-		{[kompissEntry, [2, 3]], ?active}]),
+    ?line ?expect1([{[kompissEntry, [1, 3]], "kompis3"},
+		    {[kompissEntry, [2, 3]], ?active}]),
     s([{[kompissEntry, [1, 2]], s, "kompis3"},
        {[kompissEntry, [2, 2]], i, ?createAndGo}]),
-    ?line expect(12, [{[kompissEntry, [1, 2]], "kompis3"},
-		{[kompissEntry, [2, 2]], ?createAndGo}]),
+    ?line ?expect1([{[kompissEntry, [1, 2]], "kompis3"},
+		    {[kompissEntry, [2, 2]], ?createAndGo}]),
     gn([[kompissEntry, [1, 1]],
 	[kompissEntry, [2, 1]]]),
-    ?line expect(13, [{[kompissEntry, [1, 2]], "kompis3"},
-		{[kompissEntry, [2, 2]], ?active}]),
+    ?line ?expect1([{[kompissEntry, [1, 2]], "kompis3"},
+		    {[kompissEntry, [2, 2]], ?active}]),
     s([{[kompissEntry, [2, 3]], i, ?destroy}]),
-    ?line expect(14, [{[kompissEntry, [2, 3]], ?destroy}]),
+    ?line ?expect1([{[kompissEntry, [2, 3]], ?destroy}]),
     s([{[kompissEntry, [2, 2]], i, ?destroy}]),
-    ?line expect(15, [{[kompissEntry, [2, 2]], ?destroy}]),
+    ?line ?expect1([{[kompissEntry, [2, 2]], ?destroy}]),
     ?DBG("big_test -> done",[]),
     ok.
 
@@ -3048,23 +3689,22 @@ big_test_2() ->
     
     ?P1("Testing simple next/get/set @ subagent (2)..."),
     gn([[klas2]]),
-    ?line expect(1, [{[fname2,0], ""}]),
+    ?line ?expect1([{[fname2,0], ""}]),
     g([[fname2,0]]),
-    ?line expect(2, [{[fname2,0], ""}]),
+    ?line ?expect1([{[fname2,0], ""}]),
     s([{[fname2,0], s, "test set"}]),
-    ?line expect(3, [{[fname2,0], "test set"}]),
+    ?line ?expect1([{[fname2,0], "test set"}]),
     g([[fname2,0]]),
-    ?line expect(4, [{[fname2,0], "test set"}]),
+    ?line ?expect1([{[fname2,0], "test set"}]),
 
-    otp_1298(),
+    otp_1298_test(),
 
     ?P1("Testing next from last object in master to subagent (2)..."),
     gn([[?v1_2(sysServices, sysORLastChange),0]]),
-    ?line expect(5, [{[fname2,0], "test set"}]),
-    gn([[1,1],
-	[?v1_2(sysServices, sysORLastChange),0]]),
-    ?line expect(51, [{[sysDescr,0], "Erlang SNMP agent"},
-		{[fname2,0], "test set"}]),
+    ?line ?expect1([{[fname2,0], "test set"}]),
+    gn([[1,1], [?v1_2(sysServices, sysORLastChange),0]]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+		    {[fname2,0], "test set"}]),
     
     table_test(),
     
@@ -3072,40 +3712,40 @@ big_test_2() ->
     _FTab = [friendsEntry2],
     s([{[friendsEntry2, [2, 3]], s, "kompis3"},
        {[friendsEntry2, [3, 3]], i, ?createAndGo}]),
-    ?line expect(6, [{[friendsEntry2, [2, 3]], "kompis3"},
-	       {[friendsEntry2, [3, 3]], ?createAndGo}]),
+    ?line ?expect1([{[friendsEntry2, [2, 3]], "kompis3"},
+		    {[friendsEntry2, [3, 3]], ?createAndGo}]),
     g([[friendsEntry2, [2, 3]],
        [friendsEntry2, [3, 3]]]),
-    ?line expect(7, [{[friendsEntry2, [2, 3]], "kompis3"},
-	       {[friendsEntry2, [3, 3]], ?active}]),
+    ?line ?expect1([{[friendsEntry2, [2, 3]], "kompis3"},
+		    {[friendsEntry2, [3, 3]], ?active}]),
     s([{[friendsEntry2, [3, 3]], i, ?destroy}]),
-    ?line expect(8, [{[friendsEntry2, [3, 3]], ?destroy}]),
+    ?line ?expect1([{[friendsEntry2, [3, 3]], ?destroy}]),
     
     ?P1("Adding two rows in subagent table with special INDEX (2)"),
     s([{[kompissEntry2, [1, 3]], s, "kompis3"},
        {[kompissEntry2, [2, 3]], i, ?createAndGo}]),
-    ?line expect(9, [{[kompissEntry2, [1, 3]], "kompis3"},
-	       {[kompissEntry2, [2, 3]], ?createAndGo}]),
+    ?line ?expect1([{[kompissEntry2, [1, 3]], "kompis3"},
+		    {[kompissEntry2, [2, 3]], ?createAndGo}]),
     g([[kompissEntry2, [1, 3]],
        [kompissEntry2, [2, 3]]]),
-    ?line expect(10, [{[kompissEntry2, [1, 3]], "kompis3"},
-		{[kompissEntry2, [2, 3]], ?active}]),
+    ?line ?expect1([{[kompissEntry2, [1, 3]], "kompis3"},
+		    {[kompissEntry2, [2, 3]], ?active}]),
     gn([[kompissEntry2, [1]],
 	[kompissEntry2, [2]]]),
-    ?line expect(11, [{[kompissEntry2, [1, 3]], "kompis3"},
-		{[kompissEntry2, [2, 3]], ?active}]),
+    ?line ?expect1([{[kompissEntry2, [1, 3]], "kompis3"},
+		    {[kompissEntry2, [2, 3]], ?active}]),
     s([{[kompissEntry2, [1, 2]], s, "kompis3"},
        {[kompissEntry2, [2, 2]], i, ?createAndGo}]),
-    ?line expect(12, [{[kompissEntry2, [1, 2]], "kompis3"},
-		{[kompissEntry2, [2, 2]], ?createAndGo}]),
+    ?line ?expect1([{[kompissEntry2, [1, 2]], "kompis3"},
+		    {[kompissEntry2, [2, 2]], ?createAndGo}]),
     gn([[kompissEntry2, [1, 1]],
 	[kompissEntry2, [2, 1]]]),
-    ?line expect(13, [{[kompissEntry2, [1, 2]], "kompis3"},
-		{[kompissEntry2, [2, 2]], ?active}]),
+    ?line ?expect1([{[kompissEntry2, [1, 2]], "kompis3"},
+		    {[kompissEntry2, [2, 2]], ?active}]),
     s([{[kompissEntry2, [2, 3]], i, ?destroy}]),
-    ?line expect(14, [{[kompissEntry2, [2, 3]], ?destroy}]),
+    ?line ?expect1([{[kompissEntry2, [2, 3]], ?destroy}]),
     s([{[kompissEntry2, [2, 2]], i, ?destroy}]),
-    ?line expect(15, [{[kompissEntry2, [2, 2]], ?destroy}]),
+    ?line ?expect1([{[kompissEntry2, [2, 2]], ?destroy}]),
     ok.
 
 %% Req. Test1
@@ -3114,26 +3754,26 @@ multi_threaded_test() ->
     g([[multiStr,0]]),
     Pid = get_multi_pid(),
     g([[sysUpTime,0]]),
-    ?line expect(1, [{[sysUpTime,0], any}]),
+    ?line ?expect1([{[sysUpTime,0], any}]),
     s([{[sysLocation, 0], s, "pelle"}]),
-    ?line expect(2, [{[sysLocation, 0], "pelle"}]),
+    ?line ?expect1([{[sysLocation, 0], "pelle"}]),
     Pid ! continue,
-    ?line expect(3, [{[multiStr,0], "ok"}]),
+    ?line ?expect1([{[multiStr,0], "ok"}]),
     
     s([{[multiStr, 0], s, "block"}]),
     Pid2 = get_multi_pid(),    
     g([[sysUpTime,0]]),
-    ?line expect(4, [{[sysUpTime,0], any}]),
+    ?line ?expect1([{[sysUpTime,0], any}]),
     g([[multiStr,0]]),
     Pid3 = get_multi_pid(),
     g([[sysUpTime,0]]),
-    ?line expect(5, [{[sysUpTime,0], any}]),
+    ?line ?expect1([{[sysUpTime,0], any}]),
     s([{[sysLocation, 0], s, "kalle"}]),
     Pid3 ! continue,
-    ?line expect(6, [{[multiStr,0], "ok"}]),
+    ?line ?expect1([{[multiStr,0], "ok"}]),
     Pid2 ! continue,
-    ?line expect(7, [{[multiStr,0], "block"}]),
-    ?line expect(8, [{[sysLocation,0], "kalle"}]).
+    ?line ?expect1([{[multiStr,0], "block"}]),
+    ?line ?expect1([{[sysLocation,0], "kalle"}]).
 
 %% Req. Test1, TestTrapv2
 mt_trap_test(MA) ->
@@ -3141,9 +3781,8 @@ mt_trap_test(MA) ->
     ?DBG("mt_trap_test(01) -> issue testTrapv22 (standard trap)", []),
     snmpa:send_trap(MA, testTrapv22, "standard trap"),
     ?DBG("mt_trap_test(02) -> await v2trap", []),
-    ?line expect(mt_trap_test_1, v2trap, 
-		 [{[sysUpTime, 0],   any},
-		  {[snmpTrapOID, 0], ?system ++ [0,1]}]),
+    ?line ?expect2(v2trap, [{[sysUpTime, 0],   any},
+			    {[snmpTrapOID, 0], ?system ++ [0,1]}]),
 
     ?DBG("mt_trap_test(03) -> issue mtTrap (standard trap)", []),
     snmpa:send_trap(MA, mtTrap, "standard trap"),
@@ -3152,21 +3791,21 @@ mt_trap_test(MA) ->
     g([[sysUpTime,0]]),
 
     ?DBG("mt_trap_test(06) -> await sysUpTime", []),
-    ?line expect(mt_trap_test_2, [{[sysUpTime,0], any}]),
+    ?line ?expect1([{[sysUpTime,0], any}]),
     ?DBG("mt_trap_test(07) -> issue testTrapv22 (standard trap)", []),
     snmpa:send_trap(MA, testTrapv22, "standard trap"),
     ?DBG("mt_trap_test(08) -> await v2trap", []),
-    ?line expect(mt_trap_test_3, v2trap, 
-		 [{[sysUpTime, 0],   any}, 
-		  {[snmpTrapOID, 0], ?system ++ [0,1]}]),
+    ?line ?expect2(v2trap, 
+		   [{[sysUpTime, 0],   any}, 
+		    {[snmpTrapOID, 0], ?system ++ [0,1]}]),
 
     ?DBG("mt_trap_test(09) -> send continue to multi-pid", []),
     Pid ! continue,
 
     ?DBG("mt_trap_test(10) -> await v2trap", []),
-    ?line expect(mt_trap_test_4, v2trap, [{[sysUpTime, 0], any},
-					  {[snmpTrapOID, 0], ?testTrap ++ [2]},
-					  {[multiStr,0], "ok"}]),
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?testTrap ++ [2]},
+			    {[multiStr,0], "ok"}]),
     ?DBG("mt_trap_test(11) -> done", []),
     ok.
 
@@ -3187,26 +3826,26 @@ types_v2_test() ->
     ?P1("Testing v2 types..."),
 
     s([{[bits1,0], 2#10}]),
-    ?line expect(1, [{[bits1,0], ?str(2#10)}]),
+    ?line ?expect1([{[bits1,0], ?str(2#10)}]),
     g([[bits1,0]]),
-    ?line expect(2, [{[bits1,0], ?str(2#101)}]),
+    ?line ?expect1([{[bits1,0], ?str(2#101)}]),
     
     s([{[bits2,0], 2#11000000110}]),
-    ?line expect(3, [{[bits2,0], ?str(2#11000000110)}]),
+    ?line ?expect1([{[bits2,0], ?str(2#11000000110)}]),
     g([[bits2,0]]),
-    ?line expect(4, [{[bits2,0], ?str(2#11000000110)}]),
+    ?line ?expect1([{[bits2,0], ?str(2#11000000110)}]),
     
     g([[bits3,0]]),
-    ?line expect(50, genErr, 1, any),
+    ?line ?expect3(genErr, 1, any),
     
     g([[bits4,0]]),
-    ?line expect(51, genErr, 1, any),
+    ?line ?expect3(genErr, 1, any),
     
     s([{[bits1,0], s, [2#10]}]),
-    ?line expect(6, ?v1_2(badValue, wrongValue), 1, any),
+    ?line ?expect3(?v1_2(badValue, wrongValue), 1, any),
 
     s([{[bits2,0], 2#11001001101010011}]),
-    ?line expect(7, ?v1_2(badValue, wrongValue), 1, any).
+    ?line ?expect3(?v1_2(badValue, wrongValue), 1, any).
     
 
 %% Req. Test1
@@ -3214,64 +3853,63 @@ implied_test(MA) ->
     ?LOG("implied_test -> start",[]),
     ?P1("Testing IMPLIED..."),
 
-    snmpa:verbosity(MA,trace),
-    snmpa:verbosity(MA,trace),
+    snmpa:verbosity(MA, trace),
 
     %% Create two rows, check that they are get-nexted in correct order.
     Idx1 = "apa",
     Idx2 = "qq",
     ?DBG("implied_test -> (send) create row 1 '~s' in table 1",[Idx1]),
     s([{[testStatus, Idx1], i, ?createAndGo}, {[testDescr, Idx1],s,"row 1"}]),
-    ?line expect(1, [{[testStatus, Idx1], ?createAndGo},
-		     {[testDescr, Idx1], "row 1"}]),
+    ?line ?expect1([{[testStatus, Idx1], ?createAndGo},
+		    {[testDescr, Idx1], "row 1"}]),
     ?DBG("implied_test -> (send) create row 2 '~s' in table 1",[Idx2]),
     s([{[testStatus, Idx2], i, ?createAndGo}, {[testDescr, Idx2],s,"row 2"}]),
-    ?line expect(2, [{[testStatus, Idx2], ?createAndGo},
-		     {[testDescr, Idx2], "row 2"}]),
+    ?line ?expect1([{[testStatus, Idx2], ?createAndGo},
+		    {[testDescr, Idx2], "row 2"}]),
     ?DBG("implied_test -> get-next(testDescr)",[]),
     gn([[testDescr]]),
-    ?line expect(3, [{[testDescr,Idx1], "row 1"}]),
+    ?line ?expect1([{[testDescr,Idx1], "row 1"}]),
     ?DBG("implied_test -> get-next(testDescr) of row 1",[]),
     gn([[testDescr,Idx1]]),
-    ?line expect(4, [{[testDescr,Idx2], "row 2"}]),
+    ?line ?expect1([{[testDescr,Idx2], "row 2"}]),
 
     % Delete the rows
     ?DBG("implied_test -> (send) delete row 1 '~s' from table 1",[Idx1]),
     s([{[testStatus, Idx1], i, ?destroy}]),
-    ?line expect(5, [{[testStatus, Idx1], ?destroy}]),
+    ?line ?expect1([{[testStatus, Idx1], ?destroy}]),
     ?DBG("implied_test -> (send) delete row 2 '~s' from table 1",[Idx2]),
     s([{[testStatus, Idx2], i, ?destroy}]),
-    ?line expect(6, [{[testStatus, Idx2], ?destroy}]),
+    ?line ?expect1([{[testStatus, Idx2], ?destroy}]),
 
     %% Try the same in other table
     Idx3 = [1, "apa"],
     Idx4 = [1, "qq"],
     ?DBG("implied_test -> (send) create row 1 '~s' in table 2",[Idx3]),
     s([{[testStatus2, Idx3], i, ?createAndGo}, {[testDescr2,Idx3],s,"row 1"}]),
-    ?line expect(1, [{[testStatus2, Idx3], ?createAndGo},
-		     {[testDescr2, Idx3], "row 1"}]),
+    ?line ?expect1([{[testStatus2, Idx3], ?createAndGo},
+		    {[testDescr2, Idx3], "row 1"}]),
     ?DBG("implied_test -> (send) create row 2 '~s' in table 2",[Idx4]),
     s([{[testStatus2, Idx4], i, ?createAndGo}, {[testDescr2,Idx4],s,"row 2"}]),
-    ?line expect(2, [{[testStatus2, Idx4], ?createAndGo},
-		     {[testDescr2, Idx4], "row 2"}]),
+    ?line ?expect1([{[testStatus2, Idx4], ?createAndGo},
+		    {[testDescr2, Idx4], "row 2"}]),
     ?DBG("implied_test -> get-next(testDescr2)",[]),
     gn([[testDescr2]]),
-    ?line expect(3, [{[testDescr2,Idx3], "row 1"}]),
+    ?line ?expect1([{[testDescr2,Idx3], "row 1"}]),
     ?DBG("implied_test -> get-next(testDescr2) of row 1",[]),
     gn([[testDescr2,Idx3]]),
-    ?line expect(4, [{[testDescr2,Idx4], "row 2"}]),
+    ?line ?expect1([{[testDescr2,Idx4], "row 2"}]),
 
     % Delete the rows
     ?DBG("implied_test -> (send) delete row 1 '~s' from table 2",[Idx3]),
     s([{[testStatus2, Idx3], i, ?destroy}]),
-    ?line expect(5, [{[testStatus2, Idx3], ?destroy}]),
+    ?line ?expect1([{[testStatus2, Idx3], ?destroy}]),
     ?DBG("implied_test -> (send) delete row 2 '~s' from table 2",[Idx4]),
     s([{[testStatus2, Idx4], i, ?destroy}]),
-    ?line expect(6, [{[testStatus2, Idx4], ?destroy}]),
+    ?line ?expect1([{[testStatus2, Idx4], ?destroy}]),
 
-    snmpa:verbosity(MA,log),
+    snmpa:verbosity(MA, log),
 
-    ?LOG("implied_test -> done",[]).
+    ?LOG("implied_test -> done", []).
     
     
 
@@ -3284,25 +3922,25 @@ sparse_table_test() ->
     Idx2 = 2,
     s([{[sparseStatus, Idx1], i, ?createAndGo},
        {[sparseDescr, Idx1], s, "row 1"}]),
-    ?line expect(1, [{[sparseStatus, Idx1], ?createAndGo},
-		     {[sparseDescr, Idx1], "row 1"}]),
+    ?line ?expect1([{[sparseStatus, Idx1], ?createAndGo},
+		    {[sparseDescr, Idx1], "row 1"}]),
     s([{[sparseStatus, Idx2], i, ?createAndGo},
        {[sparseDescr, Idx2], s, "row 2"}]),
-    ?line expect(2, [{[sparseStatus, Idx2], ?createAndGo},
-		     {[sparseDescr, Idx2], "row 2"}]),
+    ?line ?expect1([{[sparseStatus, Idx2], ?createAndGo},
+		    {[sparseDescr, Idx2], "row 2"}]),
     ?v1_2(gn([[sparseIndex], [sparseDescr,Idx1], [sparseDescr,Idx2],
 	      [sparseStatus,Idx1], [sparseStatus,Idx2]]),
 	  gb(0,5,[[sparseIndex]])),
-    ?line expect(3, [{[sparseDescr,Idx1], "row 1"},
-		     {[sparseDescr,Idx2], "row 2"},
-		     {[sparseStatus,Idx1], ?active},
-		     {[sparseStatus,Idx2], ?active},
-		     {[sparseStr,0], "slut"}]),
-    % Delete the rows
+    ?line ?expect1([{[sparseDescr,Idx1], "row 1"},
+		    {[sparseDescr,Idx2], "row 2"},
+		    {[sparseStatus,Idx1], ?active},
+		    {[sparseStatus,Idx2], ?active},
+		    {[sparseStr,0], "slut"}]),
+    %% Delete the rows
     s([{[sparseStatus, Idx1], i, ?destroy}]),
-    ?line expect(4, [{[sparseStatus, Idx1], ?destroy}]),
+    ?line ?expect1([{[sparseStatus, Idx1], ?destroy}]),
     s([{[sparseStatus, Idx2], i, ?destroy}]),
-    ?line expect(5, [{[sparseStatus, Idx2], ?destroy}]).
+    ?line ?expect1([{[sparseStatus, Idx2], ?destroy}]).
 
 
 %% Req. Test1
@@ -3316,13 +3954,13 @@ cnt_64_test(MA) ->
     ?DBG("get cnt64",[]),
     g([[cnt64,0]]),
     ?DBG("await response",[]),
-    ?line ?v1_2(expect(1, noSuchName, 1, any),
-		expect(1, [{[cnt64,0],18446744073709551615}])),
+    ?line ?v1_2(?expect3(noSuchName, 1, any),
+		?expect1([{[cnt64,0],18446744073709551615}])),
     ?DBG("get-next cnt64",[]),
     gn([[cnt64]]),
     ?DBG("await response",[]),
-    ?line ?v1_2(expect(2, [{[cnt64Str,0], "after cnt64"}]),
-		expect(2, [{[cnt64,0],18446744073709551615}])),
+    ?line ?v1_2(?expect1([{[cnt64Str,0], "after cnt64"}]),
+		?expect1([{[cnt64,0],18446744073709551615}])),
     ?DBG("send cntTrap",[]),
     snmpa:send_trap(MA,cntTrap,"standard trap",[
 						{sysContact,  "pelle"},
@@ -3330,13 +3968,13 @@ cnt_64_test(MA) ->
 						{sysLocation, "here"}
 					       ]),
     ?DBG("await response",[]),
-    ?line ?v1_2(expect(3, trap, [test], 6, 1, [{[sysContact,0], "pelle"},
-					       {[sysLocation,0], "here"}]),
-		expect(3, v2trap, [{[sysUpTime, 0], any},
-				   {[snmpTrapOID, 0], ?testTrap ++ [1]},
-				   {[sysContact,0], "pelle"},
-				   {[cnt64,0], 10},
-				   {[sysLocation,0], "here"}])),
+    ?line ?v1_2(?expect5(trap, [test], 6, 1, [{[sysContact,0], "pelle"},
+					      {[sysLocation,0], "here"}]),
+		?expect2(v2trap, [{[sysUpTime, 0], any},
+				  {[snmpTrapOID, 0], ?testTrap ++ [1]},
+				  {[sysContact,0], "pelle"},
+				  {[cnt64,0], 10},
+				  {[sysLocation,0], "here"}])),
     
     %% Create two rows, check that they are get-nexted in correct order.
     Idx1 = 1,
@@ -3344,27 +3982,27 @@ cnt_64_test(MA) ->
     ?DBG("create row (cntStatus): ~p",[Idx1]),
     s([{[cntStatus, Idx1], i, ?createAndGo}]),
     ?DBG("await response",[]),
-    ?line expect(1, [{[cntStatus, Idx1], ?createAndGo}]),
+    ?line ?expect1([{[cntStatus, Idx1], ?createAndGo}]),
     ?DBG("create row (cntStatus): ~p",[Idx2]),
     s([{[cntStatus, Idx2], i, ?createAndGo}]),
     ?DBG("await response",[]),
-    ?line expect(2, [{[cntStatus, Idx2], ?createAndGo}]),
+    ?line ?expect1([{[cntStatus, Idx2], ?createAndGo}]),
 
     ?DBG("get-next (cntIndex)",[]),
     gn([[cntIndex]]),
     ?DBG("await response",[]),
-    ?line ?v1_2(expect(3, [{[cntStatus,Idx1], ?active}]),
-		expect(3, [{[cntCnt,Idx1], 0}])),
+    ?line ?v1_2(?expect1([{[cntStatus,Idx1], ?active}]),
+		?expect1([{[cntCnt,Idx1], 0}])),
     % Delete the rows
     ?DBG("delete row (cntStatus): ~p",[Idx1]),
     s([{[cntStatus, Idx1], i, ?destroy}]),
     ?DBG("await response",[]),
-    ?line expect(4, [{[cntStatus, Idx1], ?destroy}]),
+    ?line ?expect1([{[cntStatus, Idx1], ?destroy}]),
     ?DBG("delete row (cntStatus): ~p",[Idx2]),
     s([{[cntStatus, Idx2], i, ?destroy}]),
     ?DBG("await response",[]),
-    ?line expect(5, [{[cntStatus, Idx2], ?destroy}]),
-    catch snmpa:verbosity(MA,log),
+    ?line ?expect1([{[cntStatus, Idx2], ?destroy}]),
+    catch snmpa:verbosity(MA, log),
     ?DBG("done",[]),
     ok.
 
@@ -3372,7 +4010,7 @@ cnt_64_test(MA) ->
 opaque_test() ->
     ?P1("Testing Opaque datatype..."),
     g([[opaqueObj,0]]),
-    ?line expect(1, [{[opaqueObj,0], "opaque-data"}]).
+    ?line ?expect1([{[opaqueObj,0], "opaque-data"}]).
     
 %% Req. OLD-SNMPEA-MIB
 api_test(MaNode) ->
@@ -3413,70 +4051,69 @@ api_test(MaNode) ->
 %% Req. Klas3
 api_test2() ->
     g([[fname3,0]]),
-    ?line expect(1, [{[fname3,0], "ok"}]),
+    ?line ?expect1([{[fname3,0], "ok"}]),
     g([[fname4,0]]),
-    ?line expect(2, [{[fname4,0], 1}]).
+    ?line ?expect1([{[fname4,0], 1}]).
 
 api_test3() ->
     g([[fname3,0]]),
-    ?line expect(1, [{[fname3,0], "ok"}]).
+    ?line ?expect1([{[fname3,0], "ok"}]).
     
     
 unreg_test() ->
     gn([[?v1_2(sysServices, sysORLastChange),0]]),
-    ?line expect(1, [{[snmpInPkts, 0], any}]).
+    ?line ?expect1([{[snmpInPkts, 0], any}]).
 
 load_test() ->
     gn([[?v1_2(sysServices, sysORLastChange),0]]),
-    ?line expect(1, [{[fname,0], ""}]).
+    ?line ?expect1([{[fname,0], ""}]).
 
 %% Req. Klas1
 load_test_sa() ->
     gn([[?v1_2(sysServices,sysORLastChange), 0]]),
-    ?line expect(1, [{[fname,0], any}]).
+    ?line ?expect1([{[fname,0], any}]).
     
 %% Req. system group, Klas1, OLD-SNMPEA-MIB
 do_mul_get() ->
     Key1c3 = [intCommunityEntry,[3],get(mip),is("public")],
     Key1c4 = [intCommunityEntry,[4],get(mip),is("public")],
     s([{[fname,0], s, "test set"}]),
-    ?line expect(3, [{[fname,0], "test set"}]),
-    g([[sysDescr,0], Key1c4, [fname,0],Key1c3,
-	       [sysName,0]]),
-    ?line expect(1, [{[sysDescr,0], "Erlang SNMP agent"},
-		     {Key1c4, 2},
-		     {[fname,0], "test set"},
-		     {Key1c3, 2},
-		     {[sysName,0], "test"}]),
+    ?line ?expect1([{[fname,0], "test set"}]),
+    g([[sysDescr,0], Key1c4, [fname,0],Key1c3,[sysName,0]]),
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+		    {Key1c4, 2},
+		    {[fname,0], "test set"},
+		    {Key1c3, 2},
+		    {[sysName,0], "test"}]),
     g([[1,3,7,1], Key1c4, [sysDescr,0], [1,3,7,2], Key1c3, [sysDescr,0]]),
-    ?line ?v1_2(expect(2, noSuchName, [1,4], any),
-		expect(2, [{[1,3,7,1], noSuchObject},
-			   {Key1c4, 2},
-			   {[sysDescr,0], "Erlang SNMP agent"},
-			   {[1,3,7,2], noSuchObject},
-			   {Key1c3, 2},
-			   {[sysDescr,0], "Erlang SNMP agent"}])).
+    ?line ?v1_2(?expect3(noSuchName, [1,4], any),
+		?expect1([{[1,3,7,1], noSuchObject},
+			  {Key1c4, 2},
+			  {[sysDescr,0], "Erlang SNMP agent"},
+			  {[1,3,7,2], noSuchObject},
+			  {Key1c3, 2},
+			  {[sysDescr,0], "Erlang SNMP agent"}])).
 
 %% Req. v1, system group, Klas1, OLD-SNMPEA-MIB, *ej* Klas3.
 do_mul_get_err() ->
     Key1c3 = [intCommunityEntry,[3],get(mip),is("public")],
     Key1c4 = [intCommunityEntry,[4],get(mip),is("public")],
     s([{[fname,0], s, "test set"}]),
-    ?line expect(3, [{[fname,0], "test set"}]),
+    ?line ?expect1([{[fname,0], "test set"}]),
     g([[sysDescr,0],Key1c4,[fname,0], Key1c3, [sysName,2]]),
-    ?line ?v1_2(expect(1, noSuchName, 5, any),
-		expect(1, [{[sysDescr,0], "Erlang SNMP agent"},
-			   {Key1c4, 2},
-			   {[fname,0], "test set"},
-			   {Key1c3, 2},
-			   {[sysName,2], noSuchInstance}])),
+    ?line ?v1_2(?expect3(noSuchName, 5, any),
+		?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+			  {Key1c4, 2},
+			  {[fname,0], "test set"},
+			  {Key1c3, 2},
+			  {[sysName,2], noSuchInstance}])),
     g([[sysDescr,0],Key1c4,[fname3,0], Key1c3, [sysName,1]]),
-    ?line ?v1_2(expect(1, noSuchName, [3,5], any),
-		expect(1, [{[sysDescr,0], "Erlang SNMP agent"},
-			   {Key1c4, 2},
-			   {[fname3,0], noSuchObject},
-			   {Key1c3, 2},
-			   {[sysName,1], noSuchInstance}])).
+    ?line ?v1_2(?expect3(noSuchName, [3,5], any),
+		?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+			  {Key1c4, 2},
+			  {[fname3,0], noSuchObject},
+			  {Key1c3, 2},
+			  {[sysName,1], noSuchInstance}])).
 
 
 %% Req. system group, Klas1, OLD-SNMPEA-MIB
@@ -3486,11 +4123,11 @@ do_mul_next() ->
     Key1c3 = [intCommunityEntry,[3],get(mip),is("public")],
     Key1c4 = [intCommunityEntry,[4],get(mip),is("public")],
     s([{[fname,0], s, "test set"}]),
-    ?line expect(3, [{[fname,0], "test set"}]),
+    ?line ?expect1([{[fname,0], "test set"}]),
     gn([[sysDescr], Key1c4s, [fname],Key1c3s,[sysName]]),
-    ?line expect(1, [{[sysDescr,0], "Erlang SNMP agent"},
-	       {Key1c4, 2}, {[fname,0], "test set"},
-	       {Key1c3, 2}, {[sysName,0], "test"}]).
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+		    {Key1c4, 2}, {[fname,0], "test set"},
+		    {Key1c3, 2}, {[sysName,0], "test"}]).
 
 %% Req. system group, Klas1, OLD-SNMPEA-MIB
 do_mul_next_err() ->
@@ -3499,17 +4136,17 @@ do_mul_next_err() ->
     Key1c3 = [intCommunityEntry,[3],get(mip),is("public")],
     Key1c4 = [intCommunityEntry,[4],get(mip),is("public")],
     s([{[fname,0], s, "test set"}]),
-    ?line expect(3, [{[fname,0], "test set"}]),
+    ?line ?expect1([{[fname,0], "test set"}]),
     gn([[sysDescr], Key1c4s, [1,3,6,999], [fname],[1,3,90], Key1c3s,[sysName]]),
-    ?line ?v1_2(expect(1, noSuchName, [3,5], any),
-		expect(1, [{[sysDescr,0], "Erlang SNMP agent"},
-			   {Key1c4, 2},
-			   {[1,3,6,999], endOfMibView},
-			   {[fname,0], "test set"},
-			   {[1,3,90], endOfMibView},
-			   {Key1c3, 2},
-			   {[sysName,0], "test"}])).
-		
+    ?line ?v1_2(?expect3(noSuchName, [3,5], any),
+		?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+			  {Key1c4, 2},
+			  {[1,3,6,999], endOfMibView},
+			  {[fname,0], "test set"},
+			  {[1,3,90], endOfMibView},
+			  {Key1c3, 2},
+			  {[sysName,0], "test"}])).
+
 
 %% Req. system group, Klas1, OLD-SNMPEA-MIB
 do_mul_set() ->
@@ -3523,24 +4160,24 @@ do_mul_set() ->
        {NewKeyc5, ?createAndGo},
        {NewKeyc4, 2},
        {[friendsEntry, [3, 3]], ?createAndGo}]),
-    ?line expect(1, [{[friendsEntry, [2, 3]], "kompis3"},
-	       {NewKeyc3, 2},
-	       {[sysLocation,0], "new_value"},
-	       {NewKeyc5, ?createAndGo},
-	       {NewKeyc4, 2},
-	       {[friendsEntry, [3, 3]], ?createAndGo}]),
+    ?line ?expect1([{[friendsEntry, [2, 3]], "kompis3"},
+		    {NewKeyc3, 2},
+		    {[sysLocation,0], "new_value"},
+		    {NewKeyc5, ?createAndGo},
+		    {NewKeyc4, 2},
+		    {[friendsEntry, [3, 3]], ?createAndGo}]),
     g([[friendsEntry, [2, 3]],
-	       [sysLocation,0],
-	       [friendsEntry, [3, 3]]]),
-    ?line expect(2, [{[friendsEntry, [2, 3]], "kompis3"},
-	       {[sysLocation,0], "new_value"},
-	       {[friendsEntry, [3, 3]], ?active}]),
+       [sysLocation,0],
+       [friendsEntry, [3, 3]]]),
+    ?line ?expect1([{[friendsEntry, [2, 3]], "kompis3"},
+		    {[sysLocation,0], "new_value"},
+		    {[friendsEntry, [3, 3]], ?active}]),
     g([NewKeyc4]),
-    ?line expect(3, [{NewKeyc4, 2}]),
+    ?line ?expect1([{NewKeyc4, 2}]),
     s([{[friendsEntry, [3, 3]], ?destroy},
        {NewKeyc5, ?destroy}]),
-    ?line expect(4, [{[friendsEntry, [3, 3]], ?destroy},
-	       {NewKeyc5, ?destroy}]).
+    ?line ?expect1([{[friendsEntry, [3, 3]], ?destroy},
+		    {NewKeyc5, ?destroy}]).
 
 %% Req. system group, Klas1, OLD-SNMPEA-MIB
 do_mul_set_err() ->
@@ -3554,53 +4191,48 @@ do_mul_set_err() ->
        {NewKeyc5, ?createAndGo},
        {NewKeyc4, 2},
        {[friendsEntry, [3, 3]], ?createAndGo}]),
-    ?line expect(1, ?v1_2(noSuchName, notWritable), 3, any),
+    ?line ?expect3(?v1_2(noSuchName, notWritable), 3, any),
     g([[friendsEntry, [2, 3]]]),
-    ?line ?v1_2(expect(2, noSuchName, 1, any),
-		expect(2, [{[friendsEntry, [2,3]], noSuchInstance}])),
+    ?line ?v1_2(?expect3(noSuchName, 1, any),
+		?expect1([{[friendsEntry, [2,3]], noSuchInstance}])),
     g([NewKeyc4]),
-    ?line ?v1_2(expect(3, noSuchName, 1, any), 
-		expect(3, [{NewKeyc4, noSuchInstance}])).
+    ?line ?v1_2(?expect3(noSuchName, 1, any), 
+		?expect1([{NewKeyc4, noSuchInstance}])).
 
 %% Req. SA-MIB
 sa_mib() ->
     g([[sa, [2,0]]]),
-    ?line expect(sa_mib_1, [{[sa, [2,0]], 3}]),
+    ?line ?expect1([{[sa, [2,0]], 3}]),
     s([{[sa, [1,0]], s, "sa_test"}]),
-    ?line expect(sa_mib_2, [{[sa, [1,0]], "sa_test"}]),
+    ?line ?expect1([{[sa, [1,0]], "sa_test"}]),
     ok.
 
 ma_trap1(MA) ->
     ok = snmpa:send_trap(MA, testTrap2, "standard trap"), 
-    ?line expect(ma_trap1_1, 
-		 trap, [system], 6, 1, [{[system, [4,0]],
-					 "{mbj,eklas}@erlang.ericsson.se"}]),
+    ?line ?expect5(trap, [system], 6, 1, [{[system, [4,0]],
+					   "{mbj,eklas}@erlang.ericsson.se"}]),
     ok = snmpa:send_trap(MA, testTrap1, "standard trap"),
-    ?line expect(ma_trap1_2, 
-		 trap, [1,2,3] , 1, 0, [{[system, [4,0]],
-					 "{mbj,eklas}@erlang.ericsson.se"}]),
+    ?line ?expect5(trap, [1,2,3] , 1, 0, [{[system, [4,0]],
+					   "{mbj,eklas}@erlang.ericsson.se"}]),
     ok.
 
 ma_trap2(MA) ->
     snmpa:send_trap(MA,testTrap2,"standard trap",[{sysContact,"pelle"}]),
-    ?line expect(ma_trap2_3, 
-		 trap, [system], 6, 1, [{[system, [4,0]], "pelle"}]),
+    ?line ?expect5(trap, [system], 6, 1, [{[system, [4,0]], "pelle"}]),
     ok.
 
 ma_v2_2_v1_trap(MA) ->
     snmpa:send_trap(MA,testTrapv22,"standard trap",[{sysContact,"pelle"}]),
-    ?line expect(ma_v2_2_v1_trap_3, 
-		 trap, [system], 6, 1, [{[system, [4,0]], "pelle"}]),
+    ?line ?expect5(trap, [system], 6, 1, [{[system, [4,0]], "pelle"}]),
     ok.    
 
 ma_v2_2_v1_trap2(MA) ->
     snmpa:send_trap(MA,linkUp,"standard trap",[{ifIndex, [1], 1},
 					      {ifAdminStatus, [1], 1},
 					      {ifOperStatus, [1], 2}]),
-    ?line expect(ma_v2_2_v1_trap2_3, 
-		 trap, [1,2,3], 3, 0, [{[ifIndex, 1], 1},
-				       {[ifAdminStatus, 1], 1},
-				       {[ifOperStatus, 1], 2}]),
+    ?line ?expect5(trap, [1,2,3], 3, 0, [{[ifIndex, 1], 1},
+					 {[ifAdminStatus, 1], 1},
+					 {[ifOperStatus, 1], 2}]),
     ok.
 
 sa_trap1(SA) ->
@@ -3618,47 +4250,44 @@ sa_trap1(SA) ->
     %% io:format("sa_trap1 -> SA trap send: "
     %% 	      "~n   TSRes: ~p"
     %% 	      "~n", [TSRes]),
-    ?line expect(sa_trap1_4, 
-		 trap, [ericsson], 6, 1, [{[system, [4,0]],
-					   "{mbj,eklas}@erlang.ericsson.se"},
-					  {[sa, [1,0]], "sa_test"}]),
+    ?line ?expect5(trap, [ericsson], 6, 1, [{[system, [4,0]],
+					     "{mbj,eklas}@erlang.ericsson.se"},
+					    {[sa, [1,0]], "sa_test"}]),
     snmpa:verbosity(SA, {subagents, silence}),
     ok.
 
 sa_trap2(SA) ->
     snmpa:send_trap(SA, saTrap, "standard trap",[{sysContact,"pelle"}]),
-    ?line expect(sa_trap2_5, 
-		 trap, [ericsson], 6, 1, [{[system, [4,0]], "pelle"},
-					  {[sa, [1,0]], "sa_test"}]),
+    ?line ?expect5(trap, [ericsson], 6, 1, [{[system, [4,0]], "pelle"},
+					    {[sa, [1,0]], "sa_test"}]),
     ok.
 
 sa_trap3(SA) ->
     snmpa:send_trap(SA, saTrap2, "standard trap",
 			 [{intViewSubtree, [4], [1,2,3,4]}]),
-    ?line expect(sa_trap3_6, 
-		 trap, [ericsson], 6, 2, [{[system, [4,0]],
-					   "{mbj,eklas}@erlang.ericsson.se"},
-					  {[sa, [1,0]], "sa_test"},
-					  {[intViewSubtree,4],[1,2,3,4]}]),
+    ?line ?expect5(trap, [ericsson], 6, 2, [{[system, [4,0]],
+					     "{mbj,eklas}@erlang.ericsson.se"},
+					    {[sa, [1,0]], "sa_test"},
+					    {[intViewSubtree,4],[1,2,3,4]}]),
     ok.
 
 ma_v2_trap1(MA) ->
     ?DBG("ma_v2_traps -> entry with MA = ~p => "
 	   "send standard trap: testTrapv22",[MA]),
     snmpa:send_trap(MA, testTrapv22, "standard trap"),
-    ?line expect(1, v2trap, [{[sysUpTime, 0], any},
-			     {[snmpTrapOID, 0], ?system ++ [0,1]}]),
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?system ++ [0,1]}]),
     ?DBG("ma_v2_traps -> send standard trap: testTrapv21",[]),
     snmpa:send_trap(MA, testTrapv21, "standard trap"),
-    ?line expect(2, v2trap, [{[sysUpTime, 0], any},
-			     {[snmpTrapOID, 0], ?snmp ++ [1]}]),
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?snmp ++ [1]}]),
     ok.
 
 ma_v2_trap2(MA) ->
     snmpa:send_trap(MA,testTrapv22,"standard trap",[{sysContact,"pelle"}]),
-    ?line expect(3, v2trap, [{[sysUpTime, 0], any},
-			     {[snmpTrapOID, 0], ?system ++ [0,1]},
-			     {[system, [4,0]], "pelle"}]).
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?system ++ [0,1]},
+			    {[system, [4,0]], "pelle"}]).
 
 %% Note: This test case takes a while... actually a couple of minutes.
 ma_v2_inform1(MA) ->
@@ -3667,18 +4296,17 @@ ma_v2_inform1(MA) ->
 	 "~n   send notification: testTrapv22", [MA]),
 
     CmdExpectInform = 
-	fun(No, Response) ->
-		expect(No, 
-		       {inform, Response},
-		       [{[sysUpTime, 0], any}, 
-			{[snmpTrapOID, 0], ?system ++ [0,1]}])
+	fun(_No, Response) ->
+		?expect2({inform, Response},
+			 [{[sysUpTime, 0], any}, 
+			  {[snmpTrapOID, 0], ?system ++ [0,1]}])
 	end,
 
     CmdExp = 
 	fun(ok) -> 
 		ok;
-	   ({ok, Val}) ->
-		?DBG("ma_v2_inform -> [cmd2] Val: ~p", [Val]),
+	   ({ok, _Val}) ->
+		?DBG("ma_v2_inform -> [cmd2] Val: ~p", [_Val]),
 		ok;
 	   ({error, Id, Extra}) ->
 		{error, {unexpected, Id, Extra}};
@@ -3713,10 +4341,10 @@ ma_v2_inform1(MA) ->
     CmdSnmpTargets = 
 	fun(T) ->
 		receive
-		    {snmp_targets, T, [Addr]} ->
+		    {snmp_targets, T, [_Addr]} ->
 			?DBG("ma_v2_inform1 -> "
 			     "received expected snmp_targets "
-			     "~n   with receiver: ~p",[Addr]),
+			     "~n   with receiver: ~p", [_Addr]),
 			ok;
 		    {snmp_targets, T, Addrs} ->
 			?ERR("ma_v2_inform1 -> "
@@ -3734,16 +4362,16 @@ ma_v2_inform1(MA) ->
     Cmd06 = 
 	fun() ->
 		receive
-		    {snmp_notification, Tag03, {got_response, Addr}} ->
+		    {snmp_notification, Tag03, {got_response, _Addr}} ->
 			?DBG("ma_v2_inform1 -> "
 			     "received expected snmp_notification "
-			     "[with manager response] from: ~n   ~p",[Addr]),
+			     "[with manager response] from: ~n   ~p", [_Addr]),
 			ok;
-		    {snmp_notification, Tag03, {no_response, Addr}} ->
+		    {snmp_notification, Tag03, {no_response, _Addr}} ->
 			?ERR("ma_v2_inform1 -> "
 			     "received unexpected snmp_notification "
 			     "[without manager response] from: ~n   ~p",
-			     [Addr]),
+			     [_Addr]),
 			{error, no_response}
 		after
 		    20000 ->
@@ -3773,16 +4401,16 @@ ma_v2_inform1(MA) ->
     Cmd10 = 
 	fun() ->
 		receive
-		    {snmp_notification, Tag07, {got_response, Addr}} ->
+		    {snmp_notification, Tag07, {got_response, _Addr}} ->
 			?ERR("ma_v2_inform1 -> "
 			     "received unexpected snmp_notification "
-			     "[with manager response] from: ~n   ~p", [Addr]),
+			     "[with manager response] from: ~n   ~p", [_Addr]),
 			{error, got_response};
-		    {snmp_notification, Tag07, {no_response, Addr}} ->
+		    {snmp_notification, Tag07, {no_response, _Addr}} ->
 			?DBG("ma_v2_inform1 -> "
 			     "received expected snmp_notification "
 			     "[without manager response] from: ~n   ~p",
-			     [Addr]),
+			     [_Addr]),
 			ok
 		after
 		    240000 ->
@@ -3817,18 +4445,17 @@ ma_v2_inform2(MA) ->
 	 "~n   send notification: testTrapv22", [MA]),
 
     CmdExpectInform = 
-	fun(No, Response) ->
-		expect(No, 
-		       {inform, Response},
-		       [{[sysUpTime, 0], any}, 
-			{[snmpTrapOID, 0], ?system ++ [0,1]}])
+	fun(_No, Response) ->
+		?expect2({inform, Response},
+			 [{[sysUpTime, 0], any}, 
+			  {[snmpTrapOID, 0], ?system ++ [0,1]}])
 	end,
 
     CmdExp = 
 	fun(ok) -> 
 		ok;
-	   ({ok, Val}) ->
-		?DBG("ma_v2_inform -> [cmd2] Val: ~p", [Val]),
+	   ({ok, _Val}) ->
+		?DBG("ma_v2_inform -> [cmd2] Val: ~p", [_Val]),
 		ok;
 	   ({error, Id, Extra}) ->
 		{error, {unexpected, Id, Extra}};
@@ -3908,18 +4535,18 @@ ma_v2_inform3(MA) ->
 	 "~n   send notification: testTrapv22", [MA]),
 
     CmdExpectInform = 
-	fun(No, Response) ->
-		expect(No, 
-		       {inform, Response},
-		       [{[sysUpTime, 0], any}, 
-			{[snmpTrapOID, 0], ?system ++ [0,1]}])
+	fun(_No, Response) ->
+		?DBG("CmdExpectInform -> ~p: ~n~p", [_No, Response]),
+		?expect2({inform, Response},
+			 [{[sysUpTime, 0], any}, 
+			  {[snmpTrapOID, 0], ?system ++ [0,1]}])
 	end,
 
     CmdExp = 
 	fun(ok) -> 
 		ok;
-	   ({ok, Val}) ->
-		?DBG("ma_v2_inform3 -> [cmd2] Val: ~p", [Val]),
+	   ({ok, _Val}) ->
+		?DBG("CmdExp -> Val: ~p", [_Val]),
 		ok;
 	   ({error, Id, Extra}) ->
 		{error, {unexpected, Id, Extra}};
@@ -3983,15 +4610,16 @@ ma_v2_inform3(MA) ->
     
     Commands = 
 	[
-	 {15, "Send notification [tag31]",                    Cmd15},
-	 {16, "Expect notification message [tag31]",          Cmd16}, 
-	 {17, "Expect targets message [tag31]",               Cmd17}, 
-	 {18, "Expect notification (no) response message [tag31]", Cmd18}
+	 {15, "Send notification [" ++ atom_to_list(Tag15) ++ "]", Cmd15},
+	 {16, "Expect notification message [" ++ atom_to_list(Tag15) ++ "]", Cmd16}, 
+	 {17, "Expect targets message [" ++ atom_to_list(Tag15) ++ "]", Cmd17}, 
+	 {18, "Expect notification (no) response message [" ++ atom_to_list(Tag15) ++ "]", Cmd18}
 	],
 
     command_handler(Commands).
 		   
-    
+
+%% snmpa_notification_delivery_info_receiver callback function
 delivery_targets(Tag, Addresses, Extra) ->
     io:format("~w:delivery_targets -> entry with"
 	      "~n   Tag:       ~p"
@@ -4008,6 +4636,7 @@ delivery_targets(Tag, Addresses, Extra) ->
     end,
     ok.
 
+%% snmpa_notification_delivery_info_receiver callback function
 delivery_info(Tag, Address, DeliveryResult, Extra) ->
     io:format("~w:delivery_info -> entry with"
 	      "~n   Tag:            ~p"
@@ -4028,57 +4657,57 @@ delivery_info(Tag, Address, DeliveryResult, Extra) ->
 
 command_handler([]) ->    
     ok;
-command_handler([{No, Desc, Cmd}|Rest]) ->
-    ?LOG("command_handler -> command ~w: ~n   ~s", [No, Desc]),
+command_handler([{_No, _Desc, Cmd}|Rest]) ->
+    ?LOG("command_handler -> command ~w: ~n   ~s", [_No, _Desc]),
     case (catch Cmd()) of
 	ok ->
-	    ?LOG("command_handler -> ~w: ok",[No]),
+	    ?LOG("command_handler -> ~w: ok", [_No]),
 	    command_handler(Rest);
 	{error, Reason} ->
-	    ?ERR("command_handler -> ~w error: ~n~p",[No, Reason]),
+	    ?ERR("command_handler -> ~w error: ~n~p", [_No, Reason]),
 	    ?line ?FAIL(Reason);
 	Error ->
-	    ?ERR("command_handler -> ~w unexpected: ~n~p",[No, Error]),
+	    ?ERR("command_handler -> ~w unexpected: ~n~p", [_No, Error]),
 	    ?line ?FAIL({unexpected_command_result, Error})
     end.
     
 
 ma_v1_2_v2_trap(MA) ->
     snmpa:send_trap(MA,linkDown,"standard trap",[{ifIndex, [1], 1}]),
-    ?line expect(2, v2trap, [{[sysUpTime, 0], any},
-			     {[snmpTrapOID, 0], ?snmpTraps ++ [3]},
-			     {[ifIndex, 1], 1},
-			     {[snmpTrapEnterprise, 0], [1,2,3]}]).
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?snmpTraps ++ [3]},
+			    {[ifIndex, 1], 1},
+			    {[snmpTrapEnterprise, 0], [1,2,3]}]).
 
     
 ma_v1_2_v2_trap2(MA) ->
     snmpa:send_trap(MA,testTrap2,"standard trap",[{sysContact,"pelle"}]),
-    ?line expect(3, v2trap, [{[sysUpTime, 0], any},
-			     {[snmpTrapOID, 0], ?system ++ [0,1]},
-			     {[system, [4,0]], "pelle"},
-			     {[snmpTrapEnterprise, 0], ?system}]).
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?system ++ [0,1]},
+			    {[system, [4,0]], "pelle"},
+			    {[snmpTrapEnterprise, 0], ?system}]).
     
 
 sa_v1_2_v2_trap1(SA) ->
     snmpa:verbosity(SA, {subagents, trace}),
     snmpa:send_trap(SA, saTrap, "standard trap"),
-    ?line expect(trap1_4, v2trap, [{[sysUpTime, 0], any},
-				   {[snmpTrapOID, 0], ?ericsson ++ [0, 1]},
-				   {[system, [4,0]],
-				    "{mbj,eklas}@erlang.ericsson.se"},
-				   {[sa, [1,0]], "sa_test"},
-				   {[snmpTrapEnterprise, 0], ?ericsson}]),
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?ericsson ++ [0, 1]},
+			    {[system, [4,0]],
+			     "{mbj,eklas}@erlang.ericsson.se"},
+			    {[sa, [1,0]], "sa_test"},
+			    {[snmpTrapEnterprise, 0], ?ericsson}]),
     snmpa:verbosity(SA, {subagents, silence}),
     ok.
 
 sa_v1_2_v2_trap2(SA) ->
     snmpa:verbosity(SA, {subagents, trace}),
     snmpa:send_trap(SA, saTrap, "standard trap",[{sysContact,"pelle"}]),
-    ?line expect(trap2_4, v2trap, [{[sysUpTime, 0], any},
-				   {[snmpTrapOID, 0], ?ericsson ++ [0, 1]},
-				   {[system, [4,0]], "pelle"},
-				   {[sa, [1,0]], "sa_test"},
-				   {[snmpTrapEnterprise, 0], ?ericsson}]),
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?ericsson ++ [0, 1]},
+			    {[system, [4,0]], "pelle"},
+			    {[sa, [1,0]], "sa_test"},
+			    {[snmpTrapEnterprise, 0], ?ericsson}]),
     snmpa:verbosity(SA, {subagents, silence}),
     ok.
 
@@ -4087,13 +4716,13 @@ sa_v1_2_v2_trap3(SA) ->
     snmpa:verbosity(SA, {subagents, trace}),
     snmpa:send_trap(SA, saTrap2, "standard trap",
 			 [{intViewSubtree, [4], [1,2,3,4]}]),
-    ?line expect(trap3_4, v2trap, [{[sysUpTime, 0], any},
-				   {[snmpTrapOID, 0], ?ericsson ++ [0, 2]},
-				   {[system, [4,0]],
-				    "{mbj,eklas}@erlang.ericsson.se"},
-				   {[sa, [1,0]], "sa_test"},
-				   {[intViewSubtree,4],[1,2,3,4]},
-				   {[snmpTrapEnterprise, 0], ?ericsson}]),
+    ?line ?expect2(v2trap, [{[sysUpTime, 0], any},
+			    {[snmpTrapOID, 0], ?ericsson ++ [0, 2]},
+			    {[system, [4,0]],
+			     "{mbj,eklas}@erlang.ericsson.se"},
+			    {[sa, [1,0]], "sa_test"},
+			    {[intViewSubtree,4],[1,2,3,4]},
+			    {[snmpTrapEnterprise, 0], ?ericsson}]),
     snmpa:verbosity(SA, {subagents, silence}),
     ok.
 			     
@@ -4107,15 +4736,15 @@ sa_errs_bad_value() ->
        {[sa, [2,0]], 5}, % badValue (i is_set_ok)
        {NewKeyc5, ?createAndGo},
        {NewKeyc4, 2}]),
-    ?line expect(1, badValue, 2, any),   
+    ?line ?expect3(badValue, 2, any),   
     s([{NewKeyc3, 2},
        {[sa, [2,0]], 6}, % wrongValue (i is_set_ok)
        {NewKeyc5, ?createAndGo},
        {NewKeyc4, 2}]),
-    ?line expect(1, ?v1_2(badValue, wrongValue), 2, any),   
+    ?line ?expect3(?v1_2(badValue, wrongValue), 2, any),   
     g([NewKeyc4]),
-    ?line ?v1_2(expect(2, noSuchName, 1, any),
-		expect(2, [{NewKeyc4, noSuchInstance}])).
+    ?line ?v1_2(?expect3(noSuchName, 1, any),
+		?expect1([{NewKeyc4, noSuchInstance}])).
 
 %% Req. SA-MIB, OLD-SNMPEA-MIB
 sa_errs_gen_err() ->
@@ -4124,23 +4753,23 @@ sa_errs_gen_err() ->
     NewKeyc5 = [intCommunityEntry,[5],get(mip),is("test")],
     s([{NewKeyc3, 2},{NewKeyc4, 2},
        {NewKeyc5, ?createAndGo}, {[sa, [3,0]], 5}]),
-    ?line expect(1, genErr, 4, any),
+    ?line ?expect3(genErr, 4, any),
 % The row might have been added; we don't know.
 % (as a matter of fact we do - it is added, because the agent
 % first sets its own vars, and then th SAs. Lets destroy it.
     s([{NewKeyc5, ?destroy}]),
-    ?line expect(2, [{NewKeyc5, ?destroy}]).
+    ?line ?expect1([{NewKeyc5, ?destroy}]).
 
 %% Req. SA-MIB, OLD-SNMPEA-MIB
 sa_too_big() ->
     g([[sa, [4,0]]]),
-    ?line expect(1, tooBig).
+    ?line ?expect1(tooBig).
 
 %% Req. Klas1, system group, snmp group (v1/v2)
-next_across_sa() ->
+next_across_sa_test() ->
     gn([[sysDescr],[klas1,5]]),
-    ?line expect(1, [{[sysDescr,0], "Erlang SNMP agent"},
-	       {[snmpInPkts, 0], any}]).
+    ?line ?expect1([{[sysDescr,0], "Erlang SNMP agent"},
+		    {[snmpInPkts, 0], any}]).
 
 %% snmp_test_mgr:s([{[fStatus3, 1], 4}, {[fname3,0], "ok"}]). -> noError
 %% snmp_test_mgr:s([{[fStatus3, 1], 4}, {[fname3,0], "hoj"}]). -> {badValue, 2}
@@ -4151,40 +4780,40 @@ next_across_sa() ->
 %% Req. Klas3, Klas4
 undo_test() ->
     s([{[fStatus3, 1], 4}, {[fname3,0], "ok"}]),
-    ?line expect(1, [{[fStatus3, 1], 4}, {[fname3,0], "ok"}]),
+    ?line ?expect1([{[fStatus3, 1], 4}, {[fname3,0], "ok"}]),
     s([{[fStatus3, 1], 4}, {[fname3,0], "hoj"}]),
-    ?line expect(2, ?v1_2(badValue, inconsistentValue), 2, any), 
+    ?line ?expect3(?v1_2(badValue, inconsistentValue), 2, any), 
     s([{[fStatus3, 3], 4}, {[fname3,0], "hoj"}]),
-    ?line expect(3, ?v1_2(genErr, undoFailed), 1, any), 
+    ?line ?expect3(?v1_2(genErr, undoFailed), 1, any), 
     s([{[fStatus3, 4], 4}, {[fname3,0], "ok"}]),
-    ?line expect(4, ?v1_2(genErr, commitFailed), 1, any), 
+    ?line ?expect3(?v1_2(genErr, commitFailed), 1, any), 
 % unfortunatly we don't know if we'll get undoFailed or commitFailed.
 % it depends on which order the agent traverses the varbind list.
 %    s([{[fStatus3, 4], 4}, {[fname3,0], "ufail"}]),
 %    ?line expect(5, ?v1_2(genErr, undoFailed), 1, any),
     s([{[fStatus3, 1], 4}, {[fname3,0], "xfail"}]),
-    ?line expect(6, genErr, 2, any).
+    ?line ?expect3(genErr, 2, any).
     
 %% Req. Klas3, Klas4
 bad_return() ->
     g([[fStatus4,4],
        [fName4,4]]),
-    ?line expect(4, genErr, 2, any),
+    ?line ?expect3(genErr, 2, any),
     g([[fStatus4,5],
        [fName4,5]]),
-    ?line expect(5, genErr, 1, any),
+    ?line ?expect3(genErr, 1, any),
     g([[fStatus4,6],
        [fName4,6]]),
-    ?line expect(6, genErr, 2, any),
+    ?line ?expect3(genErr, 2, any),
     gn([[fStatus4,7],
        [fName4,7]]),
-    ?line expect(7, genErr, 2, any),
+    ?line ?expect3(genErr, 2, any),
     gn([[fStatus4,8],
        [fName4,8]]),
-    ?line expect(8, genErr, 1, any),
+    ?line ?expect3(genErr, 1, any),
     gn([[fStatus4,9],
        [fName4,9]]),
-    ?line expect(9, genErr, 2, any).
+    ?line ?expect3(genErr, 2, any).
 
 
 %%%-----------------------------------------------------------------
@@ -4195,7 +4824,25 @@ bad_return() ->
 %%% already tested by the normal tests.
 %%%-----------------------------------------------------------------
 
-
+standard_mibs_cases() ->
+    [
+     snmp_standard_mib, 
+     snmp_community_mib,
+     snmp_framework_mib, 
+     snmp_target_mib,
+     snmp_notification_mib, 
+     snmp_view_based_acm_mib
+    ].
+    
+standard_mibs_cases_ipv6() ->
+    [
+     %% snmp_standard_mib, % Sending v1 traps does not work over IPv6
+     snmp_community_mib,
+     snmp_framework_mib,
+     snmp_target_mib,
+     snmp_notification_mib,
+     snmp_view_based_acm_mib
+    ].
 
 %%-----------------------------------------------------------------
 %% For this test, the agent is configured for v1.
@@ -4247,27 +4894,27 @@ std_mib_init() ->
     %% disable authentication failure traps.  (otherwise w'd get many of
     %% them - this is also a test to see that it works).
     s([{[snmpEnableAuthenTraps,0], 2}]),
-    ?line expect(std_mib_init_1, [{[snmpEnableAuthenTraps, 0], 2}]).
+    ?line ?expect1([{[snmpEnableAuthenTraps, 0], 2}]).
 
 %% Req. SNMP-STANDARD-MIB | SNMPv2-MIB
 std_mib_finish() ->
     %% enable again
     s([{[snmpEnableAuthenTraps,0], 1}]),
-    ?line expect(std_mib_finish_1, [{[snmpEnableAuthenTraps, 0], 1}]).
+    ?line ?expect1([{[snmpEnableAuthenTraps, 0], 1}]).
 
 %% Req. SNMP-STANDARD-MIB
 standard_mib_test_finish() ->
     %% force a authenticationFailure (should result in a trap)
     std_mib_write(),
     %% check that we got a trap
-    ?line expect(standard_mib_test_finish_2, trap, [1,2,3], 4, 0, []).
+    ?line ?expect5(trap, [1,2,3], 4, 0, []).
 
 %% Req. SNMP-STANDARD-MIB | SNMPv2-MIB
 std_mib_read() ->
     ?DBG("std_mib_read -> entry", []),
     g([[sysUpTime,0]]), % try a bad <something>; msg dropped, no reply
     ?DBG("std_mib_read -> await timeout (i.e. no reply)", []),
-    ?line expect(std_mib_read_1, timeout). % make sure we don't get a trap!
+    ?line ?expect1(timeout). % make sure we don't get a trap!
 
 
 %% Req. SNMP-STANDARD-MIB | SNMPv2-MIB
@@ -4278,6 +4925,18 @@ std_mib_write() ->
 %% Req. SNMP-STANDARD-MIB | SNMPv2-MIB
 std_mib_asn_err() ->
     snmp_test_mgr:send_bytes([48,99,67,12,0,0,0,0,0,0,5]).
+
+
+standard_mibs2_cases() ->
+    [
+     snmpv2_mib_2, 
+     snmp_community_mib_2,
+     snmp_framework_mib_2, 
+     snmp_target_mib_2,
+     snmp_notification_mib_2, 
+     snmp_view_based_acm_mib_2
+    ].
+    
 
 %%-----------------------------------------------------------------
 %% For this test, the agent is configured for v2 and v3.
@@ -4327,6 +4986,19 @@ snmpv2_mib_2(Config) when is_list(Config) ->
     
     ?LOG("snmpv2_mib_2 -> done",[]).
     
+
+standard_mibs3_cases() ->
+    [
+     snmpv2_mib_3, 
+     snmp_framework_mib_3, 
+     snmp_mpd_mib_3,
+     snmp_target_mib_3, 
+     snmp_notification_mib_3,
+     snmp_view_based_acm_mib_3, 
+     snmp_user_based_sm_mib_3
+    ].
+
+    
 %% Req. SNMPv2-MIB
 snmpv2_mib_3(suite) -> [];
 snmpv2_mib_3(Config) when is_list(Config) ->
@@ -4358,13 +5030,13 @@ snmpv2_mib_test_finish() ->
 
     %% check that we got a trap
     ?DBG("ma_v2_inform -> await trap",[]),
-    ?line expect(2, v2trap, [{[sysUpTime,0], any},
-			     {[snmpTrapOID,0], ?authenticationFailure}]),
+    ?line ?expect2(v2trap, [{[sysUpTime,0], any},
+			    {[snmpTrapOID,0], ?authenticationFailure}]),
 
     %% and the the inform
     ?DBG("ma_v2_inform -> await inform",[]),
-    ?line expect(2, {inform,true}, [{[sysUpTime,0], any},
-				    {[snmpTrapOID,0],?authenticationFailure}]).
+    ?line ?expect2({inform,true}, [{[sysUpTime,0], any},
+				   {[snmpTrapOID,0],?authenticationFailure}]).
 
 %% Req. SNMP-STANDARD-MIB | SNMPv2-MIB
 std_mib_a() ->
@@ -4402,12 +5074,12 @@ std_mib_c({InBadCommunityNames, InBadCommunityUses, InASNErrs}) ->
 snmpv2_mib_a() ->
     ?line [SetSerial] = get_req(2, [[snmpSetSerialNo,0]]),
     s([{[snmpSetSerialNo,0], SetSerial}, {[sysLocation, 0], "val2"}]),
-    ?line expect(snmpv2_mib_a_3, [{[snmpSetSerialNo,0], SetSerial},
-				  {[sysLocation, 0], "val2"}]),
+    ?line ?expect1([{[snmpSetSerialNo,0], SetSerial},
+		    {[sysLocation, 0], "val2"}]),
     s([{[sysLocation, 0], "val3"}, {[snmpSetSerialNo,0], SetSerial}]),
-    ?line expect(snmpv2_mib_a_4, inconsistentValue, 2,
-		 [{[sysLocation, 0], "val3"},
-		  {[snmpSetSerialNo,0], SetSerial}]),
+    ?line ?expect3(inconsistentValue, 2,
+		   [{[sysLocation, 0], "val3"},
+		    {[snmpSetSerialNo,0], SetSerial}]),
     ?line ["val2"] = get_req(5, [[sysLocation,0]]).
     
     
@@ -4421,13 +5093,13 @@ snmp_community_mib(Config) when is_list(Config) ->
     ?P(snmp_community_mib), 
     init_case(Config),
     ?line load_master_std("SNMP-COMMUNITY-MIB"),
-    try_test(snmp_community_mib),
+    try_test(snmp_community_mib_test),
     ?line unload_master("SNMP-COMMUNITY-MIB").
 
 snmp_community_mib_2(X) -> ?P(snmp_community_mib_2), snmp_community_mib(X).
 
 %% Req. SNMP-COMMUNITY-MIB
-snmp_community_mib() ->
+snmp_community_mib_test() ->
     ?INF("NOT YET IMPLEMENTED", []),
     nyi.
 
@@ -4439,7 +5111,7 @@ snmp_framework_mib(Config) when is_list(Config) ->
     ?P(snmp_framework_mib), 
     init_case(Config),
     ?line load_master_std("SNMP-FRAMEWORK-MIB"),
-    try_test(snmp_framework_mib),
+    try_test(snmp_framework_mib_test),
     ?line unload_master("SNMP-FRAMEWORK-MIB").
 
 snmp_framework_mib_2(X) -> ?P(snmp_framework_mib_2), snmp_framework_mib(X).
@@ -4448,11 +5120,11 @@ snmp_framework_mib_3(suite) -> [];
 snmp_framework_mib_3(Config) when is_list(Config) ->
     ?P(snmp_framework_mib_3), 
     init_case(Config),
-    try_test(snmp_framework_mib).
+    try_test(snmp_framework_mib_test).
 
 
 %% Req. SNMP-FRAMEWORK-MIB
-snmp_framework_mib() ->
+snmp_framework_mib_test() ->
     ?line ["agentEngine"] = get_req(1, [[snmpEngineID,0]]),
     ?line [EngineTime] = get_req(2, [[snmpEngineTime,0]]),
     ?SLEEP(5000),
@@ -4538,7 +5210,7 @@ snmp_mpd_mib_a() ->
 -define(snmpUnknownPDUHandlers_instance, [1,3,6,1,6,3,11,2,1,3,0]).
 snmp_mpd_mib_b() ->
     g([[sysUpTime,0]]),
-    ?line expect(1, report, [{?snmpUnknownPDUHandlers_instance, any}]).
+    ?line ?expect2(report, [{?snmpUnknownPDUHandlers_instance, any}]).
     
 
 snmp_mpd_mib_c(UnknownPDUHs) ->
@@ -4551,14 +5223,14 @@ snmp_target_mib(Config) when is_list(Config) ->
     ?P(snmp_target_mib), 
     init_case(Config),
     ?line load_master_std("SNMP-TARGET-MIB"),
-    try_test(snmp_target_mib),
+    try_test(snmp_target_mib_test),
     ?line unload_master("SNMP-TARGET-MIB").
 
 snmp_target_mib_2(X) -> ?P(snmp_target_mib_2), snmp_target_mib(X).
 
 snmp_target_mib_3(X) -> ?P(snmp_target_mib_3), snmp_target_mib(X).
 
-snmp_target_mib() ->
+snmp_target_mib_test() ->
     ?INF("NOT YET IMPLEMENTED", []),
     nyi.
 
@@ -4567,7 +5239,7 @@ snmp_notification_mib(Config) when is_list(Config) ->
     ?P(snmp_notification_mib), 
     init_case(Config),
     ?line load_master_std("SNMP-NOTIFICATION-MIB"),
-    try_test(snmp_notification_mib),
+    try_test(snmp_notification_mib_test),
     ?line unload_master("SNMP-NOTIFICATION-MIB").
 
 snmp_notification_mib_2(X) -> ?P(snmp_notification_mib_2), 
@@ -4576,7 +5248,7 @@ snmp_notification_mib_2(X) -> ?P(snmp_notification_mib_2),
 snmp_notification_mib_3(X) -> ?P(snmp_notification_mib_3), 
 			      snmp_notification_mib(X).
 
-snmp_notification_mib() ->
+snmp_notification_mib_test() ->
     ?INF("NOT YET IMPLEMENTED", []),
     nyi.
 
@@ -4728,49 +5400,50 @@ snmp_view_based_acm_mib() ->
 
 do_set(Row) ->
     s(Row),
-    expect(do_set_1, Row).
+    ?expect1(Row).
     
 add_row(RowStatus) ->
     s([{RowStatus, ?createAndGo}]),
-    expect(add_row_1, [{RowStatus, ?createAndGo}]).
+    ?expect1([{RowStatus, ?createAndGo}]).
 
 del_row(RowStatus) ->
     s([{RowStatus, ?destroy}]),
-    expect(del_row_1, [{RowStatus, ?destroy}]).
+    ?expect1([{RowStatus, ?destroy}]).
     
     
 
 use_no_rights() ->
     g([[xDescr,0]]),
-    ?v1_2_3(expect(use_no_rights_11, noSuchName, 1, any),
-	    expect(use_no_rights_12, [{[xDescr,0], noSuchObject}]),
-	    expect(use_no_rights_13, authorizationError, 1, any)),
+    ?v1_2_3(?expect3(noSuchName, 1, any),
+	    ?expect1([{[xDescr,0], noSuchObject}]),
+	    ?expect3(authorizationError, 1, any)),
     g([[xDescr2,0]]),
-    ?v1_2_3(expect(use_no_rights_21, noSuchName, 1, any),
-	    expect(use_no_rights_22, [{[xDescr2,0], noSuchObject}]),
-	    expect(use_no_rights_23, authorizationError, 1, any)),
+    ?v1_2_3(?expect3(noSuchName, 1, any),
+	    ?expect1([{[xDescr2,0], noSuchObject}]),
+	    ?expect3(authorizationError, 1, any)),
     gn([[xDescr]]),
-    ?v1_2_3(expect(use_no_rights_31, noSuchName, 1, any),
-	    expect(use_no_rights_32, [{[xDescr], endOfMibView}]),
-	    expect(use_no_rights_33, authorizationError, 1, any)),
+    ?v1_2_3(?expect3(noSuchName, 1, any),
+	    ?expect1([{[xDescr], endOfMibView}]),
+	    ?expect3(authorizationError, 1, any)),
     s([{[xDescr,0], "tryit"}]),
-    ?v1_2_3(expect(use_no_rights_41, noSuchName, 1, any),
-	    expect(use_no_rights_42, noAccess, 1, any),
-	    expect(use_no_rights_43, authorizationError, 1, any)).
+    ?v1_2_3(?expect3(noSuchName, 1, any),
+	    ?expect3(noAccess, 1, any),
+	    ?expect3(authorizationError, 1, any)).
 
 
 use_rights() ->
     g([[xDescr,0]]),
-    expect(use_rights_1, [{[xDescr,0], any}]),
+    ?expect1([{[xDescr,0], any}]),
     g([[xDescr2,0]]),
-    expect(use_rights_2, [{[xDescr2,0], any}]),
+    ?expect1([{[xDescr2,0], any}]),
     s([{[xDescr,0], "tryit"}]),
-    expect(use_rights_3, noError, 0, any),
+    ?expect3(noError, 0, any),
     g([[xDescr,0]]),
-    expect(use_rights_4, [{[xDescr,0], "tryit"}]).
+    ?expect1([{[xDescr,0], "tryit"}]).
 
 mk_ln(X) ->
     [length(X) | X].
+
 
 %%-----------------------------------------------------------------
 %% o  add/delete users and try them
@@ -4851,15 +5524,15 @@ snmp_user_based_sm_mib_3(Config) when is_list(Config) ->
 
     %% Try some read requests
     ?line try_test(v3_sync, [[{usm_read, []}]],
-	      [{sec_level, authPriv}, {user, "privDES"}]),
+		   [{sec_level, authPriv}, {user, "privDES"}]),
 
     %% Delete the new user
     ?line try_test(v3_sync, [[{usm_del_user, []}]],
-	      [{sec_level, authPriv}, {user, "privDES"}]),
+		   [{sec_level, authPriv}, {user, "privDES"}]),
 
     %% Try some bad requests
     ?line try_test(v3_sync, [[{usm_bad, []}]],
-	      [{sec_level, authPriv}, {user, "privDES"}]),
+		   [{sec_level, authPriv}, {user, "privDES"}]),
 
     ?line unload_master("SNMP-USER-BASED-SM-MIB").
 
@@ -4871,7 +5544,7 @@ usm_add_user1() ->
     Vbs1  = [{[usmUserCloneFrom, NewRowIndex], RowPointer},
 	     {[usmUserStatus, NewRowIndex], ?createAndGo}],
     ?line s(Vbs1),
-    ?line expect(1, Vbs1),
+    ?line ?expect1(Vbs1),
     ok.
     
 usm_use_user() ->
@@ -4890,7 +5563,7 @@ usm_key_change1(ShaKey, DesKey) ->
     Vbs1 = [{[usmUserAuthKeyChange, NewRowIndex], ShaKeyChange},
 	    {[usmUserPrivKeyChange, NewRowIndex], DesKeyChange}],
     s(Vbs1),
-    ?line expect(1, Vbs1).
+    ?line ?expect1(Vbs1).
     
 %% Change own private keys
 usm_key_change2(OldShaKey, OldDesKey, ShaKey, DesKey) ->
@@ -4904,7 +5577,7 @@ usm_key_change2(OldShaKey, OldDesKey, ShaKey, DesKey) ->
     Vbs1 = [{[usmUserOwnAuthKeyChange, NewRowIndex], ShaKeyChange},
 	    {[usmUserOwnPrivKeyChange, NewRowIndex], DesKeyChange}],
     s(Vbs1),
-    ?line expect(1, Vbs1).
+    ?line ?expect1(Vbs1).
     
 %% Change other's public keys
 usm_key_change3(OldShaKey, OldDesKey, ShaKey, DesKey) ->
@@ -4917,16 +5590,16 @@ usm_key_change3(OldShaKey, OldDesKey, ShaKey, DesKey) ->
 							DesKey),
     Vbs1 = [{[usmUserOwnAuthKeyChange, NewRowIndex], ShaKeyChange}],
     s(Vbs1),
-    ?line expect(1, noAccess, 1, any),
+    ?line ?expect3(noAccess, 1, any),
     Vbs2 = [{[usmUserOwnPrivKeyChange, NewRowIndex], DesKeyChange}],
     s(Vbs2),
-    ?line expect(2, noAccess, 1, any),
+    ?line ?expect3(noAccess, 1, any),
     
     
     Vbs3 = [{[usmUserAuthKeyChange, NewRowIndex], ShaKeyChange},
 	    {[usmUserPrivKeyChange, NewRowIndex], DesKeyChange}],
     s(Vbs3),
-    ?line expect(1, Vbs3).
+    ?line ?expect1(Vbs3).
 
 usm_read() ->
     NewRowIndex = [11,"agentEngine", 7, "newUser"],
@@ -4936,13 +5609,12 @@ usm_read() ->
 	     [usmUserOwnAuthKeyChange, NewRowIndex],
 	     [usmUserPrivKeyChange, NewRowIndex],
 	     [usmUserOwnPrivKeyChange, NewRowIndex]]),
-    ?line expect(1, 
-		 [{[usmUserSecurityName, NewRowIndex], "newUser"},
-		  {[usmUserCloneFrom, NewRowIndex], [0,0]},
-		  {[usmUserAuthKeyChange, NewRowIndex], ""},
-		  {[usmUserOwnAuthKeyChange, NewRowIndex], ""},
-		  {[usmUserPrivKeyChange, NewRowIndex], ""},
-		  {[usmUserOwnPrivKeyChange, NewRowIndex], ""}]),
+    ?line ?expect1([{[usmUserSecurityName, NewRowIndex], "newUser"},
+		    {[usmUserCloneFrom, NewRowIndex], [0,0]},
+		    {[usmUserAuthKeyChange, NewRowIndex], ""},
+		    {[usmUserOwnAuthKeyChange, NewRowIndex], ""},
+		    {[usmUserPrivKeyChange, NewRowIndex], ""},
+		    {[usmUserOwnPrivKeyChange, NewRowIndex], ""}]),
     ok.
     
     
@@ -4951,7 +5623,7 @@ usm_del_user() ->
     NewRowIndex = [11,"agentEngine", 7, "newUser"],
     Vbs1  = [{[usmUserStatus, NewRowIndex], ?destroy}],
     ?line s(Vbs1),
-    ?line expect(1, Vbs1),
+    ?line ?expect1(Vbs1),
     ok.
 
 -define(usmUserCloneFrom, [1,3,6,1,6,3,15,1,2,2,1,4]).
@@ -4972,32 +5644,31 @@ usm_bad() ->
     Vbs1  = [{[usmUserCloneFrom, NewRowIndex], RowPointer1},
 	     {[usmUserStatus, NewRowIndex], ?createAndGo}],
     ?line s(Vbs1),
-    ?line expect(1, inconsistentName, 1, any),
+    ?line ?expect3(inconsistentName, 1, any),
 
     RowPointer2 = ?usmUserCloneFrom ++ [11|"agentEngine"] ++ [7|"privDES"],
     Vbs2  = [{[usmUserCloneFrom, NewRowIndex], RowPointer2},
 	     {[usmUserStatus, NewRowIndex], ?createAndGo}],
     ?line s(Vbs2),
-    ?line expect(2, wrongValue, 1, any),
+    ?line ?expect3(wrongValue, 1, any),
 
     RowPointer3 = ?usmUserSecurityName ++ [11|"agentEngine"] ++ [7|"privDES"],
     Vbs3  = [{[usmUserCloneFrom, NewRowIndex], RowPointer3},
 	     {[usmUserStatus, NewRowIndex], ?createAndGo}],
     ?line s(Vbs3),
-    ?line expect(3, Vbs3),
+    ?line ?expect1(Vbs3),
     ?line s([{[usmUserAuthProtocol, NewRowIndex], ?usmNoAuthProtocol}]),
-    ?line expect(4, inconsistentValue, 1, any),
+    ?line ?expect3(inconsistentValue, 1, any),
     ?line s([{[usmUserAuthProtocol, NewRowIndex], ?usmHMACMD5AuthProtocol}]),
-    ?line expect(5, inconsistentValue, 1, any),
+    ?line ?expect3(inconsistentValue, 1, any),
     ?line s([{[usmUserAuthProtocol, NewRowIndex], ?usmDESPrivProtocol}]),
-    ?line expect(6, wrongValue, 1, any),
+    ?line ?expect3(wrongValue, 1, any),
     ?line s([{[usmUserPrivProtocol, NewRowIndex], ?usmHMACSHAAuthProtocol}]),
-    ?line expect(7, wrongValue, 1, any),
+    ?line ?expect3(wrongValue, 1, any),
 
     Vbs4  = [{[usmUserStatus, NewRowIndex], ?destroy}],
     ?line s(Vbs4),
-    ?line expect(1, Vbs4),
-
+    ?line ?expect1(Vbs4),
     ok.
     
 
@@ -5006,57 +5677,58 @@ usm_bad() ->
 %% works.
 %% Load all std mibs that are not loaded by default.
 %%-----------------------------------------------------------------
-loop_mib(suite) -> [];
-loop_mib(Config) when is_list(Config) ->
-    ?P(loop_mib), 
-    ?LOG("loop_mib -> initiate case",[]),
-    %% snmpa:verbosity(master_agent,debug),
-    %% snmpa:verbosity(mib_server,info),
-    {SaNode, MgrNode, MibDir} = init_case(Config),
-    ?DBG("loop_mib -> ~n"
+loop_mib_1(suite) -> [];
+loop_mib_1(Config) when is_list(Config) ->
+    ?P(loop_mib_1),
+    ?LOG("loop_mib_1 -> initiate case",[]),
+
+    {_SaNode, _MgrNode, _MibDir} = init_case(Config),
+    ?DBG("loop_mib_1 -> ~n"
 	   "\tSaNode:  ~p~n"
 	   "\tMgrNode: ~p~n"
-	   "\tMibDir:  ~p",[SaNode, MgrNode, MibDir]),
-    ?DBG("loop_mib -> load mib SNMP-COMMUNITY-MIB",[]),
+	   "\tMibDir:  ~p",[_SaNode, _MgrNode, _MibDir]),
+    ?DBG("loop_mib_1 -> load mib SNMP-COMMUNITY-MIB",[]),
     ?line load_master_std("SNMP-COMMUNITY-MIB"),
-    ?DBG("loop_mib -> load mib SNMP-MPD-MIB",[]),
+    ?DBG("loop_mib_1 -> load mib SNMP-MPD-MIB",[]),
     ?line load_master_std("SNMP-MPD-MIB"),
-    ?DBG("loop_mib -> load mib SNMP-TARGET-MIB",[]),
+    ?DBG("loop_mib_1 -> load mib SNMP-TARGET-MIB",[]),
     ?line load_master_std("SNMP-TARGET-MIB"),
-    ?DBG("loop_mib -> load mib SNMP-NOTIFICATION-MIB",[]),
+    ?DBG("loop_mib_1 -> load mib SNMP-NOTIFICATION-MIB",[]),
     ?line load_master_std("SNMP-NOTIFICATION-MIB"),
-    ?DBG("loop_mib -> load mib SNMP-FRAMEWORK-MIB",[]),
+    ?DBG("loop_mib_1 -> load mib SNMP-FRAMEWORK-MIB",[]),
     ?line load_master_std("SNMP-FRAMEWORK-MIB"),
-    ?DBG("loop_mib -> load mib SNMP-VIEW-BASED-ACM-MIB",[]),
+    ?DBG("loop_mib_1 -> load mib SNMP-VIEW-BASED-ACM-MIB",[]),
     ?line load_master_std("SNMP-VIEW-BASED-ACM-MIB"),
-    ?DBG("loop_mib -> try",[]),
-    try_test(loop_mib_1),
-    ?DBG("loop_mib -> unload mib SNMP-COMMUNITY-MIB",[]),
+    ?DBG("loop_mib_1 -> try",[]),
+
+    try_test(loop_mib_1_test),
+
+    ?DBG("loop_mib_1 -> unload mib SNMP-COMMUNITY-MIB",[]),
     ?line unload_master("SNMP-COMMUNITY-MIB"),
-    ?DBG("loop_mib -> unload mib SNMP-MPD-MIB",[]),
+    ?DBG("loop_mib_1 -> unload mib SNMP-MPD-MIB",[]),
     ?line unload_master("SNMP-MPD-MIB"),
-    ?DBG("loop_mib -> unload mib SNMP-TARGET-MIB",[]),
+    ?DBG("loop_mib_1 -> unload mib SNMP-TARGET-MIB",[]),
     ?line unload_master("SNMP-TARGET-MIB"),
-    ?DBG("loop_mib -> unload mib SNMP-NOTIFICATION-MIB",[]),
+    ?DBG("loop_mib_1 -> unload mib SNMP-NOTIFICATION-MIB",[]),
     ?line unload_master("SNMP-NOTIFICATION-MIB"),
-    ?DBG("loop_mib -> unload mib SNMP-FRAMEWORK-MIB",[]),
+    ?DBG("loop_mib_1 -> unload mib SNMP-FRAMEWORK-MIB",[]),
     ?line unload_master("SNMP-FRAMEWORK-MIB"),
-    ?DBG("loop_mib -> unload mib SNMP-VIEW-BASED-ACM-MIB",[]),
+    ?DBG("loop_mib_1 -> unload mib SNMP-VIEW-BASED-ACM-MIB",[]),
     ?line unload_master("SNMP-VIEW-BASED-ACM-MIB"),
     %% snmpa:verbosity(master_agent,log),
     %% snmpa:verbosity(mib_server,silence),
-    ?LOG("loop_mib -> done",[]).
+    ?LOG("loop_mib_1 -> done",[]).
     
 
 loop_mib_2(suite) -> [];
 loop_mib_2(Config) when is_list(Config) ->
     ?P(loop_mib_2), 
     ?LOG("loop_mib_2 -> initiate case",[]),
-    {SaNode, MgrNode, MibDir} = init_case(Config),
-    ?DBG("loop_mib_2 -> ~n"
+    {_SaNode, _MgrNode, _MibDir} = init_case(Config),
+    ?DBG("do_loop_mib_2 -> ~n"
 	   "\tSaNode:  ~p~n"
 	   "\tMgrNode: ~p~n"
-	   "\tMibDir:  ~p",[SaNode, MgrNode, MibDir]),
+	   "\tMibDir:  ~p", [_SaNode, _MgrNode, _MibDir]),
     ?DBG("loop_mib_2 -> load mibs",[]),
     ?line load_master_std("SNMP-COMMUNITY-MIB"),
     ?line load_master_std("SNMP-MPD-MIB"),
@@ -5064,7 +5736,9 @@ loop_mib_2(Config) when is_list(Config) ->
     ?line load_master_std("SNMP-NOTIFICATION-MIB"),
     ?line load_master_std("SNMP-FRAMEWORK-MIB"),
     ?line load_master_std("SNMP-VIEW-BASED-ACM-MIB"),
-    try_test(loop_mib_2),
+
+    try_test(loop_mib_2_test),
+
     ?DBG("loop_mib_2 -> unload mibs",[]),
     ?line unload_master("SNMP-COMMUNITY-MIB"),
     ?line unload_master("SNMP-MPD-MIB"),
@@ -5079,18 +5753,18 @@ loop_mib_3(suite) -> [];
 loop_mib_3(Config) when is_list(Config) ->
     ?P(loop_mib_3), 
     ?LOG("loop_mib_3 -> initiate case",[]),
-    {SaNode, MgrNode, MibDir} = init_case(Config),
+    {_SaNode, _MgrNode, _MibDir} = init_case(Config),
     ?DBG("loop_mib_3 -> ~n"
 	   "\tSaNode:  ~p~n"
 	   "\tMgrNode: ~p~n"
-	   "\tMibDir:  ~p",[SaNode, MgrNode, MibDir]),
+	   "\tMibDir:  ~p", [_SaNode, _MgrNode, _MibDir]),
     ?DBG("loop_mib_3 -> load mibs",[]),
     ?line load_master_std("SNMP-TARGET-MIB"),
     ?line load_master_std("SNMP-NOTIFICATION-MIB"),
     ?line load_master_std("SNMP-VIEW-BASED-ACM-MIB"),
     ?line load_master_std("SNMP-USER-BASED-SM-MIB"),
 
-    try_test(loop_mib_2),
+    try_test(loop_mib_3_test),
 
     ?DBG("loop_mib_3 -> unload mibs",[]),
     ?line unload_master("SNMP-TARGET-MIB"),
@@ -5101,17 +5775,16 @@ loop_mib_3(Config) when is_list(Config) ->
 
 
 %% Req. As many mibs all possible
-loop_mib_1() ->
-    ?DBG("loop_mib_1 -> entry",[]),
+loop_mib_1_test() ->
+    ?DBG("loop_mib_1_test -> entry",[]),
     N = loop_it_1([1,1], 0),
     io:format(user, "found ~w varibles\n", [N]),
     ?line N = if N < 100 -> 100;
 		 true -> N
 	      end.
-	    
 
 loop_it_1(Oid, N) ->
-    ?DBG("loop_it_1 -> entry with~n"
+    ?DBG("loop_it_1_test -> entry with~n"
 	   "\tOid: ~p~n"
 	   "\tN:   ~p",[Oid,N]),
     case get_next_req([Oid]) of
@@ -5119,13 +5792,13 @@ loop_it_1(Oid, N) ->
 	     error_status = noError, 
 	     error_index  = 0,
 	     varbinds     = [#varbind{oid   = NOid,
-				      value = Value}]} when NOid > Oid ->
-	    ?DBG("loop_it_1 -> "
+				      value = _Value}]} when NOid > Oid ->
+	    ?DBG("loop_it_1_test -> "
 		   "~n   NOid:  ~p"
-		   "~n   Value: ~p",[NOid, Value]),
-	    ?line [Value2] = get_req(1, [NOid]), % must not be same
-	    ?DBG("loop_it_1 -> "
-		   "~n   Value2: ~p",[Value2]),
+		   "~n   Value: ~p", [NOid, _Value]),
+	    ?line [_Value2] = get_req(1, [NOid]), % must not be same
+	    ?DBG("loop_it_1_test -> "
+		   "~n   Value2: ~p", [_Value2]),
 	    loop_it_1(NOid, N+1);
 
 	#pdu{type         = 'get-response', 
@@ -5138,7 +5811,7 @@ loop_it_1(Oid, N) ->
 	     error_status = noSuchName, 
 	     error_index = 1,
 	     varbinds    = [_]} ->
-	    ?DBG("loop_it_1 -> done: ~p",[N]),
+	    ?DBG("loop_it_1_test -> done: ~p",[N]),
 	    N;
 
 	#pdu{type         = 'get-response', 
@@ -5159,14 +5832,13 @@ loop_it_1(Oid, N) ->
 	    
 
 %% Req. As many mibs all possible
-loop_mib_2() ->
-    ?DBG("loop_mib_1 -> entry",[]),
+loop_mib_2_test() ->
+    ?DBG("loop_mib_2_test -> entry",[]),
     N = loop_it_2([1,1], 0),
     io:format(user, "found ~w varibles\n", [N]),
     ?line N = if N < 100 -> 100;
 		 true -> N
 	      end.
-    
 
 loop_it_2(Oid, N) ->
     ?DBG("loop_it_2 -> entry with"
@@ -5176,22 +5848,22 @@ loop_it_2(Oid, N) ->
 	#pdu{type         = 'get-response', 
 	     error_status = noError, 
 	     error_index  = 0,
-	     varbinds     = [#varbind{oid = NOid, value = endOfMibView}]} ->
+	     varbinds     = [#varbind{oid = _NOid, value = endOfMibView}]} ->
 	    ?DBG("loop_it_2 -> "
-		 "~n   NOid: ~p",[NOid]),
+		 "~n   NOid: ~p", [_NOid]),
 	    N;
 
 	#pdu{type         = 'get-response', 
 	     error_status = noError, 
 	     error_index  = 0,
 	     varbinds     = [#varbind{oid   = NOid,
-				      value = Value}]} when NOid > Oid ->
+				      value = _Value}]} when NOid > Oid ->
 	    ?DBG("loop_it_2 -> "
 		 "~n   NOid:  ~p"
-		 "~n   Value: ~p",[NOid, Value]),
-	    ?line [Value2] = get_req(1, [NOid]), % must not be same
+		 "~n   Value: ~p", [NOid, _Value]),
+	    ?line [_Value2] = get_req(1, [NOid]), % must not be same
 	    ?DBG("loop_it_2 -> "
-		 "~n   Value2: ~p",[Value2]),
+		 "~n   Value2: ~p", [_Value2]),
 	    loop_it_2(NOid, N+1);
 
 	#pdu{type         = 'get-response', 
@@ -5234,12 +5906,69 @@ loop_it_2(Oid, N) ->
 
     end.
 	    
+loop_mib_3_test() ->
+    ?DBG("loop_mib_3_test -> entry",[]),
+    loop_mib_2_test().
+
 
 %%%-----------------------------------------------------------------
 %%% Testing of reported bugs and other tickets.
 %%%-----------------------------------------------------------------
 
+reported_bugs_cases() ->
+    [
+     otp_1128, 
+     otp_1129, 
+     otp_1131, 
+     otp_1162, 
+     otp_1222,
+     otp_1298, 
+     otp_1331, 
+     otp_1338, 
+     otp_1342, 
+     otp_1366, 
+     otp_2776,
+     otp_2979, 
+     otp_3187, 
+     otp_3725
+    ].
 
+reported_bugs2_cases() ->
+    [
+     otp_1128_2, 
+     otp_1129_2, 
+     otp_1131_2, 
+     otp_1162_2,
+     otp_1222_2, 
+     otp_1298_2, 
+     otp_1331_2, 
+     otp_1338_2,
+     otp_1342_2, 
+     otp_1366_2, 
+     otp_2776_2, 
+     otp_2979_2, 
+     otp_3187_2
+    ].
+
+reported_bugs3_cases() ->
+    [
+     otp_1128_3, 
+     otp_1129_3, 
+     otp_1131_3, 
+     otp_1162_3,
+     otp_1222_3, 
+     otp_1298_3, 
+     otp_1331_3, 
+     otp_1338_3,
+     otp_1342_3, 
+     otp_1366_3, 
+     otp_2776_3, 
+     otp_2979_3, 
+     otp_3187_3,
+     otp_3542
+    ].
+   
+    
 %%-----------------------------------------------------------------
 %% Ticket: OTP-1128
 %% Slogan: Bug in handling of createAndWait set-requests.
@@ -5251,14 +5980,14 @@ otp_1128(Config) when is_list(Config) ->
 
     ?line load_master("OLD-SNMPEA-MIB"),
     ?line init_old(),
-    try_test(otp_1128),
+    try_test(otp_1128_test),
     ?line unload_master("OLD-SNMPEA-MIB").
 
 otp_1128_2(X) -> ?P(otp_1128_2), otp_1128(X).
 
 otp_1128_3(X) -> ?P(otp_1128_3), otp_1128(X).
 
-otp_1128() ->
+otp_1128_test() ->
     io:format("Testing bug reported in ticket OTP-1128...~n"),
 
     NewKeyc3 = [intCommunityViewIndex,get(mip),is("test")],
@@ -5266,15 +5995,16 @@ otp_1128() ->
     NewKeyc5 = [intCommunityStatus,get(mip),is("test")],
 
     s([{NewKeyc5, ?createAndWait}, {NewKeyc4, 2}]),
-    ?line expect(28, [{NewKeyc5, ?createAndWait}, {NewKeyc4, 2}]),
+    ?line ?expect1([{NewKeyc5, ?createAndWait}, {NewKeyc4, 2}]),
     g([NewKeyc5]),
-    ?line expect(29, [{NewKeyc5, ?notReady}]),
+    ?line ?expect1([{NewKeyc5, ?notReady}]),
     s([{NewKeyc5, ?active}, {NewKeyc3, 2}]),
-    ?line expect(30, [{NewKeyc5, ?active}, {NewKeyc3, 2}]),
+    ?line ?expect1([{NewKeyc5, ?active}, {NewKeyc3, 2}]),
     g([NewKeyc5]),
-    ?line expect(31, [{NewKeyc5, ?active}]),
+    ?line ?expect1([{NewKeyc5, ?active}]),
     s([{NewKeyc5, ?destroy}]),
-    ?line expect(32, [{NewKeyc5, ?destroy}]).
+    ?line ?expect1([{NewKeyc5, ?destroy}]).
+
 
 %%-----------------------------------------------------------------
 %% Ticket: OTP-1129, OTP-1169
@@ -5297,6 +6027,7 @@ otp_1129_i(MaNode) ->
     false = rpc:call(MaNode, snmp, int_to_enum, [iso, 1]),
     false = rpc:call(MaNode, snmp, int_to_enum, [isox, 1]).
 
+
 %%-----------------------------------------------------------------
 %% Ticket: OTP-1131
 %% Slogan: Agent crashes / erlang node halts if RowIndex in a
@@ -5309,7 +6040,7 @@ otp_1131(Config) when is_list(Config) ->
     init_case(Config),
 
     ?line load_master("Klas1"),
-    try_test(otp_1131),
+    try_test(otp_1131_test),
     ?line unload_master("Klas1").
 
 otp_1131_2(X) -> ?P(otp_1131_2), otp_1131(X).
@@ -5352,11 +6083,11 @@ otp_1131_3(X) ->
     ?P(otp_1131_3), 
     otp_1131(X).
 
-otp_1131() ->
+otp_1131_test() ->
     io:format("Testing bug reported in ticket OTP-1131...~n"),
     s([{[friendsEntry, [2, 3, 1]], s, "kompis3"},
        {[friendsEntry, [3, 3, 1]], i, ?createAndGo}]),
-    ?line expect(1, ?v1_2(noSuchName, noCreation), 2, any).
+    ?line ?expect3(?v1_2(noSuchName, noCreation), 2, any).
 
 
 %%-----------------------------------------------------------------
@@ -5368,16 +6099,16 @@ otp_1162(Config) when is_list(Config) ->
     ?P(otp_1162), 
     {SaNode, _MgrNode, _MibDir} = init_case(Config),
     ?line {ok, SA} = start_subagent(SaNode, ?sa, "SA-MIB"),
-    try_test(otp_1162),
+    try_test(otp_1162_test),
     stop_subagent(SA).
 
 otp_1162_2(X) -> ?P(otp_1162_2), otp_1162(X).
 
 otp_1162_3(X) -> ?P(otp_1162_3), otp_1162(X).
 
-otp_1162() ->
+otp_1162_test() ->
     s([{[sa, [2,0]], 6}]), % wrongValue (i is_set_ok)
-    ?line expect(1, ?v1_2(badValue, wrongValue), 1, any).
+    ?line ?expect3(?v1_2(badValue, wrongValue), 1, any).
 
 
 %%-----------------------------------------------------------------
@@ -5390,7 +6121,7 @@ otp_1222(Config) when is_list(Config) ->
     init_case(Config),
     ?line load_master("Klas3"),
     ?line load_master("Klas4"),
-    try_test(otp_1222),
+    try_test(otp_1222_test),
     ?line unload_master("Klas3"),
     ?line unload_master("Klas4").
 
@@ -5398,12 +6129,13 @@ otp_1222_2(X) -> ?P(otp_1222_2), otp_1222(X).
 
 otp_1222_3(X) -> ?P(otp_1222_3), otp_1222(X).
 
-otp_1222() ->
+otp_1222_test() ->
     io:format("Testing bug reported in ticket OTP-1222...~n"),
     s([{[fStatus4,1], 4}, {[fName4,1], 1}]),
-    ?line expect(1, genErr, 0, any),
+    ?line ?expect3(genErr, 0, any),
     s([{[fStatus4,2], 4}, {[fName4,2], 1}]),
-    ?line expect(2, genErr, 0, any).
+    ?line ?expect3(genErr, 0, any).
+
 
 %%-----------------------------------------------------------------
 %% Ticket: OTP-1298
@@ -5415,17 +6147,17 @@ otp_1298(Config) when is_list(Config) ->
     init_case(Config),
 
     ?line load_master("Klas2"),
-    try_test(otp_1298),
+    try_test(otp_1298_test),
     ?line unload_master("Klas2").
 
 otp_1298_2(X) -> ?P(otp_1298_2), otp_1298(X).
 
 otp_1298_3(X) -> ?P(otp_1298_3), otp_1298(X).
 
-otp_1298() ->
+otp_1298_test() ->
     io:format("Testing bug reported in ticket OTP-1298...~n"),
     s([{[fint,0], -1}]),
-    ?line expect(1298, [{[fint,0], -1}]).
+    ?line ?expect1([{[fint,0], -1}]).
     
 
 %%-----------------------------------------------------------------
@@ -5438,17 +6170,17 @@ otp_1331(Config) when is_list(Config) ->
     init_case(Config),
     ?line load_master("OLD-SNMPEA-MIB"),
     ?line init_old(),
-    try_test(otp_1331),
+    try_test(otp_1331_test),
     ?line unload_master("OLD-SNMPEA-MIB").
 
 otp_1331_2(X) -> ?P(otp_1331_2), otp_1331(X).
 
 otp_1331_3(X) -> ?P(otp_1331_3), otp_1331(X).
 
-otp_1331() ->
+otp_1331_test() ->
     NewKeyc5 = [intCommunityStatus,[127,32,0,0],is("test")],
     s([{NewKeyc5, ?destroy}]),
-    ?line expect(1, [{NewKeyc5, ?destroy}]).
+    ?line ?expect1([{NewKeyc5, ?destroy}]).
 
 
 %%-----------------------------------------------------------------
@@ -5461,18 +6193,19 @@ otp_1338(Config) when is_list(Config) ->
     init_case(Config),
 
     ?line load_master("Klas2"),
-    try_test(otp_1338),
+    try_test(otp_1338_test),
     ?line unload_master("Klas2").
 
 otp_1338_2(X) -> ?P(otp_1338_2), otp_1338(X).
 
 otp_1338_3(X) -> ?P(otp_1338_3), otp_1338(X).
 
-otp_1338() ->
+otp_1338_test() ->
     s([{[kStatus2, 7], i, ?createAndGo}]),
-    ?line expect(1, [{[kStatus2, 7], ?createAndGo}]),
+    ?line ?expect1([{[kStatus2, 7], ?createAndGo}]),
     g([[kName2, 7]]),
-    ?line expect(2, [{[kName2, 7], "JJJ"}]).
+    ?line ?expect1([{[kName2, 7], "JJJ"}]).
+
 
 %%-----------------------------------------------------------------
 %% Ticket: OTP-1342
@@ -5484,18 +6217,18 @@ otp_1342(Config) when is_list(Config) ->
     ?P(otp_1342), 
     init_case(Config),
     ?line load_master("Klas4"),
-    try_test(otp_1342),
+    try_test(otp_1342_test),
     ?line unload_master("Klas4").
 
 otp_1342_2(X) -> ?P(otp_1342_2), otp_1342(X).
 
 otp_1342_3(X) -> ?P(otp_1342_3), otp_1342(X).
 
-otp_1342() ->
+otp_1342_test() ->
     s([{[fIndex5, 1], i, 1},
        {[fName5, 1], i, 3},
        {[fStatus5, 1], i, ?createAndGo}]),
-    ?line expect(1, ?v1_2(noSuchName, noCreation), 3, any).
+    ?line ?expect3(?v1_2(noSuchName, noCreation), 3, any).
 
 
 %%-----------------------------------------------------------------
@@ -5510,16 +6243,17 @@ otp_1366(Config) when is_list(Config) ->
     init_case(Config),
     ?line load_master("OLD-SNMPEA-MIB"),
     ?line init_old(),
-    try_test(otp_1366),
+    try_test(otp_1366_test),
     ?line unload_master("OLD-SNMPEA-MIB").
 
 otp_1366_2(X) -> ?P(otp_1366_2), otp_1366(X).
 
 otp_1366_3(X) -> ?P(otp_1366_3), otp_1366(X).
 
-otp_1366() ->
+otp_1366_test() ->
     ?INF("NOT YET IMPLEMENTED", []),
     'NYI'.
+
 
 %%-----------------------------------------------------------------
 %% Ticket: OTP-2776
@@ -5529,13 +6263,13 @@ otp_2776(suite) -> [];
 otp_2776(Config) when is_list(Config) ->
     ?P(otp_2776), 
     init_case(Config),
-    try_test(otp_2776).
+    try_test(otp_2776_test).
  
 otp_2776_2(X) -> ?P(otp_2776_2), otp_2776(X).
 
 otp_2776_3(X) -> ?P(otp_2776_3), otp_2776(X).
  
-otp_2776() ->
+otp_2776_test() ->
   io:format("Testing bug reported in ticket OTP-2776...~n"),
  
   Dt01_valid   = [19,98,9,1,1,0,23,0,43,0,0],
@@ -5598,17 +6332,18 @@ otp_2979(Config) when is_list(Config) ->
     init_case(Config),
     ?line load_master("Test1"),
     ?line init_old(),
-    try_test(otp_2979),
+    try_test(otp_2979_test),
     ?line unload_master("Test1").
 
 otp_2979_2(X) -> ?P(otp_2979_2), otp_2979(X).
 
 otp_2979_3(X) -> ?P(otp_2979_3), otp_2979(X).
 
-otp_2979() ->
+otp_2979_test() ->
     gn([[sparseDescr], [sparseStatus]]),
-    ?line expect(1, [{[sparseStr,0], "slut"},
-		     {[sparseStr,0], "slut"}]).
+    ?line ?expect1([{[sparseStr,0], "slut"},
+		    {[sparseStr,0], "slut"}]).
+
 
 %%-----------------------------------------------------------------
 %% Ticket: OTP-3187
@@ -5620,14 +6355,14 @@ otp_3187(Config) when is_list(Config) ->
     ?P(otp_3187), 
     init_case(Config),
     ?line load_master_std("SNMP-VIEW-BASED-ACM-MIB"),
-    otp_3187(),
+    otp_3187_test(),
     ?line unload_master("SNMP-VIEW-BASED-ACM-MIB").
 
 otp_3187_2(X) -> ?P(otp_3187_2), otp_3187(X).
 
 otp_3187_3(X) -> ?P(otp_3187_3), otp_3187(X).
 
-otp_3187() ->
+otp_3187_test() ->
     ?line Elements =
        snmp_view_based_acm_mib:vacmAccessTable(get_next,[],[4,5,6]),
     lists:foreach(fun(E) ->
@@ -5645,9 +6380,9 @@ otp_3542(suite) -> [];
 otp_3542(Config) when is_list(Config) ->
     ?P(otp_3542), 
     init_case(Config),
-    try_test(otp_3542).
+    try_test(otp_3542_test).
 
-otp_3542() ->
+otp_3542_test() ->
     io:format("SNMP v3 discovery...~n"),
     ?line Res = snmp_test_mgr:d(),
     io:format("SNMP v3 discovery result: ~p~n",[Res]).
@@ -5716,10 +6451,15 @@ otp_3725_test(MaNode) ->
 %% Slogan: Target mib tag list check invalid
 %%-----------------------------------------------------------------
 
+tickets1_cases() ->
+    [
+     {group, otp4394}, 
+     {group, otp7157}
+    ].
+    
 
-
-init_otp_4394(Config) when is_list(Config) ->
-    ?DBG("init_otp_4394 -> entry with"
+otp_4394_init(Config) when is_list(Config) ->
+    ?DBG("otp_4394_init -> entry with"
 	   "~n   Config: ~p", [Config]),
     ?line AgentConfDir = ?config(agent_conf_dir, Config),
     ?line MgrDir       = ?config(mgr_dir,        Config),
@@ -5742,8 +6482,8 @@ otp_4394_config(AgentConfDir, MgrDir, Ip0) ->
 					     "OTP-4394 test"),
     ?line case update_usm(Vsn, AgentConfDir) of
 	true ->
-	    ?line copy_file(filename:join(AgentConfDir, "usm.conf"),
-			    filename:join(MgrDir, "usm.conf")),
+	    ?line copy_file(join(AgentConfDir, "usm.conf"),
+			    join(MgrDir, "usm.conf")),
 	    ?line update_usm_mgr(Vsn, MgrDir);
 	false ->
 	    ?line ok
@@ -5770,37 +6510,35 @@ otp_4394_config(AgentConfDir, MgrDir, Ip0) ->
     ?line write_notify_conf(AgentConfDir),
     ok.
     
-
-
-finish_otp_4394(Config) when is_list(Config) ->
+otp_4394_finish(Config) when is_list(Config) ->
     ?DBG("finish_otp_4394 -> entry", []),
     C1 = stop_agent(Config),
     delete_files(C1),
     erase(mgr_node),
     lists:keydelete(vsn, 1, C1).
 
-otp_4394_test(suite) -> [];
-otp_4394_test(Config) ->
-    ?P(otp_4394_test), 
-    ?DBG("otp_4394_test -> entry", []),
+otp_4394(suite) -> [];
+otp_4394(Config) ->
+    ?P(otp_4394), 
+    ?DBG("otp_4394 -> entry", []),
     init_case(Config),
-    try_test(otp_4394_test1),
-    ?DBG("otp_4394_test -> done", []),
+    try_test(otp_4394_test),
+    ?DBG("otp_4394 -> done", []),
     ok.
 
-otp_4394_test1() ->
-    ?DBG("otp_4394_test1 -> entry", []),
+otp_4394_test() ->
+    ?DBG("otp_4394_test -> entry", []),
     gn([[1,1]]),
     Res = 
 	case snmp_test_mgr:expect(1, [{[sysDescr,0],  "Erlang SNMP agent"}]) of
 	    %% {error, 1, {"?",[]}, {"~w",[timeout]}}
 	    {error, 1, _, {_, [timeout]}} ->
-		?DBG("otp_4394_test1 -> expected result: timeout", []),
+		?DBG("otp_4394_test -> expected result: timeout", []),
 		ok;
 	    Else ->
 		Else
 	end,
-    ?DBG("otp_4394_test1 -> done with: ~p", [Res]),
+    ?DBG("otp_4394_test -> done with: ~p", [Res]),
     Res.
 
 
@@ -5811,7 +6549,7 @@ otp_4394_test1() ->
 
 
 
-init_otp_7157(Config) when is_list(Config) ->
+otp_7157_init(Config) when is_list(Config) ->
     %% <CONDITIONAL-SKIP>
     Skippable = [win32],
     Condition = fun() -> ?OS_BASED_SKIP(Skippable) end,
@@ -5831,30 +6569,30 @@ init_otp_7157(Config) when is_list(Config) ->
     [{vsn, v2} | start_v2_agent(Config, Opts)].
 
 
-finish_otp_7157(Config) when is_list(Config) ->
+otp_7157_finish(Config) when is_list(Config) ->
     ?DBG("finish_otp_7157 -> entry", []),
     C1 = stop_agent(Config),
     delete_files(C1),
     erase(mgr_node),
     lists:keydelete(vsn, 1, C1).
 
-otp_7157_test(suite) -> [];
-otp_7157_test(Config) ->
-    ?P(otp_7157_test), 
-    ?DBG("otp_7157_test -> entry", []),
+otp_7157(suite) -> [];
+otp_7157(Config) ->
+    ?P(otp_7157), 
+    ?DBG("otp_7157 -> entry", []),
     init_case(Config),
     MA = whereis(snmp_master_agent),
     ?line load_master("Test1"),
-    try_test(otp_7157_test1, [MA]),
+    try_test(otp_7157_test, [MA]),
     ?line unload_master("Test1"),
-    ?DBG("otp_7157_test -> done", []),
+    ?DBG("otp_7157 -> done", []),
     ok.
 
 %% ts:run(snmp, snmp_agent_test, [batch]).
-otp_7157_test1(MA) ->
-    ?LOG("start otp_7157_test1 test (~p)",[MA]),
+otp_7157_test(MA) ->
+    ?LOG("start otp_7157_test test (~p)",[MA]),
     snmpa:verbosity(MA, trace),
-    ?LOG("start otp_7157_test1 test",[]),
+    ?LOG("start otp_7157_test test",[]),
     ?P1("Testing that varbinds in traps/notifications are not reordered"),
     
     ?DBG("send cntTrap",[]),
@@ -5862,11 +6600,11 @@ otp_7157_test1(MA) ->
 
     ?DBG("await response",[]),
     %% We don't really care about the values, just the vb order.
-    ?line ok = expect(1, v2trap, [{[sysUpTime,   0], any},
-				  {[snmpTrapOID, 0], any},
-				  {[sysContact,  0], any},
-				  {[cnt64,       0], any},
-				  {[sysLocation, 0], any}]),
+    ?line ok = ?expect2(v2trap, [{[sysUpTime,   0], any},
+				 {[snmpTrapOID, 0], any},
+				 {[sysContact,  0], any},
+				 {[cnt64,       0], any},
+				 {[sysLocation, 0], any}]),
 
     ?DBG("done", []),
     ok.
@@ -5878,6 +6616,13 @@ otp_7157_test1(MA) ->
 %% These cases are started in the new way
 %%-----------------------------------------------------------------
 
+tickets2_cases() ->
+    [
+     otp8395, 
+     otp9884
+    ].
+
+
 otp8395({init, Config}) when is_list(Config) ->
     ?DBG("otp8395(init) -> entry with"
 	 "~n   Config: ~p", [Config]),
@@ -5887,7 +6632,6 @@ otp8395({init, Config}) when is_list(Config) ->
     %% 
 
     {ok, AgentNode}    = start_node(agent),
-    %% {ok, SubAgentNode} = start_node(sub_agent),
     {ok, ManagerNode}  = start_node(manager),
 
     %% -- 
@@ -5895,19 +6639,12 @@ otp8395({init, Config}) when is_list(Config) ->
     %% 
 
     AgentDbDir = ?config(agent_db_dir, Config),
-    AgentMnesiaDir = filename:join([AgentDbDir, "mnesia"]),
+    AgentMnesiaDir = join([AgentDbDir, "mnesia"]),
     mnesia_init(AgentNode, AgentMnesiaDir),
 
-    %% SubAgentDir = ?config(sub_agent_dir, Config),
-    %% SubAgentMnesiaDir = filename:join([SubAgentDir, "mnesia"]),
-    %% mnesia_init(SubAgentNode, SubAgentMnesiaDir),
-
-    %% ok = mnesia_create_schema(AgentNode, [AgentNode, SubAgentNode]), 
-    %% ok = mnesia:create_schema([AgentNode, SubAgentNode]),
     mnesia_create_schema(AgentNode, [AgentNode]),
 
     mnesia_start(AgentNode),
-    %% mnesia_start(SubAgentNode),
 
     %% --
     %% Host & IP
@@ -5917,6 +6654,7 @@ otp8395({init, Config}) when is_list(Config) ->
     %% SubAgentHost = ?HPSTNAME(SubAgentNode), 
     ManagerHost  = ?HOSTNAME(ManagerNode),
 
+    IpFamily          = inet,
     Host              = snmp_test_lib:hostname(), 
     Ip                = ?LOCALHOST(),
     {ok, AgentIP0}    = snmp_misc:ip(AgentHost),
@@ -5934,9 +6672,7 @@ otp8395({init, Config}) when is_list(Config) ->
     Vsns           = [v1], 
     AgentConfDir   = ?config(agent_conf_dir, Config),
     ManagerConfDir = ?config(manager_top_dir, Config),
-    snmp_agent_test_lib:config(Vsns, 
-			       ManagerConfDir, AgentConfDir, 
-			       ManagerIP, AgentIP),
+    config(Vsns, ManagerConfDir, AgentConfDir, ManagerIP, AgentIP, IpFamily),
 
 
     %% --
@@ -5945,6 +6681,7 @@ otp8395({init, Config}) when is_list(Config) ->
 
     Config2 = start_agent([{host,          Host}, 
 			   {ip,            Ip}, 
+			   {ipfamily,      IpFamily},
 			   {agent_node,    AgentNode}, 
 			   {agent_host,    AgentHost}, 
 			   {agent_ip,      AgentIP}, 
@@ -5993,11 +6730,6 @@ otp8395({fin, Config}) when is_list(Config) ->
     ?DBG("otp8395(fin) -> stop agent node", []),
     stop_node(AgentNode),
 
-
-    %% SubAgentNode = ?config(sub_agent_node, Config),
-    %% stop_node(SubAgentNode),
-
-
     %% - 
     %% Stop the manager node
     %% 
@@ -6024,22 +6756,23 @@ otp8395(Config) when is_list(Config) ->
     put(mib_dir,  ?config(mib_dir, Config)),
     put(vsn, v1), 
     put(master_host, ?config(agent_host, Config)),
+    put(ipfamily, ?config(ipfamily, Config)),
     try_test(simple_standard_test),
 
     ?SLEEP(1000),
     AgentNode   = ?config(agent_node, Config),
     AgentLogDir = ?config(agent_log_dir, Config),
-    OutFile     = filename:join([AgentLogDir, "otp8395.txt"]),
-    {ok, LogInfo} = rpc:call(AgentNode, snmpa, log_info, []),
-    ?DBG("otp8395 -> LogInfo: ~p", [LogInfo]), 
+    OutFile     = join([AgentLogDir, "otp8395.txt"]),
+    {ok, _LogInfo} = rpc:call(AgentNode, snmpa, log_info, []),
+    ?DBG("otp8395 -> LogInfo: ~p", [_LogInfo]), 
 
     %% SyncRes = rpc:call(AgentNode, snmp, log_sync, [?audit_trail_log_name]),
     %% ?DBG("otp8395 -> SyncRes: ~p", [SyncRes]), 
 
     ok = agent_log_validation(AgentNode),
-    LTTRes = 
+    _LTTRes = 
 	rpc:call(AgentNode, snmpa, log_to_txt, [AgentLogDir, [], OutFile]), 
-    ?DBG("otp8395 -> LTTRes: ~p", [LTTRes]), 
+    ?DBG("otp8395 -> LTTRes: ~p", [_LTTRes]), 
 
     ?SLEEP(1000),
     ?DBG("otp8395 -> done", []),
@@ -6051,126 +6784,12 @@ otp8395(Config) when is_list(Config) ->
 otp9884({init, Config}) when is_list(Config) ->
     ?DBG("otp9884(init) -> entry with"
 	 "~n   Config: ~p", [Config]),
-
-    %% -- 
-    %% Start nodes
-    %% 
-
-    {ok, AgentNode}   = start_node(agent),
-
-    %% We don't use a manager in this test but the (common) config 
-    %% function takes an argument that is derived from this
-    {ok, ManagerNode} = start_node(manager), 
-
-    %% -- 
-    %% Mnesia init
-    %% 
-
-    AgentDbDir = ?config(agent_db_dir, Config),
-    AgentMnesiaDir = filename:join([AgentDbDir, "mnesia"]),
-    mnesia_init(AgentNode, AgentMnesiaDir),
-
-    mnesia_create_schema(AgentNode, [AgentNode]),
-
-    mnesia_start(AgentNode),
-
-    %% --
-    %% Host & IP
-    %% 
-
-    AgentHost   = ?HOSTNAME(AgentNode),
-    ManagerHost = ?HOSTNAME(ManagerNode),
-
-    Host              = snmp_test_lib:hostname(), 
-    Ip                = ?LOCALHOST(),
-    {ok, AgentIP0}    = snmp_misc:ip(AgentHost),
-    AgentIP           = tuple_to_list(AgentIP0), 
-    {ok, ManagerIP0}  = snmp_misc:ip(ManagerHost),
-    ManagerIP         = tuple_to_list(ManagerIP0),
-
-
-    %% --
-    %% Write agent config
-    %% 
-
-    Vsns           = [v1], 
-    ManagerConfDir = ?config(manager_top_dir, Config),
-    AgentConfDir   = ?config(agent_conf_dir, Config),
-    AgentTopDir    = ?config(agent_top_dir, Config),
-    AgentBkpDir1   = filename:join([AgentTopDir, backup1]),
-    AgentBkpDir2   = filename:join([AgentTopDir, backup2]),
-    ok = file:make_dir(AgentBkpDir1),
-    ok = file:make_dir(AgentBkpDir2),
-    AgentBkpDirs = [AgentBkpDir1, AgentBkpDir2], 
-    snmp_agent_test_lib:config(Vsns, 
-			       ManagerConfDir, AgentConfDir, 
-			       ManagerIP, AgentIP),
-
-
-    %% --
-    %% Start the agent
-    %% 
-
-    Config2 = start_agent([{host,              Host}, 
-			   {ip,                Ip}, 
-			   {agent_node,        AgentNode}, 
-			   {agent_host,        AgentHost}, 
-			   {agent_ip,          AgentIP}, 
-			   {agent_backup_dirs, AgentBkpDirs}|Config]),
-
-    %% -- 
-    %% Create watchdog 
-    %% 
-
-    Dog = ?WD_START(?MINS(1)),
-
-    [{watchdog, Dog} | Config2];
+    init_v1_agent([{ipfamily, inet} | Config]);
 
 otp9884({fin, Config}) when is_list(Config) ->
     ?DBG("otp9884(fin) -> entry with"
 	 "~n   Config: ~p", [Config]),
-
-    AgentNode   = ?config(agent_node, Config),
-    ManagerNode = ?config(manager_node, Config),
-
-    %% -
-    %% Stop agent (this is the nice way to do it, 
-    %% so logs and files can be closed in the proper way).
-    %% 
-
-    AgentSup = ?config(agent_sup, Config),
-    ?DBG("otp9884(fin) -> stop (stand-alone) agent: ~p", [AgentSup]),
-    stop_stdalone_agent(AgentSup), 
-
-    %% - 
-    %% Stop mnesia
-    %% 
-    ?DBG("otp9884(fin) -> stop mnesia", []),
-    mnesia_stop(AgentNode),
-
-
-    %% - 
-    %% Stop the agent node
-    %% 
-
-    ?DBG("otp9884(fin) -> stop agent node", []),
-    stop_node(AgentNode),
-
-
-    %%     SubAgentNode = ?config(sub_agent_node, Config),
-    %%     stop_node(SubAgentNode),
-
-
-    %% - 
-    %% Stop the manager node
-    %% 
-
-    ?DBG("otp9884(fin) -> stop manager node", []),
-    stop_node(ManagerNode),
-
-    Dog = ?config(watchdog, Config),
-    ?WD_STOP(Dog),
-    lists:keydelete(watchdog, 1, Config);
+    fin_v1_agent(Config);
 
 otp9884(doc) ->
     "OTP-9884 - Simlutaneous backup call should not work. ";
@@ -6230,8 +6849,6 @@ otp9884_await_backup_completion(First, Second)
     end;
 otp9884_await_backup_completion(First, Second) ->
     throw({error, {bad_completion, First, Second}}).
-
-
 %%-----------------------------------------------------------------
 
 agent_log_validation(Node) ->
@@ -6329,20 +6946,6 @@ process_options(Defaults, _Opts) ->
     %% process_options(Defaults, Opts, []).
     Defaults.
 
-%% process_options([], _Opts, Acc) ->
-%%     lists:reverse(Acc);
-%% process_options([{Key, DefaultValue}|Defaults], Opts, Acc) ->
-%%     case lists:keysearch(Key, 1, Opts) of
-%% 	{value, {Key, Value}} when is_list->
-	    
-
-snmp_app_env_init(Node, Entity, Conf) ->
-    rpc:call(Node, snmp_app_env_init, [Entity, Conf]).
-
-snmp_app_env_init(Entity, Conf) ->
-    application:unload(snmp),
-    application:load(snmp),
-    application:set_env(snmp, Entity, Conf).
 
 start_stdalone_agent(Node, Config)  ->
     rpc:call(Node, ?MODULE, start_stdalone_agent, [Config]).
@@ -6360,10 +6963,10 @@ stop_stdalone_agent(Pid) when (node(Pid) =/= node()) ->
     MRef = erlang:monitor(process, Pid),
     rpc:call(node(Pid), ?MODULE, stop_stdalone_agent, [Pid]),
     receive
-	{'DOWN', MRef, process, Pid, Info} ->
+	{'DOWN', MRef, process, Pid, _Info} ->
 	    ?DBG("received expected DOWN message "
 		 "regarding snmp agent supervisor: "
-		 "~n   Info: ~p", [Info]),
+		 "~n   Info: ~p", [_Info]),
 	    ok
     after 5000 ->
 	    ?DBG("no DOWN message "
@@ -6403,10 +7006,10 @@ info_test(Config) when is_list(Config) ->
 
     ?line load_master("OLD-SNMPEA-MIB"),
     ?line init_old(),
-    try_test(info_test1, [node()]),
+    try_test(do_info, [node()]),
     ?line unload_master("OLD-SNMPEA-MIB").
     
-info_test1(MaNode) ->
+do_info(MaNode) ->
     ?line Info = rpc:call(MaNode, snmpa, info, []),
     ?DBG("info_test1 -> Info: ~n~p", [Info]),
     Keys = [vsns, 
@@ -6422,9 +7025,6 @@ info_test1(MaNode) ->
 			  tree_size_bytes, 
 			  db_memory]}], 
     verify_info(Info, Keys),
-    OldInfo = snmpa:old_info_format(Info),
-    ?DBG("info_test1 -> OldInfo: ~n~p", [OldInfo]),
-    verify_old_info(OldInfo),
     ok.
 
 verify_info([], []) ->
@@ -6466,23 +7066,8 @@ verify_subinfo(Info0, [Key|Keys]) ->
 	Info ->
 	    verify_subinfo(Info, Keys)
     end.
-
-verify_old_info(Info) ->
-    Keys = [vsns, subagents, loaded_mibs, 
-	    tree_size_bytes, process_memory, db_memory],
-    verify_old_info(Keys, Info).
-
-verify_old_info([], _) ->
-    ok;
-verify_old_info([Key|Keys], Info) ->
-    case lists:keymember(Key, 1, Info) of
-	true ->
-	    verify_old_info(Keys, Info);
-	false ->
-	    ?FAIL({missing_old_info, Key})
-    end.
    
-%% string used in index
+%% Index String - string used in index
 is(S) -> [length(S) | S].
 
 try_test(Func) ->
@@ -6500,16 +7085,11 @@ try_test(Func, A, Opts) ->
 
 %% Test manager wrapperfunctions:
 g(Oids)          -> snmp_test_mgr:g(Oids).
-gn()             -> snmp_test_mgr:gn().
+%%gn()             -> snmp_test_mgr:gn().
 gn(OidsOrN)      -> snmp_test_mgr:gn(OidsOrN).
 gb(NR, MR, Oids) -> snmp_test_mgr:gb(NR, MR, Oids).
 s(VAV)           -> snmp_test_mgr:s(VAV).
    
-expect(A, B)             -> snmp_agent_test_lib:expect(A, B).
-expect(A, B, C)          -> snmp_agent_test_lib:expect(A, B, C).
-expect(A, B, C, D)       -> snmp_agent_test_lib:expect(A, B, C, D).
-expect(A, B, C, D, E, F) -> snmp_agent_test_lib:expect(A, B, C, D, E, F).
-
 get_req(Id, Vars) ->
     snmp_agent_test_lib:get_req(Id, Vars).
 
@@ -6533,6 +7113,9 @@ delete_files(Config) ->
 config(Vsns, MgrDir, AgentDir, MIp, AIp) ->
     snmp_agent_test_lib:config(Vsns, MgrDir, AgentDir, MIp, AIp).
 
+config(Vsns, MgrDir, AgentDir, MIp, AIp, IpFamily) ->
+    snmp_agent_test_lib:config(Vsns, MgrDir, AgentDir, MIp, AIp, IpFamily).
+
 update_usm(Vsns, Dir) ->
     snmp_agent_test_lib:update_usm(Vsns, Dir).
     
@@ -6545,8 +7128,6 @@ rewrite_usm_mgr(Dir, ShaKey, DesKey) ->
 reset_usm_mgr(Dir) ->
     snmp_agent_test_lib:reset_usm_mgr(Dir).
 
-update_community(Vsns, DIr) ->
-    snmp_agent_test_lib:update_community(Vsns, DIr).
 
 update_vacm(Vsn, Dir) ->
     snmp_agent_test_lib:update_vacm(Vsn, Dir).
@@ -6557,8 +7138,6 @@ write_community_conf(Dir, Conf) ->
 write_target_addr_conf(Dir, Conf) ->
     snmp_agent_test_lib:write_target_addr_conf(Dir, Conf).
 
-%% write_target_addr_conf(Dir, ManagerIp, UDP, Vsns) -> 
-%%     snmp_agent_test_lib:write_target_addr_conf(Dir, ManagerIp, UDP, Vsns).
 
 rewrite_target_addr_conf(Dir, NewPort) ->
     snmp_agent_test_lib:rewrite_target_addr_conf(Dir, NewPort).
@@ -6579,10 +7158,6 @@ reset_target_params_conf(Dir) ->
 write_notify_conf(Dir) -> 
     snmp_agent_test_lib:write_notify_conf(Dir).
 
-write_view_conf(Dir) -> 
-    snmp_agent_test_lib:write_view_conf(Dir).
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 copy_file(From, To) ->
@@ -6598,7 +7173,7 @@ display_log(Config) ->
 		{value, {_, Node}} ->
 		    LogDir  = Dir, 
 		    Mibs    = [], 
-		    OutFile = filename:join(LogDir, "snmpa_log.txt"), 
+		    OutFile = join(LogDir, "snmpa_log.txt"), 
 		    p("~n"
 		      "========================="
 		      "  < Audit Trail Log >  "
@@ -6742,8 +7317,13 @@ lists_key1search(Key, List) when is_atom(Key) ->
     end.
 
 
-regs() ->
-    lists:sort(registered()).
+%% ------
+
+join(Parts) ->
+    filename:join(Parts).
+
+join(Dir, File) ->
+    filename:join(Dir, File).
 
 
 %% ------
@@ -6769,3 +7349,124 @@ p(F, A) ->
 formated_timestamp() ->
     snmp_test_lib:formated_timestamp().
 
+
+init_v1_agent(Config) -> 
+    %% -- 
+    %% Start nodes
+    %% 
+
+    {ok, AgentNode}   = start_node(agent),
+
+    %% We don't use a manager in this test but the (common) config 
+    %% function takes an argument that is derived from this
+    {ok, ManagerNode} = start_node(manager), 
+
+    %% -- 
+    %% Mnesia init
+    %% 
+
+    AgentDbDir = ?config(agent_db_dir, Config),
+    AgentMnesiaDir = join([AgentDbDir, "mnesia"]),
+    mnesia_init(AgentNode, AgentMnesiaDir),
+
+    mnesia_create_schema(AgentNode, [AgentNode]),
+
+    mnesia_start(AgentNode),
+
+    %% --
+    %% Host & IP
+    %% 
+
+    AgentHost   = ?HOSTNAME(AgentNode),
+    ManagerHost = ?HOSTNAME(ManagerNode),
+
+    Host              = snmp_test_lib:hostname(), 
+    IpFamily          = config_ipfamily(Config),
+    Ip                = ?LOCALHOST(IpFamily),
+    {ok, AgentIP0}    = snmp_misc:ip(AgentHost, IpFamily),
+    AgentIP           = tuple_to_list(AgentIP0), 
+    {ok, ManagerIP0}  = snmp_misc:ip(ManagerHost, IpFamily),
+    ManagerIP         = tuple_to_list(ManagerIP0),
+
+
+    %% --
+    %% Write agent config
+    %% 
+
+    Vsns           = [v1], 
+    ManagerConfDir = ?config(manager_top_dir, Config),
+    AgentConfDir   = ?config(agent_conf_dir, Config),
+    AgentTopDir    = ?config(agent_top_dir, Config),
+    AgentBkpDir1   = join([AgentTopDir, backup1]),
+    AgentBkpDir2   = join([AgentTopDir, backup2]),
+    ok = file:make_dir(AgentBkpDir1),
+    ok = file:make_dir(AgentBkpDir2),
+    AgentBkpDirs = [AgentBkpDir1, AgentBkpDir2], 
+    config(Vsns, ManagerConfDir, AgentConfDir, ManagerIP, AgentIP, IpFamily),
+
+
+    %% --
+    %% Start the agent
+    %% 
+
+    Config2 = start_agent([{host,              Host}, 
+			   {ip,                Ip},
+			   {agent_node,        AgentNode}, 
+			   {agent_host,        AgentHost}, 
+			   {agent_ip,          AgentIP}, 
+			   {agent_backup_dirs, AgentBkpDirs}|Config]),
+
+    %% -- 
+    %% Create watchdog 
+    %% 
+
+    Dog = ?WD_START(?MINS(1)),
+
+    [{watchdog, Dog} | Config2].
+
+fin_v1_agent(Config) ->
+    AgentNode   = ?config(agent_node, Config),
+    ManagerNode = ?config(manager_node, Config),
+
+    %% -
+    %% Stop agent (this is the nice way to do it, 
+    %% so logs and files can be closed in the proper way).
+    %% 
+
+    AgentSup = ?config(agent_sup, Config),
+    stop_stdalone_agent(AgentSup), 
+
+    %% - 
+    %% Stop mnesia
+    %% 
+    mnesia_stop(AgentNode),
+
+
+    %% - 
+    %% Stop the agent node
+    %% 
+    stop_node(AgentNode),
+
+
+    %%     SubAgentNode = ?config(sub_agent_node, Config),
+    %%     stop_node(SubAgentNode),
+
+
+    %% - 
+    %% Stop the manager node
+    %% 
+    stop_node(ManagerNode),
+
+    Dog = ?config(watchdog, Config),
+    ?WD_STOP(Dog),
+    lists:keydelete(watchdog, 1, Config).
+
+
+
+config_ipfamily(Config) ->
+    case ?config(ipfamily, Config) of
+	undefined ->
+	    inet;
+	Value ->
+	    Value
+    end.

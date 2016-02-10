@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2010-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -59,22 +60,25 @@ end_per_testcase(_Func, Config) ->
     ?t:timetrap_cancel(Dog).
 
 call_with_huge_message_queue(Config) when is_list(Config) ->
-    ?line Pid = spawn_link(fun echo_loop/0),
+    Pid = spawn_link(fun echo_loop/0),
 
-    ?line {Time,ok} = tc(fun() -> calls(10, Pid) end),
+    {Time,ok} = tc(fun() -> calls(10, Pid) end),
 
-    ?line [self() ! {msg,N} || N <- lists:seq(1, 500000)],
+    [self() ! {msg,N} || N <- lists:seq(1, 500000)],
     erlang:garbage_collect(),
-    ?line {NewTime,ok} = tc(fun() -> calls(10, Pid) end),
-    io:format("Time for empty message queue: ~p", [Time]),
-    io:format("Time for huge message queue: ~p", [NewTime]),
+    {NewTime1,ok} = tc(fun() -> calls(10, Pid) end),
+    {NewTime2,ok} = tc(fun() -> calls(10, Pid) end),
 
-    case (NewTime+1) / (Time+1) of
+    io:format("Time for empty message queue: ~p", [Time]),
+    io:format("Time1 for huge message queue: ~p", [NewTime1]),
+    io:format("Time2 for huge message queue: ~p", [NewTime2]),
+
+    case hd(lists:sort([(NewTime1+1) / (Time+1), (NewTime2+1) / (Time+1)])) of
 	Q when Q < 10 ->
 	    ok;
 	Q ->
-	    io:format("Q = ~p", [Q]),
-	    ?line ?t:fail()
+	    io:format("Best Q = ~p", [Q]),
+	    ?t:fail()
     end,
     ok.
 
@@ -95,8 +99,8 @@ call(Pid, Msg) ->
     end.
 
 receive_in_between(Config) when is_list(Config) ->
-    ?line Pid = spawn_link(fun echo_loop/0),
-    ?line [{ok,{a,b}} = call2(Pid, {a,b}) || _ <- lists:seq(1, 100000)],
+    Pid = spawn_link(fun echo_loop/0),
+    [{ok,{a,b}} = call2(Pid, {a,b}) || _ <- lists:seq(1, 100000)],
     ok.
 
 call2(Pid, Msg) ->

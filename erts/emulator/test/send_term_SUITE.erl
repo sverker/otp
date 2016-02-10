@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2005-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2005-2014. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -62,7 +63,19 @@ basic(Config) when is_list(Config) ->
 
     ?line [] = term(P, 0),
     ?line Self = self(),
-    ?line {blurf,42,[],[-42,{}|"abc"++P],"kalle",3.1416,Self} = term(P, 1),
+    {blurf,42,[],[-42,{}|"abc"++P],"kalle",3.1416,Self,#{}} = term(P, 1),
+
+    Map41 = maps:from_list([{blurf, 42},
+			    {[], [-42,{}|"abc"++P]},
+			    {"kalle", 3.1416},
+			    {Self, #{}}]),
+    Map41 = term(P, 41),
+
+    Map42 = maps:from_list([{42, []},
+			    {[-42,{}|"abc"++P], "kalle"},
+			    {3.1416, Self},
+			    {#{}, blurf}]),
+    Map42 = term(P, 42),
     ?line Deep = lists:seq(0, 199),
     ?line Deep = term(P, 2),
     ?line {B1,B2} = term(P, 3),
@@ -125,7 +138,8 @@ basic(Config) when is_list(Config) ->
                {-1, 36}, % ERL_DRV_INT64
                {-4711, 37}, % ERL_DRV_INT64
                {-20233590931456, 38}, % ERL_DRV_INT64
-               {-9223372036854775808, 39}], % ERL_DRV_INT64
+               {-9223372036854775808, 39},
+	       {#{}, 40}], % ERL_DRV_MAP
     ?line {Terms, Ops} = lists:unzip(Singles),
     ?line Terms = term(P,Ops),
 
@@ -175,10 +189,6 @@ chk_temp_alloc() ->
 	    %% Verify that we havn't got anything allocated by temp_alloc
 	    lists:foreach(
 	      fun ({instance, _, TI}) ->
-		      ?line {value, {sbmbcs, SBMBCInfo}}
-			  = lists:keysearch(sbmbcs, 1, TI),
-		      ?line {value, {blocks, 0, _, _}}
-			  = lists:keysearch(blocks, 1, SBMBCInfo),
 		      ?line {value, {mbcs, MBCInfo}}
 			  = lists:keysearch(mbcs, 1, TI),
 		      ?line {value, {blocks, 0, _, _}}
@@ -270,7 +280,10 @@ generate_external_terms_files(BaseDir) ->
 	 {4444444444444444,-44444, [[[[[[[[[[[5]]]]]]]]]]], make_ref()},
 	 {444444444444444444444,-44444, {{{{{{{{{{{{6}}}}}}}}}}}}, make_ref()},
 	 {444444444444444,-44444, {{{{{{{{{{{{7}}}}}}}}}}}}, make_ref()},
-	 {4444444444444444444,-44444, {{{{{{{{{{{{8}}}}}}}}}}}}, make_ref()}],
+	 {4444444444444444444,-44444, {{{{{{{{{{{{8}}}}}}}}}}}}, make_ref()},
+         #{},
+	 #{1 => 11, 2 => 22, 3 => 33},
+	 maps:from_list([{K,K*11} || K <- lists:seq(1,100)])],
     ok = file:write_file(filename:join([BaseDir,
 					"send_term_SUITE_data",
 					"ext_terms.bin"]),
@@ -345,16 +358,17 @@ write_bytes(IoDev, Prefix, [B|Bs], N) ->
     write_bytes(IoDev, ",", Bs, N+1).
 
 write_license(IoDev) ->
-    S =	"/* ``The contents of this file are subject to the Erlang Public License,~n"
-	" * Version 1.1, (the \"License\"); you may not use this file except in~n"
-	" * compliance with the License. You should have received a copy of the~n"
-	" * Erlang Public License along with this software. If not, it can be~n"
-	" * retrieved via the world wide web at http://www.erlang.org/.~n"
-	" * ~n"
-	" * Software distributed under the License is distributed on an \"AS IS\"~n"
-	" * basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See~n"
-	" * the License for the specific language governing rights and limitations~n"
-	" * under the License.~n"
+    S = "/* ``Licensed under the Apache License, Version 2.0 (the \"License\");~n"
+        " * you may not use this file except in compliance with the License.~n"
+        " * You may obtain a copy of the License at~n"
+        " * ~n"
+        " *     http://www.apache.org/licenses/LICENSE-2.0~n"
+        " * ~n"
+        " * Unless required by applicable law or agreed to in writing, software~n"
+        " * distributed under the License is distributed on an \"AS IS\" BASIS,~n"
+        " * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.~n"
+        " * See the License for the specific language governing permissions and~n"
+        " * limitations under the License.~n"
 	" * ~n"
 	" * The Initial Developer of the Original Code is Ericsson AB.~n"
 	" * Portions created by Ericsson are Copyright 2007, Ericsson AB.~n"

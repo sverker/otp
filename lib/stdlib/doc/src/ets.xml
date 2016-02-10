@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
-      <year>1996</year><year>2013</year>
+      <year>1996</year><year>2014</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -131,9 +132,10 @@
       <name name="access"/>
     </datatype>
     <datatype>
-      <name><marker id="type-continuation">continuation()</marker></name>
+      <name>continuation()</name>
       <desc>
-        <p>Opaque continuation used by <seealso marker="#select/1">
+        <p><marker id="type-continuation"/>
+          Opaque continuation used by <seealso marker="#select/1">
           <c>select/1,3</c></seealso>, <seealso marker="#select_reverse/1">
           <c>select_reverse/1,3</c></seealso>, <seealso
           marker="#match/1">
@@ -171,6 +173,10 @@
         <p>Returns a list of all tables at the node. Named tables are
           given by their names, unnamed tables are given by their
           table identifiers.</p>
+	<p>There is no guarantee of consistency in the returned list. Tables created
+	or deleted by other processes "during" the ets:all() call may or may
+	not be included in the list. Only tables created/deleted <em>before</em>
+	ets:all() is called are guaranteed to be included/excluded.</p>
       </desc>
     </func>
     <func>
@@ -443,15 +449,21 @@ Error: fun containing local Erlang function calls
           <item><c>{owner, pid()}</c>          <br></br>
 
            The pid of the owner of the table.</item>
-          <item><c>{protection, <seealso marker="#type-access">access()</seealso>}</c>          <br></br>
+          <item><c>{protection, </c><seealso marker="#type-access">access()</seealso><c>}</c>          <br></br>
 
            The table access rights.</item>
           <item><c>{size, integer() >= 0</c>          <br></br>
 
            The number of objects inserted in the table.</item>
-          <item><c>{type, <seealso marker="#type-type">type()</seealso>}</c>          <br></br>
+          <item><c>{type, </c><seealso marker="#type-type">type()</seealso><c>}</c>          <br></br>
 
            The table type.</item>
+          <item><c>{read_concurrency, boolean()}</c>          <br></br>
+
+           Indicates whether the table uses read_concurrency or not.</item>
+          <item><c>{write_concurrency, boolean()}</c>          <br></br>
+
+           Indicates whether the table uses write_concurrency or not.</item>
         </list>
       </desc>
     </func>
@@ -476,14 +488,39 @@ Error: fun containing local Erlang function calls
           <item><c>Item=fixed, Value=boolean()</c>          <br></br>
 
            Indicates if the table is fixed by any process or not.</item>
-          <item>
-            <p><c>Item=safe_fixed, Value={FirstFixed,Info}|false</c>              <br></br>
+          <item><marker id="info_2_safe_fixed_monotonic_time"/>
+            <p><c>Item=safe_fixed|safe_fixed_monotonic_time, Value={FixationTime,Info}|false</c>              <br></br>
 </p>
-            <p>If the table has been fixed using <c>safe_fixtable/2</c>,
-              the call returns a tuple where <c>FirstFixed</c> is the
+            <p>If the table has been fixed using
+	    <seealso marker="#safe_fixtable/2"><c>safe_fixtable/2</c></seealso>,
+              the call returns a tuple where <c>FixationTime</c> is the
               time when the table was first fixed by a process, which
               may or may not be one of the processes it is fixed by
               right now.</p>
+	    <p>The format and value of <c>FixationTime</c> depends on
+	    <c>Item</c>:</p>
+	    <taglist>
+	      <tag><c>safe_fixed</c></tag>
+	      <item><p><c>FixationTime</c> will correspond to the result
+	      returned by
+	      <seealso marker="erts:erlang#timestamp/0">erlang:timestamp/0</seealso>
+	      at the time of fixation. Note that when the system is using
+	      single or multi
+	      <seealso marker="erts:time_correction#Time_Warp_Modes">time warp
+	      modes</seealso> this might produce strange results. This
+	      since the usage of <c>safe_fixed</c> is not
+	      <seealso marker="erts:time_correction#Time_Warp_Safe_Code">time warp
+	      safe</seealso>. Time warp safe code need to use
+	      <c>safe_fixed_monotonic_time</c> instead.</p></item>
+
+	      <tag><c>safe_fixed_monotonic_time</c></tag>
+	      <item><p><c>FixationTime</c> will correspond to the result
+	      returned by
+	      <seealso marker="erts:erlang#monotonic_time/0">erlang:monotonic_time/0</seealso>
+	      at the time of fixation. The usage of <c>safe_fixed_monotonic_time</c> is
+	      <seealso marker="erts:time_correction#Time_Warp_Safe_Code">time warp
+	      safe</seealso>.</p></item>
+	    </taglist>
             <p><c>Info</c> is a possibly empty lists of tuples
               <c>{Pid,RefCount}</c>, one tuple for every process the
               table is fixed by right now. <c>RefCount</c> is the value
@@ -599,7 +636,7 @@ ets:is_compiled_ms(Broken).</code>
         <p>Returns the last key <c><anno>Key</anno></c> according to Erlang term
           order in the table <c>Tab</c> of the <c>ordered_set</c> type.
           If the table is of any other type, the function is synonymous
-          to <c>first/2</c>. If the table is empty,
+          to <c>first/1</c>. If the table is empty,
           <c>'$end_of_table'</c> is returned.</p>
         <p>Use <c>prev/2</c> to find preceding keys in the table.</p>
       </desc>
@@ -905,7 +942,7 @@ ets:select(Table,MatchSpec),</code>
           </item>
           <item>
             <p><c>{keypos,<anno>Pos</anno>}</c>
-              Specfies which element in the stored tuples should be
+              Specifies which element in the stored tuples should be
               used as key. By default, it is the first element, i.e.
               <c><anno>Pos</anno>=1</c>. However, this is not always appropriate. In
               particular, we do not want the first element to be the
@@ -1123,9 +1160,11 @@ clean_all_with_value(Tab,X,Key) ->
           table but never releases it, the memory used by the deleted
           objects will never be freed. The performance of operations on
           the table will also degrade significantly.</p>
-        <p>Use <c>info/2</c> to retrieve information about which
-          processes have fixed which tables. A system with a lot of
-          processes fixing tables may need a monitor which sends alarms
+        <p>Use
+	<seealso marker="#info_2_safe_fixed_monotonic_time"><c>info(Tab,
+	safe_fixed_monotonic_time)</c></seealso> to retrieve information
+	about which processes have fixed which tables. A system with a lot
+	of processes fixing tables may need a monitor which sends alarms
           when tables have been fixed for too long.</p>
         <p>Note that for tables of the <c>ordered_set</c> type,
           <c>safe_fixtable/2</c> is not necessary as calls to
@@ -1425,7 +1464,9 @@ is_integer(X), is_integer(Y), X + Y < 4711]]></code>
 	<p>Whenever the <c>extended_info</c> option is used, it
 	results in a file not readable by versions of ets prior to
 	that in stdlib-1.15.1</p> 
-
+        <p>The <c>sync</c> option, if set to <c>true</c>, ensures that
+	the content of the file is actually written to the disk before
+	<c>tab2file</c> returns. Default is <c>{sync, false}</c>.</p>
       </desc>
     </func>
     <func>
@@ -1583,6 +1624,21 @@ true</pre>
       </desc>
     </func>
     <func>
+      <name name="take" arity="2"/>
+      <fsummary>Return and remove all objects with a given key from an ETS
+        table.</fsummary>
+      <desc>
+        <p>Returns a list of all objects with the key <c><anno>Key</anno></c> in
+          the table <c><anno>Tab</anno></c> and removes.</p>
+        <p>The given <c><anno>Key</anno></c> is used to identify the object by
+          either <em>comparing equal</em> the key of an object in an
+          <c>ordered_set</c> table, or <em>matching</em> in other types of
+          tables (see <seealso marker="#lookup/2">lookup/2</seealso> and
+          <seealso marker="#new/2">new/2</seealso> for details on the
+          difference).</p>
+      </desc>
+    </func>
+    <func>
       <name name="to_dets" arity="2"/>
       <fsummary>Fill a Dets table with objects from an ETS table.</fsummary>
       <desc>
@@ -1593,15 +1649,19 @@ true</pre>
     </func>
     <func> 
       <name name="update_counter" arity="3" clause_i="1"/>
+      <name name="update_counter" arity="4" clause_i="1"/>
       <name name="update_counter" arity="3" clause_i="2"/>
+      <name name="update_counter" arity="4" clause_i="2"/>
       <name name="update_counter" arity="3" clause_i="3"/>
+      <name name="update_counter" arity="4" clause_i="3"/>
+      <fsummary>Update a counter object in an ETS table.</fsummary>
       <type variable="Tab"/>
       <type variable="Key"/>
       <type variable="UpdateOp" name_i="1"/>
       <type variable="Pos" name_i="1"/>
       <type variable="Threshold" name_i="1"/>
       <type variable="SetValue" name_i="1"/>
-      <fsummary>Update a counter object in an ETS table.</fsummary>
+      <type variable="Default"/>
       <desc>
         <p>This function provides an efficient way to update one or more 
           counters, without the hassle of having to look up an object, update 
@@ -1642,12 +1702,22 @@ true</pre>
           <seealso marker="#lookup/2">lookup/2</seealso> and 
           <seealso marker="#new/2">new/2</seealso>
           for details on the difference).</p>
+        <p>If a default object <c><anno>Default</anno></c> is given, it is used
+          as the object to be updated if the key is missing from the table. The
+          value in place of the key is ignored and replaced by the proper key
+          value. The return value is as if the default object had not been used,
+          that is a single updated element or a list of them.</p>
         <p>The function will fail with reason <c>badarg</c> if:</p>
         <list type="bulleted">
           <item>the table is not of type <c>set</c> or
           <c>ordered_set</c>,</item>
-          <item>no object with the right key exists,</item>
+          <item>no object with the right key exists and no default object were
+            supplied,</item>
           <item>the object has the wrong arity,</item>
+          <item>the default object arity is smaller than
+            <c><![CDATA[<keypos>]]></c></item>
+          <item>any field from the default object being updated is not an
+            integer</item>
           <item>the element to update is not an integer,</item>
           <item>the element to update is also the key, or,</item>
           <item>any of <c><anno>Pos</anno></c>, <c><anno>Incr</anno></c>, <c><anno>Threshold</anno></c> or
@@ -1658,11 +1728,11 @@ true</pre>
     <func>
       <name name="update_element" arity="3" clause_i="1"/>
       <name name="update_element" arity="3" clause_i="2"/>
+      <fsummary>Updates the <c>Pos</c>:th element of the object with a given key in an ETS table.</fsummary>
       <type variable="Tab"/>
       <type variable="Key"/>
       <type variable="Value"/>
       <type variable="Pos"/>
-      <fsummary>Updates the <c>Pos</c>:th element of the object with a given key in an ETS table.</fsummary>
       <desc>
         <p>This function provides an efficient way to update one or more 
           elements within an object, without the hassle of having to look up, 

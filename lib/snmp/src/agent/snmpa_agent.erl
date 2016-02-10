@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -28,7 +29,8 @@
 %% External exports
 -export([start_link/4, start_link/5, stop/1]).
 -export([subagent_set/2, 
-	 load_mibs/2, unload_mibs/2, which_mibs/1, whereis_mib/2, info/1,
+	 load_mibs/3, unload_mibs/3, 
+	 which_mibs/1, whereis_mib/2, info/1,
 	 register_subagent/3, unregister_subagent/2,
 	 send_notification/3, 
          register_notification_filter/5,
@@ -71,7 +73,8 @@
 	 handle_pdu/8, worker/2, worker_loop/1, 
 	 do_send_trap/7, do_send_trap/8]).
 %% <BACKWARD-COMPAT>
--export([handle_pdu/7]).
+-export([handle_pdu/7, 
+	 load_mibs/2, unload_mibs/2]).
 %% </BACKWARD-COMPAT>
 
 -include("snmpa_internal.hrl").
@@ -159,12 +162,15 @@
 %% it is sent to the worker, and the worker is marked as busy.
 %% If a request is received when the worker is busy, a new temporary
 %% worker is spawned.
+%% 
 %% Code change
 %% ===========
 %% Note that the worker(s) execute the same module as the master
 %% agent. For code change we have two options - ignore the workers,
 %% or send them a code change message.
+%% 
 %%-----------------------------------------------------------------
+
 -record(state, {type, 
 		parent, 
 		worker, 
@@ -219,22 +225,19 @@
 %%-----------------------------------------------------------------
 start_link(Prio, Parent, Ref, Options) ->
     ?d("start_link -> entry with"
-	"~n   Prio:    ~p"
-	"~n   Parent:  ~p"
-	"~n   Ref:     ~p"
-	"~n   Options: ~p", [Prio, Parent, Ref, Options]),
-    %% gen_server:start_link(?MODULE, [Prio, Parent, Ref, Options], []).
+       "~n   Prio:    ~p"
+       "~n   Parent:  ~p"
+       "~n   Ref:     ~p"
+       "~n   Options: ~p", [Prio, Parent, Ref, Options]),
     ?GS_START_LINK3(Prio, Parent, Ref, Options).
 
 start_link(Prio, Name, Parent, Ref, Options) ->
     ?d("start_link -> entry with"
-	"~n   Prio:    ~p"
-	"~n   Name:    ~p"
-	"~n   Parent:  ~p"
-	"~n   Ref:     ~p"
-	"~n   Options: ~p", [Prio, Name, Parent, Ref, Options]),
-%     gen_server:start_link({local, Name}, ?MODULE, 
-% 			  [Prio, Parent, Ref, Options], []).
+       "~n   Prio:    ~p"
+       "~n   Name:    ~p"
+       "~n   Parent:  ~p"
+       "~n   Ref:     ~p"
+       "~n   Options: ~p", [Prio, Name, Parent, Ref, Options]),
     ?GS_START_LINK4(Prio, Name, Parent, Ref, Options).
 
 stop(Agent) -> call(Agent, stop).
@@ -335,10 +338,10 @@ increment_counter(Counter, Initial, Max) ->
 
 init([Prio, Parent, Ref, Options]) ->
     ?d("init -> entry with"
-	"~n   Prio:    ~p"
-	"~n   Parent:  ~p"
-	"~n   Ref:     ~p"
-	"~n   Options: ~p", [Prio, Parent, Ref, Options]),
+       "~n   Prio:    ~p"
+       "~n   Parent:  ~p"
+       "~n   Ref:     ~p"
+       "~n   Options: ~p", [Prio, Parent, Ref, Options]),
     case (catch do_init(Prio, Parent, Ref, Options)) of
 	{ok, State} ->
 	    ?vdebug("started",[]),
@@ -528,12 +531,22 @@ subagent_set(SubAgent, Arguments) ->
 
 
 %% Called by administrator (not agent; deadlock would occur)
+%% <BACKWARD-COMPAT>
 load_mibs(Agent, Mibs) ->
-    call(Agent, {load_mibs, Mibs}).
+    load_mibs(Agent, Mibs, false).
+%% </BACKWARD-COMPAT>
+
+load_mibs(Agent, Mibs, Force) ->
+    call(Agent, {load_mibs, Mibs, Force}).
 
 %% Called by administrator (not agent; deadlock would occur)
+%% <BACKWARD-COMPAT>
 unload_mibs(Agent, Mibs) ->
-    call(Agent, {unload_mibs, Mibs}).
+    unload_mibs(Agent, Mibs, false).
+%% </BACKWARD-COMPAT>
+
+unload_mibs(Agent, Mibs, Force) ->
+    call(Agent, {unload_mibs, Mibs, Force}).
 
 which_mibs(Agent) ->
     call(Agent, which_mibs).
@@ -1216,13 +1229,25 @@ handle_call({unregister_subagent, SubTreeOid}, _From, S) ->
 	end,
     {reply, Reply, S};
 
+%% <BACKWARD-COMPAT>
 handle_call({load_mibs, Mibs}, _From, S) ->
     ?vlog("load mibs ~p", [Mibs]),
     {reply, snmpa_mib:load_mibs(get(mibserver), Mibs), S};
+%% </BACKWARD-COMPAT>
 
+handle_call({load_mibs, Mibs, Force}, _From, S) ->
+    ?vlog("[~w] load mibs ~p", [Force, Mibs]),
+    {reply, snmpa_mib:load_mibs(get(mibserver), Mibs, Force), S};
+
+%% <BACKWARD-COMPAT>
 handle_call({unload_mibs, Mibs}, _From, S) ->
     ?vlog("unload mibs ~p", [Mibs]),
     {reply, snmpa_mib:unload_mibs(get(mibserver), Mibs), S};
+%% </BACKWARD-COMPAT>
+
+handle_call({unload_mibs, Mibs, Force}, _From, S) ->
+    ?vlog("[~w] unload mibs ~p", [Force, Mibs]),
+    {reply, snmpa_mib:unload_mibs(get(mibserver), Mibs, Force), S};
 
 handle_call(which_mibs, _From, S) ->
     ?vlog("which mibs", []),
@@ -1457,80 +1482,80 @@ handle_mibs_cache_request(MibServer, Req) ->
 
 %% Downgrade
 %%
-code_change({down, _Vsn}, S1, downgrade_to_pre_4_17_3) ->
-    #state{type               = Type, 
-	   parent             = Parent, 
-	   worker             = Worker, 
-	   worker_state       = WorkerState,
-	   set_worker         = SetWorker, 
-	   multi_threaded     = MT, 
-	   ref                = Ref, 
-	   vsns               = Vsns,
-	   nfilters           = NF,
-	   note_store         = NoteStore,
-	   mib_server         = MS, 
-	   net_if             = NetIf, 
-	   net_if_mod         = NetIfMod, 
-	   backup             = Backup,
-	   disco              = Disco,
-	   mibs_cache_request = MCR} = S1, 
-    S2 = {state, 
-	  type               = Type, 
-	  parent             = Parent, 
-	  worker             = Worker, 
-	  worker_state       = WorkerState,
-	  set_worker         = SetWorker, 
-	  multi_threaded     = MT, 
-	  ref                = Ref, 
-	  vsns               = Vsns,
-	  nfilters           = NF,
-	  note_store         = NoteStore,
-	  mib_server         = MS, 
-	  net_if             = NetIf, 
-	  net_if_mod         = NetIfMod, 
-	  backup             = Backup,
-	  disco              = Disco,
-	  mibs_cache_request = MCR}, 
-    {ok, S2};
+%% code_change({down, _Vsn}, S1, downgrade_to_pre_4_17_3) ->
+%%     #state{type               = Type, 
+%% 	   parent             = Parent, 
+%% 	   worker             = Worker, 
+%% 	   worker_state       = WorkerState,
+%% 	   set_worker         = SetWorker, 
+%% 	   multi_threaded     = MT, 
+%% 	   ref                = Ref, 
+%% 	   vsns               = Vsns,
+%% 	   nfilters           = NF,
+%% 	   note_store         = NoteStore,
+%% 	   mib_server         = MS, 
+%% 	   net_if             = NetIf, 
+%% 	   net_if_mod         = NetIfMod, 
+%% 	   backup             = Backup,
+%% 	   disco              = Disco,
+%% 	   mibs_cache_request = MCR} = S1, 
+%%     S2 = {state, 
+%% 	  type               = Type, 
+%% 	  parent             = Parent, 
+%% 	  worker             = Worker, 
+%% 	  worker_state       = WorkerState,
+%% 	  set_worker         = SetWorker, 
+%% 	  multi_threaded     = MT, 
+%% 	  ref                = Ref, 
+%% 	  vsns               = Vsns,
+%% 	  nfilters           = NF,
+%% 	  note_store         = NoteStore,
+%% 	  mib_server         = MS, 
+%% 	  net_if             = NetIf, 
+%% 	  net_if_mod         = NetIfMod, 
+%% 	  backup             = Backup,
+%% 	  disco              = Disco,
+%% 	  mibs_cache_request = MCR}, 
+%%     {ok, S2};
 
-%% Upgrade
-%%
-code_change(_Vsn, S1, upgrade_from_pre_4_17_3) ->
-    {state, 
-     type               = Type, 
-     parent             = Parent, 
-     worker             = Worker, 
-     worker_state       = WorkerState,
-     set_worker         = SetWorker, 
-     multi_threaded     = MT, 
-     ref                = Ref, 
-     vsns               = Vsns,
-     nfilters           = NF,
-     note_store         = NoteStore,
-     mib_server         = MS, 
-     net_if             = NetIf, 
-     net_if_mod         = NetIfMod, 
-     backup             = Backup,
-     disco              = Disco,
-     mibs_cache_request = MCR} = S1,
-    S2 = #state{type               = Type, 
-		parent             = Parent, 
-		worker             = Worker, 
-		worker_state       = WorkerState,
-		set_worker         = SetWorker, 
-		multi_threaded     = MT, 
-		ref                = Ref, 
-		vsns               = Vsns,
-		nfilters           = NF,
-		note_store         = NoteStore,
-		mib_server         = MS, 
-		net_if             = NetIf, 
-		net_if_mod         = NetIfMod, 
-		backup             = Backup,
-		disco              = Disco,
-		mibs_cache_request = MCR,
-		gb_max_vbs         = ?DEFAULT_GB_MAX_VBS}, 
-    {ok, S2};
+%% %% Upgrade
+%% %%
+%% code_change(_Vsn, S1, upgrade_from_pre_4_17_3) ->
+%%     {state, 
+%%      type               = Type, 
+%%      parent             = Parent, 
+%%      worker             = Worker, 
+%%      worker_state       = WorkerState,
+%%      set_worker         = SetWorker, 
+%%      multi_threaded     = MT, 
+%%      ref                = Ref, 
+%%      vsns               = Vsns,
+%%      nfilters           = NF,
+%%      note_store         = NoteStore,
+%%      mib_server         = MS, 
+%%      net_if             = NetIf, 
+%%      net_if_mod         = NetIfMod, 
+%%      backup             = Backup,
+%%      disco              = Disco,
+%%      mibs_cache_request = MCR} = S1,
+%%     S2 = #state{type               = Type, 
+%% 		parent             = Parent, 
+%% 		worker             = Worker, 
+%% 		worker_state       = WorkerState,
+%% 		set_worker         = SetWorker, 
+%% 		multi_threaded     = MT, 
+%% 		ref                = Ref, 
+%% 		vsns               = Vsns,
+%% 		nfilters           = NF,
+%% 		note_store         = NoteStore,
+%% 		mib_server         = MS, 
+%% 		net_if             = NetIf, 
+%% 		net_if_mod         = NetIfMod, 
+%% 		backup             = Backup,
+%% 		disco              = Disco,
+%% 		mibs_cache_request = MCR,
+%% 		gb_max_vbs         = ?DEFAULT_GB_MAX_VBS}, 
+%%     {ok, S2};
 
 code_change(_Vsn, S, _Extra) ->
     {ok, S}.
@@ -2488,10 +2513,19 @@ handle_mib_of(MibServer, Oid) ->
 %% Func: process_msg/7
 %% Returns: RePdu
 %%-----------------------------------------------------------------
-process_msg(MibView, Vsn, Pdu, PduMS, Community, {Ip, Udp}, ContextName, 
-	    GbMaxVBs) ->
+process_msg(
+  MibView, Vsn, Pdu, PduMS, Community,
+  SourceAddress, ContextName, GbMaxVBs) ->
     #pdu{request_id = ReqId} = Pdu,
-    put(snmp_address, {tuple_to_list(Ip), Udp}),
+    put(
+      snmp_address,
+      case SourceAddress of
+	  {Domain, _} when is_atom(Domain) ->
+	      SourceAddress;
+	  {Ip, Port} when is_integer(Port) ->
+	      %% Legacy transport domain
+	      {tuple_to_list(Ip), Port}
+      end),
     put(snmp_request_id, ReqId),
     put(snmp_community, Community),
     put(snmp_context, ContextName),
@@ -4411,7 +4445,7 @@ get_mibs(Opts) ->
     get_option(mibs, Opts, []).
 
 get_mib_storage(Opts) ->
-    get_option(mib_storage, Opts, ets).
+    get_option(mib_storage, Opts).
 
 get_set_mechanism(Opts) ->
     get_option(set_mechanism, Opts, snmpa_set).
@@ -4449,6 +4483,9 @@ net_if_verbosity(Pid,Verbosity) when is_pid(Pid) ->
 net_if_verbosity(_Pid,_Verbosity) ->
     ok.
 
+
+get_option(Key, Opts) ->
+    snmp_misc:get_option(Key, Opts).
 
 get_option(Key, Opts, Default) ->
     snmp_misc:get_option(Key, Opts, Default).

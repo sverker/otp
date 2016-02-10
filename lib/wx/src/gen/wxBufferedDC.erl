@@ -1,23 +1,24 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %% This file is generated DO NOT EDIT
 
-%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/stable/wx_wxbuffereddc.html">wxBufferedDC</a>.
+%% @doc See external documentation: <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxbuffereddc.html">wxBufferedDC</a>.
 %% <p>This class is derived (and can use functions) from:
 %% <br />{@link wxMemoryDC}
 %% <br />{@link wxDC}
@@ -54,13 +55,15 @@
   setUserScale/3,startDoc/2,startPage/1]).
 
 -export_type([wxBufferedDC/0]).
+-compile([{nowarn_deprecated_function, {wxDC,computeScaleAndOrigin,1}}]).
+
 %% @hidden
 parent_class(wxMemoryDC) -> true;
 parent_class(wxDC) -> true;
 parent_class(_Class) -> erlang:error({badtype, ?MODULE}).
 
 -type wxBufferedDC() :: wx:wx_object().
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxbuffereddc.html#wxbuffereddcwxbuffereddc">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxbuffereddc.html#wxbuffereddcwxbuffereddc">external documentation</a>.
 -spec new() -> wxBufferedDC().
 new() ->
   wxe_util:construct(?wxBufferedDC_new_0,
@@ -74,7 +77,7 @@ new(Dc)
  when is_record(Dc, wx_ref) ->
   new(Dc, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxbuffereddc.html#wxbuffereddcwxbuffereddc">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxbuffereddc.html#wxbuffereddcwxbuffereddc">external documentation</a>.
 %% <br /> Also:<br />
 %% new(Dc, [Option]) -> wxBufferedDC() when<br />
 %% 	Dc::wxDC:wxDC(),<br />
@@ -101,7 +104,7 @@ new(#wx_ref{type=DcT,ref=DcRef}, Options)
   wxe_util:construct(?wxBufferedDC_new_2,
   <<DcRef:32/?UI, 0:32,BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxbuffereddc.html#wxbuffereddcwxbuffereddc">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxbuffereddc.html#wxbuffereddcwxbuffereddc">external documentation</a>.
 -spec new(Dc, Area, [Option]) -> wxBufferedDC() when
 	Dc::wxDC:wxDC(), Area::{W::integer(), H::integer()},
 	Option :: {style, integer()}.
@@ -122,7 +125,7 @@ init(This,Dc)
  when is_record(This, wx_ref),is_record(Dc, wx_ref) ->
   init(This,Dc, []).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxbuffereddc.html#wxbuffereddcinit">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxbuffereddc.html#wxbuffereddcinit">external documentation</a>.
 %% <br /> Also:<br />
 %% init(This, Dc, [Option]) -> ok when<br />
 %% 	This::wxBufferedDC(), Dc::wxDC:wxDC(),<br />
@@ -150,7 +153,7 @@ init(#wx_ref{type=ThisT,ref=ThisRef},#wx_ref{type=DcT,ref=DcRef}, Options)
   wxe_util:cast(?wxBufferedDC_Init_2,
   <<ThisRef:32/?UI,DcRef:32/?UI, BinOpt/binary>>).
 
-%% @doc See <a href="http://www.wxwidgets.org/manuals/stable/wx_wxbuffereddc.html#wxbuffereddcinit">external documentation</a>.
+%% @doc See <a href="http://www.wxwidgets.org/manuals/2.8.12/wx_wxbuffereddc.html#wxbuffereddcinit">external documentation</a>.
 -spec init(This, Dc, Area, [Option]) -> ok when
 	This::wxBufferedDC(), Dc::wxDC:wxDC(), Area::{W::integer(), H::integer()},
 	Option :: {style, integer()}.

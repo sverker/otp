@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2015. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -22,11 +23,11 @@
 %%%------------------------------------------------------------------
 
 -module(erl2html2).
--export([convert/2, convert/3]).
+-export([convert/3, convert/4]).
 
-convert([], _Dest) ->   % Fake clause.
+convert([], _Dest, _InclPath) ->   % Fake clause.
     ok;
-convert(File, Dest) ->
+convert(File, Dest, InclPath) ->
     %% The generated code uses the BGCOLOR attribute in the
     %% BODY tag, which wasn't valid until HTML 3.2.  Also,
     %% good HTML should either override all colour attributes
@@ -48,12 +49,12 @@ convert(File, Dest) ->
               "</head>\n\n"
 	      "<body bgcolor=\"white\" text=\"black\""
 	      " link=\"blue\" vlink=\"purple\" alink=\"red\">\n"],
-    convert(File, Dest, Header).
+    convert(File, Dest, InclPath, Header).
 
 
-convert(File, Dest, Header) ->
+convert(File, Dest, InclPath, Header) ->
     %% statistics(runtime),
-    case parse_file(File) of
+    case parse_file(File, InclPath) of
 	{ok,Functions} ->
 	    %% {_, Time1} = statistics(runtime),
 	    %% io:format("Parsed file in ~.2f Seconds.~n",[Time1/1000]),
@@ -88,55 +89,140 @@ convert(File, Dest, Header) ->
 %%%
 %%% All function clauses are also marked in order to allow
 %%% possibly_enhance/2 to write these in bold.
-parse_file(File) ->
-    case epp:open(File, [], []) of
+%%%
+%%% Use expanded preprocessor directives if possible (epp). Only if
+%%% this fails, fall back on using non-expanded code (epp_dodger).
+
+parse_file(File, InclPath) ->
+    case epp:open(File, InclPath, []) of
 	{ok,Epp} ->
-	    Forms = parse_file(Epp,File,false),
-	    epp:close(Epp),
-	    {ok,Forms};
-	{error,E} ->
-	    {error,E}
+	    try parse_preprocessed_file(Epp,File,false) of
+		Forms ->
+		    epp:close(Epp),
+		    {ok,Forms}
+	    catch
+		_:{error,_Reason,true} ->
+		    parse_non_preprocessed_file(File);
+		_:{error,_Reason,false} ->
+		    {ok,[]}
+	    end;
+	Error = {error,_} ->
+	    Error
     end.
 
-
-parse_file(Epp,File,InCorrectFile) ->
+parse_preprocessed_file(Epp, File, InCorrectFile) ->
     case epp:parse_erl_form(Epp) of
 	{ok,Form} ->
 	    case Form of
 		{attribute,_,file,{File,_}} ->
-		    parse_file(Epp,File,true);
+		    parse_preprocessed_file(Epp, File, true);
 		{attribute,_,file,{_OtherFile,_}} ->
-		    parse_file(Epp,File,false);
-		{function,L,F,A,[_|C]} when InCorrectFile ->
-		    Clauses = [{clause,CL} || {clause,CL,_,_,_} <- C],
-		    [{atom_to_list(F),A,L} | Clauses] ++
-			parse_file(Epp,File,true);
+		    parse_preprocessed_file(Epp, File, false);
+                {function,L,F,A,Cs} when InCorrectFile ->
+                    {CLs,LastCL} = find_clause_lines(Cs, []),
+		    %% tl(CLs) cause we know the start line already
+		    [{atom_to_list(F),A,get_line(L),LastCL} | tl(CLs)] ++
+			parse_preprocessed_file(Epp, File, true);
 		_ ->
-		    parse_file(Epp,File,InCorrectFile)
+		    parse_preprocessed_file(Epp, File, InCorrectFile)
 	    end;
-	{error,_E} ->
-	    parse_file(Epp,File,InCorrectFile);
+	{error,Reason={_L,epp,{undefined,_Macro,none}}} ->
+	    throw({error,Reason,InCorrectFile});
+	{error,_Reason} ->
+	    parse_preprocessed_file(Epp, File, InCorrectFile);
 	{eof,_Location} ->
 	    []
     end.
 
+parse_non_preprocessed_file(File) ->
+    case file:open(File, []) of
+	{ok,Epp} ->
+	    Forms = parse_non_preprocessed_file(Epp, File, 1),
+	    file:close(Epp),
+	    {ok,Forms};
+	Error = {error,_E} ->
+	    Error
+    end.
+
+parse_non_preprocessed_file(Epp, File, Location) ->
+    case epp_dodger:parse_form(Epp, Location) of
+	{ok,Tree,Location1} ->
+	    try erl_syntax:revert(Tree) of
+                {function,L,F,A,Cs} ->
+                    {CLs,LastCL} = find_clause_lines(Cs, []),
+		    %% tl(CLs) cause we know the start line already
+                    [{atom_to_list(F),A,get_line(L),LastCL} | tl(CLs)] ++
+			parse_non_preprocessed_file(Epp, File, Location1);
+		_ ->
+		    parse_non_preprocessed_file(Epp, File, Location1)
+	    catch
+		_:_ -> parse_non_preprocessed_file(Epp, File, Location1)
+	    end;
+	{error,_E,Location1} ->
+	    parse_non_preprocessed_file(Epp, File, Location1);
+	{eof,_Location} ->
+	    []
+    end.
+
+get_line(Anno) ->
+    erl_anno:line(Anno).
+
+%%%-----------------------------------------------------------------
+%%% Find the line number of the last expression in the function
+find_clause_lines([{clause,CL,_Params,_Op,Exprs}], CLs) -> % last clause
+    case classify_exprs(Exprs) of
+        {anno, Anno} ->
+	    {lists:reverse([{clause,get_line(CL)}|CLs]), get_line(Anno)};
+        {tree, Exprs1} ->
+	    find_clause_lines([{clause,CL,undefined,undefined,Exprs1}], CLs);
+        unknown ->
+	    {lists:reverse([{clause,get_line(CL)}|CLs]), get_line(CL)}
+    end;
+find_clause_lines([{clause,CL,_Params,_Op,_Exprs} | Cs], CLs) ->
+    find_clause_lines(Cs, [{clause,get_line(CL)}|CLs]).
+
+classify_exprs(Exprs) ->
+    case tuple_to_list(lists:last(Exprs)) of
+        [macro,{_var,Anno,_MACRO} | _] ->
+            {anno, Anno};
+        [T,ExprAnno | Exprs1] ->
+            case erl_anno:is_anno(ExprAnno) of
+                true ->
+                    {anno, ExprAnno};
+                false when T =:= tree ->
+                    {tree, Exprs1};
+                false ->
+                    unknown
+            end
+    end.
+
 %%%-----------------------------------------------------------------
 %%% Add a link target for each line and one for each function definition.
-build_html(SFd,DFd,Encoding,Functions) ->
-    build_html(SFd,DFd,Encoding,file:read_line(SFd),1,Functions,false).
+build_html(SFd,DFd,Encoding,FuncsAndCs) ->
+    build_html(SFd,DFd,Encoding,file:read_line(SFd),1,FuncsAndCs,
+	       false,undefined).
 
-build_html(SFd,DFd,Encoding,{ok,Str},L,[{F,A,L}|Functions],_IsFuncDef) ->
-    FALink = http_uri:encode(F++"-"++integer_to_list(A)),
-    file:write(DFd,["<a name=\"",to_raw_list(FALink,Encoding),"\"/>"]),
-    build_html(SFd,DFd,Encoding,{ok,Str},L,Functions,true);
-build_html(SFd,DFd,Encoding,{ok,Str},L,[{clause,L}|Functions],_IsFuncDef) ->
-    build_html(SFd,DFd,Encoding,{ok,Str},L,Functions,true);
-build_html(SFd,DFd,Encoding,{ok,Str},L,Functions,IsFuncDef) ->
+%% line of last expression in function found
+build_html(SFd,DFd,Enc,{ok,Str},LastL,FuncsAndCs,_IsFuncDef,{F,LastL}) ->
+    LastLineLink = test_server_ctrl:uri_encode(F++"-last_expr",utf8),
+	    file:write(DFd,["<a name=\"",
+			    to_raw_list(LastLineLink,Enc),"\"/>"]),
+    build_html(SFd,DFd,Enc,{ok,Str},LastL,FuncsAndCs,true,undefined);
+%% function start line found
+build_html(SFd,DFd,Enc,{ok,Str},L0,[{F,A,L0,LastL}|FuncsAndCs],
+	   _IsFuncDef,_FAndLastL) ->
+    FALink = test_server_ctrl:uri_encode(F++"-"++integer_to_list(A),utf8),
+    file:write(DFd,["<a name=\"",to_raw_list(FALink,Enc),"\"/>"]),
+    build_html(SFd,DFd,Enc,{ok,Str},L0,FuncsAndCs,true,{F,LastL});
+build_html(SFd,DFd,Enc,{ok,Str},L,[{clause,L}|FuncsAndCs],
+	   _IsFuncDef,FAndLastL) ->
+    build_html(SFd,DFd,Enc,{ok,Str},L,FuncsAndCs,true,FAndLastL);
+build_html(SFd,DFd,Enc,{ok,Str},L,FuncsAndCs,IsFuncDef,FAndLastL) ->
     LStr = line_number(L),
     Str1 = line(Str,IsFuncDef),
     file:write(DFd,[LStr,Str1]),
-    build_html(SFd,DFd,Encoding,file:read_line(SFd),L+1,Functions,false);
-build_html(_SFd,_DFd,_Encoding,eof,L,_Functions,_IsFuncDef) ->
+    build_html(SFd,DFd,Enc,file:read_line(SFd),L+1,FuncsAndCs,false,FAndLastL);
+build_html(_SFd,_DFd,_Enc,eof,L,_FuncsAndCs,_IsFuncDef,_FAndLastL) ->
     L.
 
 line_number(L) ->
@@ -214,7 +300,7 @@ html_encoding(utf8) ->
 %%% from the source.
 %%%
 %%% Example: if the encoding of the file is utf8, and we have a string
-%%% containing "å" = [229], then we need to convert this to [195,165]
+%%% containing "Ã¥" = [229], then we need to convert this to [195,165]
 %%% before writing. Note that this conversion is only necessary
 %%% because the destination file is not (necessarily) opened with utf8
 %%% encoding - it is opened with default encoding in order to allow

@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -44,6 +45,7 @@
 	 set_env/2,
 	 start/0,
 	 start_proc/4,
+	 sync_log/1,
 	 terminate_proc/3,
 	 unsafe_close_dets/1,
 	 unsafe_close_log/1,
@@ -78,7 +80,7 @@
 
 -record(state, {supervisor, pending_negotiators = [],
 		going_down = [], tm_started = false, early_connects = [],
-		connecting, mq = []}).
+		connecting, mq = [], remote_node_status = []}).
 
 -define(current_protocol_version,  {8,1}).
 
@@ -117,6 +119,9 @@ open_log(Args) ->
 
 reopen_log(Name, Fname, Head) ->
     unsafe_call({reopen_log, Name, Fname, Head}).
+
+sync_log(Name) ->
+    unsafe_call({sync_log, Name}).
 
 close_log(Name) ->
     unsafe_call({close_log, Name}).
@@ -202,7 +207,7 @@ needs_protocol_conversion(Node) ->
 
 cast(Msg) ->
     case whereis(?MODULE) of
-	undefined -> ignore;
+	undefined -> ok;
 	Pid ->  gen_server:cast(Pid, Msg)
     end.
 
@@ -264,7 +269,7 @@ init([Parent]) ->
     set(version, Version),
     dbg_out("Version: ~p~n", [Version]),
 
-    case catch process_config_args(env()) of
+    try process_config_args(env()) of
 	ok ->
 	    mnesia_lib:set({'$$$_report', current_pos}, 0),
 	    Level = mnesia_lib:val(debug),
@@ -284,8 +289,8 @@ init([Parent]) ->
 	    set(pending_checkpoints, []),
 	    set(pending_checkpoint_pids, []),
 
-	    {ok, #state{supervisor = Parent}};
-	{'EXIT', Reason} ->
+	    {ok, #state{supervisor = Parent}}
+    catch _:Reason ->
 	    mnesia_lib:report_fatal("Bad configuration: ~p~n", [Reason]),
 	    {stop, {bad_config, Reason}}
     end.
@@ -319,24 +324,23 @@ non_empty_dir() ->
 %%----------------------------------------------------------------------
 
 handle_call({mktab, Tab, Args}, _From, State) ->
-    case catch ?ets_new_table(Tab, Args) of
-	{'EXIT', ExitReason} ->
+    try ?ets_new_table(Tab, Args) of
+	Reply ->
+	    {reply, Reply, State}
+    catch error:ExitReason ->
 	    Msg = "Cannot create ets table",
 	    Reason = {system_limit, Msg, Tab, Args, ExitReason},
 	    fatal("~p~n", [Reason]),
-	    {noreply, State};
-	Reply ->
-	    {reply, Reply, State}
+	    {noreply, State}
     end;
 
 handle_call({unsafe_mktab, Tab, Args}, _From, State) ->
-    case catch ?ets_new_table(Tab, Args) of
-	{'EXIT', ExitReason} ->
-	    {reply, {error, ExitReason}, State};
+    try ?ets_new_table(Tab, Args) of
 	Reply ->
 	    {reply, Reply, State}
+    catch error:ExitReason ->
+	    {reply, {error, ExitReason}, State}
     end;
-
 
 handle_call({open_dets, Tab, Args}, _From, State) ->
     case mnesia_lib:dets_sync_open(Tab, Args) of
@@ -382,6 +386,9 @@ handle_call({reopen_log, Name, Fname, Head}, _From, State) ->
  	    {noreply, State}
     end;
 
+handle_call({sync_log, Name}, _From, State) ->
+    {reply, disk_log:sync(Name), State};
+
 handle_call({close_log, Name}, _From, State) ->
     case disk_log:close(Name) of
 	ok ->
@@ -395,7 +402,7 @@ handle_call({close_log, Name}, _From, State) ->
     end;
 
 handle_call({unsafe_close_log, Name}, _From, State) ->
-    disk_log:close(Name),
+    _ = disk_log:close(Name),
     {reply, ok, State};
 
 handle_call({negotiate_protocol, Mon, _Version, _Protocols}, _From, State)
@@ -439,7 +446,7 @@ handle_call({negotiate_protocol, Nodes}, From, State) ->
     end;
 
 handle_call(init, _From, State) ->
-    net_kernel:monitor_nodes(true),
+    _ = net_kernel:monitor_nodes(true),
     EarlyNodes = State#state.early_connects,
     State2 = State#state{tm_started = true},
     {reply, EarlyNodes, State2};
@@ -482,27 +489,24 @@ handle_cast({mnesia_down, mnesia_controller, Node}, State) ->
     mnesia_tm:mnesia_down(Node),
     {noreply, State};
 
-handle_cast({mnesia_down, mnesia_tm, {Node, Pending}}, State) ->
-    mnesia_locker:mnesia_down(Node, Pending),
-    {noreply, State};
-
-handle_cast({mnesia_down, mnesia_locker, Node}, State) ->
+handle_cast({mnesia_down, mnesia_tm, Node}, State) ->
     Down = {mnesia_down, Node},
     mnesia_lib:report_system_event(Down),
     GoingDown = lists:delete(Node, State#state.going_down),
     State2 = State#state{going_down = GoingDown},
     Pending = State#state.pending_negotiators,
+    State3 = check_raise_conditon_nodeup(Node, State2),
     case lists:keysearch(Node, 1, Pending) of
 	{value, {Node, Mon, ReplyTo, Reply}} ->
 	    %% Late reply to remote monitor
 	    link(Mon),  %% link to remote Monitor
 	    gen_server:reply(ReplyTo, Reply),
 	    P2 = lists:keydelete(Node, 1,Pending),
-	    State3 = State2#state{pending_negotiators = P2},
-	    process_q(State3);
+	    State4 = State3#state{pending_negotiators = P2},
+	    process_q(State4);
 	false ->
 	    %% No pending remote monitors
-	    process_q(State2)
+	    process_q(State3)
     end;
 
 handle_cast({disconnect, Node}, State) ->
@@ -542,7 +546,7 @@ handle_info({'EXIT', Pid, fatal}, State) when node(Pid) == node() ->
     %% is in progress
     %% exit(State#state.supervisor, shutdown),
     %% It is better to kill an innocent process
-    catch exit(whereis(mnesia_locker), kill),
+    ?SAFE(exit(whereis(mnesia_locker), kill)),
     {noreply, State};
 
 handle_info(Msg = {'EXIT',Pid,_}, State) ->
@@ -568,27 +572,18 @@ handle_info({protocol_negotiated, From,Res}, State) ->
     gen_server:reply(From, Res),
     process_q(State#state{connecting = undefined});
 
+handle_info({check_nodeup, Node}, State) ->
+    State2 = check_mnesia_down(Node, State),
+    {noreply, State2};
+
 handle_info({nodeup, Node}, State) ->
-    %% Ok, we are connected to yet another Erlang node
-    %% Let's check if Mnesia is running there in order
-    %% to detect if the network has been partitioned
-    %% due to communication failure.
+    State2 = remote_node_status(Node, up, State),
+    State3 = check_mnesia_down(Node, State2),
+    {noreply, State3};
 
-    HasDown   = mnesia_recover:has_mnesia_down(Node),
-    ImRunning = mnesia_lib:is_running(),
-
-    if
-	%% If I'm not running the test will be made later.
-	HasDown == true, ImRunning == yes ->
-	    spawn_link(?MODULE, detect_partitioned_network, [self(), Node]);
-	true ->
-	    ignore
-    end,
-    {noreply, State};
-
-handle_info({nodedown, _Node}, State) ->
-    %% Ignore, we are only caring about nodeup's
-    {noreply, State};
+handle_info({nodedown, Node}, State) ->
+    State2 = remote_node_status(Node, down, State),
+    {noreply, State2};
 
 handle_info({disk_log, _Node, Log, Info}, State) ->
     case Info of
@@ -669,6 +664,7 @@ env() ->
      backup_module,
      debug,
      dir,
+     dump_disc_copies_at_startup,
      dump_log_load_regulation,
      dump_log_time_threshold,
      dump_log_update_in_place,
@@ -697,6 +693,8 @@ default_env(debug) ->
 default_env(dir) ->
     Name = lists:concat(["Mnesia.", node()]),
     filename:absname(Name);
+default_env(dump_disc_copies_at_startup) ->
+    true;
 default_env(dump_log_load_regulation) ->
     false;
 default_env(dump_log_time_threshold) ->
@@ -729,11 +727,8 @@ default_env(send_compressed) ->
     0.
 
 check_type(Env, Val) ->
-    case catch do_check_type(Env, Val) of
-	{'EXIT', _Reason} ->
-	    exit({bad_config, Env, Val});
-	NewVal ->
-	    NewVal
+    try do_check_type(Env, Val)
+    catch error:_ -> exit({bad_config, Env, Val})
     end.
 
 do_check_type(access_module, A) when is_atom(A) -> A;
@@ -746,6 +741,7 @@ do_check_type(debug, trace) -> trace;
 do_check_type(debug, true) -> debug;
 do_check_type(debug, verbose) -> verbose;
 do_check_type(dir, V) -> filename:absname(V);
+do_check_type(dump_disc_copies_at_startup, B) -> bool(B);
 do_check_type(dump_log_load_regulation, B) -> bool(B);
 do_check_type(dump_log_time_threshold, I) when is_integer(I), I > 0 -> I;
 do_check_type(dump_log_update_in_place, B) -> bool(B);
@@ -782,12 +778,12 @@ media(opt_disc) -> opt_disc;
 media(ram) -> ram.
 
 patch_env(Env, Val) ->
-    case catch do_check_type(Env, Val) of
-	{'EXIT', _Reason} ->
-	    {error, {bad_type, Env, Val}};
+    try do_check_type(Env, Val) of
 	NewVal ->
 	    application_controller:set_env(mnesia, Env, NewVal),
 	    NewVal
+    catch error:_ ->
+	    {error, {bad_type, Env, Val}}
     end.
 
 detect_partitioned_network(Mon, Node) ->
@@ -830,3 +826,48 @@ report_inconsistency([{badrpc, _Reason} | Replies], Context, Status) ->
     report_inconsistency(Replies, Context, Status);
 report_inconsistency([], _Context, Status) ->
     Status.
+
+remote_node_status(Node, Status, State) ->
+    {ok, Nodes} = mnesia_schema:read_nodes(),
+    case lists:member(Node, Nodes) of
+	true ->
+	    update_node_status({Node, Status}, State);
+	_ ->
+	    State
+    end.
+
+update_node_status({Node, down}, State = #state{remote_node_status = RNodeS}) ->
+    RNodeS2 = lists:ukeymerge(1, [{Node, down}], RNodeS),
+    State#state{remote_node_status = RNodeS2};
+update_node_status({Node, up}, State = #state{remote_node_status = RNodeS}) ->
+    case lists:keyfind(Node, 1, RNodeS) of
+	{Node, down} ->
+	    RNodeS2 = lists:ukeymerge(1, [{Node, up}], RNodeS),
+	    State#state{remote_node_status = RNodeS2};
+	_ ->
+	    State
+    end.
+
+check_raise_conditon_nodeup(Node, State = #state{remote_node_status = RNodeS}) ->
+    case lists:keyfind(Node, 1, RNodeS) of
+	{Node, up} ->
+	    self() ! {check_nodeup, Node};
+	_ ->
+	    ignore
+    end,
+    State#state{remote_node_status = lists:keydelete(Node, 1, RNodeS)}.
+
+check_mnesia_down(Node, State = #state{remote_node_status = RNodeS}) ->
+    %% Check if the network has been partitioned
+    %% due to communication failure.
+
+    HasDown   = mnesia_recover:has_mnesia_down(Node),
+    ImRunning = mnesia_lib:is_running(),
+    if
+	%% If I'm not running the test will be made later.
+	HasDown == true, ImRunning == yes ->
+	    spawn_link(?MODULE, detect_partitioned_network, [self(), Node]),
+	    State#state{remote_node_status = lists:keydelete(Node, 1, RNodeS)};
+	true ->
+	    State
+    end.

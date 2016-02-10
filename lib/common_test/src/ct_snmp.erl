@@ -1,25 +1,26 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2012. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
 
 %%% @doc Common Test user interface module for the OTP snmp application
 %%%
-%%% The purpose of this module is to make snmp configuration easier for 
+%%% <p>The purpose of this module is to make snmp configuration easier for
 %%% the test case writer. Many test cases can use default values for common
 %%% operations and then no snmp configuration files need to be supplied. When
 %%% it is necessary to change particular configuration parameters, a subset
@@ -30,7 +31,7 @@
 %%% To simplify the test suite, Common Test keeps track
 %%% of some of the snmp manager information. This way the test suite doesn't
 %%% have to handle as many input parameters as it would if it had to interface the
-%%% OTP snmp manager directly.
+%%% OTP snmp manager directly.</p>
 %%% 
 %%% <p> The following snmp manager and agent parameters are configurable: </p>
 %%%
@@ -325,9 +326,9 @@ set_info(Config) ->
 %%% @doc Register the manager entity (=user) responsible for specific agent(s).
 %%% Corresponds to making an entry in users.conf.
 %%%
-%%% This function will try to register the given users, without
+%%% <p>This function will try to register the given users, without
 %%% checking if any of them already exist. In order to change an
-%%% already registered user, the user must first be unregistered.
+%%% already registered user, the user must first be unregistered.</p>
 register_users(MgrAgentConfName, Users) ->
     case setup_users(Users) of
 	ok ->
@@ -350,10 +351,10 @@ register_users(MgrAgentConfName, Users) ->
 %%% @doc Explicitly instruct the manager to handle this agent.
 %%% Corresponds to making an entry in agents.conf 
 %%%
-%%% This function will try to register the given managed agents,
+%%% <p>This function will try to register the given managed agents,
 %%% without checking if any of them already exist. In order to change
 %%% an already registered managed agent, the agent must first be
-%%% unregistered.
+%%% unregistered.</p>
 register_agents(MgrAgentConfName, ManagedAgents) ->
     case setup_managed_agents(MgrAgentConfName,ManagedAgents) of
 	ok ->
@@ -377,9 +378,9 @@ register_agents(MgrAgentConfName, ManagedAgents) ->
 %%% @doc Explicitly instruct the manager to handle this USM user.
 %%% Corresponds to making an entry in usm.conf 
 %%%
-%%% This function will try to register the given users, without
+%%% <p>This function will try to register the given users, without
 %%% checking if any of them already exist. In order to change an
-%%% already registered user, the user must first be unregistered.
+%%% already registered user, the user must first be unregistered.</p>
 register_usm_users(MgrAgentConfName, UsmUsers) ->
     EngineID = ct:get_config({MgrAgentConfName, engine_id}, ?ENGINE_ID),
     case setup_usm_users(UsmUsers, EngineID) of

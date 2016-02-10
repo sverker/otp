@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -37,10 +38,14 @@
          code_change/3,
          terminate/2]).
 
--export([info/1]).  %% service_info callback
+-export([listener/1,%% diameter_sync callback
+         info/1]).  %% service_info callback
 
 -export([ports/0,
          ports/1]).
+
+-export_type([connect_option/0,
+              listen_option/0]).
 
 -include_lib("diameter/include/diameter.hrl").
 
@@ -68,7 +73,7 @@
 %% Listener process state.
 -record(listener, {socket    :: inet:socket(),
                    count = 1 :: non_neg_integer(),
-                   tref      :: reference()}).
+                   tref      :: reference() | undefined}).
 
 %% Monitor process state.
 -record(monitor,
@@ -79,6 +84,25 @@
 -type size()   :: non_neg_integer().  %% accumulated binary size
 -type frag()   :: {length(), size(), binary(), list(binary())}
                 | binary().
+
+-type connect_option() :: {raddr, inet:ip_address()}
+                        | {rport, pos_integer()}
+                        | {ssl_options, true | [ssl:connect_option()]}
+                        | option()
+                        | ssl:connect_option()
+                        | gen_tcp:connect_option().
+
+-type match() :: inet:ip_address()
+               | string()
+               | [match()].
+
+-type listen_option() :: {accept, match()}
+                       | {ssl_options, true | [ssl:listen_option()]}
+                       | ssl:listen_option()
+                       | gen_tcp:listen_option().
+
+-type option() :: {port, non_neg_integer()}
+                | {fragment_timer, 0..16#FFFFFFFF}.
 
 %% Accepting/connecting transport process state.
 -record(transport,
@@ -99,6 +123,14 @@
 %% ---------------------------------------------------------------------------
 %% # start/3
 %% ---------------------------------------------------------------------------
+
+-spec start({accept, Ref}, #diameter_service{}, [listen_option()])
+   -> {ok, pid(), [inet:ip_address()]}
+ when Ref :: diameter:transport_ref();
+           ({connect, Ref}, #diameter_service{}, [connect_option()])
+   -> {ok, pid(), [inet:ip_address()]}
+    | {ok, pid()}
+ when Ref :: diameter:transport_ref().
 
 start({T, Ref}, #diameter_service{capabilities = Caps}, Opts) ->
     diameter_tcp_sup:start(),  %% start tcp supervisors on demand
@@ -161,7 +193,7 @@ init(T) ->
 i({T, Ref, Mod, Pid, Opts, Addrs})
   when T == accept;
        T == connect ->
-    erlang:monitor(process, Pid),
+    monitor(process, Pid),
     %% Since accept/connect might block indefinitely, spawn a process
     %% that does nothing but kill us with the parent until call
     %% returns.
@@ -172,7 +204,7 @@ i({T, Ref, Mod, Pid, Opts, Addrs})
                               OwnOpts,
                               ?DEFAULT_FRAGMENT_TIMEOUT),
     ?IS_TIMEOUT(Tmo) orelse ?ERROR({fragment_timer, Tmo}),
-    Sock = i(T, Ref, Mod, Pid, SslOpts, Rest, Addrs),
+    Sock = init(T, Ref, Mod, Pid, SslOpts, Rest, Addrs),
     MPid ! {stop, self()},  %% tell the monitor to die
     M = if SslOpts -> ssl; true -> Mod end,
     setopts(M, Sock),
@@ -188,8 +220,8 @@ i({T, Ref, Mod, Pid, Opts, Addrs})
 %% A monitor process to kill the transport if the parent dies.
 i(#monitor{parent = Pid, transport = TPid} = S) ->
     proc_lib:init_ack({ok, self()}),
-    erlang:monitor(process, Pid),
-    erlang:monitor(process, TPid),
+    monitor(process, Pid),
+    monitor(process, TPid),
     S;
 %% In principle a link between the transport and killer processes
 %% could do the same thing: have the accepting/connecting process be
@@ -199,17 +231,24 @@ i(#monitor{parent = Pid, transport = TPid} = S) ->
 
 i({listen, LRef, APid, {Mod, Opts, Addrs}}) ->
     {[LA, LP], Rest} = proplists:split(Opts, [ip, port]),
-    LAddr = get_addr(LA, Addrs),
+    LAddrOpt = get_addr(LA, Addrs),
     LPort = get_port(LP),
-    {ok, LSock} = Mod:listen(LPort, gen_opts(LAddr, Rest)),
+    {ok, LSock} = Mod:listen(LPort, gen_opts(LAddrOpt, Rest)),
+    LAddr = laddr(LAddrOpt, Mod, LSock),
     true = diameter_reg:add_new({?MODULE, listener, {LRef, {LAddr, LSock}}}),
     proc_lib:init_ack({ok, self(), {LAddr, LSock}}),
-    erlang:monitor(process, APid),
+    monitor(process, APid),
     start_timer(#listener{socket = LSock}).
 
+laddr([], Mod, Sock) ->
+    {ok, {Addr, _Port}} = sockname(Mod, Sock),
+    Addr;
+laddr([{ip, Addr}], _, _) ->
+    Addr.
+
 own(Opts) ->
-    {Own, Rest} = proplists:split(Opts, [fragment_timer]),
-    {lists:append(Own), Rest}.
+    {[Own], Rest} = proplists:split(Opts, [fragment_timer]),
+    {Own, Rest}.
 
 ssl(Opts) ->
     {[SslOpts], Rest} = proplists:split(Opts, [ssl_options]),
@@ -225,34 +264,49 @@ ssl_opts([{ssl_options, Opts}])
 ssl_opts(L) ->
     ?ERROR({ssl_options, L}).
 
-%% i/7
+%% init/7
 
 %% Establish a TLS connection before capabilities exchange ...
-i(Type, Ref, Mod, Pid, true, Opts, Addrs) ->
-    i(Type, Ref, ssl, Pid, [{cb_info, ?TCP_CB(Mod)} | Opts], Addrs);
+init(Type, Ref, Mod, Pid, true, Opts, Addrs) ->
+    init(Type, Ref, ssl, Pid, [{cb_info, ?TCP_CB(Mod)} | Opts], Addrs);
 
 %% ... or not.
-i(Type, Ref, Mod, Pid, _, Opts, Addrs) ->
-    i(Type, Ref, Mod, Pid, Opts, Addrs).
+init(Type, Ref, Mod, Pid, _, Opts, Addrs) ->
+    init(Type, Ref, Mod, Pid, Opts, Addrs).
 
-i(accept = T, Ref, Mod, Pid, Opts, Addrs) ->
-    {LAddr, LSock} = listener(Ref, {Mod, Opts, Addrs}),
+%% init/6
+
+init(accept = T, Ref, Mod, Pid, Opts, Addrs) ->
+    {[Matches], Rest} = proplists:split(Opts, [accept]),
+    {LAddr, LSock} = listener(Ref, {Mod, Rest, Addrs}),
     proc_lib:init_ack({ok, self(), [LAddr]}),
     Sock = ok(accept(Mod, LSock)),
+    ok = accept_peer(Mod, Sock, accept(Matches)),
     publish(Mod, T, Ref, Sock),
     diameter_peer:up(Pid),
     Sock;
 
-i(connect = T, Ref, Mod, Pid, Opts, Addrs) ->
+init(connect = T, Ref, Mod, Pid, Opts, Addrs) ->
     {[LA, RA, RP], Rest} = proplists:split(Opts, [ip, raddr, rport]),
-    LAddr = get_addr(LA, Addrs),
-    RAddr = get_addr(RA, []),
+    LAddrOpt = get_addr(LA, Addrs),
+    RAddr = get_addr(RA),
     RPort = get_port(RP),
-    proc_lib:init_ack({ok, self(), [LAddr]}),
-    Sock = ok(connect(Mod, RAddr, RPort, gen_opts(LAddr, Rest))),
+    proc_lib:init_ack(init_rc(LAddrOpt)),
+    Sock = ok(connect(Mod, RAddr, RPort, gen_opts(LAddrOpt, Rest))),
     publish(Mod, T, Ref, Sock),
-    diameter_peer:up(Pid, {RAddr, RPort}),
+    up(Pid, {RAddr, RPort}, LAddrOpt, Mod, Sock),
     Sock.
+
+init_rc([{ip, Addr}]) ->
+    {ok, self(), [Addr]};
+init_rc([]) ->
+    {ok, self()}.
+
+up(Pid, Remote, [{ip, _Addr}], _, _) ->
+    diameter_peer:up(Pid, Remote);
+up(Pid, Remote, [], Mod, Sock) ->
+    {Addr, _Port} = ok(sockname(Mod, Sock)),
+    diameter_peer:up(Pid, Remote, [Addr]).
 
 publish(Mod, T, Ref, Sock) ->
     true = diameter_reg:add_new({?MODULE, T, {Ref, Sock}}),
@@ -266,25 +320,56 @@ ok(No) ->
 x(Reason) ->
     exit({shutdown, Reason}).
 
+%% accept_peer/3
+
+accept_peer(_Mod, _Sock, []) ->
+    ok;
+
+accept_peer(Mod, Sock, Matches) ->
+    {RAddr, _} = ok(peername(Mod, Sock)),
+    diameter_peer:match([RAddr], Matches)
+        orelse x({accept, RAddr, Matches}),
+    ok.
+
+%% accept/1
+
+accept(Opts) ->
+    [[M] || {accept, M} <- Opts].
+
 %% listener/2
 
+%% Accepting processes can be started concurrently: ensure only one
+%% listener is started.
 listener(LRef, T) ->
-    l(diameter_reg:match({?MODULE, listener, {LRef, '_'}}), LRef, T).
+    diameter_sync:call({?MODULE, listener, LRef},
+                       {?MODULE, listener, [{LRef, T, self()}]},
+                       infinity,
+                       infinity).
 
-%% Existing process with the listening socket ...
-l([{{?MODULE, listener, {_, AS}}, LPid}], _, _) ->
-    LPid ! {accept, self()},
+listener({LRef, T, TPid}) ->
+    l(diameter_reg:match({?MODULE, listener, {LRef, '_'}}), LRef, T, TPid).
+
+%% Existing listening process ...
+l([{{?MODULE, listener, {_, AS}}, LPid}], _, _, TPid) ->
+    LPid ! {accept, TPid},
     AS;
 
-%% ... or not: start one.
-l([], LRef, T) ->
-    {ok, _, AS} = diameter_tcp_sup:start_child({listen, LRef, self(), T}),
+%% ... or not.
+l([], LRef, T, TPid) ->
+    {ok, _, AS} = diameter_tcp_sup:start_child({listen, LRef, TPid, T}),
     AS.
+
+%% get_addr/1
+
+get_addr(As) ->
+    diameter_lib:ipaddr(addr(As, [])).
 
 %% get_addr/2
 
+get_addr([], []) ->
+    [];
 get_addr(As, Def) ->
-    diameter_lib:ipaddr(addr(As, Def)).
+    [{ip, diameter_lib:ipaddr(addr(As, Def))}].
 
 %% Take the first address from the service if several are unspecified.
 addr([], [Addr | _]) ->
@@ -305,14 +390,10 @@ get_port(Ps) ->
 
 %% gen_opts/2
 
-gen_opts(LAddr, Opts) ->
+gen_opts(LAddrOpt, Opts) ->
     {L,_} = proplists:split(Opts, [binary, packet, active]),
     [[],[],[]] == L orelse ?ERROR({reserved_options, Opts}),
-    [binary,
-     {packet, 0},
-     {active, once},
-     {ip, LAddr}
-     | Opts].
+    [binary, {packet, 0}, {active, once}] ++ LAddrOpt ++ Opts.
 
 %% ---------------------------------------------------------------------------
 %% # ports/1
@@ -431,7 +512,7 @@ m({'DOWN', _, process, Pid, _}, #monitor{parent = Pid,
 
 %% Another accept transport is attaching.
 l({accept, TPid}, #listener{count = N} = S) ->
-    erlang:monitor(process, TPid),
+    monitor(process, TPid),
     S#listener{count = N+1};
 
 %% Accepting process has died.

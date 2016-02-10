@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2008-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -35,6 +36,7 @@
 	 select_line/2, selected_line/1,
 	 eval_output/3,                               % Evaluator area
 	 update_bindings/2,                           % Bindings area
+         update_strings/1,
 	 trace_output/2,                              % Trace area
 	 handle_event/2
 	]).
@@ -200,6 +202,7 @@ create_win(Parent, Title, Windows, Menus) ->
 		
 		wxFrame:show(Win),
 		put(window, Win),
+                put(strings, [str_on]),
 		Wi
 	end,
 
@@ -567,10 +570,18 @@ update_bindings(#winInfo{bind=#sub{out=BA}}, Bs) ->
     wx:foldl(fun({Var,Val},Row) ->
 		     wxListCtrl:insertItem(BA, Row, ""), 
 		     wxListCtrl:setItem(BA, Row, 0, dbg_wx_win:to_string(Var)),
-		     wxListCtrl:setItem(BA, Row, 1, dbg_wx_win:to_string("~99999tP",[Val, 20])),
+                     Format = case get(strings) of
+                                  []        -> "~999999lP";
+                                  [str_on]  -> "~999999tP"
+                              end,
+		     wxListCtrl:setItem(BA, Row, 1, dbg_wx_win:to_string(Format,[Val, 20])),
 		     Row+1
 	     end, 0, Bs),
     put(bindings,Bs),
+    ok.
+
+update_strings(Strings) ->
+    _ = put(strings, Strings),
     ok.
 
 %%--------------------------------------------------------------------
@@ -853,7 +864,10 @@ handle_event(#wx{id=?EVAL_ENTRY, event=#wxCommand{type=command_text_enter}},
 handle_event(#wx{event=#wxList{type=command_list_item_selected, itemIndex=Row}},Wi) ->
     Bs = get(bindings),
     {Var,Val} = lists:nth(Row+1, Bs),
-    Str = io_lib:format("< ~s = ~lp~n", [Var, Val]),
+    Str = case get(strings) of
+              []       -> io_lib:format("< ~s = ~lp~n", [Var, Val]);
+              [str_on] -> io_lib:format("< ~s = ~tp~n", [Var, Val])
+          end,
     eval_output(Wi, Str, bold),
     ignore;
 handle_event(#wx{event=#wxList{type=command_list_item_activated, itemIndex=Row}},_Wi) ->    

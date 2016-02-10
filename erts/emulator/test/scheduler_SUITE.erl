@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2008-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -52,7 +53,9 @@
 	 update_cpu_info/1,
 	 sct_cmd/1,
 	 sbt_cmd/1,
+	 scheduler_threads/1,
 	 scheduler_suspend/1,
+	 dirty_scheduler_threads/1,
 	 reader_groups/1]).
 
 -define(DEFAULT_TIMEOUT, ?t:minutes(15)).
@@ -66,7 +69,8 @@ all() ->
      equal_with_part_time_max,
      equal_and_high_with_part_time_max, equal_with_high,
      equal_with_high_max, bound_process,
-     {group, scheduler_bind}, scheduler_suspend,
+     {group, scheduler_bind}, scheduler_threads, scheduler_suspend,
+     dirty_scheduler_threads,
      reader_groups].
 
 groups() -> 
@@ -1039,7 +1043,129 @@ sbt_test(Config, CpuTCmd, ClBt, Bt, LP) ->
 		      tuple_to_list(SB)),
     ?line stop_node(Node),
     ?line ok.
-    
+
+scheduler_threads(Config) when is_list(Config) ->
+    SmpSupport = erlang:system_info(smp_support),
+    {Sched, SchedOnln, _} = get_sstate(Config, ""),
+    %% Configure half the number of both the scheduler threads and
+    %% the scheduler threads online.
+    {HalfSched, HalfSchedOnln} = case SmpSupport of
+                                     false -> {1,1};
+                                     true ->
+                                         {Sched div 2,
+                                          SchedOnln div 2}
+                                 end,
+    {HalfSched, HalfSchedOnln, _} = get_sstate(Config, "+SP 50:50"),
+    %% Use +S to configure 4x the number of scheduler threads and
+    %% 4x the number of scheduler threads online, but alter that
+    %% setting using +SP to 50% scheduler threads and 25% scheduler
+    %% threads online. The result should be 2x scheduler threads and
+    %% 1x scheduler threads online.
+    TwiceSched = case SmpSupport of
+                     false -> 1;
+                     true -> Sched*2
+                 end,
+    FourSched = integer_to_list(Sched*4),
+    FourSchedOnln = integer_to_list(SchedOnln*4),
+    CombinedCmd1 = "+S "++FourSched++":"++FourSchedOnln++" +SP50:25",
+    {TwiceSched, SchedOnln, _} = get_sstate(Config, CombinedCmd1),
+    %% Now do the same test but with the +S and +SP options in the
+    %% opposite order, since order shouldn't matter.
+    CombinedCmd2 = "+SP50:25 +S "++FourSched++":"++FourSchedOnln,
+    {TwiceSched, SchedOnln, _} = get_sstate(Config, CombinedCmd2),
+    %% Apply two +SP options to make sure the second overrides the first
+    TwoCmd = "+SP 25:25 +SP 100:100",
+    {Sched, SchedOnln, _} = get_sstate(Config, TwoCmd),
+    %% Configure 50% of scheduler threads online only
+    {Sched, HalfSchedOnln, _} = get_sstate(Config, "+SP:50"),
+    %% Configure 2x scheduler threads only
+    {TwiceSched, SchedOnln, _} = get_sstate(Config, "+SP 200"),
+    %% Test resetting the scheduler counts
+    ResetCmd = "+S "++FourSched++":"++FourSchedOnln++" +S 0:0",
+    {Sched, SchedOnln, _} = get_sstate(Config, ResetCmd),
+    %% Test negative +S settings, but only for SMP-enabled emulators
+    case SmpSupport of
+        false -> ok;
+        true ->
+            SchedMinus1 = Sched-1,
+            SchedOnlnMinus1 = SchedOnln-1,
+            {SchedMinus1, SchedOnlnMinus1, _} = get_sstate(Config, "+S -1"),
+            {Sched, SchedOnlnMinus1, _} = get_sstate(Config, "+S :-1"),
+            {SchedMinus1, SchedOnlnMinus1, _} = get_sstate(Config, "+S -1:-1")
+    end,
+    ok.
+
+dirty_scheduler_threads(Config) when is_list(Config) ->
+    SmpSupport = erlang:system_info(smp_support),
+    try
+	erlang:system_info(dirty_cpu_schedulers),
+	dirty_scheduler_threads_test(Config, SmpSupport)
+    catch
+	error:badarg ->
+	    {skipped, "No dirty scheduler support"}
+    end.
+
+dirty_scheduler_threads_test(Config, SmpSupport) ->
+    {Sched, SchedOnln, _} = get_dsstate(Config, ""),
+    {HalfSched, HalfSchedOnln} = case SmpSupport of
+                                     false -> {1,1};
+                                     true ->
+                                         {Sched div 2,
+                                          SchedOnln div 2}
+                                 end,
+    Cmd1 = "+SDcpu "++integer_to_list(HalfSched)++":"++
+	integer_to_list(HalfSchedOnln),
+    {HalfSched, HalfSchedOnln, _} = get_dsstate(Config, Cmd1),
+    {HalfSched, HalfSchedOnln, _} = get_dsstate(Config, "+SDPcpu 50:50"),
+    IOSched = 20,
+    {_, _, IOSched} = get_dsstate(Config, "+SDio "++integer_to_list(IOSched)),
+    {ok, Node} = start_node(Config, ""),
+    [ok] = mcall(Node, [fun() -> dirty_schedulers_online_test() end]),
+    ok.
+
+dirty_schedulers_online_test() ->
+    dirty_schedulers_online_test(erlang:system_info(smp_support)).
+dirty_schedulers_online_test(false) -> ok;
+dirty_schedulers_online_test(true) ->
+    dirty_schedulers_online_smp_test(erlang:system_info(schedulers_online)).
+dirty_schedulers_online_smp_test(SchedOnln) when SchedOnln < 4 -> ok;
+dirty_schedulers_online_smp_test(SchedOnln) ->
+    DirtyCPUSchedOnln = erlang:system_info(dirty_cpu_schedulers_online),
+    SchedOnln = DirtyCPUSchedOnln,
+    HalfSchedOnln = SchedOnln div 2,
+    SchedOnln = erlang:system_flag(schedulers_online, HalfSchedOnln),
+    HalfDirtyCPUSchedOnln = DirtyCPUSchedOnln div 2,
+    HalfDirtyCPUSchedOnln = erlang:system_flag(schedulers_online, SchedOnln),
+    DirtyCPUSchedOnln = erlang:system_flag(dirty_cpu_schedulers_online,
+					   HalfDirtyCPUSchedOnln),
+    HalfDirtyCPUSchedOnln = erlang:system_info(dirty_cpu_schedulers_online),
+    QrtrDirtyCPUSchedOnln = HalfDirtyCPUSchedOnln div 2,
+    SchedOnln = erlang:system_flag(schedulers_online, HalfSchedOnln),
+    QrtrDirtyCPUSchedOnln = erlang:system_info(dirty_cpu_schedulers_online),
+    ok.
+
+get_sstate(Config, Cmd) ->
+    {ok, Node} = start_node(Config, Cmd),
+    [SState] = mcall(Node, [fun () ->
+                                    erlang:system_info(schedulers_state)
+                            end]),
+    stop_node(Node),
+    SState.
+
+get_dsstate(Config, Cmd) ->
+    {ok, Node} = start_node(Config, Cmd),
+    [DSCPU] = mcall(Node, [fun () ->
+				   erlang:system_info(dirty_cpu_schedulers)
+			   end]),
+    [DSCPUOnln] = mcall(Node, [fun () ->
+				       erlang:system_info(dirty_cpu_schedulers_online)
+			       end]),
+    [DSIO] = mcall(Node, [fun () ->
+				  erlang:system_info(dirty_io_schedulers)
+			  end]),
+    stop_node(Node),
+    {DSCPU, DSCPUOnln, DSIO}.
+
 scheduler_suspend(Config) when is_list(Config) ->
     ?line Dog = ?t:timetrap(?t:minutes(5)),
     ?line lists:foreach(fun (S) -> scheduler_suspend_test(Config, S) end,
@@ -1111,16 +1237,40 @@ sst2_loop(N) ->
     erlang:system_flag(multi_scheduling, unblock),
     sst2_loop(N-1).
 
-sst3_loop(_S, 0) ->
-    ok;
 sst3_loop(S, N) ->
+    try erlang:system_info(dirty_cpu_schedulers) of
+	DS ->
+	    sst3_loop_with_dirty_schedulers(S, DS, N)
+    catch
+	error:badarg ->
+	    sst3_loop_normal_schedulers_only(S, N)
+    end.
+
+sst3_loop_normal_schedulers_only(_S, 0) ->
+    ok;
+sst3_loop_normal_schedulers_only(S, N) ->
     erlang:system_flag(schedulers_online, (S div 2)+1),
     erlang:system_flag(schedulers_online, 1),
     erlang:system_flag(schedulers_online, (S div 2)+1),
     erlang:system_flag(schedulers_online, S),
     erlang:system_flag(schedulers_online, 1),
     erlang:system_flag(schedulers_online, S),
-    sst3_loop(S, N-1).
+    sst3_loop_normal_schedulers_only(S, N-1).
+
+sst3_loop_with_dirty_schedulers(_S, _DS, 0) ->
+    ok;
+sst3_loop_with_dirty_schedulers(S, DS, N) ->
+    erlang:system_flag(schedulers_online, (S div 2)+1),
+    erlang:system_flag(dirty_cpu_schedulers_online, (DS div 2)+1),
+    erlang:system_flag(schedulers_online, 1),
+    erlang:system_flag(schedulers_online, (S div 2)+1),
+    erlang:system_flag(dirty_cpu_schedulers_online, 1),
+    erlang:system_flag(schedulers_online, S),
+    erlang:system_flag(dirty_cpu_schedulers_online, DS),
+    erlang:system_flag(schedulers_online, 1),
+    erlang:system_flag(schedulers_online, S),
+    erlang:system_flag(dirty_cpu_schedulers_online, DS),
+    sst3_loop_with_dirty_schedulers(S, DS, N-1).
 
 reader_groups(Config) when is_list(Config) ->
     %% White box testing. These results are correct, but other results
@@ -1435,7 +1585,7 @@ mcall(Node, Funs) ->
 	      end, Refs).
 
 erl_rel_flag_var() ->
-    "ERL_"++erlang:system_info(otp_release)++"_FLAGS".
+    "ERL_OTP"++erlang:system_info(otp_release)++"_FLAGS".
 
 clear_erl_rel_flags() ->
     EnvVar = erl_rel_flag_var(),
@@ -1680,11 +1830,11 @@ do_it(Tracer, Low, Normal, High, Max) ->
 do_it(Tracer, Low, Normal, High, Max, RedsPerSchedLimit) ->
     OldPrio = process_flag(priority, max),
     go_work(Low, Normal, High, Max),
-    StartWait = now(),
+    StartWait = erlang:monotonic_time(milli_seconds),
     %% Give the emulator a chance to balance the load...
     wait_balance(5),
-    EndWait = now(),
-    BalanceWait = timer:now_diff(EndWait,StartWait) div 1000,
+    EndWait = erlang:monotonic_time(milli_seconds),
+    BalanceWait = EndWait-StartWait,
     erlang:display({balance_wait, BalanceWait}),
     Timeout = ?DEFAULT_TIMEOUT - ?t:minutes(4) - BalanceWait,
     Res = case Timeout < ?MIN_SCHEDULER_TEST_TIMEOUT of
@@ -1878,17 +2028,14 @@ start_node(Config) ->
     start_node(Config, "").
 
 start_node(Config, Args) when is_list(Config) ->
-    ?line Pa = filename:dirname(code:which(?MODULE)),
-    ?line {A, B, C} = now(),
-    ?line Name = list_to_atom(atom_to_list(?MODULE)
-			      ++ "-"
-			      ++ atom_to_list(?config(testcase, Config))
-			      ++ "-"
-			      ++ integer_to_list(A)
-			      ++ "-"
-			      ++ integer_to_list(B)
-			      ++ "-"
-			      ++ integer_to_list(C)),
+    Pa = filename:dirname(code:which(?MODULE)),
+    Name = list_to_atom(atom_to_list(?MODULE)
+			++ "-"
+			++ atom_to_list(?config(testcase, Config))
+			++ "-"
+			++ integer_to_list(erlang:system_time(seconds))
+			++ "-"
+			++ integer_to_list(erlang:unique_integer([positive]))),
     ?line ?t:start_node(Name, slave, [{args, "-pa "++Pa++" "++Args}]).
 
 stop_node(Node) ->

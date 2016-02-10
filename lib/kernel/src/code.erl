@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -59,13 +60,15 @@
 	 del_path/1,
 	 replace_path/2,
 	 rehash/0,
-	 start_link/0, start_link/1,
+	 start_link/0,
 	 which/1,
 	 where_is_file/1,
 	 where_is_file/2,
 	 set_primary_archive/4,
 	 clash/0,
      get_mode/0]).
+
+-deprecated({rehash,0,next_major_release}).
 
 -export_type([load_error_rsn/0, load_ret/0]).
 
@@ -76,10 +79,9 @@
 %%----------------------------------------------------------------------------
 
 -type load_error_rsn() :: 'badfile'
-                        | 'native_code'
                         | 'nofile'
                         | 'not_purged'
-                        | 'on_load'
+                        | 'on_load_failure'
                         | 'sticky_directory'.
 -type load_ret() :: {'error', What :: load_error_rsn()}
                   | {'module', Module :: module()}.
@@ -107,7 +109,7 @@ is_module_native(_) ->
 -spec make_stub_module(Module, Beam, Info) -> Module when
       Module :: module(),
       Beam :: binary(),
-      Info :: {list(), list()}.
+      Info :: {list(), list(), binary()}.
 
 make_stub_module(_, _, _) ->
     erlang:nif_error(undef).
@@ -134,14 +136,16 @@ load_file(Mod) when is_atom(Mod) ->
 
 -spec ensure_loaded(Module) -> {module, Module} | {error, What} when
       Module :: module(),
-      What :: embedded | badfile | native_code | nofile | on_load.
+      What :: embedded | badfile | nofile | on_load_failure.
 ensure_loaded(Mod) when is_atom(Mod) -> 
     call({ensure_loaded,Mod}).
 
 %% XXX File as an atom is allowed only for backwards compatibility.
 -spec load_abs(Filename) -> load_ret() when
       Filename :: file:filename().
-load_abs(File) when is_list(File); is_atom(File) -> call({load_abs,File,[]}).
+load_abs(File) when is_list(File); is_atom(File) ->
+    Mod = list_to_atom(filename:basename(File)),
+    call({load_abs,File,Mod}).
 
 %% XXX Filename is also an atom(), e.g. 'cover_compiled'
 -spec load_abs(Filename :: loaded_filename(), Module :: module()) -> load_ret().
@@ -292,7 +296,9 @@ replace_path(Name, Dir) when (is_atom(Name) orelse is_list(Name)),
     call({replace_path,Name,Dir}).
 
 -spec rehash() -> 'ok'.
-rehash() -> call(rehash).
+rehash() ->
+    cache_warning(),
+    ok.
 
 -spec get_mode() -> 'embedded' | 'interactive'.
 get_mode() -> call(get_mode).
@@ -300,15 +306,11 @@ get_mode() -> call(get_mode).
 %%-----------------------------------------------------------------
 
 call(Req) ->
-    code_server:call(code_server, Req).
+    code_server:call(Req).
 
 -spec start_link() -> {'ok', pid()} | {'error', 'crash'}.
 start_link() ->
-    start_link([stick]).
-
--spec start_link(Flags :: [atom()]) -> {'ok', pid()} | {'error', 'crash'}.
-start_link(Flags) ->
-    do_start(Flags).
+    do_start().
     
 %%-----------------------------------------------------------------
 %% In the init phase, code must not use any modules not yet loaded,
@@ -320,34 +322,21 @@ start_link(Flags) ->
 %% us, so the module is loaded.
 %%-----------------------------------------------------------------
 
-do_start(Flags) ->
+do_start() ->
+    maybe_warn_for_cache(),
     load_code_server_prerequisites(),
 
-    Mode = get_mode(Flags),
-    case init:get_argument(root) of 
-	{ok,[[Root0]]} ->
-	    Root = filename:join([Root0]), % Normalize.  Use filename
-	    case code_server:start_link([Root,Mode]) of
-		{ok,_Pid} = Ok2 ->
-		    if
-			Mode =:= interactive ->
-			    case lists:member(stick, Flags) of
-				true -> do_stick_dirs();
-				_    -> ok
-			    end;
-			true ->
-			    ok
-		    end,
-		    %% Quietly load native code for all modules loaded so far
-		    catch load_native_code_for_all_loaded(),
-		    Ok2;
-		Other ->
-		    Other
-	    end;
-	Other ->
-	    error_logger:error_msg("Can not start code server ~w ~n", [Other]),
-	    {error, crash}
-    end.
+    {ok,[[Root0]]} = init:get_argument(root),
+    Mode = start_get_mode(),
+    Root = filename:join([Root0]),	    % Normalize.
+    Res = code_server:start_link([Root,Mode]),
+
+    maybe_stick_dirs(Mode),
+
+    %% Quietly load native code for all modules loaded so far.
+    Architecture = erlang:system_info(hipe_architecture),
+    load_native_code_for_all_loaded(Architecture),
+    Res.
 
 %% Make sure that all modules that the code_server process calls
 %% (directly or indirectly) are loaded. Otherwise the code_server
@@ -364,7 +353,17 @@ load_code_server_prerequisites() ->
 	      lists,
 	      os,
 	      unicode],
-    [M = M:module_info(module) || M <- Needed],
+    _ = [M = M:module_info(module) || M <- Needed],
+    ok.
+
+maybe_stick_dirs(interactive) ->
+    case init:get_argument(nostick) of
+	{ok,[[]]} ->
+	    ok;
+	_ ->
+	    do_stick_dirs()
+    end;
+maybe_stick_dirs(_) ->
     ok.
 
 do_stick_dirs() ->
@@ -384,19 +383,12 @@ do_s(Lib) ->
 	    ok
     end.
 
-get_mode(Flags) ->
-    case lists:member(embedded, Flags) of
-	true ->
+start_get_mode() ->
+    case init:get_argument(mode) of
+	{ok,[["embedded"]]} ->
 	    embedded;
-	_Otherwise -> 
-	    case init:get_argument(mode) of
-		{ok,[["embedded"]]} ->
-		    embedded;
-		{ok,[["minimal"]]} ->
-		    minimal;
-		_Else ->
-		    interactive
-	    end
+	_ ->
+	    interactive
     end.
 
 %% Find out which version of a particular module we would
@@ -450,30 +442,14 @@ which(File, Base, [Directory|Tail]) ->
       Filename :: file:filename(),
       Absname :: file:filename().
 where_is_file(File) when is_list(File) ->
-    case call({is_cached,File}) of
-	no ->
-	    Path = get_path(),
-	    which(File, ".", Path);
-	Dir ->
-	    filename:join(Dir, File)
-    end.
+    Path = get_path(),
+    which(File, ".", Path).
 
 -spec where_is_file(Path :: file:filename(), Filename :: file:filename()) ->
         file:filename() | 'non_existing'.
 
 where_is_file(Path, File) when is_list(Path), is_list(File) ->
-    CodePath = get_path(),
-    if
-	Path =:= CodePath ->
-	    case call({is_cached, File}) of
-		no ->
-		    which(File, ".", Path);
-		Dir ->
-		    filename:join(Dir, File)
-	    end;
-	true ->
-	    which(File, ".", Path)
-    end.
+    which(File, ".", Path).
 
 -spec set_primary_archive(ArchiveFile :: file:filename(),
 			  ArchiveBin :: binary(),
@@ -550,18 +526,59 @@ has_ext(Ext, Extlen, File) ->
 	_ -> false
     end.
 
--spec load_native_code_for_all_loaded() -> ok.
-load_native_code_for_all_loaded() ->
-    Architecture = erlang:system_info(hipe_architecture),
-    ChunkName = hipe_unified_loader:chunk_name(Architecture),
-    lists:foreach(fun({Module, BeamFilename}) ->
-        case code:is_module_native(Module) of
-            false ->
-                case beam_lib:chunks(BeamFilename, [ChunkName]) of
-                    {ok,{_,[{_,Bin}]}} when is_binary(Bin) ->
-                        load_native_partial(Module, Bin);
-                    {error, beam_lib, _} -> ok
-                end;
-            true -> ok
-        end
-    end, all_loaded()).
+%%%
+%%% Warning for deprecated code path cache.
+%%%
+
+maybe_warn_for_cache() ->
+    case init:get_argument(code_path_cache) of
+	{ok, _} ->
+	    cache_warning();
+	error ->
+	    ok
+    end.
+
+cache_warning() ->
+    W = "The code path cache functionality has been removed",
+    error_logger:warning_report(W).
+
+%%%
+%%% Silently load native code for all modules loaded so far.
+%%%
+
+load_native_code_for_all_loaded(undefined) ->
+    ok;
+load_native_code_for_all_loaded(Architecture) ->
+    try hipe_unified_loader:chunk_name(Architecture) of
+	ChunkTag ->
+	    Loaded = all_loaded(),
+	    _ = spawn(fun() -> load_all_native(Loaded, ChunkTag) end),
+	    ok
+    catch
+	_:_ ->
+	    ok
+    end.
+
+load_all_native(Loaded, ChunkTag) ->
+    catch load_all_native_1(Loaded, ChunkTag).
+
+load_all_native_1([{_,preloaded}|T], ChunkTag) ->
+    load_all_native_1(T, ChunkTag);
+load_all_native_1([{Mod,BeamFilename}|T], ChunkTag) ->
+    case code:is_module_native(Mod) of
+	false ->
+	    %% prim_file is faster than file and the file server may
+	    %% not be started yet.
+	    {ok,Beam} = prim_file:read_file(BeamFilename),
+	    case code:get_chunk(Beam, ChunkTag) of
+		undefined ->
+		    ok;
+		NativeCode when is_binary(NativeCode) ->
+		    _ = load_native_partial(Mod, NativeCode),
+		    ok
+	    end;
+	true -> ok
+    end,
+    load_all_native_1(T, ChunkTag);
+load_all_native_1([], _) ->
+    ok.

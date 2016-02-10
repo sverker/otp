@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 2006-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -25,6 +26,7 @@
 -export([run/1,run/3,run/4]).
 -export([run_on_node/2,run_on_node/3]).
 -export([run_test/1,run_test/2]).
+-export([get_event_mgr_ref/0]).
 -export([basic_html/1]).
 
 -export([abort/0,abort/1,progress/0]).
@@ -290,6 +292,18 @@ abort(Node) when is_atom(Node) ->
 %%% tests are running on the node and have not yet finished.
 progress() ->
     call(progress).
+
+%%%-----------------------------------------------------------------
+%%% @spec get_event_mgr_ref() -> MasterEvMgrRef
+%%%       MasterEvMgrRef = atom()
+%%%
+%%% @doc <p>Call this function in order to get a reference to the
+%%%         CT master event manager. The reference can be used to e.g.
+%%%         add a user specific event handler while tests are running.
+%%%         Example:
+%%%         <c>gen_event:add_handler(ct_master:get_event_mgr_ref(), my_ev_h, [])</c></p>
+get_event_mgr_ref() ->
+    ?CT_MEVMGR_REF.
 
 %%%-----------------------------------------------------------------
 %%% @spec basic_html(Bool) -> ok

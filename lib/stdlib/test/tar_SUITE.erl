@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1997-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -23,7 +24,7 @@
 	 create_long_names/1, bad_tar/1, errors/1, extract_from_binary/1,
 	 extract_from_binary_compressed/1,
 	 extract_from_open_file/1, symlinks/1, open_add_close/1, cooked_compressed/1,
-	 memory/1]).
+	 memory/1,unicode/1]).
 
 -include_lib("test_server/include/test_server.hrl").
 -include_lib("kernel/include/file.hrl").
@@ -34,7 +35,7 @@ all() ->
     [borderline, atomic, long_names, create_long_names,
      bad_tar, errors, extract_from_binary,
      extract_from_binary_compressed, extract_from_open_file,
-     symlinks, open_add_close, cooked_compressed, memory].
+     symlinks, open_add_close, cooked_compressed, memory, unicode].
 
 groups() -> 
     [].
@@ -73,6 +74,7 @@ borderline(Config) when is_list(Config) ->
 
     ?line lists:foreach(fun(Size) -> borderline_test(Size, TempDir) end,
 			[0, 1, 10, 13, 127, 333, Record-1, Record, Record+1,
+			 Block-2*Record-1, Block-2*Record, Block-2*Record+1,
 			 Block-Record-1, Block-Record, Block-Record+1,
 			 Block-1, Block, Block+1,
 			 Block+Record-1, Block+Record, Block+Record+1]),
@@ -88,7 +90,7 @@ borderline_test(Size, TempDir) ->
     ?line io:format("Testing size ~p", [Size]),
 
     %% Create a file and archive it.
-    ?line {_, _, X0} = erlang:now(),
+    X0 = erlang:monotonic_time(),
     ?line file:write_file(Name, random_byte_list(X0, Size)),
     ?line ok = erl_tar:create(Archive, [Name]),
     ?line ok = file:delete(Name),
@@ -653,6 +655,7 @@ open_add_close(Config) when is_list(Config) ->
     ?line ok = erl_tar:add(AD, FileOne, []),
     ?line ok = erl_tar:add(AD, FileTwo, "second file", []),
     ?line ok = erl_tar:add(AD, FileThree, [verbose]),
+    ?line ok = erl_tar:add(AD, FileThree, "chunked", [{chunks,11411},verbose]),
     ?line ok = erl_tar:add(AD, ADir, [verbose]),
     ?line ok = erl_tar:add(AD, AnotherDir, [verbose]),
     ?line ok = erl_tar:close(AD),
@@ -660,7 +663,7 @@ open_add_close(Config) when is_list(Config) ->
     ?line ok = erl_tar:t(TarOne),
     ?line ok = erl_tar:tt(TarOne),
 
-    ?line {ok,[FileOne,"second file",FileThree,ADir,SomeContent]} = erl_tar:table(TarOne),
+    ?line {ok,[FileOne,"second file",FileThree,"chunked",ADir,SomeContent]} = erl_tar:table(TarOne),
 
     ?line delete_files(["oac_file","oac_small","oac_big",Dir,AnotherDir,ADir]),
 
@@ -726,6 +729,56 @@ memory(Config) when is_list(Config) ->
     ?line ok = delete_files([Name1,Name2]),
     ok.
 
+%% Test filenames with characters outside the US ASCII range.
+unicode(Config) when is_list(Config) ->
+    PrivDir = ?config(priv_dir, Config),
+    do_unicode(PrivDir),
+    case has_transparent_naming() of
+	true ->
+	    Pa = filename:dirname(code:which(?MODULE)),
+	    Node = start_node(unicode, "+fnl -pa "++Pa),
+	    ok = rpc:call(Node, erlang, apply,
+			  [fun() -> do_unicode(PrivDir) end,[]]),
+	    true = test_server:stop_node(Node),
+	    ok;
+	false ->
+	    ok
+    end.
+
+has_transparent_naming() ->
+    case os:type() of
+	{unix,darwin} -> false;
+	{unix,_} -> true;
+	_ -> false
+    end.
+
+do_unicode(PrivDir) ->
+    ok = file:set_cwd(PrivDir),
+    ok = file:make_dir("unicöde"),
+
+    Names = unicode_create_files(),
+    Tar = "unicöde.tar",
+    ok = erl_tar:create(Tar, ["unicöde"], []),
+    {ok,Names} = erl_tar:table(Tar, []),
+    _ = [ok = file:delete(Name) || Name <- Names],
+    ok = erl_tar:extract(Tar),
+    _ = [{ok,_} = file:read_file(Name) || Name <- Names],
+    _ = [ok = file:delete(Name) || Name <- Names],
+    ok = file:del_dir("unicöde"),
+    ok.
+
+unicode_create_files() ->
+    FileA = "unicöde/smörgåsbord",
+    ok = file:write_file(FileA, "yum!\n"),
+    [FileA|case file:native_name_encoding() of
+	       utf8 ->
+		   FileB = "unicöde/Хороший файл!",
+		   ok = file:write_file(FileB, "But almost empty.\n"),
+		   [FileB];
+	       latin1 ->
+		   []
+	   end].
+
 %% Delete the given list of files.
 delete_files([]) -> ok;
 delete_files([Item|Rest]) ->
@@ -790,4 +843,15 @@ make_temp_dir(Base, I) ->
     case file:make_dir(Name) of
 	ok -> Name;
 	{error,eexist} -> make_temp_dir(Base, I+1)
+    end.
+
+start_node(Name, Args) ->
+    [_,Host] = string:tokens(atom_to_list(node()), "@"),
+    ct:log("Trying to start ~w@~s~n", [Name,Host]),
+    case test_server:start_node(Name, peer, [{args,Args}]) of
+	{error,Reason} ->
+	    test_server:fail(Reason);
+	{ok,Node} ->
+	    ct:log("Node ~p started~n", [Node]),
+	    Node
     end.

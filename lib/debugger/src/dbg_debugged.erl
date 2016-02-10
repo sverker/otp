@@ -3,24 +3,22 @@
 %% 
 %% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
-%%
 -module(dbg_debugged).
 
 %% External exports
-%% Avoid warning for local function demonitor/1 clashing with autoimported BIF.
--compile({no_auto_import,[demonitor/1]}).
 -export([eval/3]).
 
 %%====================================================================
@@ -47,7 +45,7 @@ msg_loop(Meta, Mref, SaveStacktrace) ->
 
 	%% Evaluated function has returned a value
 	{sys, Meta, {ready, Val}} ->
-	    demonitor(Mref),
+	    erlang:demonitor(Mref, [flush]),
 
 	    %% Restore original stacktrace and return the value
 	    try erlang:raise(throw, stack, SaveStacktrace)
@@ -63,7 +61,7 @@ msg_loop(Meta, Mref, SaveStacktrace) ->
 
 	%% Evaluated function raised an (uncaught) exception
 	{sys, Meta, {exception,{Class,Reason,Stacktrace}}} ->
-	    demonitor(Mref),
+	    erlang:demonitor(Mref, [flush]),
 
 	    %% ...raise the same exception
 	    erlang:error(erlang:raise(Class, Reason, Stacktrace), 
@@ -106,14 +104,6 @@ reply({apply,M,F,As}) ->
 reply({eval,Expr,Bs}) ->
     %% Bindings is an orddict (sort them)
     erl_eval:expr(Expr, lists:sort(Bs)). % {value, Value, Bs2}
-
-%% Demonitor and delete message from inbox
-%%
-demonitor(Mref) ->
-    erlang:demonitor(Mref),
-    receive {'DOWN',Mref,_,_,_} -> ok
-    after 0 -> ok
-    end.
 
 %% Fix stacktrace - keep all above call to this module.
 %%

@@ -3,16 +3,17 @@
 %%
 %% Copyright Ericsson AB 1999-2011. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -75,8 +76,6 @@
 	 close_connections_local_interface_ctx_override_api/1,
 	 ssl_1_multi_orber_generation_3_api/1, ssl_2_multi_orber_generation_3_api/1,
 	 ssl_reconfigure_generation_3_api/1,
-	 ssl_1_multi_orber_generation_3_api_old/1, ssl_2_multi_orber_generation_3_api_old/1,
-	 ssl_reconfigure_generation_3_api_old/1,
 	 close_connections_alt_iiop_addr_api/1, close_connections_multiple_profiles_api/1]).
 
 
@@ -137,13 +136,10 @@ cases() ->
      setup_multi_connection_timeout_attempts_api,
      setup_multi_connection_timeout_random_api,
      ssl_1_multi_orber_api,
-     ssl_1_multi_orber_generation_3_api_old,
      ssl_1_multi_orber_generation_3_api,
      ssl_2_multi_orber_api,
-     ssl_2_multi_orber_generation_3_api_old,
      ssl_2_multi_orber_generation_3_api,
      ssl_reconfigure_api,
-     ssl_reconfigure_generation_3_api_old,
      ssl_reconfigure_generation_3_api].
 
 %%-----------------------------------------------------------------
@@ -155,10 +151,7 @@ init_per_testcase(TC,Config)
        TC =:= ssl_reconfigure_api ->
     init_ssl(Config);
 init_per_testcase(TC,Config)
-  when TC =:= ssl_1_multi_orber_generation_3_api_old;
-       TC =:= ssl_2_multi_orber_generation_3_api_old;
-       TC =:= ssl_reconfigure_generation_3_api_old;
-       TC =:= ssl_1_multi_orber_generation_3_api;
+  when TC =:= ssl_1_multi_orber_generation_3_api;
        TC =:= ssl_2_multi_orber_generation_3_api;
        TC =:= ssl_reconfigure_generation_3_api ->
     init_ssl_3(Config);
@@ -590,12 +583,12 @@ proxy_interface_ipv6_api2() ->
 
     IOR1 = ?match(#'IOP_IOR'{},
 		  orber_test_lib:remote_apply(ClientNode, corba, string_to_object,
-					      ["corbaloc::1.2@"++IP++":"++integer_to_list(ServerPort)++"/NameService"])),
+					      ["corbaloc::1.2@["++IP++"]:"++integer_to_list(ServerPort)++"/NameService"])),
     ?match({'external', {IP, ServerPort, _ObjectKey, _Counter, _TP, _NewHD}},
 	   orber_test_lib:remote_apply(ClientNode, iop_ior, get_key, [IOR1])),
     IOR2 = ?match(#'IOP_IOR'{},
 		  orber_test_lib:remote_apply(ClientNode, corba, string_to_object,
-					      ["corbaloc::1.2@"++Loopback++":"++integer_to_list(ServerPort)++"/NameService"])),
+					      ["corbaloc::1.2@["++Loopback++"]:"++integer_to_list(ServerPort)++"/NameService"])),
     ?match({'external', {Loopback, ServerPort, _ObjectKey, _Counter, _TP, _NewHD}},
 	   orber_test_lib:remote_apply(ClientNode, iop_ior, get_key, [IOR2])),
     ok.
@@ -930,9 +923,9 @@ max_requests(Node, Host, Port) ->
     spawn(orber_test_server, pseudo_call_delay, [Obj, 15000]),
     %% Wait for a second to be sure that the previous request has been sent
     timer:sleep(1000),
-    {MegaSecsB, Before, _} = now(),
+    {MegaSecsB, Before, _} = erlang:timestamp(),
     pseudo_calls(5, Obj),
-    {MegaSecsA, After, _} = now(),
+    {MegaSecsA, After, _} = erlang:timestamp(),
     %% Normally we we can perform hundreds of pseudo-calls per second. Hence,
     %% if we add 8 seconds to 'Before' it should still be less since we only
     %% allow one request at a time to the target ORB.
@@ -1632,22 +1625,6 @@ ssl_1_multi_orber_api(_Config) ->
     ssl_suite(ServerOptions, ClientOptions).
 
 
-ssl_1_multi_orber_generation_3_api_old(doc) -> ["SECURE MULTI ORB API tests (SSL depth 1)",
-			       "This case set up two secure orbs and test if they can",
-			     "communicate. The case also test to access one of the",
-			     "secure orbs which must raise a NO_PERMISSION exception."];
-ssl_1_multi_orber_generation_3_api_old(suite) -> [];
-ssl_1_multi_orber_generation_3_api_old(_Config) ->
-
-    ServerOptions = orber_test_lib:get_options_old(iiop_ssl, server,
-					       1, [{ssl_generation, 3},
-						   {iiop_ssl_port, 0}]),
-    ClientOptions = orber_test_lib:get_options_old(iiop_ssl, client,
-					       1, [{ssl_generation, 3},
-						   {iiop_ssl_port, 0}]),
-    ssl_suite(ServerOptions, ClientOptions).
-
-
 ssl_1_multi_orber_generation_3_api(doc) -> ["SECURE MULTI ORB API tests (SSL depth 1)",
 			       "This case set up two secure orbs and test if they can",
 			     "communicate. The case also test to access one of the",
@@ -1681,22 +1658,6 @@ ssl_2_multi_orber_api(_Config) ->
     ssl_suite(ServerOptions, ClientOptions).
 
 
-ssl_2_multi_orber_generation_3_api_old(doc) -> ["SECURE MULTI ORB API tests (SSL depth 2)",
-			     "This case set up two secure orbs and test if they can",
-			     "communicate. The case also test to access one of the",
-			     "secure orbs which must raise a NO_PERMISSION exception."];
-ssl_2_multi_orber_generation_3_api_old(suite) -> [];
-ssl_2_multi_orber_generation_3_api_old(_Config) ->
-
-    ServerOptions = orber_test_lib:get_options_old(iiop_ssl, server,
-					       2, [{ssl_generation, 3},
-						   {iiop_ssl_port, 0}]),
-    ClientOptions = orber_test_lib:get_options_old(iiop_ssl, client,
-					       2, [{ssl_generation, 3},
-						   {iiop_ssl_port, 0}]),
-    ssl_suite(ServerOptions, ClientOptions).
-
-
 ssl_2_multi_orber_generation_3_api(doc) -> ["SECURE MULTI ORB API tests (SSL depth 2)",
 			     "This case set up two secure orbs and test if they can",
 			     "communicate. The case also test to access one of the",
@@ -1724,11 +1685,6 @@ ssl_reconfigure_api(_Config) ->
     ssl_reconfigure_old([]).
 
 
-ssl_reconfigure_generation_3_api_old(doc) -> ["SECURE MULTI ORB API tests (SSL depth 2)",
-			     "This case set up two secure orbs and test if they can",
-			     "communicate. The case also test to access one of the",
-			     "secure orbs which must raise a NO_PERMISSION exception."];
-ssl_reconfigure_generation_3_api_old(suite) -> [];
 ssl_reconfigure_generation_3_api_old(_Config) ->
     ssl_reconfigure_old([{ssl_generation, 3}]).
 

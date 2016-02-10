@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2014. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -24,7 +25,7 @@
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2]).
 
--export([get_path/1, set_path/1, get_file/1,
+-export([get_path/1, set_path/1, get_file/1, normalize_and_backslash/1,
 	 inet_existing/1, inet_coming_up/1, inet_disconnects/1,
 	 multiple_slaves/1, file_requests/1,
 	 local_archive/1, remote_archive/1,
@@ -39,7 +40,8 @@
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
 all() -> 
-    [get_path, set_path, get_file, inet_existing,
+    [get_path, set_path, get_file,
+     normalize_and_backslash, inet_existing,
      inet_coming_up, inet_disconnects, multiple_slaves,
      file_requests, local_archive, remote_archive,
      primary_archive, virtual_dir_in_archive].
@@ -105,6 +107,26 @@ get_file(Config) when is_list(Config) ->
     ?line error = erl_prim_loader:get_file("duuuuuuummmy_file"),
     ?line error = erl_prim_loader:get_file(duuuuuuummmy_file),
     ?line error = erl_prim_loader:get_file({dummy}),
+    ok.
+
+normalize_and_backslash(Config) ->
+    %% Test OTP-11170
+    case os:type() of
+	{win32,_} ->
+	    {skip, "not on windows"};
+	_ ->
+	    test_normalize_and_backslash(Config)
+    end.
+test_normalize_and_backslash(Config) ->
+    PrivDir = ?config(priv_dir,Config),
+    Dir = filename:join(PrivDir,"\\"),
+    File = filename:join(Dir,"file-OTP-11170"),
+    ok = file:make_dir(Dir),
+    ok = file:write_file(File,"a file to test OTP-11170"),
+    {ok,["file-OTP-11170"]} = file:list_dir(Dir),
+    {ok,["file-OTP-11170"]} = erl_prim_loader:list_dir(Dir),
+    ok = file:delete(File),
+    ok = file:del_dir(Dir),
     ok.
 
 inet_existing(doc) -> ["Start a node using the 'inet' loading method, ",
@@ -238,46 +260,41 @@ multiple_slaves(doc) ->
     ["Start nodes in parallell, all using the 'inet' loading method, ",
      "verify that the boot server manages"];
 multiple_slaves(Config) when is_list(Config) ->
-    case os:type() of
-	{ose,_} ->
-	    {comment, "OSE: multiple nodes not supported"};
-	_ ->
-	    ?line Name = erl_prim_test_multiple_slaves,
-	    ?line Host = host(),
-	    ?line Cookie = atom_to_list(erlang:get_cookie()),
-	    ?line IpStr = ip_str(Host),
-	    ?line LFlag = get_loader_flag(os:type()),
-	    ?line Args = LFlag ++ " -hosts " ++ IpStr ++
-		" -setcookie " ++ Cookie,
+    ?line Name = erl_prim_test_multiple_slaves,
+    ?line Host = host(),
+    ?line Cookie = atom_to_list(erlang:get_cookie()),
+    ?line IpStr = ip_str(Host),
+    ?line LFlag = get_loader_flag(os:type()),
+    ?line Args = LFlag ++ " -hosts " ++ IpStr ++
+        " -setcookie " ++ Cookie,
 
-	    NoOfNodes = 10,			% no of slave nodes to be started
+    NoOfNodes = 10,			% no of slave nodes to be started
 
-	    NamesAndNodes = 
-		lists:map(fun(N) ->
-				  NameN = atom_to_list(Name) ++ 
-				          integer_to_list(N),
-				  NodeN = NameN ++ "@" ++ Host,
-				  {list_to_atom(NameN),list_to_atom(NodeN)}
-			  end, lists:seq(1, NoOfNodes)),
+    NamesAndNodes = 
+        lists:map(fun(N) ->
+                          NameN = atom_to_list(Name) ++ 
+                              integer_to_list(N),
+                          NodeN = NameN ++ "@" ++ Host,
+                          {list_to_atom(NameN),list_to_atom(NodeN)}
+                  end, lists:seq(1, NoOfNodes)),
 
-	    ?line Nodes = start_multiple_nodes(NamesAndNodes, Args, []),
+    ?line Nodes = start_multiple_nodes(NamesAndNodes, Args, []),
 
-	    %% "queue up" the nodes to wait for the boot server to respond
-	    %% (note: test_server supervises each node start by accept()
-	    %% on a socket, the timeout value for the accept has to be quite 
-	    %% long for this test to work).
-	    ?line test_server:sleep(test_server:seconds(5)),
-	    %% start the code loading circus!
-	    ?line {ok,BootPid} = erl_boot_server:start_link([Host]),
-	    %% give the nodes a chance to boot up before attempting to stop them
-	    ?line test_server:sleep(test_server:seconds(10)),
+    %% "queue up" the nodes to wait for the boot server to respond
+    %% (note: test_server supervises each node start by accept()
+    %% on a socket, the timeout value for the accept has to be quite 
+    %% long for this test to work).
+    ?line test_server:sleep(test_server:seconds(5)),
+    %% start the code loading circus!
+    ?line {ok,BootPid} = erl_boot_server:start_link([Host]),
+    %% give the nodes a chance to boot up before attempting to stop them
+    ?line test_server:sleep(test_server:seconds(10)),
 
-	    ?line wait_and_shutdown(lists:reverse(Nodes), 30),
+    ?line wait_and_shutdown(lists:reverse(Nodes), 30),
 
-	    ?line unlink(BootPid),
-	    ?line exit(BootPid, kill),
-	    ok
-    end.
+    ?line unlink(BootPid),
+    ?line exit(BootPid, kill),
+    ok.
 
 start_multiple_nodes([{Name,Node} | NNs], Args, Started) ->
     ?line {ok,Node} = start_node(Name, Args, [{wait, false}]),
@@ -307,6 +324,30 @@ file_requests(Config) when is_list(Config) ->
     {ok,Info} = file:read_file_info(code:which(test_server)),
     ?line {ok,Info} = rpc:call(Node, erl_prim_loader, read_file_info,
 			       [code:which(test_server)]),
+
+    PrivDir = ?config(priv_dir,Config),
+    Dir = filename:join(PrivDir,?MODULE_STRING++"_file_requests"),
+    ok = file:make_dir(Dir),
+    Alias = filename:join(Dir,"symlink"),
+    case file:make_symlink(code:which(test_server), Alias) of
+	{error, enotsup} ->
+	    %% Links not supported on this platform
+	    ok;
+	{error, eperm} ->
+	    {win32,_} = os:type(),
+	    %% Windows user not privileged to create symlinks"
+	    ok;
+	ok ->
+	    %% Reading file info for link should return file info for
+	    %% link target
+	    {ok,Info} = rpc:call(Node, erl_prim_loader, read_file_info,
+				 [Alias]),
+	    #file_info{type=regular} = Info,
+	    {ok,#file_info{type=symlink}} =
+		rpc:call(Node, erl_prim_loader, read_link_info,
+			 [Alias])
+    end,
+
     {ok,Cwd} = file:get_cwd(),
     ?line {ok,Cwd} = rpc:call(Node, erl_prim_loader, get_cwd, []),
     case file:get_cwd("C:") of
@@ -351,7 +392,7 @@ local_archive(Config) when is_list(Config) ->
     ?line ok = test_archive(Node, Archive, KernelDir, BeamName),
 
     %% Cleanup
-    ?line ok = rpc:call(Node, erl_prim_loader, release_archives, []),
+    ok = rpc:call(Node, erl_prim_loader, purge_archive_cache, []),
     ?line ok = file:delete(Archive),
     ok.
 
@@ -509,7 +550,7 @@ virtual_dir_in_archive(Config) when is_list(Config) ->
     ?line {ok, [EbinBase]} = erl_prim_loader:list_dir(AppDir),
     
     %% Cleanup
-    ?line ok = erl_prim_loader:release_archives(),
+    ok = erl_prim_loader:purge_archive_cache(),
     ?line ok = file:delete(Archive),
     ok.
 

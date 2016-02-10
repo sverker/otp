@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -26,7 +27,7 @@
 -export([start/0,
 	 stop/0,
 	 dump/0,
-	 start_profiling/1, start_profiling/2,
+	 start_profiling/1, start_profiling/2, start_profiling/3,
 	 profile/1, profile/2, profile/3, profile/4, profile/5,
 	 stop_profiling/0,
 	 analyze/0, analyze/1, analyze/2,
@@ -39,6 +40,8 @@
 	 handle_info/2,
 	 terminate/2,
 	 code_change/3]).
+
+
 -record(bpd, {
 	n   = 0,                 % number of total calls
 	us  = 0,                 % sum of uS for all calls
@@ -46,14 +49,18 @@
 	mfa = []                 % list of {Mfa, {Count, Us}}
     }).
 
+-define(default_options, [{set_on_spawn, true}]).
+-define(default_pattern, {'_','_','_'}).
+
 -record(state, {
-	profiling = false,
-	pattern   = {'_','_','_'},
-	rootset   = [],
-	fd    = undefined,
-	start_ts  = undefined,
-	reply     = undefined,
-	bpd       = #bpd{}
+	profiling  = false,
+	pattern    = ?default_pattern,
+	rootset    = [],
+	trace_opts = [],
+	fd         = undefined,
+	start_ts   = undefined,
+	reply      = undefined,
+	bpd        = #bpd{}
     }).
 
 
@@ -67,26 +74,6 @@
 start() -> gen_server:start({local, ?MODULE}, ?MODULE, [], []).
 stop()  -> gen_server:call(?MODULE, stop, infinity).
 
-profile(Fun) when is_function(Fun) ->
-    profile([], Fun);
-profile(Rs) when is_list(Rs) ->
-    start_profiling(Rs).
-
-profile(Pids, Fun) ->
-    profile(Pids, Fun, {'_','_','_'}).
-
-profile(Pids, Fun, Pattern) ->
-    profile(Pids, erlang, apply, [Fun,[]], Pattern).
-
-profile(Pids, M, F, A) ->
-    profile(Pids, M, F, A, {'_','_','_'}).
-
-profile(Pids, M, F, A, Pattern) ->
-    start(),
-    gen_server:call(?MODULE, {profile,Pids,Pattern,M,F,A},infinity).
-
-dump() -> 
-    gen_server:call(?MODULE, dump, infinity).
 
 analyze() ->
     analyze(procs).
@@ -98,17 +85,53 @@ analyze(Opts) when is_list(Opts) ->
 analyze(Type, Opts) when is_list(Opts) ->
     gen_server:call(?MODULE, {analyze, Type, Opts}, infinity).
 
+%% odd duck, should only been start_profiling/1
+profile(Rootset) when is_list(Rootset) ->
+    start_profiling(Rootset);
+
+profile(Fun) when is_function(Fun) ->
+    profile([], Fun).
+
+profile(Fun, Opts) when is_function(Fun), is_list(Opts) ->
+    profile([], erlang, apply, [Fun, []], ?default_pattern, Opts);
+
+profile(Rootset, Fun) when is_list(Rootset), is_function(Fun) ->
+    profile(Rootset, Fun, ?default_pattern).
+
+profile(Rootset, Fun, Pattern) when is_list(Rootset), is_function(Fun) ->
+    profile(Rootset, Fun, Pattern, ?default_options).
+
+profile(Rootset, Fun, Pattern, Options) when is_list(Rootset), is_function(Fun), is_list(Options) ->
+    profile(Rootset, erlang, apply, [Fun,[]], Pattern, Options);
+
+profile(Rootset, M, F, A) when is_list(Rootset), is_atom(M), is_atom(F), is_list(A) ->
+    profile(Rootset, M, F, A, ?default_pattern).
+
+profile(Rootset, M, F, A, Pattern) when is_list(Rootset), is_atom(M), is_atom(F), is_list(A) ->
+    profile(Rootset, M, F, A, Pattern, ?default_options).
+
+%% Returns when M:F/A has terminated
+profile(Rootset, M, F, A, Pattern, Options) ->
+    start(),
+    gen_server:call(?MODULE, {profile_start, Rootset, Pattern, {M,F,A}, Options}, infinity).
+
+dump() -> 
+    gen_server:call(?MODULE, dump, infinity).
+
 log(File) ->
     gen_server:call(?MODULE, {logfile, File}, infinity).
 
+%% Does not block
 start_profiling(Rootset) ->
-    start_profiling(Rootset, {'_','_','_'}).
+    start_profiling(Rootset, ?default_pattern).
 start_profiling(Rootset, Pattern) ->
+    start_profiling(Rootset, Pattern, ?default_options).
+start_profiling(Rootset, Pattern, Options) ->
     start(),
-    gen_server:call(?MODULE, {profile, Rootset, Pattern}, infinity).
+    gen_server:call(?MODULE, {profile_start, Rootset, Pattern, undefined, Options}, infinity).
 
 stop_profiling() ->
-    gen_server:call(?MODULE, stop_profiling, infinity).
+    gen_server:call(?MODULE, profile_stop, infinity).
 
 
 %% -------------------------------------------------------------------- %%
@@ -151,74 +174,75 @@ handle_call({analyze, Type, _Opts}, _, S) ->
 
 %% profile
 
-handle_call({profile, _Rootset, _Pattern, _M,_F,_A}, _From, #state{ profiling = true } = S) ->
+handle_call({profile_start, _Rootset, _Pattern, _MFA, _Opts}, _From, #state{ profiling = true } = S) ->
     {reply, {error, already_profiling}, S};
 
-handle_call({profile, Rootset, Pattern, M,F,A}, From, #state{fd = Fd } = S) ->
+handle_call({profile_start, Rootset, Pattern, {M,F,A}, Opts}, From, #state{fd = Fd } = S) ->
 
-    set_pattern_trace(false, S#state.pattern),
-    set_process_trace(false, S#state.rootset),
+    ok = set_pattern_trace(false, S#state.pattern),
+    _  = set_process_trace(false, S#state.rootset, S#state.trace_opts),
 
-    Pid = setup_profiling(M,F,A),
-    case set_process_trace(true, [Pid|Rootset]) of
+    Topts = get_trace_options(Opts),
+    Pid   = setup_profiling(M,F,A),
+
+    case set_process_trace(true, [Pid|Rootset], Topts) of
 	true ->
-	    set_pattern_trace(true, Pattern),
-	    T0 = now(),
-	    execute_profiling(Pid),
+	    ok = set_pattern_trace(true, Pattern),
+	    T0 = erlang:timestamp(),
+	    ok = execute_profiling(Pid),
 	    {noreply, #state{
-		    profiling = true,
-		    rootset   = [Pid|Rootset],
-		    start_ts  = T0,
-		    reply     = From,
-		    fd        = Fd,
-		    pattern   = Pattern
+		    profiling  = true,
+		    rootset    = [Pid|Rootset],
+		    start_ts   = T0,
+		    reply      = From,
+		    fd         = Fd,
+		    trace_opts = Topts,
+		    pattern    = Pattern
 		}};
 	false ->
 	    exit(Pid, eprof_kill),
 	    {reply, error, #state{ fd = Fd}}
     end;
 
-handle_call({profile, _Rootset, _Pattern}, _From, #state{ profiling = true } = S) ->
-    {reply, {error, already_profiling}, S};
+handle_call({profile_start, Rootset, Pattern, undefined, Opts}, From, #state{ fd = Fd } = S) ->
 
-handle_call({profile, Rootset, Pattern}, From, #state{ fd = Fd } = S) ->
+    ok    = set_pattern_trace(false, S#state.pattern),
+    true  = set_process_trace(false, S#state.rootset, S#state.trace_opts),
+    Topts = get_trace_options(Opts),
 
-    set_pattern_trace(false, S#state.pattern),
-    set_process_trace(false, S#state.rootset),
-
-    case set_process_trace(true, Rootset) of
+    case set_process_trace(true, Rootset, Topts) of
 	true ->
-	    T0 = now(),
-	    set_pattern_trace(true, Pattern),
+	    T0 = erlang:timestamp(),
+	    ok = set_pattern_trace(true, Pattern),
 	    {reply, profiling, #state{
-		    profiling = true,
-		    rootset   = Rootset,
-		    start_ts  = T0,
-		    reply     = From,
-		    fd        = Fd,
-		    pattern   = Pattern
+		    profiling  = true,
+		    rootset    = Rootset,
+		    start_ts   = T0,
+		    reply      = From,
+		    fd         = Fd,
+		    trace_opts = Topts,
+		    pattern    = Pattern
 		}};
 	false ->
 	    {reply, error, #state{ fd = Fd }}
     end;
 
-handle_call(stop_profiling, _From, #state{ profiling = false } = S) ->
+handle_call(profile_stop, _From, #state{ profiling = false } = S) ->
     {reply, profiling_already_stopped, S};
 
-handle_call(stop_profiling, _From, #state{ profiling = true } = S) ->
+handle_call(profile_stop, _From, #state{ profiling = true } = S) ->
 
-    set_pattern_trace(pause, S#state.pattern),
-
+    ok  = set_pattern_trace(pause, S#state.pattern),
     Bpd = collect_bpd(),
-
-    set_process_trace(false, S#state.rootset),
-    set_pattern_trace(false, S#state.pattern),
+    _   = set_process_trace(false, S#state.rootset, S#state.trace_opts),
+    ok  = set_pattern_trace(false, S#state.pattern),
 
     {reply, profiling_stopped, S#state{
-	profiling = false,
-	rootset   = [],
-	pattern   = {'_','_','_'},
-	bpd       = Bpd
+	profiling  = false,
+	rootset    = [],
+	trace_opts = [],
+	pattern    = ?default_pattern,
+	bpd        = Bpd
     }};
 
 %% logfile
@@ -261,33 +285,33 @@ handle_info({'EXIT', _, eprof_kill}, S) ->
     {noreply, S};
 handle_info({'EXIT', _, Reason}, #state{ reply = FromTag } = S) ->
 
-    set_process_trace(false, S#state.rootset),
-    set_pattern_trace(false, S#state.pattern),
+    _  = set_process_trace(false, S#state.rootset, S#state.trace_opts),
+    ok = set_pattern_trace(false, S#state.pattern),
 
     gen_server:reply(FromTag, {error, Reason}),
     {noreply, S#state{
-	profiling = false,
-	rootset   = [],
-	pattern   = {'_','_','_'}
+	profiling  = false,
+	rootset    = [],
+	trace_opts = [],
+	pattern    = ?default_pattern
     }};
 
 % check if Pid is spawned process?
 handle_info({_Pid, {answer, Result}}, #state{ reply = {From,_} = FromTag} = S) ->
 
-    set_pattern_trace(pause, S#state.pattern),
-
-    Bpd = collect_bpd(),
-
-    set_process_trace(false, S#state.rootset),
-    set_pattern_trace(false, S#state.pattern),
+    ok   = set_pattern_trace(pause, S#state.pattern),
+    Bpd  = collect_bpd(),
+    _    = set_process_trace(false, S#state.rootset, S#state.trace_opts),
+    ok   = set_pattern_trace(false, S#state.pattern),
 
     catch unlink(From),
     gen_server:reply(FromTag, {ok, Result}),
     {noreply, S#state{
-	profiling = false,
-	rootset   = [],
-	pattern   = {'_','_','_'},
-	bpd       = Bpd
+	profiling  = false,
+	rootset    = [],
+	trace_opts = [],
+	pattern    = ?default_pattern,
+	bpd        = Bpd
     }}.
 
 %% -------------------------------------------------------------------- %%
@@ -297,11 +321,11 @@ handle_info({_Pid, {answer, Result}}, #state{ reply = {From,_} = FromTag} = S) -
 %% -------------------------------------------------------------------- %%
 
 terminate(_Reason, #state{ fd = undefined }) ->
-    set_pattern_trace(false, {'_','_','_'}),
+    ok = set_pattern_trace(false, ?default_pattern),
     ok;
 terminate(_Reason, #state{ fd = Fd }) ->
-    file:close(Fd),
-    set_pattern_trace(false, {'_','_','_'}),
+    ok = file:close(Fd),
+    ok = set_pattern_trace(false, ?default_pattern),
     ok.
 
 %% -------------------------------------------------------------------- %%
@@ -330,7 +354,19 @@ spin_profile(M, F, A) ->
     end.
 
 execute_profiling(Pid) ->
-    Pid ! {self(), execute}.
+    Pid ! {self(), execute},
+    ok.
+
+
+get_trace_options([]) ->
+    [call];
+get_trace_options([{set_on_spawn, true}|Opts]) ->
+    [set_on_spawn | get_trace_options(Opts)];
+get_trace_options([set_on_spawn|Opts]) ->
+    [set_on_spawn | get_trace_options(Opts)];
+get_trace_options([_|Opts]) ->
+    get_trace_options(Opts).
+
 
 set_pattern_trace(Flag, Pattern) ->
     erlang:system_flag(multi_scheduling, block),
@@ -339,10 +375,6 @@ set_pattern_trace(Flag, Pattern) ->
     erlang:system_flag(multi_scheduling, unblock),
     ok.
 
-set_process_trace(Flag, Pids) ->
-    % do we need procs for meta info?
-    % could be useful
-    set_process_trace(Flag, Pids, [call, set_on_spawn]).
 set_process_trace(_, [], _) -> true;
 set_process_trace(Flag, [Pid|Pids], Options) when is_pid(Pid) ->
     try
@@ -454,20 +486,22 @@ string_bp_mfa([{Mfa, {Count, Time}}|Mfas], Tus, {MfaW, CountW, PercW, TimeW, TpC
 		erlang:max(TpCW,  length(Stpc))
 	    }, [[Smfa, Scount, Sperc, Stime, Stpc] | Strings]).
 
-print_bp_mfa(Mfas, {_Tn, Tus}, Fd, Opts) ->
+print_bp_mfa(Mfas, {Tn, Tus}, Fd, Opts) ->
     Fmfas = filter_mfa(sort_mfa(Mfas, proplists:get_value(sort, Opts)), proplists:get_value(filter, Opts)),
     {{MfaW, CountW, PercW, TimeW, TpCW}, Strs} = string_bp_mfa(Fmfas, Tus),
-    Ws = {
-	erlang:max(length("FUNCTION"), MfaW),
-	erlang:max(length("CALLS"), CountW),
-	erlang:max(length("  %"), PercW),
-	erlang:max(length("TIME"), TimeW),
-	erlang:max(length("uS / CALLS"), TpCW)
-    },
-    format(Fd, Ws, ["FUNCTION", "CALLS", "  %", "TIME", "uS / CALLS"]),
-    format(Fd, Ws, ["--------", "-----", "---", "----", "----------"]),
-
+    TnStr    = s(Tn),
+    TusStr   = s(Tus),
+    TuspcStr = s("~.2f", [divide(Tus,Tn)]),
+    Ws = {erlang:max(length("FUNCTION"), MfaW),
+          lists:max([length("CALLS"), CountW, length(TnStr)]),
+          erlang:max(length("      %"), PercW),
+          lists:max([length("TIME"), TimeW, length(TusStr)]),
+          lists:max([length("uS / CALLS"), TpCW, length(TuspcStr)])},
+    format(Fd, Ws, ["FUNCTION", "CALLS", "      %", "TIME", "uS / CALLS"]),
+    format(Fd, Ws, ["--------", "-----", "-------", "----", "----------"]),
     lists:foreach(fun (String) -> format(Fd, Ws, String) end, Strs),
+    format(Fd, Ws, [lists:duplicate(N,$-)||N <- tuple_to_list(Ws)]),
+    format(Fd, Ws, ["Total:", TnStr, "100.00%", TusStr, TuspcStr]),
     ok.
 
 s({M,F,A}) -> s("~w:~w/~w",[M,F,A]);

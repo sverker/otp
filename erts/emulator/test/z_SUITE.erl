@@ -3,16 +3,17 @@
 %% 
 %% Copyright Ericsson AB 2006-2011. All Rights Reserved.
 %% 
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
-%% 
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %% 
 %% %CopyrightEnd%
 %%
@@ -38,7 +39,7 @@
 
 -export([schedulers_alive/1, node_container_refc_check/1,
 	 long_timers/1, pollset_size/1,
-	 check_io_debug/1]).
+	 check_io_debug/1, get_check_io_info/0]).
 
 -define(DEFAULT_TIMEOUT, ?t:minutes(5)).
 
@@ -248,6 +249,7 @@ pollset_size(Config) when is_list(Config) ->
     ?line io:format("Initial: ~p~nFinal: ~p~n", [InitChkIo, FinChkIo]),
     ?line InitPollsetSize = lists:keysearch(total_poll_set_size, 1, InitChkIo),
     ?line FinPollsetSize = lists:keysearch(total_poll_set_size, 1, FinChkIo),
+    HasGethost = case has_gethost() of true -> 1; _ -> 0 end,
     ?line case InitPollsetSize =:= FinPollsetSize of
 	      true ->
 		  case InitPollsetSize of
@@ -268,7 +270,7 @@ pollset_size(Config) when is_list(Config) ->
 		      = InitPollsetSize,
 		  ?line {value, {total_poll_set_size, FinSize}}
 		      = FinPollsetSize,
-		  ?line true = FinSize < InitSize,
+		  ?line true = FinSize < (InitSize + HasGethost),
 		  ?line true = 2 =< FinSize,
 		  ?line {comment,
 			 "Start pollset size: "
@@ -288,13 +290,39 @@ check_io_debug(Config) when is_list(Config) ->
 	  end.
 
 check_io_debug_test() ->
-    ?line erts_debug:set_internal_state(available_internal_state, true),
-    ?line erlang:display(erlang:system_info(check_io)),
-    ?line NoOfErrorFds = erts_debug:get_internal_state(check_io_debug),
-    ?line erts_debug:set_internal_state(available_internal_state, false),
-    ?line 0 = NoOfErrorFds,
+    erlang:display(get_check_io_info()),
+    erts_debug:set_internal_state(available_internal_state, true),
+    {NoErrorFds, NoUsedFds, NoDrvSelStructs, NoDrvEvStructs} = CheckIoDebug
+	= erts_debug:get_internal_state(check_io_debug),
+    erts_debug:set_internal_state(available_internal_state, false),
+    HasGetHost = has_gethost(),
+    ct:log("check_io_debug: ~p~n"
+           "HasGetHost: ~p",[CheckIoDebug, HasGetHost]),
+    0 = NoErrorFds,
+    if
+        NoUsedFds == NoDrvSelStructs ->
+            ok;
+        HasGetHost andalso (NoUsedFds == (NoDrvSelStructs - 1)) ->
+            %% If the inet_gethost port is alive, we may have
+            %% one extra used fd that is not selected on.
+            %% This happens when the initial setup of the
+            %% port returns an EAGAIN
+            ok
+    end,
+    ?line 0 = NoDrvEvStructs,
     ?line ok.
 
+has_gethost() ->
+    has_gethost(erlang:ports()).
+has_gethost([P|T]) ->
+    case erlang:port_info(P, name) of
+        {name,"inet_gethost"++_} ->
+            true;
+        _ ->
+            has_gethost(T)
+    end;
+has_gethost([]) ->
+    false.
 
 
 %%
@@ -305,7 +333,7 @@ display_check_io(ChkIo) ->
     catch erlang:display('--- CHECK IO INFO ---'),
     catch erlang:display(ChkIo),
     catch erts_debug:set_internal_state(available_internal_state, true),
-    NoOfErrorFds = (catch erts_debug:get_internal_state(check_io_debug)),
+    NoOfErrorFds = (catch element(1, erts_debug:get_internal_state(check_io_debug))),
     catch erlang:display({'NoOfErrorFds', NoOfErrorFds}),
     catch erts_debug:set_internal_state(available_internal_state, false),
     catch erlang:display('--- CHECK IO INFO ---'),
@@ -313,14 +341,19 @@ display_check_io(ChkIo) ->
 
 get_check_io_info() ->
     ChkIo = erlang:system_info(check_io),
-    case lists:keysearch(pending_updates, 1, ChkIo) of
-	{value, {pending_updates, 0}} ->
+    PendUpdNo = case lists:keysearch(pending_updates, 1, ChkIo) of
+		    {value, {pending_updates, PendNo}} ->
+			PendNo;
+		    false ->
+			0
+		end,
+    {value, {active_fds, ActFds}} = lists:keysearch(active_fds, 1, ChkIo),
+    case {PendUpdNo, ActFds} of
+	{0, 0} ->
 	    display_check_io(ChkIo),
 	    ChkIo;
-	false ->
-	    ChkIo;
 	_ ->
-	    receive after 10 -> ok end,
+	    receive after 100 -> ok end,
 	    get_check_io_info()
     end.
 

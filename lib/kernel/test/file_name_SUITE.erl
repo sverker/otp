@@ -1,20 +1,20 @@
 -module(file_name_SUITE).
-%% -*- coding: utf-8 -*-
 %%
 %% %CopyrightBegin%
 %%
 %% Copyright Ericsson AB 1996-2013. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -159,7 +159,7 @@ normalize(suite) ->
 normalize(doc) ->
     ["Check that filename normalization works"];
 normalize(Config) when is_list(Config) ->
-    random:seed({1290,431421,830412}),
+    rand:seed(exsplus, {1290,431421,830412}),
     try
 	?line UniMode = file:native_name_encoding() =/= latin1,
 	if 
@@ -197,7 +197,10 @@ normal(Config) when is_list(Config) ->
 	put(file_module,prim_file),
 	ok = check_normal(prim_file),
 	put(file_module,file),
-	ok = check_normal(file)
+	ok = check_normal(file),
+	%% If all is good, delete dir again (avoid hanging dir on windows)
+	rm_rf(file,"normal_dir"),
+	ok
     after
 	file:set_cwd(Dir)
     end.
@@ -219,7 +222,10 @@ icky(Config) when is_list(Config) ->
 		put(file_module,prim_file),
 		ok = check_icky(prim_file),
 		put(file_module,file),
-		ok = check_icky(file)
+		ok = check_icky(file),
+		%% If all is good, delete dir again (avoid hanging dir on windows)
+		rm_rf(file,"icky_dir"),
+		ok
 	    after
 		file:set_cwd(Dir)
 	    end
@@ -243,7 +249,11 @@ very_icky(Config) when is_list(Config) ->
 			{skipped,"VM needs to be started in Unicode filename mode"};
 		    ok ->
 			put(file_module,file),
-			ok = check_very_icky(file)
+			ok = check_very_icky(file),
+			%% If all is good, delete dir again
+			%% (avoid hanging dir on windows)
+			rm_rf(file,"very_icky_dir"),
+			ok
 		end
 	    after
 		file:set_cwd(Dir)
@@ -835,7 +845,7 @@ conv(L) ->
 
 
 rand_comp_decomp(Max) ->
-    N = random:uniform(Max),
+    N = rand:uniform(Max),
     L = [ rand_decomp() || _ <- lists:seq(1,N) ],
     LC = [ A || {A,_} <- L],
     LD = lists:flatten([B || {_,B} <- L]),
@@ -845,7 +855,7 @@ rand_comp_decomp(Max) ->
 rand_decomp() ->
     BT = bigtup(),
     SZ = tuple_size(BT),
-    element(random:uniform(SZ),BT).
+    element(rand:uniform(SZ),BT).
 bigtup() ->
     {{192,[65,768]},
      {200,[69,768]},

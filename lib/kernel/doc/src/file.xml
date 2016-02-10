@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE erlref SYSTEM "erlref.dtd">
 
 <erlref>
   <header>
     <copyright>
-      <year>1996</year><year>2013</year>
+      <year>1996</year><year>2014</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
 
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
 
     </legalnotice>
 
@@ -37,54 +38,48 @@
       the file operations. See the command line flag
       <c>+A</c> in <seealso marker="erts:erl">erl(1)</seealso>.</p>
 
-    <p>The Erlang VM supports file names in Unicode to a limited
-    extent.  Depending on how the VM is started (with the parameter
-    <c>+fnu</c> or <c>+fnl</c>), file names given can contain
-    characters > 255 and the VM system will convert file names
-    back and forth to the native file name encoding.</p>
+    <p>With regard to file name encoding, the Erlang VM can operate in
+    two modes. The current mode can be queried using the <seealso
+    marker="#native_name_encoding">native_name_encoding/0</seealso>
+    function.  It returns either <c>latin1</c> or <c>utf8</c>.</p>
 
-    <p>The default behavior for Unicode character translation depends
-    on to what extent the underlying OS/filesystem enforces consistent
-    naming. On OSes where all file names are ensured to be in one or
-    another encoding, Unicode is the default (currently this holds for
-    Windows and MacOSX). On OSes with completely transparent file
-    naming (i.e. all Unixes except MacOSX), ISO-latin-1 file naming is
-    the default. The reason for the ISO-latin-1 default is that
-    file names are not guaranteed to be possible to interpret according to
-    the Unicode encoding expected (i.e. UTF-8), and file names that
-    cannot be decoded will only be accessible by using &quot;raw
-    file names&quot;, in other word file names given as binaries.</p>
- 
-    <p>As file names are traditionally not binaries in Erlang,
-    applications that need to handle raw file names need to be
-    converted, why the Unicode mode for file names is not default on
-    systems having completely transparent file naming.</p>
+    <p>In the <c>latin1</c> mode, the Erlang VM does not change the
+    encoding of file names. In the <c>utf8</c> mode, file names can
+    contain Unicode characters greater than 255 and the VM will
+    convert file names back and forth to the native file name encoding
+    (usually UTF-8, but UTF-16 on Windows).</p>
 
-    <p>Raw file names is a new feature in OTP R14B01, which allows the
-    user to supply completely uninterpreted file names to the
-    underlying OS/filesystem. They are supplied as binaries, where it
-    is up to the user to supply a correct encoding for the
-    environment. The function <c>file:native_name_encoding()</c> can
-    be used to check what encoding the VM is working in. If the
-    function returns <c>latin1</c> file names are not in any way
-    converted to Unicode, if it is <c>utf8</c>, raw file names should
-    be encoded as UTF-8 if they are to follow the convention of the VM
-    (and usually the convention of the OS as well). Using raw
-    file names is useful if you have a filesystem with inconsistent
-    file naming, where some files are named in UTF-8 encoding while
-    others are not. A file:list_dir on such mixed file name systems
-    when the VM is in Unicode file name mode might return file names as
-    raw binaries as they cannot be interpreted as Unicode
-    file names. Raw file names can also be used to give UTF-8 encoded
-    file names even though the VM is not started in Unicode file name
-    translation mode.</p>
+    <p>The default mode depends on the operating system. Windows and
+    MacOS X enforce consistent file name encoding and therefore the
+    VM uses the <c>utf8</c> mode.</p>
 
-    <p>Note that on Windows, <c>file:native_name_encoding()</c>
-    returns <c>utf8</c> per default, which is the format for raw
-    file names even on Windows, although the underlying OS specific
-    code works in a limited version of little endian UTF16. As far as
-    the Erlang programmer is concerned, Windows native Unicode format
-    is UTF-8...</p>
+    <p>On operating systems with transparent naming (i.e. all Unix
+    systems except MacOS X), the default will be <c>utf8</c> if the
+    terminal supports UTF-8, otherwise <c>latin1</c>. The default may
+    be overridden using the <c>+fnl</c> (to force <c>latin1</c> mode)
+    or <c>+fnu</c> (to force <c>utf8</c> mode) when starting <seealso
+    marker="erts:erl">erl</seealso>.</p>
+
+    <p>On operating systems with transparent naming, files could be
+    inconsistently named, i.e. some files are encoded in UTF-8 while
+    others are encoded in (for example) iso-latin1. To be able to
+    handle file systems with inconsistent naming when running in the
+    <c>utf8</c> mode, the concept of "raw file names" has been
+    introduced.</p>
+
+    <p>A raw file name is a file name given as a binary. The Erlang VM
+    will perform no translation of a file name given as a binary on
+    systems with transparent naming.</p>
+
+    <p>When running in the <c>utf8</c> mode, the
+    <c>file:list_dir/1</c> and <c>file:read_link/1</c> functions will
+    never return raw file names. Use the <seealso
+    marker="#list_dir_all">list_dir_all/1</seealso> and <seealso
+    marker="#read_link_all">read_link_all/1</seealso> functions to
+    return all file names including raw file names.</p>
+
+    <p>Also see <seealso marker="stdlib:unicode_usage#notes-about-raw-filenames">Notes about raw file names</seealso>.</p>
+
   </description>
 
   <datatypes>
@@ -92,9 +87,10 @@
       <name name="deep_list"/>
     </datatype>
     <datatype>
-      <name><marker id="type-fd">fd()</marker></name>
+      <name>fd()</name>
       <desc>
-        <p>A file descriptor representing a file opened in <seealso
+        <p><marker id="type-fd"/>
+          A file descriptor representing a file opened in <seealso
           marker="#raw">raw</seealso> mode.</p>
       </desc>
     </datatype>
@@ -434,14 +430,6 @@
       </desc>
     </func>
     <func>
-      <name name="file_info" arity="1"/>
-      <fsummary>Get information about a file (deprecated)</fsummary>
-      <desc>
-        <p>This function is obsolete. Use <c>read_file_info/1,2</c>
-          instead.</p>
-      </desc>
-    </func>
-    <func>
       <name name="format_error" arity="1"/>
       <fsummary>Return a descriptive string for an error reason</fsummary>
       <desc>
@@ -504,7 +492,7 @@
       <name name="list_dir" arity="1"/>
       <fsummary>List files in a directory</fsummary>
       <desc>
-        <p>Lists all files in a directory, <b>except</b> files
+        <p>Lists all files in a directory, <em>except</em> files
 	with "raw" names. Returns
           <c>{ok, <anno>Filenames</anno>}</c> if successful.
           Otherwise, it returns <c>{error, <anno>Reason</anno>}</c>.
@@ -535,8 +523,8 @@
       <name name="list_dir_all" arity="1"/>
       <fsummary>List all files in a directory</fsummary>
       <desc>
-        <p>Lists all the files in a directory, including files with
-	"raw" names.
+        <p><marker id="list_dir_all"/>Lists all the files in a directory,
+	including files with "raw" names.
 	Returns <c>{ok, <anno>Filenames</anno>}</c> if successful.
           Otherwise, it returns <c>{error, <anno>Reason</anno>}</c>.
           <c><anno>Filenames</anno></c> is a list of
@@ -648,16 +636,24 @@
           <item>
             <p>Symbolic links are not supported on this platform.</p>
           </item>
+          <tag><c>eperm</c></tag>
+          <item>
+            <p>User does not have privileges to create symbolic links
+	    (<c>SeCreateSymbolicLinkPrivilege</c> on Windows).</p>
+          </item>
         </taglist>
       </desc>
     </func>
     <func>
       <name name="native_name_encoding" arity="0"/>
-      <fsummary>Return the VM's configured filename encoding.</fsummary>
+      <fsummary>Return the VM's configured filename encoding</fsummary>
       <desc>
-        <p>This function returns the configured default file name encoding to use for raw file names. Generally an application supplying file names raw (as binaries), should obey the character encoding returned by this function.</p>
-	<p>By default, the VM uses ISO-latin-1 file name encoding on filesystems and/or OSes that use completely transparent file naming. This includes all Unix versions except MacOSX, where the vfs layer enforces UTF-8 file naming. By giving the experimental option <c>+fnu</c> when starting Erlang, UTF-8 translation of file names can be turned on even for those systems. If Unicode file name translation is in effect, the system behaves as usual as long as file names conform to the encoding, but will return file names that are not properly encoded in UTF-8 as raw file names (i.e. binaries).</p> 
-	<p>On Windows, this function also returns <c>utf8</c> by default. The OS uses a pure Unicode naming scheme and file names are always possible to interpret as valid Unicode. The fact that the underlying Windows OS actually encodes file names using little endian UTF-16 can be ignored by the Erlang programmer. Windows and MacOSX are the only operating systems where the VM operates in Unicode file name mode by default.</p>
+	<p><marker id="native_name_encoding"/>This function returns
+	the file name encoding mode.  If it is <c>latin1</c>, the
+	system does no translation of file names.  If it is
+	<c>utf8</c>, file names will be converted back and forth to
+	the native file name encoding (usually UTF-8, but UTF-16 on
+	Windows).</p>
       </desc>
     </func>
     <func>
@@ -825,6 +821,16 @@
           <tag><c>ram</c></tag>
           <item>
             <p><c>File</c> must be <c>iodata()</c>. Returns an <c>fd()</c> which lets the <c>file</c> module operate on the data in-memory as if it is a file.</p>
+          </item>
+          <tag><c>sync</c></tag>
+          <item>
+            <p>On platforms that support it, enables the POSIX <c>O_SYNC</c> synchronous I/O flag or its platform-dependent
+            equivalent (e.g., <c>FILE_FLAG_WRITE_THROUGH</c> on Windows) so that writes to the file block until the data has
+            been physically written to disk. Be aware, though, that the exact semantics of this flag differ from platform to
+            platform; for example, neither Linux nor Windows guarantees that all file metadata are also written before the call
+            returns. For precise semantics, check the details of your platform's documentation. On platforms with no
+            support for POSIX <c>O_SYNC</c> or equivalent, use of the <c>sync</c> flag causes <c>open</c> to return
+            <c>{error, enotsup}</c>.</p>
           </item>
         </taglist>
         <p>Returns:</p>
@@ -1188,8 +1194,8 @@
           and <c>read_line/1</c> are the only ways to read from a file
           opened in raw mode (although they work for normally opened
           files, too).</p>
-	  <p>For files where <c>encoding</c> is set to something else than <c>latin1</c>, one character might be represented by more than one byte on the file. The parameter <c>Number</c> always denotes the number of <em>characters</em> read from the file, why the position in the file might be moved a lot more than this number when reading a Unicode file.</p>
-	  <p>Also if <c>encoding</c> is set to something else than <c>latin1</c>, the <c>read/3</c> call will fail if the data contains characters larger than 255, why the <seealso marker="stdlib:io">io(3)</seealso> module is to be preferred when reading such a file.</p> 
+	  <p>For files where <c>encoding</c> is set to something else than <c>latin1</c>, one character might be represented by more than one byte on the file. The parameter <c>Number</c> always denotes the number of <em>characters</em> read from the file, while the position in the file might be moved much more than this number when reading a Unicode file.</p>
+	  <p>Also, if <c>encoding</c> is set to something else than <c>latin1</c>, the <c>read/3</c> call will fail if the data contains characters larger than 255, which is why the <seealso marker="stdlib:io">io(3)</seealso> module is to be preferred when reading such a file.</p> 
 	  <p>The function returns:</p>
         <taglist>
           <tag><c>{ok, <anno>Data</anno>}</c></tag>
@@ -1279,6 +1285,8 @@
 			or before unix time epoch which is 1970-01-01 00:00 UTC. 
 			Default is <c>{time, local}</c>.
 		</p> 
+        <p>If the <c>raw</c> option is set, the file server will not be called
+          and only informations about local files will be returned.</p>
 		<note>
           <p>
 			  Since file times is stored in posix time on most OS it is
@@ -1300,15 +1308,15 @@
           <item>
             <p>The current system access to the file.</p>
           </item>
-          <tag><c>atime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
+          <tag><c>atime = </c><seealso marker="#type-date_time">date_time()</seealso><c> | integer() >= 0</c></tag>
           <item>
             <p>The last time the file was read.</p>
           </item>
-          <tag><c>mtime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
+          <tag><c>mtime = </c><seealso marker="#type-date_time">date_time()</seealso><c> | integer() >= 0</c></tag>
           <item>
             <p>The last time the file was written.</p>
           </item>
-          <tag><c>ctime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >=0</c></tag>
+          <tag><c>ctime = </c><seealso marker="#type-date_time">date_time()</seealso><c> | integer() >=0</c></tag>
           <item>
             <p>The interpretation of this time field depends on
               the operating system. On Unix, it is the last time
@@ -1440,7 +1448,8 @@
       <name name="read_link" arity="1"/>
       <fsummary>See what a link is pointing to</fsummary>
       <desc>
-        <p>This function returns <c>{ok, <anno>Filename</anno>}</c> if
+        <p><marker id="read_link_all"/>This function returns
+	<c>{ok, <anno>Filename</anno>}</c> if
           <c><anno>Name</anno></c> refers to a symbolic link that is
 	  not a "raw" file name, or <c>{error, <anno>Reason</anno>}</c>
 	  otherwise.
@@ -1504,6 +1513,8 @@
           the link will be returned in the <c>file_info</c> record and
           the <c>type</c> field of the record will be set to
           <c>symlink</c>.</p>
+      <p>If the <c>raw</c> option is set, the file server will not be called
+        and only informations about local files will be returned.</p>
         <p>If <c><anno>Name</anno></c> is not a symbolic link, this function returns
           exactly the same result as <c>read_file_info/1</c>.
           On platforms that do not support symbolic links, this function
@@ -1622,6 +1633,11 @@
       <desc>
         <p>Sets the current working directory of the file server to
           <c><anno>Dir</anno></c>. Returns <c>ok</c> if successful.</p>
+        <p>The functions in the <c>file</c> module usually treat binaries
+          as raw filenames, i.e. they are passed as is even when the encoding
+          of the binary does not agree with <c>file:native_name_encoding()</c>.
+          This function however expects binaries to be encoded according to the
+          value returned by <c>file:native_name_encoding()</c>.</p>
         <p>Typical error reasons are:</p>
         <taglist>
           <tag><c>enoent</c></tag>
@@ -1646,8 +1662,8 @@
           <tag><c>no_translation</c></tag>
           <item>
             <p><c><anno>Dir</anno></c> is a <c>binary()</c> with
-              characters coded in ISO-latin-1 and the VM was started
-              with the parameter <c>+fnue</c>.</p>
+              characters coded in ISO-latin-1 and the VM is operating
+              with unicode file name encoding.</p>
           </item>
         </taglist>
         <warning>
@@ -1679,9 +1695,9 @@
       <desc>
         <p>Makes sure that any buffers kept by the operating system
           (not by the Erlang runtime system) are written to disk. In
-          many ways it's resembles fsync but it not requires to update
-          some of file's metadata such as the access time. On
-          some platforms, this function might have no effect.</p>
+          many ways it resembles fsync but it does not update
+          some of the file's metadata such as the access time. On
+          some platforms this function has no effect.</p>
         <p>Applications that access databases or log files often write
           a tiny data fragment (e.g., one line in a log file) and then
           call fsync() immediately in order to ensure that the written
@@ -1689,11 +1705,11 @@
           will always initiate two write operations: one for the newly
           written data and another one in order to update the modification
           time stored in the inode. If the modification time is not a part
-          of the transaction concept fdatasync() can be used to avoid
+          of the transaction concept, fdatasync() can be used to avoid
           unnecessary inode disk write operations.</p>
-        <p>Available only in some POSIX systems. This call results in a
-          call to fsync(), or has no effect, in systems not implementing
-          the fdatasync syscall.</p>
+        <p>Available only in some POSIX systems, this call results in a
+          call to fsync(), or has no effect in systems not implementing
+          the fdatasync() syscall.</p>
       </desc>
     </func>
     <func>
@@ -1730,22 +1746,21 @@
 	See <seealso marker="gen_tcp#controlling_process-2">gen_tcp:controlling_process/2</seealso></p>
 	<p>If the OS used does not support sendfile, an Erlang fallback
 	using file:read and gen_tcp:send is used.</p>
-	<p>The option list can contain the following options:
+	<p>The option list can contain the following options:</p>
 	<taglist>
           <tag><c>chunk_size</c></tag>
           <item>The chunk size used by the erlang fallback to send
 	  data. If using the fallback, this should be set to a value
 	  which comfortably fits in the systems memory. Default is 20 MB.</item>
+	  <tag><c>use_threads</c></tag>
+          <item>Instruct the emulator to use the async thread pool for the
+	  sendfile system call. This could be usefull if the OS you are running
+	  on does not properly support non-blocking sendfile calls. Do note that
+	  using async threads potentially makes your system volnerable to slow
+	  client attacks. If set to true and no async threads are available,
+	  the sendfile call will return <c>{error,einval}</c>.
+	  Introduced in Erlang/OTP 17.0. Default is false.</item>
 	</taglist>
-	</p>
-	<p>On operating systems with thread support, it is recommended to use
-	async threads. See the command line flag
-	<c>+A</c> in <seealso marker="erts:erl">erl(1)</seealso>. If it is not
-	possible to use async threads for sendfile, it is recommended to use
-	a relatively small value for the send buffer on the socket. Otherwise
-	the Erlang VM might loose some of its soft realtime guarantees.
-	Which size to use depends on the OS/hardware and the requirements
-	of the application.</p>
       </desc>
     </func>
     <func>
@@ -1836,20 +1851,21 @@
 			Type <c>local</c> will interpret the time set as local, <c>universal</c> will
 			interpret it as universal time and <c>posix</c> must be seconds since
 			or before unix time epoch which is 1970-01-01 00:00 UTC.
-			Default is <c>{time, local}</c>.
-		</p>
+			Default is <c>{time, local}</c>.</p>
+        <p>If the <c>raw</c> option is set, the file server will not be called
+          and only informations about local files will be returned.</p>
         <p>The following fields are used from the record, if they are
           given.</p>
         <taglist>
-          <tag><c>atime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
+          <tag><c>atime = </c><seealso marker="#type-date_time">date_time()</seealso><c> | integer() >= 0</c></tag>
           <item>
             <p>The last time the file was read.</p>
           </item>
-          <tag><c>mtime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
+          <tag><c>mtime = </c><seealso marker="#type-date_time">date_time()</seealso><c> | integer() >= 0</c></tag>
           <item>
             <p>The last time the file was written.</p>
           </item>
-          <tag><c>ctime = <seealso marker="#type-date_time">date_time()</seealso> | integer() >= 0</c></tag>
+          <tag><c>ctime = </c><seealso marker="#type-date_time">date_time()</seealso><c> | integer() >= 0</c></tag>
           <item>
             <p>On Unix, any value give for this field will be ignored
               (the "ctime" for the file will be set to the current

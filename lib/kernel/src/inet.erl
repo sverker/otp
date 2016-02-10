@@ -1,18 +1,19 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2012. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2015. All Rights Reserved.
 %%
-%% The contents of this file are subject to the Erlang Public License,
-%% Version 1.1, (the "License"); you may not use this file except in
-%% compliance with the License. You should have received a copy of the
-%% Erlang Public License along with this software. If not, it can be
-%% retrieved online at http://www.erlang.org/.
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and limitations
-%% under the License.
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 %%
 %% %CopyrightEnd%
 %%
@@ -24,6 +25,7 @@
 
 %% socket
 -export([peername/1, sockname/1, port/1, send/2,
+	 peernames/1, peernames/2, socknames/1, socknames/2,
 	 setopts/2, getopts/2, 
 	 getifaddrs/0, getifaddrs/1,
 	 getif/1, getif/0, getiflist/0, getiflist/1,
@@ -32,7 +34,7 @@
 	 ip/1, stats/0, options/0, 
 	 pushf/3, popf/1, close/1, gethostname/0, gethostname/1, 
 	 parse_ipv4_address/1, parse_ipv6_address/1, parse_ipv4strict_address/1,
-	 parse_ipv6strict_address/1, parse_address/1, parse_strict_address/1]).
+	 parse_ipv6strict_address/1, parse_address/1, parse_strict_address/1, ntoa/1]).
 
 -export([connect_options/2, listen_options/2, udp_options/2, sctp_options/2]).
 
@@ -120,6 +122,17 @@
       'addr' | 'broadaddr' | 'dstaddr' | 
       'mtu' | 'netmask' | 'flags' |'hwaddr'.
 
+-type if_getopt_result() ::
+      {'addr', ip_address()} |
+      {'broadaddr', ip_address()} |
+      {'dstaddr', ip_address()} |
+      {'mtu', non_neg_integer()} |
+      {'netmask', ip_address()} |
+      {'flags', ['up' | 'down' | 'broadcast' | 'no_broadcast' |
+		 'pointtopoint' | 'no_pointtopoint' |
+		 'running' | 'multicast' | 'loopback']} |
+      {'hwaddr', ether_address()}.
+
 -type address_family() :: 'inet' | 'inet6'.
 -type socket_protocol() :: 'tcp' | 'udp' | 'sctp'.
 -type socket_type() :: 'stream' | 'dgram' | 'seqpacket'.
@@ -146,6 +159,7 @@ close(Socket) ->
 	    ok
     end.
 
+
 -spec peername(Socket) ->  {ok, {Address, Port}} | {error, posix()} when
       Socket :: socket(),
       Address :: ip_address(),
@@ -161,6 +175,24 @@ setpeername(Socket, {IP,Port}) ->
     prim_inet:setpeername(Socket, {IP,Port});
 setpeername(Socket, undefined) ->
     prim_inet:setpeername(Socket, undefined).
+
+-spec peernames(Socket) -> {ok, [{Address, Port}]} | {error, posix()} when
+      Socket :: socket(),
+      Address :: ip_address(),
+      Port :: non_neg_integer().
+
+peernames(Socket) ->
+    prim_inet:peernames(Socket).
+
+-spec peernames(Socket, Assoc) ->
+		       {ok, [{Address, Port}]} | {error, posix()} when
+      Socket :: socket(),
+      Assoc :: #sctp_assoc_change{} | gen_sctp:assoc_id(),
+      Address :: ip_address(),
+      Port :: non_neg_integer().
+
+peernames(Socket, Assoc) ->
+    prim_inet:peernames(Socket, Assoc).
 
 
 -spec sockname(Socket) -> {ok, {Address, Port}} | {error, posix()} when
@@ -178,6 +210,25 @@ setsockname(Socket, {IP,Port}) ->
     prim_inet:setsockname(Socket, {IP,Port});
 setsockname(Socket, undefined) ->
     prim_inet:setsockname(Socket, undefined).
+
+-spec socknames(Socket) -> {ok, [{Address, Port}]} | {error, posix()} when
+      Socket :: socket(),
+      Address :: ip_address(),
+      Port :: non_neg_integer().
+
+socknames(Socket) ->
+    prim_inet:socknames(Socket).
+
+-spec socknames(Socket, Assoc) ->
+		       {ok, [{Address, Port}]} | {error, posix()} when
+      Socket :: socket(),
+      Assoc :: #sctp_assoc_change{} | gen_sctp:assoc_id(),
+      Address :: ip_address(),
+      Port :: non_neg_integer().
+
+socknames(Socket, Assoc) ->
+    prim_inet:socknames(Socket, Assoc).
+
 
 -spec port(Socket) -> {'ok', Port} | {'error', any()} when
       Socket :: socket(),
@@ -200,7 +251,14 @@ send(Socket, Packet) ->
       Options :: [socket_setopt()].
 
 setopts(Socket, Opts) -> 
-    prim_inet:setopts(Socket, Opts).
+    SocketOpts =
+	[case Opt of
+	     {netns,NS} ->
+		 {netns,filename2binary(NS)};
+	     _ ->
+		 Opt
+	 end || Opt <- Opts],
+    prim_inet:setopts(Socket, SocketOpts).
 
 -spec getopts(Socket, Options) ->
 	{'ok', OptionValues} | {'error', posix()} when
@@ -209,7 +267,18 @@ setopts(Socket, Opts) ->
       OptionValues :: [socket_setopt()].
 
 getopts(Socket, Opts) ->
-    prim_inet:getopts(Socket, Opts).
+    case prim_inet:getopts(Socket, Opts) of
+	{ok,OptionValues} ->
+	    {ok,
+	     [case OptionValue of
+		  {netns,Bin} ->
+		      {netns,binary2filename(Bin)};
+		  _ ->
+		      OptionValue
+	      end || OptionValue <- OptionValues]};
+	Other ->
+	    Other
+    end.
 
 -spec getifaddrs(Socket :: socket()) ->
 	{'ok', [string()]} | {'error', posix()}.
@@ -248,13 +317,13 @@ getiflist() ->
 -spec ifget(Socket :: socket(),
             Name :: string() | atom(),
 	    Opts :: [if_getopt()]) ->
-	{'ok', [if_setopt()]} | {'error', posix()}.
+	{'ok', [if_getopt_result()]} | {'error', posix()}.
 
 ifget(Socket, Name, Opts) -> 
     prim_inet:ifget(Socket, Name, Opts).
 
 -spec ifget(Name :: string() | atom(), Opts :: [if_getopt()]) ->
-	{'ok', [if_setopt()]} | {'error', posix()}.
+	{'ok', [if_getopt_result()]} | {'error', posix()}.
 
 ifget(Name, Opts) ->
     withsocket(fun(S) -> prim_inet:ifget(S, Name, Opts) end).
@@ -389,7 +458,7 @@ gethostbyname(Name,Family) ->
 gethostbyname(Name,Family,Timeout) ->
     Timer = start_timer(Timeout),
     Res = gethostbyname_tm(Name,Family,Timer),
-    stop_timer(Timer),
+    _ = stop_timer(Timer),
     Res.
 
 gethostbyname_tm(Name,Family,Timer) ->
@@ -420,7 +489,7 @@ gethostbyaddr(Address) ->
 gethostbyaddr(Address,Timeout) ->
     Timer = start_timer(Timeout),    
     Res = gethostbyaddr_tm(Address, Timer),
-    stop_timer(Timer),
+    _ = stop_timer(Timer),
     Res.
 
 gethostbyaddr_tm(Address,Timer) ->
@@ -475,7 +544,7 @@ getaddr(Address, Family) ->
 getaddr(Address, Family, Timeout) ->
     Timer = start_timer(Timeout),
     Res = getaddr_tm(Address, Family, Timer),
-    stop_timer(Timer),
+    _ = stop_timer(Timer),
     Res.
 
 getaddr_tm(Address, Family, Timer) ->
@@ -501,7 +570,7 @@ getaddrs(Address, Family) ->
 getaddrs(Address, Family, Timeout) ->
     Timer = start_timer(Timeout),
     Res = getaddrs_tm(Address, Family, Timer),
-    stop_timer(Timer),
+    _ = stop_timer(Timer),
     Res.
 
 -spec getservbyport(Port :: port_number(), Protocol :: atom() | string()) ->
@@ -528,6 +597,12 @@ getservbyname(Name, Protocol) when is_atom(Name) ->
 	    Res;
 	Error -> Error
     end.
+
+-spec ntoa(IpAddress) -> Address | {error, einval} when
+      Address :: string(),
+      IpAddress :: ip_address().
+ntoa(Addr) ->
+    inet_parse:ntoa(Addr).
 
 -spec parse_ipv4_address(Address) ->
 	{ok, IPv4Address} | {error, einval} when
@@ -580,7 +655,7 @@ options() ->
      multicast_if, multicast_ttl, multicast_loop,
      exit_on_close, high_watermark, low_watermark,
      high_msgq_watermark, low_msgq_watermark,
-     send_timeout, send_timeout_close
+     send_timeout, send_timeout_close, show_econnreset
     ].
 
 %% Return a list of statistics options
@@ -596,9 +671,10 @@ stats() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 connect_options() ->
     [tos, priority, reuseaddr, keepalive, linger, sndbuf, recbuf, nodelay,
-     header, active, packet, packet_size, buffer, mode, deliver,
+     header, active, packet, packet_size, buffer, mode, deliver, line_delimiter,
      exit_on_close, high_watermark, low_watermark, high_msgq_watermark,
-     low_msgq_watermark, send_timeout, send_timeout_close, delay_send, raw].
+     low_msgq_watermark, send_timeout, send_timeout_close, delay_send, raw,
+     show_econnreset].
     
 connect_options(Opts, Family) ->
     BaseOpts = 
@@ -616,14 +692,15 @@ connect_options(Opts, Family) ->
     case con_opt(Opts, BaseOpts, connect_options()) of
 	{ok, R} ->
 	    {ok, R#connect_opts {
+		   opts = lists:reverse(R#connect_opts.opts),
 		   ifaddr = translate_ip(R#connect_opts.ifaddr, Family)
 		  }};
 	Error -> Error	    
     end.
 
-con_opt([{raw,A,B,C}|Opts],R,As) ->
+con_opt([{raw,A,B,C}|Opts],#connect_opts{} = R,As) ->
     con_opt([{raw,{A,B,C}}|Opts],R,As);
-con_opt([Opt | Opts], R, As) ->
+con_opt([Opt | Opts], #connect_opts{} = R, As) ->
     case Opt of
 	{ip,IP}     -> con_opt(Opts, R#connect_opts { ifaddr = IP }, As);
 	{ifaddr,IP} -> con_opt(Opts, R#connect_opts { ifaddr = IP }, As);
@@ -634,13 +711,26 @@ con_opt([Opt | Opts], R, As) ->
 	{tcp_module,_}  -> con_opt(Opts, R, As);
 	inet        -> con_opt(Opts, R, As);
 	inet6       -> con_opt(Opts, R, As);
+	{netns,NS} ->
+	    BinNS = filename2binary(NS),
+	    case prim_inet:is_sockopt_val(netns, BinNS) of
+		true ->
+		    con_opt(Opts, R#connect_opts { fd = [{netns,BinNS}] }, As);
+		false ->
+		    {error, badarg}
+	    end;
+        {active,N} when is_integer(N), N < 32768, N >= -32768 ->
+            NOpts = lists:keydelete(active, 1, R#connect_opts.opts),
+            con_opt(Opts, R#connect_opts { opts = [{active,N}|NOpts] }, As);
+	{line_delimiter,C} when is_integer(C), C >= 0, C =< 255 ->
+	    con_add(line_delimiter, C, R, Opts, As);
 	{Name,Val} when is_atom(Name) -> con_add(Name, Val, R, Opts, As);
 	_ -> {error, badarg}
     end;
-con_opt([], R, _) ->
+con_opt([], #connect_opts{} = R, _) ->
     {ok, R}.
 
-con_add(Name, Val, R, Opts, AllOpts) ->
+con_add(Name, Val, #connect_opts{} = R, Opts, AllOpts) ->
     case add_opt(Name, Val, R#connect_opts.opts, AllOpts) of
 	{ok, SOpts} ->
 	    con_opt(Opts, R#connect_opts { opts = SOpts }, AllOpts);
@@ -655,7 +745,7 @@ listen_options() ->
      header, active, packet, buffer, mode, deliver, backlog, ipv6_v6only,
      exit_on_close, high_watermark, low_watermark, high_msgq_watermark,
      low_msgq_watermark, send_timeout, send_timeout_close, delay_send,
-     packet_size, raw].
+     packet_size, raw, show_econnreset].
 
 listen_options(Opts, Family) ->
     BaseOpts = 
@@ -673,14 +763,15 @@ listen_options(Opts, Family) ->
     case list_opt(Opts, BaseOpts, listen_options()) of
 	{ok, R} ->
 	    {ok, R#listen_opts {
+		   opts = lists:reverse(R#listen_opts.opts),
 		   ifaddr = translate_ip(R#listen_opts.ifaddr, Family)
 		  }};
 	Error -> Error
     end.
 	
-list_opt([{raw,A,B,C}|Opts], R, As) ->
+list_opt([{raw,A,B,C}|Opts], #listen_opts{} = R, As) ->
     list_opt([{raw,{A,B,C}}|Opts], R, As);
-list_opt([Opt | Opts], R, As) ->
+list_opt([Opt | Opts], #listen_opts{} = R, As) ->
     case Opt of
 	{ip,IP}      ->  list_opt(Opts, R#listen_opts { ifaddr = IP }, As);
 	{ifaddr,IP}  ->  list_opt(Opts, R#listen_opts { ifaddr = IP }, As);
@@ -692,13 +783,24 @@ list_opt([Opt | Opts], R, As) ->
 	{tcp_module,_}  -> list_opt(Opts, R, As);
 	inet         -> list_opt(Opts, R, As);
 	inet6        -> list_opt(Opts, R, As);
+	{netns,NS} ->
+	    BinNS = filename2binary(NS),
+	    case prim_inet:is_sockopt_val(netns, BinNS) of
+		true ->
+		    list_opt(Opts, R#listen_opts { fd = [{netns,BinNS}] }, As);
+		false ->
+		    {error, badarg}
+	    end;
+        {active,N} when is_integer(N), N < 32768, N >= -32768 ->
+            NOpts = lists:keydelete(active, 1, R#listen_opts.opts),
+            list_opt(Opts, R#listen_opts { opts = [{active,N}|NOpts] }, As);
 	{Name,Val} when is_atom(Name) -> list_add(Name, Val, R, Opts, As);
 	_ -> {error, badarg}
     end;
-list_opt([], R, _SockOpts) ->
+list_opt([], #listen_opts{} = R, _SockOpts) ->
     {ok, R}.
 
-list_add(Name, Val, R, Opts, As) ->
+list_add(Name, Val, #listen_opts{} = R, Opts, As) ->
     case add_opt(Name, Val, R#listen_opts.opts, As) of
 	{ok, SOpts} ->
 	    list_opt(Opts, R#listen_opts { opts = SOpts }, As);
@@ -712,21 +814,23 @@ udp_options() ->
     [tos, priority, reuseaddr, sndbuf, recbuf, header, active, buffer, mode, 
      deliver, ipv6_v6only,
      broadcast, dontroute, multicast_if, multicast_ttl, multicast_loop,
-     add_membership, drop_membership, read_packets,raw].
+     add_membership, drop_membership, read_packets,raw,
+     high_msgq_watermark, low_msgq_watermark].
 
 
 udp_options(Opts, Family) ->
     case udp_opt(Opts, #udp_opts { }, udp_options()) of
 	{ok, R} ->
 	    {ok, R#udp_opts {
+		   opts = lists:reverse(R#udp_opts.opts),
 		   ifaddr = translate_ip(R#udp_opts.ifaddr, Family)
 		  }};
 	Error -> Error
     end.
 
-udp_opt([{raw,A,B,C}|Opts], R, As) ->
+udp_opt([{raw,A,B,C}|Opts], #udp_opts{} = R, As) ->
     udp_opt([{raw,{A,B,C}}|Opts], R, As);
-udp_opt([Opt | Opts], R, As) ->
+udp_opt([Opt | Opts], #udp_opts{} = R, As) ->
     case Opt of
 	{ip,IP}     ->  udp_opt(Opts, R#udp_opts { ifaddr = IP }, As);
 	{ifaddr,IP} ->  udp_opt(Opts, R#udp_opts { ifaddr = IP }, As);
@@ -737,13 +841,24 @@ udp_opt([Opt | Opts], R, As) ->
 	{udp_module,_} -> udp_opt(Opts, R, As);
 	inet        -> udp_opt(Opts, R, As);
 	inet6       -> udp_opt(Opts, R, As);
+	{netns,NS} ->
+	    BinNS = filename2binary(NS),
+	    case prim_inet:is_sockopt_val(netns, BinNS) of
+		true ->
+		    udp_opt(Opts, R#udp_opts { fd = [{netns,BinNS}] }, As);
+		false ->
+		    {error, badarg}
+	    end;
+        {active,N} when is_integer(N), N < 32768, N >= -32768 ->
+            NOpts = lists:keydelete(active, 1, R#udp_opts.opts),
+            udp_opt(Opts, R#udp_opts { opts = [{active,N}|NOpts] }, As);
 	{Name,Val} when is_atom(Name) -> udp_add(Name, Val, R, Opts, As);
 	_ -> {error, badarg}
     end;
-udp_opt([], R, _SockOpts) ->
+udp_opt([], #udp_opts{} = R, _SockOpts) ->
     {ok, R}.
 
-udp_add(Name, Val, R, Opts, As) ->
+udp_add(Name, Val, #udp_opts{} = R, Opts, As) ->
     case add_opt(Name, Val, R#udp_opts.opts, As) of
 	{ok, SOpts} ->
 	    udp_opt(Opts, R#udp_opts { opts = SOpts }, As);
@@ -755,7 +870,7 @@ udp_add(Name, Val, R, Opts, As) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %  Currently supported options include:
 %  (*) {mode,   list|binary}	 or just list|binary
-%  (*) {active, true|false|once}
+%  (*) {active, true|false|once|N}
 %  (*) {sctp_module, inet_sctp|inet6_sctp} or just inet|inet6
 %  (*) options set via setsockopt.
 %      The full list is below in sctp_options/0 .
@@ -766,7 +881,7 @@ udp_add(Name, Val, R, Opts, As) ->
 sctp_options() ->
 [   % The following are generic inet options supported for SCTP sockets:
     mode, active, buffer, tos, priority, dontroute, reuseaddr, linger, sndbuf,
-    recbuf, ipv6_v6only,
+    recbuf, ipv6_v6only, high_msgq_watermark, low_msgq_watermark,
 
     % Other options are SCTP-specific (though they may be similar to their
     % TCP and UDP counter-parts):
@@ -781,13 +896,16 @@ sctp_options() ->
 sctp_options(Opts, Mod)  ->
     case sctp_opt(Opts, Mod, #sctp_opts{}, sctp_options()) of
 	{ok,#sctp_opts{ifaddr=undefined}=SO} -> 
-	    {ok,SO#sctp_opts{ifaddr=Mod:translate_ip(?SCTP_DEF_IFADDR)}};
-	{ok,_}=OK ->
-	    OK;
+	    {ok,
+	     SO#sctp_opts{
+	       opts=lists:reverse(SO#sctp_opts.opts),
+	       ifaddr=Mod:translate_ip(?SCTP_DEF_IFADDR)}};
+	{ok,SO} ->
+	    {ok,SO#sctp_opts{opts=lists:reverse(SO#sctp_opts.opts)}};
 	Error -> Error
     end.
 
-sctp_opt([Opt|Opts], Mod, R, As) ->
+sctp_opt([Opt|Opts], Mod, #sctp_opts{} = R, As) ->
     case Opt of
 	{ip,IP} ->
 	    sctp_opt_ifaddr(Opts, Mod, R, As, IP);
@@ -806,6 +924,20 @@ sctp_opt([Opt|Opts], Mod, R, As) ->
 	{sctp_module,_}	-> sctp_opt (Opts, Mod, R, As); % Done with
 	inet		-> sctp_opt (Opts, Mod, R, As); % Done with
 	inet6		-> sctp_opt (Opts, Mod, R, As); % Done with
+	{netns,NS} ->
+	    BinNS = filename2binary(NS),
+	    case prim_inet:is_sockopt_val(netns, BinNS) of
+		true ->
+		    sctp_opt(
+		      Opts, Mod,
+		      R#sctp_opts { fd = [{netns,BinNS}] },
+		      As);
+		false ->
+		    {error, badarg}
+	    end;
+        {active,N} when is_integer(N), N < 32768, N >= -32768 ->
+            NOpts = lists:keydelete(active, 1, R#sctp_opts.opts),
+            sctp_opt(Opts, Mod, R#sctp_opts { opts = [{active,N}|NOpts] }, As);
 	{Name,Val}	-> sctp_opt (Opts, Mod, R, As, Name, Val);
 	_ -> {error,badarg}
     end;
@@ -816,7 +948,7 @@ sctp_opt([], _Mod, #sctp_opts{ifaddr=IfAddr}=R, _SockOpts) ->
 	    {ok, R}
     end.
 
-sctp_opt(Opts, Mod, R, As, Name, Val) ->
+sctp_opt(Opts, Mod, #sctp_opts{} = R, As, Name, Val) ->
     case add_opt(Name, Val, R#sctp_opts.opts, As) of
 	{ok,SocketOpts} ->
 	    sctp_opt(Opts, Mod, R#sctp_opts{opts=SocketOpts}, As);
@@ -841,6 +973,8 @@ add_opt(Name, Val, Opts, As) ->
     case lists:member(Name, As) of
 	true ->
 	    case prim_inet:is_sockopt_val(Name, Val) of
+		true when Name =:= raw ->
+		    {ok, [{Name,Val} | Opts]};
 		true ->
 		    Opts1 = lists:keydelete(Name, 1, Opts),
 		    {ok, [{Name,Val} | Opts1]};
@@ -849,6 +983,39 @@ add_opt(Name, Val, Opts, As) ->
 	false -> {error,badarg}
     end.
 	
+
+%% Passthrough all unknown - catch type errors later
+filename2binary(List) when is_list(List) ->
+    OutEncoding = file:native_name_encoding(),
+    try unicode:characters_to_binary(List, unicode, OutEncoding) of
+	Bin when is_binary(Bin) ->
+	    Bin;
+	_ ->
+	    List
+    catch
+	error:badarg ->
+	    List
+    end;
+filename2binary(Bin) ->
+    Bin.
+
+binary2filename(Bin) ->
+    InEncoding = file:native_name_encoding(),
+    case unicode:characters_to_list(Bin, InEncoding) of
+	Filename when is_list(Filename) ->
+	    Filename;
+	_ ->
+	    %% For getopt/setopt of netns this should only happen if
+	    %% a binary with wrong encoding was used when setting the
+	    %% option, hence the user shall eat his/her own medicine.
+	    %%
+	    %% I.e passthrough here too for now.
+	    %% Future usecases will most probably not want this,
+	    %% rather Unicode error or warning
+	    %% depending on emulator flag instead.
+	    Bin
+    end.
+
 
 translate_ip(any,      inet) -> {0,0,0,0};
 translate_ip(loopback, inet) -> {127,0,0,1};
@@ -915,7 +1082,7 @@ gethostbyname_tm(Name, Type, Timer, [wins|_]=Opts) ->
     gethostbyname_tm_native(Name, Type, Timer, Opts);
 gethostbyname_tm(Name, Type, Timer, [native|_]=Opts) ->
     gethostbyname_tm_native(Name, Type, Timer, Opts);
-gethostbyname_tm(Name, Type, Timer, [_|_]=Opts) ->
+gethostbyname_tm(Name, Type, Timer, [_|Opts]) ->
     gethostbyname_tm(Name, Type, Timer, Opts);
 %% Make sure we always can look up our own hostname.
 gethostbyname_tm(Name, Type, Timer, []) ->
@@ -946,21 +1113,34 @@ gethostbyname_self(Name, Type) when is_atom(Name) ->
 gethostbyname_self(Name, Type)
   when is_list(Name), Type =:= inet;
        is_list(Name), Type =:= inet6 ->
-    case inet_db:gethostname() of
-	Name ->
-	    {ok,make_hostent(Name,
-			     [translate_ip(loopback, Type)],
-			     [], Type)};
-	Self ->
+    N = inet_db:tolower(Name),
+    Self = inet_db:gethostname(),
+    %%
+    %% This is the final fallback that pretends /etc/hosts has got
+    %% a line for the hostname on the loopback address.
+    %% Lookups into /etc/hosts are case insensitive and return
+    %% what is in the file. Therefore the letter case may differ between
+    %% the returned hostent record and the hostname that was asked for.
+    %%
+    case inet_db:tolower(Self) of
+	N ->
+	    {ok,
+	     make_hostent(
+	       Self, [translate_ip(loopback, Type)], [], Type)};
+	_ ->
 	    case inet_db:res_option(domain) of
-		"" -> {error,nxdomain};
+		"" ->
+		    {error,nxdomain};
 		Domain ->
-		    case lists:append([Self,".",Domain]) of
-			Name ->
-			    {ok,make_hostent(Name,
-					     [translate_ip(loopback, Type)],
-					     [], Type)};
-			_ -> {error,nxdomain}
+		    FQDN = lists:append([Self,".",Domain]),
+		    case inet_db:tolower(FQDN) of
+			N ->
+			    {ok,
+			     make_hostent(
+			       FQDN,
+			       [translate_ip(loopback, Type)], [], Type)};
+			_ ->
+			    {error,nxdomain}
 		    end
 	    end
     end;
@@ -1049,7 +1229,7 @@ gethostbyaddr_tm_native(Addr, Timer, Opts) ->
 	Result -> Result
     end.
 
--spec open(Fd :: integer(),
+-spec open(Fd_or_OpenOpts :: integer() | list(),
 	   Addr :: ip_address(),
 	   Port :: port_number(),
 	   Opts :: [socket_setopt()],
@@ -1059,8 +1239,14 @@ gethostbyaddr_tm_native(Addr, Timer, Opts) ->
 	   Module :: atom()) ->
 	{'ok', socket()} | {'error', posix()}.
 
-open(Fd, Addr, Port, Opts, Protocol, Family, Type, Module) when Fd < 0 ->
-    case prim_inet:open(Protocol, Family, Type) of
+open(FdO, Addr, Port, Opts, Protocol, Family, Type, Module)
+  when is_integer(FdO), FdO < 0;
+       is_list(FdO) ->
+    OpenOpts =
+	if  is_list(FdO) -> FdO;
+	    true -> []
+	end,
+    case prim_inet:open(Protocol, Family, Type, OpenOpts) of
 	{ok,S} ->
 	    case prim_inet:setopts(S, Opts) of
 		ok ->
@@ -1083,8 +1269,9 @@ open(Fd, Addr, Port, Opts, Protocol, Family, Type, Module) when Fd < 0 ->
 	Error ->
 	    Error
     end;
-open(Fd, _Addr, _Port, Opts, Protocol, Family, Type, Module) ->
-    fdopen(Fd, Opts, Protocol, Family, Type, Module).
+open(Fd, Addr, Port, Opts, Protocol, Family, Type, Module)
+  when is_integer(Fd) ->
+    fdopen(Fd, Addr, Port, Opts, Protocol, Family, Type, Module).
 
 bindx(S, [Addr], Port0) ->
     {IP, Port} = set_bindx_port(Addr, Port0),
@@ -1123,12 +1310,35 @@ change_bindx_0_port({_IP, _Port}=Addr, _AssignedPort) ->
 	{'ok', socket()} | {'error', posix()}.
 
 fdopen(Fd, Opts, Protocol, Family, Type, Module) ->
-    case prim_inet:fdopen(Protocol, Family, Type, Fd) of
+    fdopen(Fd, any, 0, Opts, Protocol, Family, Type, Module).
+
+fdopen(Fd, Addr, Port, Opts, Protocol, Family, Type, Module) ->
+    IsAnyAddr = (Addr == {0,0,0,0} orelse Addr == {0,0,0,0,0,0,0,0} 
+                 orelse Addr == any),
+    Bound = Port == 0 andalso IsAnyAddr,
+    case prim_inet:fdopen(Protocol, Family, Type, Fd, Bound) of
 	{ok, S} ->
 	    case prim_inet:setopts(S, Opts) of
 		ok ->
-		    inet_db:register_socket(S, Module),
-		    {ok, S};
+                    case if
+                             Bound ->
+                                 %% We do not do any binding if default
+                                 %% port+addr options where given in order
+                                 %% to keep backwards compatability with
+                                 %% pre Erlang/TOP 17
+                                 {ok, ok};
+                             is_list(Addr) ->
+                                 bindx(S, Addr, Port);
+                             true ->
+                                 prim_inet:bind(S, Addr, Port)
+                         end of
+                        {ok, _} ->
+                            inet_db:register_socket(S, Module),
+                            {ok, S};
+                        Error  ->
+                            prim_inet:close(S),
+                            Error
+                    end;
 		Error ->
 		    prim_inet:close(S), Error
 	    end;
@@ -1329,26 +1539,28 @@ tcp_controlling_process(S, NewOwner) when is_port(S), is_pid(NewOwner) ->
 	_ ->
 	    case prim_inet:getopt(S, active) of
 		{ok, A0} ->
-		    case A0 of
-			false -> ok;
-			_ -> prim_inet:setopt(S, active, false)
-		    end,
-		    case tcp_sync_input(S, NewOwner, false) of
-			true ->  %% socket already closed, 
+		    SetOptRes =
+			case A0 of
+			    false -> ok;
+			    _ -> prim_inet:setopt(S, active, false)
+			end,
+		    case {tcp_sync_input(S, NewOwner, false), SetOptRes} of
+			{true, _} ->  %% socket already closed
 			    ok;
-			false ->
+			{false, ok} ->
 			    try erlang:port_connect(S, NewOwner) of
 				true -> 
 				    unlink(S), %% unlink from port
 				    case A0 of
 					false -> ok;
 					_ -> prim_inet:setopt(S, active, A0)
-				    end,
-				    ok
+				    end
 			    catch
 				error:Reason -> 
 				    {error, Reason}
-			    end
+			    end;
+			{false, Error} ->
+			    Error
 		    end;
 		Error ->
 		    Error
@@ -1385,13 +1597,12 @@ udp_controlling_process(S, NewOwner) when is_port(S), is_pid(NewOwner) ->
 	    {error, not_owner};
 	_ ->
 	    {ok, A0} = prim_inet:getopt(S, active),
-	    prim_inet:setopt(S, active, false),
+	    ok = prim_inet:setopt(S, active, false),
 	    udp_sync_input(S, NewOwner),
 	    try erlang:port_connect(S, NewOwner) of
 		true -> 
 		    unlink(S),
-		    prim_inet:setopt(S, active, A0),
-		    ok
+		    ok = prim_inet:setopt(S, active, A0)
 	    catch
 		error:Reason -> 
 		    {error, Reason}

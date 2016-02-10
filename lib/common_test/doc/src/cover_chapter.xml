@@ -1,23 +1,24 @@
-<?xml version="1.0" encoding="latin1" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE chapter SYSTEM "chapter.dtd">
 
 <chapter>
   <header>
     <copyright>
-      <year>2006</year><year>2012</year>
+      <year>2006</year><year>2014</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
-      The contents of this file are subject to the Erlang Public License,
-      Version 1.1, (the "License"); you may not use this file except in
-      compliance with the License. You should have received a copy of the
-      Erlang Public License along with this software. If not, it can be
-      retrieved online at http://www.erlang.org/.
-    
-      Software distributed under the License is distributed on an "AS IS"
-      basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-      the License for the specific language governing rights and limitations
-      under the License.
+      Licensed under the Apache License, Version 2.0 (the "License");
+      you may not use this file except in compliance with the License.
+      You may obtain a copy of the License at
+ 
+          http://www.apache.org/licenses/LICENSE-2.0
+
+      Unless required by applicable law or agreed to in writing, software
+      distributed under the License is distributed on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      See the License for the specific language governing permissions and
+      limitations under the License.
     
     </legalnotice>
 
@@ -74,12 +75,6 @@
       executed during the test. In overview mode, only the code
       coverage overview page gets printed.</p>
 
-    <p><em>Note:</em> Currently, for Common Test to be able to print
-      code coverage HTML files for the modules included in the
-      analysis, the source code files of these modules must be
-      located in the same directory as the corresponding <c>.beam</c>
-      files. This is a limitation that will be removed later.</p>
-
     <p>You can choose to export and import code coverage data between
       tests. If you specify the name of an export file in the cover
       specification file, Common Test will export collected coverage
@@ -87,10 +82,7 @@
       specify that previously exported data should be imported and
       included in the analysis for a test (you can specify multiple
       import files). This way it is possible to analyse total code coverage
-      without necessarily running all tests at once. Note that even if
-      you run separate tests in one test run, code coverage data will
-      not be passed on from one test to another unless you specify an
-      export file for Common Test to use for this purpose.</p>
+      without necessarily running all tests at once.</p>
 
     <p>To activate the code coverage support, you simply specify the
       name of the cover specification file as you start Common Test.
@@ -100,7 +92,7 @@
     <p><c>$ ct_run -dir $TESTOBJS/db -cover $TESTOBJS/db/config/db.coverspec</c></p>
     
     <p>You may also pass the cover specification file name in a
-      call to <c><seealso marker="ct#run_test-1">ct:run_test/1</seealso></c>, by adding a <c>{cover,CoverSpec}</c>
+      call to <seealso marker="ct#run_test-1"><c>ct:run_test/1</c></seealso>, by adding a <c>{cover,CoverSpec}</c>
       tuple to the <c>Opts</c> argument. Also, you can of course 
       enable code coverage in your test specifications (read
       more in the chapter about 
@@ -108,8 +100,8 @@
       specifications</seealso>).</p>
   </section>
 
-  <marker id="cover_stop"></marker>
   <section>
+  <marker id="cover_stop"></marker>
     <title>Stopping the cover tool when tests are completed</title>
     <p>By default the Cover tool is automatically stopped when the
       tests are completed. This causes the original (non cover
@@ -126,8 +118,8 @@
 
     <p>The option can be set by using the <c>-cover_stop</c> flag with
       <c>ct_run</c>, by adding <c>{cover_stop,true|false}</c> to the
-      Opts argument to <c><seealso
-      marker="ct#run_test-1">ct:run_test/1</seealso></c>, or by adding
+      Opts argument to <seealso
+      marker="ct#run_test-1"><c>ct:run_test/1</c></seealso>, or by adding
       a <c>cover_stop</c> term in your test specification (see chapter
       about <seealso
       marker="run_test_chapter#test_specifications">test
@@ -195,8 +187,8 @@
        specification file for Common Test).</p>
   </section>
 
-  <marker id="cross_cover"/>
   <section>
+  <marker id="cross_cover"/>
     <title>Cross cover analysis</title>
     <p>The cross cover mechanism allows cover analysis of modules
     across multiple tests. It is useful if some code, e.g. a library
@@ -272,10 +264,20 @@ ct_cover:cross_cover_analyse(Level, [{s1,S1LogDir},{s2,S2LogDir}]).</code>
 
   <section>
     <title>Logging</title>
-    <p>To view the result of a code coverage test, follow the
-      "Coverage log" link on the test suite results page. This 
-      takes you to the code coverage overview page. If you have 
-      successfully performed a detailed coverage analysis, you 
+    <p>To view the result of a code coverage test, click the button
+      labled "COVER LOG" in the top level index page for the test run.</p>
+
+    <p>Prior to Erlang/OTP 17.1, if your test run consisted of
+      multiple tests, cover would be started and stopped for each test
+      within the test run. Separate logs would be available via the
+      "Coverage log" link on the test suite result pages. These links
+      are still available, but now they all point to the same page as
+      the button on the top level index page. The log contains the
+      accumulated results for the complete test run. See the release
+      notes for more information about this change.</p>
+
+    <p>The buttonc takes you to the code coverage overview page. If you
+      have successfully performed a detailed coverage analysis, you
       find links to each individual module coverage page here.</p>
 
     <p>If cross cover analysis has been performed, and there are
