@@ -99,7 +99,9 @@ BIF_RETTYPE code_make_stub_module_3(BIF_ALIST_3)
 	erts_end_staging_code_ix();
 	erts_commit_staging_code_ix();
       #ifdef HIPE
-	hipe_redirect_to_module(modp);
+        if (!modp)
+	    modp = erts_get_module(BIF_ARG_1, erts_active_code_ix());
+        hipe_redirect_to_module(modp);
       #endif
     }
     else {
