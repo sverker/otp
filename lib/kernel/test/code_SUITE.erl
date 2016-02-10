@@ -872,8 +872,8 @@ check_funs({'$M_EXPR','$F_EXPR',_},
 	    {code_server,start_link,1}]) -> 0;
 check_funs({'$M_EXPR','$F_EXPR',_},
 	   [{erlang,spawn_link,1},{code_server,start_link,1}]) -> 0;
-check_funs({'$M_EXPR',module_info,1},
-	   [{hipe_unified_loader,patch_to_emu_step1,1} | _]) -> 0;
+%% check_funs({'$M_EXPR',module_info,1},
+%% 	   [{hipe_unified_loader,patch_to_emu_step1,1} | _]) -> 0;
 check_funs({'$M_EXPR','$F_EXPR',2},
 	   [{hipe_unified_loader,write_words,3} | _]) -> 0;
 check_funs({'$M_EXPR','$F_EXPR',2},
@@ -885,11 +885,11 @@ check_funs({'$M_EXPR','$F_EXPR',2},
 	    {hipe_unified_loader,sort_and_write,5} | _]) -> 0;
 check_funs({'$M_EXPR','$F_EXPR',1},
 	   [{lists,foreach,2},
-	    {hipe_unified_loader,patch_consts,3} | _]) -> 0;
-check_funs({'$M_EXPR','$F_EXPR',1},
-	   [{lists,foreach,2},
-	    {hipe_unified_loader,mark_referred_from,1},
-	    {hipe_unified_loader,get_refs_from,2}| _]) -> 0;
+	    {hipe_unified_loader,patch_consts,4} | _]) -> 0;
+%% check_funs({'$M_EXPR','$F_EXPR',1},
+%% 	   [{lists,foreach,2},
+%% 	    {hipe_unified_loader,mark_referred_from,1},
+%% 	    {hipe_unified_loader,get_refs_from,2}| _]) -> 0;
 check_funs({'$M_EXPR',warning_msg,2},
 	   [{code_server,finish_on_load_report,2} | _]) -> 0;
 %% This is cheating! /raimo
