@@ -257,7 +257,8 @@ load_common(Mod, Bin, Beam, Architecture) ->
 	  AddressesOfClosuresToPatch =
 	    calculate_addresses(ClosurePatches, CodeAddress, Addresses),
 	  export_funs(Addresses),
-	  make_beam_stub(Mod, MD5, BeamBinary, Addresses, AddressesOfClosuresToPatch)
+	  make_beam_stub(Mod, MD5, BeamBinary, Addresses, AddressesOfClosuresToPatch,
+			 CodeAddress, byte_size(CodeBinary))
       end,
 
       %% Redirect references to the old module to the new module's BEAM stub.
@@ -442,9 +443,9 @@ export_funs([FunDef | Addresses]) ->
 export_funs([]) ->
   ok.
 
-make_beam_stub(Mod, MD5, Beam, Addresses, ClosuresToPatch) ->
+make_beam_stub(Mod, MD5, Beam, Addresses, ClosuresToPatch, CodeAddress, CodeSize) ->
   Fs = [{F,A,Address} || #fundef{address=Address, mfa={_M,F,A}} <- Addresses],
-  Mod = code:make_stub_module(Mod, Beam, {Fs,ClosuresToPatch,MD5}),
+  Mod = code:make_stub_module(Mod, Beam, {Fs,ClosuresToPatch,MD5,CodeAddress,CodeSize}),
   ok.
 
 %%========================================================================

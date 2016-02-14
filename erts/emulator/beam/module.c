@@ -89,6 +89,12 @@ static Module* module_alloc(Module* tmpl)
     obj->first_hipe_mfa = NULL;
     obj->curr.first_hipe_ref = NULL;
     obj->old.first_hipe_ref = NULL;
+# ifdef DEBUG
+    obj->curr.hipe_code_start = NULL;
+    obj->curr.hipe_code_size = 0;
+    obj->old.hipe_code_start = NULL;
+    obj->old.hipe_code_size = 0;
+# endif
 #endif
     return obj;
 }

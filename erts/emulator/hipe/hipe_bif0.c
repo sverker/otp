@@ -1672,6 +1672,9 @@ void hipe_purge_module(Module* modp)
 	}
     }
 
+#ifdef DEBUG
+    sys_memset(modp->old.hipe_code_start, 0xfe, modp->old.hipe_code_size);
+#endif
     /*
      * This could be a good place to deallocate old native code
      */

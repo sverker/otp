@@ -34,6 +34,10 @@ struct erl_module_instance {
     int num_traced_exports;
 #ifdef HIPE
     struct hipe_ref* first_hipe_ref;  /* all external hipe calls from this module */
+# ifdef DEBUG
+    void* hipe_code_start;
+    UWord hipe_code_size;
+# endif
 #endif
 };
 

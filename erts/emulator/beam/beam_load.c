@@ -481,7 +481,8 @@ static void free_literal_fragment(ErlHeapFragment*);
 static void loader_state_dtor(Binary* magic);
 static Eterm insert_new_code(Process *c_p, ErtsProcLocks c_p_locks,
 			     Eterm group_leader, Eterm module,
-			     BeamCodeHeader* code, Uint size);
+			     BeamCodeHeader* code, Uint size,
+                             void* hipe_code_start, UWord hipe_code_size);
 static int init_iff_file(LoaderState* stp, byte* code, Uint size);
 static int scan_iff_file(LoaderState* stp, Uint* chunk_types,
 			 Uint num_types, Uint num_mandatory);
@@ -785,7 +786,7 @@ erts_finish_loading(Binary* magic, Process* c_p,
 
     CHKBLK(ERTS_ALC_T_CODE,stp->code);
     retval = insert_new_code(c_p, c_p_locks, stp->group_leader, stp->module,
-			     stp->hdr, stp->loaded_size);
+			     stp->hdr, stp->loaded_size, NULL, 0);
     if (retval != NIL) {
 	goto load_error;
     }
@@ -1011,7 +1012,8 @@ loader_state_dtor(Binary* magic)
 static Eterm
 insert_new_code(Process *c_p, ErtsProcLocks c_p_locks,
 		Eterm group_leader, Eterm module, BeamCodeHeader* code_hdr,
-		Uint size)
+		Uint size,
+                void* hipe_code_start, UWord hipe_code_size)
 {
     Module* modp;
     Eterm retval;
@@ -1034,6 +1036,10 @@ insert_new_code(Process *c_p, ErtsProcLocks c_p_locks,
     modp->curr.code_hdr = code_hdr;
     modp->curr.code_length = size;
     modp->curr.catches = BEAM_CATCHES_NIL; /* Will be filled in later. */
+#if defined(HIPE) && defined(DEBUG)
+    modp->curr.hipe_code_start = hipe_code_start;
+    modp->curr.hipe_code_size  = hipe_code_size;
+#endif
 
     /*
      * Update ranges (used for finding a function from a PC value).
@@ -6232,6 +6238,7 @@ erts_make_stub_module(Process* p, Eterm Mod, Eterm Beam, Eterm Info)
     byte* temp_alloc = NULL;
     byte* bytes;
     Uint size;
+    UWord hipe_code_start = NULL, hipe_code_size = 0;
 
     /*
      * Must initialize stp->lambdas here because the error handling code
@@ -6247,7 +6254,7 @@ erts_make_stub_module(Process* p, Eterm Mod, Eterm Beam, Eterm Info)
 	goto error;
     }
     tp = tuple_val(Info);
-    if (tp[0] != make_arityval(3)) {
+    if (tp[0] != make_arityval(5)) {
       goto error;
     }
     Funcs = tp[1];
@@ -6263,6 +6270,12 @@ erts_make_stub_module(Process* p, Eterm Mod, Eterm Beam, Eterm Info)
 	goto error;
     }
     size = binary_size(Beam);
+
+#if defined(HIPE) && defined(DEBUG)
+    if (!term_to_Uint(tp[4], &hipe_code_start)
+        || !term_to_Uint(tp[5], &hipe_code_size))
+        goto error;
+#endif
 
     /*
      * Scan the Beam binary and read the interesting sections.
@@ -6427,7 +6440,8 @@ erts_make_stub_module(Process* p, Eterm Mod, Eterm Beam, Eterm Info)
      * Insert the module in the module table.
      */
 
-    rval = insert_new_code(p, 0, p->group_leader, Mod, code_hdr, code_size);
+    rval = insert_new_code(p, 0, p->group_leader, Mod, code_hdr, code_size,
+                           (void*)hipe_code_start, hipe_code_size);
     if (rval != NIL) {
 	goto error;
     }

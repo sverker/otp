@@ -98,11 +98,11 @@ BIF_RETTYPE code_make_stub_module_3(BIF_ALIST_3)
     if (res == BIF_ARG_1) {
 	erts_end_staging_code_ix();
 	erts_commit_staging_code_ix();
-      #ifdef HIPE
+#ifdef HIPE
         if (!modp)
 	    modp = erts_get_module(BIF_ARG_1, erts_active_code_ix());
         hipe_redirect_to_module(modp);
-      #endif
+#endif
     }
     else {
 	erts_fprintf(stderr, "SVERK: staging stub FAILED!!!!!!! res=%lx\r\n", res);
@@ -1273,6 +1273,10 @@ delete_code(Module* modp)
     modp->curr.nif = NULL;
 #ifdef HIPE
     modp->curr.first_hipe_ref = NULL;
+# ifdef DEBUG
+    modp->curr.hipe_code_start = NULL;
+    modp->curr.hipe_code_size = 0;
+# endif
     hipe_delete_code(modp);
 #endif
 }
