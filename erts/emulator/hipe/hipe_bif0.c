@@ -1046,7 +1046,7 @@ struct hipe_ref {
     void *address;
     void *trampoline;
     unsigned int flags;
-    struct hipe_ref* next_callee; /* list of refs from same caller */
+    struct hipe_ref* next_from_modi; /* list of refs from same module instance */
 #if defined(DEBUG) || defined(SVERK_DEBUG)
     struct hipe_mfa_info* callee;
     Eterm caller_m, caller_f, caller_a;
@@ -1561,7 +1561,7 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
     
     modp = erts_put_active_module(caller.mod);
     ASSERT(modp);
-    ref->next_callee = modp->curr.first_hipe_ref;
+    ref->next_from_modi = modp->curr.first_hipe_ref;
     modp->curr.first_hipe_ref = ref;
 
 #if defined(DEBUG) || defined(SVERK_DEBUG)
@@ -1657,7 +1657,7 @@ void hipe_purge_module(Module* modp)
 	}
 	ASSERT(*ref->prevp == ref);
 	*ref->prevp = ref->next;
-	ref = ref->next_callee;
+	ref = ref->next_from_modi;
 	erts_free(ERTS_ALC_T_HIPE, free_ref);
     }
     modp->old.first_hipe_ref = NULL;
