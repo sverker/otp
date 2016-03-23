@@ -642,7 +642,7 @@ free_dist_obuf(ErtsDistOutputBuf *obuf)
     Binary *bin = ErtsDistOutputBuf2Binary(obuf);
     ASSERT(obuf->dbg_pattern == ERTS_DIST_OUTPUT_BUF_DBG_PATTERN);
     if (erts_refc_dectest(&bin->refc, 0) == 0)
-	erts_bin_free(bin);
+	erts_bin_payload_free(bin);
 }
 
 static ERTS_INLINE Sint
@@ -712,7 +712,7 @@ static void clear_dist_entry(DistEntry *dep)
     }
 }
 
-void erts_dsend_context_dtor(Binary* ctx_bin)
+void erts_dsend_context_dtor(BinaryRef* ctx_bin)
 {
     ErtsSendContext* ctx = ERTS_MAGIC_BIN_DATA(ctx_bin);
     switch (ctx->dss.phase) {
@@ -737,8 +737,8 @@ Eterm erts_dsend_export_trap_context(Process* p, ErtsSendContext* ctx)
 	ErtsSendContext ctx;
 	ErtsAtomCacheMap acm;
     };
-    Binary* ctx_bin = erts_create_magic_binary(sizeof(struct exported_ctx),
-					       erts_dsend_context_dtor);
+    BinaryRef* ctx_bin = erts_create_magic_binary(sizeof(struct exported_ctx),
+                                                  erts_dsend_context_dtor);
     struct exported_ctx* dst = ERTS_MAGIC_BIN_DATA(ctx_bin);
     Eterm* hp = HAlloc(p, PROC_BIN_SIZE);
 

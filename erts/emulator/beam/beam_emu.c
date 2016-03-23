@@ -3753,7 +3753,8 @@ do {						\
 	 HEAP_SPACE_VERIFIED(0);
 	 StoreBifResult(2, new_binary);
      } else {
-	 Binary* bptr;
+	 Binary* payload;
+         BinaryRef* bptr;
 	 ProcBin* pb;
 
 	 erts_bin_offset = 0;
@@ -3762,9 +3763,14 @@ do {						\
 	 /*
 	  * Allocate the binary struct itself.
 	  */
-	 bptr = erts_bin_nrml_alloc(num_bytes);
-	 erts_refc_init(&bptr->refc, 1);
-	 erts_current_bin = (byte *) bptr->orig_bytes;
+	 payload = erts_bin_nrml_alloc(num_bytes);
+	 erts_refc_init(&payload->refc, 1);
+	 erts_current_bin = (byte *) payload->orig_bytes;
+
+         bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+         bptr->flags = 0;
+         erts_refc_init(&bptr->refc, 1);
+         bptr->bin = payload;
 
 	 /*
 	  * Now allocate the ProcBin on the heap.
@@ -3839,7 +3845,8 @@ do {						\
      }
      /* FALL THROUGH */
      do_proc_bin_alloc: {
-	 Binary* bptr;
+	 Binary* payload;
+         BinaryRef* bptr;
 	 ProcBin* pb;
 
 	 erts_bin_offset = 0;
@@ -3850,9 +3857,14 @@ do {						\
 	 /*
 	  * Allocate the binary struct itself.
 	  */
-	 bptr = erts_bin_nrml_alloc(BsOp1);
-	 erts_refc_init(&bptr->refc, 1);
-	 erts_current_bin = (byte *) bptr->orig_bytes;
+	 payload = erts_bin_nrml_alloc(BsOp1);
+	 erts_refc_init(&payload->refc, 1);
+	 erts_current_bin = (byte *) payload->orig_bytes;
+
+         bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+         bptr->flags = 0;
+         erts_refc_init(&bptr->refc, 1);
+         bptr->bin = payload;
 
 	 /*
 	  * Now allocate the ProcBin on the heap.

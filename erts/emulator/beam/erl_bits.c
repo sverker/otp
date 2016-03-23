@@ -1332,11 +1332,11 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
     /*
      * Reallocate the binary if it is too small.
      */
-    binp = pb->val;
+    binp = pb->val->bin;
     if (binp->orig_size < pb->size) {
 	Uint new_size = 2*pb->size;
 	binp = erts_bin_realloc(binp, new_size);
-	pb->val = binp;
+	pb->val->bin = binp;
 	pb->offset = 0;
     }
     erts_current_bin = ERTS_PROCBIN_GET_BYTES(pb);
@@ -1370,6 +1370,7 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
 	Uint used_size_in_bytes; /* Size of old binary + data to be built */
 	Uint bin_size;
 	Binary* bptr;
+        BinaryRef* binref;
 	byte* src_bytes;
 	Uint bitoffs;
 	Uint bitsize;
@@ -1410,12 +1411,16 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
 	erts_refc_init(&bptr->refc, 1);
 	erts_current_bin = (byte *) bptr->orig_bytes;
 
+        binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+        binref->flags = 0;
+        erts_refc_init(&binref->refc, 1);
+        binref->bin = bptr;
 	/*
 	 * Now allocate the ProcBin on the heap.
 	 */
 	pb = (ProcBin *) hp;
 	hp += PROC_BIN_SIZE;
-        ERTS_PROCBIN_INIT(pb, bptr, NULL);
+        ERTS_PROCBIN_INIT(pb, binref, NULL);
 	pb->size = used_size_in_bytes;
 	pb->next = MSO(c_p).first;
 	MSO(c_p).first = (struct erl_off_heap_header*)pb;
@@ -1496,7 +1501,7 @@ erts_bs_private_append(Process* p, Eterm bin, Eterm build_size_term, Uint unit)
     /*
      * Reallocate the binary if it is too small.
      */
-    binp = pb->val;
+    binp = pb->val->bin;
     if (binp->orig_size < pb->size) {
 	Uint new_size = 2*pb->size;
 
@@ -1507,7 +1512,7 @@ erts_bs_private_append(Process* p, Eterm bin, Eterm build_size_term, Uint unit)
 	     * is safe to reallocate it.
 	     */
 	    binp = erts_bin_realloc(binp, new_size);
-	    pb->val = binp;
+	    pb->val->bin = binp;
 	    pb->offset = 0;
 	} else {
 	    /*
@@ -1518,15 +1523,23 @@ erts_bs_private_append(Process* p, Eterm bin, Eterm build_size_term, Uint unit)
 	     * to reallocate the binary. Instead, we must allocate a new
 	     * binary and copy the contents of the old binary into it.
 	     */
+            BinaryRef* binref;
 	    Binary* bptr = erts_bin_nrml_alloc(new_size);
 	    erts_refc_init(&bptr->refc, 1);
 	    sys_memcpy(bptr->orig_bytes, binp->orig_bytes, binp->orig_size);
+
+            binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+            binref->flags = 0;
+            erts_refc_init(&binref->refc, 1);
+            binref->bin = bptr;
+
+            if (erts_refc_dectest(&pb->val->refc, 0) == 0) {
+                erts_bin_free(pb->val);
+            }
+
 	    pb->flags |= PB_IS_WRITABLE | PB_ACTIVE_WRITER;
-	    pb->val = bptr;
+	    pb->val = binref;
 	    pb->offset = 0;
-	    if (erts_refc_dectest(&binp->refc, 0) == 0) {
-		erts_bin_free(binp);
-	    }
 	}
     }
     erts_current_bin = ERTS_PROCBIN_GET_BYTES(pb);
@@ -1542,6 +1555,7 @@ erts_bs_init_writable(Process* p, Eterm sz)
     Uint bin_size = 1024;
     Uint heap_need;
     Binary* bptr;
+    BinaryRef* binref;
     ProcBin* pb;
     ErlSubBin* sb;
     Eterm* hp;
@@ -1568,16 +1582,21 @@ erts_bs_init_writable(Process* p, Eterm sz)
     bptr = erts_bin_nrml_alloc(bin_size);
     erts_refc_init(&bptr->refc, 1);
     
+    binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+    binref->flags = 0;
+    erts_refc_init(&binref->refc, 1);
+    binref->bin = bptr;
+
     /*
      * Now allocate the ProcBin on the heap.
      */
     pb = (ProcBin *) hp;
     hp += PROC_BIN_SIZE;
-    ERTS_PROCBIN_INIT(pb, bptr, NULL);
+    ERTS_PROCBIN_INIT(pb, binref, NULL);
     pb->size = 0;
     pb->next = MSO(p).first;
     MSO(p).first = (struct erl_off_heap_header*) pb;
-    pb->val = bptr;
+    pb->val = binref;
     pb->flags = PB_IS_WRITABLE | PB_ACTIVE_WRITER;
 
     /*
@@ -1604,14 +1623,14 @@ erts_emasculate_writable_binary(ProcBin* pb)
     Uint unused;
 
     pb->flags = 0;
-    binp = pb->val;
+    binp = pb->val->bin;
     ASSERT(binp->orig_size >= pb->size);
     unused = binp->orig_size - pb->size;
     /* Our allocators are 8 byte aligned, i.e., shrinking with
        less than 8 bytes will have no real effect */
     if (unused >= 8) {
 	binp = erts_bin_realloc(binp, pb->size);
-	pb->val = binp;
+	pb->val->bin = binp;
 	pb->offset = 0;
     }
 }

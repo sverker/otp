@@ -970,7 +970,7 @@ erts_garbage_collect_literals(Process* p, Eterm* literals,
 
     while (oh) {
 	if (IS_MOVED_BOXED(oh->thing_word)) {
-	    Binary* bptr;
+	    BinaryRef* bptr;
 	    struct erl_off_heap_header* ptr;
 
 	    ptr = (struct erl_off_heap_header*) boxed_val(oh->thing_word);
@@ -2500,7 +2500,7 @@ link_live_proc_bin(struct shrink_cand_data *shrink,
 	    shrink->no_of_active++;
 	}
 	else { /* inactive */
-	    Uint unused = pbp->val->orig_size - pbp->size;
+	    Uint unused = pbp->val->bin->orig_size - pbp->size;
 	    /* Our allocators are 8 byte aligned, i.e., shrinking with
 	       less than 8 bytes will have no real effect */
 	    if (unused >= 8) { /* A shrink candidate; save in candidate list */
@@ -2577,7 +2577,7 @@ sweep_off_heap(Process *p, int fullsweep)
 	    switch (thing_subtag(ptr->thing_word)) {
 	    case REFC_BINARY_SUBTAG:
 		{
-		    Binary* bptr = ((ProcBin*)ptr)->val;	
+		    BinaryRef* bptr = ((ProcBin*)ptr)->val;
 		    if (erts_refc_dectest(&bptr->refc, 0) == 0) {
 			erts_bin_free(bptr);
 		    }
@@ -2650,11 +2650,11 @@ sweep_off_heap(Process *p, int fullsweep)
 		    new_size += (new_size * 100) / leave_unused;
 		    /* Our allocators are 8 byte aligned, i.e., shrinking with
 		       less than 8 bytes will have no real effect */
-		    if (new_size + 8 >= pb->val->orig_size)
+		    if (new_size + 8 >= pb->val->bin->orig_size)
 			continue;
 		}
 
-		pb->val = erts_bin_realloc(pb->val, new_size);
+		pb->val->bin = erts_bin_realloc(pb->val->bin, new_size);
 		pb->offset = 0;
 	    }
 	}

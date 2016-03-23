@@ -109,7 +109,7 @@ prepare_loading_2(BIF_ALIST_2)
     byte* temp_alloc = NULL;
     byte* code;
     Uint sz;
-    Binary* magic;
+    BinaryRef* magic;
     Eterm reason;
     Eterm* hp;
     Eterm res;
@@ -159,7 +159,7 @@ has_prepared_code_on_load_1(BIF_ALIST_1)
 }
 
 struct m {
-    Binary* code;
+    BinaryRef* code;
     Eterm module;
     Module* modp;
     Uint exception;
@@ -716,8 +716,8 @@ static void
 set_default_trace_pattern(Eterm module)
 {
     int trace_pattern_is_on;
-    Binary *match_spec;
-    Binary *meta_match_spec;
+    BinaryRef *match_spec;
+    BinaryRef *meta_match_spec;
     struct trace_pattern_flags trace_pattern_flags;
     Eterm meta_tracer_pid;
 
@@ -1214,7 +1214,7 @@ decrement_refc(BeamCodeHeader* code_hdr)
     struct erl_off_heap_header* oh = code_hdr->literals_off_heap;
 
     while (oh) {
-	Binary* bptr;
+	BinaryRef* bptr;
 	ASSERT(thing_subtag(oh->thing_word) == REFC_BINARY_SUBTAG);
 	bptr = ((ProcBin*)oh)->val;
 	if (erts_refc_dectest(&bptr->refc, 0) == 0) {

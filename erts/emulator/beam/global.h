@@ -219,7 +219,10 @@ extern Eterm erts_ddll_monitor_driver(Process *p,
     ERTS_BINARY_STRUCT_ALIGNMENT
 
 typedef struct binary {
-    ERTS_INTERNAL_BINARY_FIELDS
+    UWord flags;       
+    erts_refc_t refc;     
+    ERTS_BINARY_STRUCT_ALIGNMENT
+
     SWord orig_size;
     char orig_bytes[1]; /* to be continued */
 } Binary;
@@ -227,10 +230,15 @@ typedef struct binary {
 #define ERTS_SIZEOF_Binary(Sz) \
     (offsetof(Binary,orig_bytes) + (Sz))
 
+struct BinaryRef_;
+
 typedef struct {
-    ERTS_INTERNAL_BINARY_FIELDS
+    UWord flags;       
+    erts_refc_t refc;     
+    ERTS_BINARY_STRUCT_ALIGNMENT
+
     SWord orig_size;
-    void (*destructor)(Binary *);
+    void (*destructor)(struct BinaryRef_ *);
     union {
         struct {
             ERTS_BINARY_STRUCT_ALIGNMENT
@@ -252,7 +260,10 @@ typedef union {
     Binary binary;
     ErtsMagicBinary magic_binary;
     struct {
-	ERTS_INTERNAL_BINARY_FIELDS
+        UWord flags;
+        erts_refc_t refc;
+        ERTS_BINARY_STRUCT_ALIGNMENT
+
 	ErlDrvBinary binary;
     } driver;
 } ErtsBinary;
@@ -265,9 +276,9 @@ typedef union {
  */
 
 #define ERTS_MAGIC_BIN_DESTRUCTOR(BP) \
-  ((ErtsBinary *) (BP))->magic_binary.destructor
+  ((ErtsBinary *) ((BP)->bin))->magic_binary.destructor
 #define ERTS_MAGIC_BIN_DATA(BP) \
-  ((void *) ((ErtsBinary *) (BP))->magic_binary.u.aligned.data)
+  ((void *) ((ErtsBinary *) ((BP)->bin))->magic_binary.u.aligned.data)
 #define ERTS_MAGIC_DATA_OFFSET \
   (offsetof(ErtsMagicBinary,u.aligned.data) - offsetof(Binary,orig_bytes))
 #define ERTS_MAGIC_BIN_ORIG_SIZE(Sz) \
@@ -279,7 +290,7 @@ typedef union {
    by not forcing 8-byte alignment for the magic payload.
 */
 #define ERTS_MAGIC_BIN_UNALIGNED_DATA(BP) \
-  ((void *) ((ErtsBinary *) (BP))->magic_binary.u.unaligned.data)
+  ((void *) ((ErtsBinary *) ((BP)->bin))->magic_binary.u.unaligned.data)
 #define ERTS_MAGIC_UNALIGNED_DATA_OFFSET \
   (offsetof(ErtsMagicBinary,u.unaligned.data) - offsetof(Binary,orig_bytes))
 #define ERTS_MAGIC_BIN_UNALIGNED_DATA_SIZE(BP) \
@@ -303,6 +314,12 @@ typedef union {
 #define BIN_FLAG_USR2       4 /*  certain binaries as special (used by ets) */
 #define BIN_FLAG_DRV        8
 
+typedef struct BinaryRef_ {
+    UWord flags;       
+    erts_refc_t refc;
+    Binary* bin;
+} BinaryRef;
+
 /*
  * This structure represents one type of a binary in a process.
  */
@@ -311,7 +328,7 @@ typedef struct proc_bin {
     Eterm thing_word;		/* Subtag REFC_BINARY_SUBTAG. */
     Uint size;			/* Binary size in bytes. */
     struct erl_off_heap_header *next;
-    Binary *val;		/* Pointer to Binary structure. */
+    BinaryRef *val;		/* Pointer to BinaryRef structure. */
     Uint offset;		/* Offset of actual data bytes. */
     Uint flags;			/* Flag word. */
 } ProcBin;
@@ -327,12 +344,12 @@ typedef struct proc_bin {
 
 ERTS_GLB_INLINE Eterm erts_mk_magic_binary_term(Eterm **hpp,
 						ErlOffHeap *ohp,
-						Binary *mbp);
+						BinaryRef *mbp);
 
 #if ERTS_GLB_INLINE_INCL_FUNC_DEF
 
 ERTS_GLB_INLINE Eterm
-erts_mk_magic_binary_term(Eterm **hpp, ErlOffHeap *ohp, Binary *mbp)
+erts_mk_magic_binary_term(Eterm **hpp, ErlOffHeap *ohp, BinaryRef *mbp)
 {
     ProcBin *pb = (ProcBin *) *hpp;
     *hpp += PROC_BIN_SIZE;
@@ -1007,13 +1024,13 @@ typedef struct {
     Eterm* fname_ptr;		/* Pointer to fname table */
 } FunctionInfo;
 
-Binary* erts_alloc_loader_state(void);
-Eterm erts_module_for_prepared_code(Binary* magic);
-Eterm erts_has_code_on_load(Binary* magic);
-Eterm erts_prepare_loading(Binary* loader_state,  Process *c_p,
+BinaryRef* erts_alloc_loader_state(void);
+Eterm erts_module_for_prepared_code(BinaryRef* magic);
+Eterm erts_has_code_on_load(BinaryRef* magic);
+Eterm erts_prepare_loading(BinaryRef* loader_state,  Process *c_p,
 			   Eterm group_leader, Eterm* modp,
 			   byte* code, Uint size);
-Eterm erts_finish_loading(Binary* loader_state, Process* c_p,
+Eterm erts_finish_loading(BinaryRef* loader_state, Process* c_p,
 			  ErtsProcLocks c_p_locks, Eterm* modp);
 Eterm erts_preload_module(Process *c_p, ErtsProcLocks c_p_locks,
 			  Eterm group_leader, Eterm* mod, byte* code, Uint size);
@@ -1475,7 +1492,7 @@ do {								\
 
 #define MatchSetGetSource(MPSP) erts_match_set_get_source(MPSP)
 
-extern Binary *erts_match_set_compile(Process *p, Eterm matchexpr);
+extern BinaryRef *erts_match_set_compile(Process *p, Eterm matchexpr);
 Eterm erts_match_set_lint(Process *p, Eterm matchexpr); 
 extern void erts_match_set_release_result(Process* p);
 
@@ -1485,12 +1502,12 @@ enum erts_pam_run_flags {
     ERTS_PAM_CONTIGUOUS_TUPLE=4,
     ERTS_PAM_IGNORE_TRACE_SILENT=8
 };
-extern Eterm erts_match_set_run(Process *p, Binary *mpsp, 
+extern Eterm erts_match_set_run(Process *p, BinaryRef *mpsp,
 				Eterm *args, int num_args,
 				enum erts_pam_run_flags in_flags,
 				Uint32 *return_flags);
-extern Eterm erts_match_set_get_source(Binary *mpsp);
-extern void erts_match_prog_foreach_offheap(Binary *b,
+extern Eterm erts_match_set_get_source(BinaryRef *mpsp);
+extern void erts_match_prog_foreach_offheap(BinaryRef *b,
 					    void (*)(ErlOffHeap *, void *),
 					    void *);
 

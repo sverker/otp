@@ -73,6 +73,7 @@ Eterm
 new_binary(Process *p, byte *buf, Uint len)
 {
     ProcBin* pb;
+    BinaryRef* binref;
     Binary* bptr;
 
     if (len <= ERL_ONHEAP_BIN_LIMIT) {
@@ -94,11 +95,16 @@ new_binary(Process *p, byte *buf, Uint len)
 	sys_memcpy(bptr->orig_bytes, buf, len);
     }
 
+    binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+    binref->flags = 0;
+    erts_refc_init(&binref->refc, 1);
+    binref->bin = bptr;
+
     /*
      * Now allocate the ProcBin on the heap.
      */
     pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-    ERTS_PROCBIN_INIT(pb, bptr, &MSO(p));
+    ERTS_PROCBIN_INIT(pb, binref, &MSO(p));
 
     /*
      * Miscellanous updates. Return the tagged binary.
@@ -114,6 +120,7 @@ new_binary(Process *p, byte *buf, Uint len)
 Eterm erts_new_mso_binary(Process *p, byte *buf, int len)
 {
     ProcBin* pb;
+    BinaryRef* binref;
     Binary* bptr;
 
     /*
@@ -125,11 +132,16 @@ Eterm erts_new_mso_binary(Process *p, byte *buf, int len)
 	sys_memcpy(bptr->orig_bytes, buf, len);
     }
 
+    binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+    binref->flags = 0;
+    erts_refc_init(&binref->refc, 1);
+    binref->bin = bptr;
+
     /*
      * Now allocate the ProcBin on the heap.
      */
     pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-    ERTS_PROCBIN_INIT(pb, bptr, &MSO(p));
+    ERTS_PROCBIN_INIT(pb, binref, &MSO(p));
 
     /*
      * Miscellanous updates. Return the tagged binary.
@@ -166,8 +178,8 @@ erts_realloc_binary(Eterm bin, size_t size)
 	binary_size(bin) = size;
     } else {			/* REFC */
 	ProcBin* pb = (ProcBin *) bval;
-	Binary* newbin = erts_bin_realloc(pb->val, size);
-	pb->val = newbin;
+	Binary* newbin = erts_bin_realloc(pb->val->bin, size);
+	pb->val->bin = newbin;
 	pb->size = size;
 	pb->offset = 0;
 	pb->flags = 0;
@@ -343,7 +355,7 @@ typedef struct {
     Uint bitoffs;
 } ErtsB2LState;
 
-static void b2l_state_destructor(Binary *mbp)
+static void b2l_state_destructor(BinaryRef *mbp)
 {
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(mbp) == b2l_state_destructor);
 }
@@ -419,7 +431,7 @@ binary_to_list(Process *c_p, Eterm *hp, Eterm tail, byte *bytes,
 	return ret;
     }
     else {
-	Binary *mbp = erts_create_magic_binary(sizeof(ErtsB2LState),
+	BinaryRef *mbp = erts_create_magic_binary(sizeof(ErtsB2LState),
 					       b2l_state_destructor);
 	ErtsB2LState *sp = ERTS_MAGIC_BIN_DATA(mbp);
 	Eterm mb;
@@ -441,7 +453,7 @@ binary_to_list(Process *c_p, Eterm *hp, Eterm tail, byte *bytes,
 
 static BIF_RETTYPE binary_to_list_continue(BIF_ALIST_1)
 {
-    Binary *mbp = ((ProcBin *) binary_val(BIF_ARG_1))->val;
+    BinaryRef *mbp = ((ProcBin *) binary_val(BIF_ARG_1))->val;
 
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(mbp) == b2l_state_destructor);
 
@@ -718,7 +730,7 @@ list_to_binary_engine(ErtsL2BState *sp)
 }
 
 static void
-l2b_state_destructor(Binary *mbp)
+l2b_state_destructor(BinaryRef *mbp)
 {
     ErtsL2BState *sp = ERTS_MAGIC_BIN_DATA(mbp); 
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(mbp) == l2b_state_destructor);
@@ -773,7 +785,7 @@ list_to_binary_chunk(Eterm mb_eterm,
 	if (!gc_disabled) {
 	    /* first yield... */
 	    Eterm *hp;
-	    Binary *mbp = erts_create_magic_binary(sizeof(ErtsL2BState),
+	    BinaryRef *mbp = erts_create_magic_binary(sizeof(ErtsL2BState),
 						   l2b_state_destructor);
 	    ErtsL2BState *new_sp = ERTS_MAGIC_BIN_DATA(mbp);
 
@@ -827,7 +839,7 @@ list_to_binary_chunk(Eterm mb_eterm,
 
 static BIF_RETTYPE list_to_binary_continue(BIF_ALIST_1)
 {
-    Binary *mbp = ((ProcBin *) binary_val(BIF_ARG_1))->val;
+    BinaryRef *mbp = ((ProcBin *) binary_val(BIF_ARG_1))->val;
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(mbp) == l2b_state_destructor);
 
     ASSERT(BIF_P->flags & F_DISABLE_GC);

@@ -53,6 +53,7 @@
 #define ERL_TRACE_H__
 
 struct binary;
+struct BinaryRef_;
 
 /* erl_bif_trace.c */
 Eterm erl_seq_trace_info(Process *p, Eterm arg1);
@@ -86,7 +87,7 @@ void erts_queue_error_logger_message(Eterm, Eterm, ErlHeapFragment *);
 void erts_send_sys_msg_proc(Eterm, Eterm, Eterm, ErlHeapFragment *);
 void trace_send(Process*, Eterm, Eterm);
 void trace_receive(Process*, Eterm);
-Uint32 erts_call_trace(Process *p, BeamInstr mfa[], struct binary *match_spec, Eterm* args,
+Uint32 erts_call_trace(Process *p, BeamInstr mfa[], struct BinaryRef_ *match_spec, Eterm* args,
 		       int local, Eterm *tracer_pid);
 void erts_trace_return(Process* p, BeamInstr* fi, Eterm retval, Eterm *tracer_pid);
 void erts_trace_exception(Process* p, BeamInstr mfa[], Eterm class, Eterm value,
@@ -158,14 +159,14 @@ struct trace_pattern_flags {
 extern const struct trace_pattern_flags erts_trace_pattern_flags_off;
 extern int erts_call_time_breakpoint_tracing;
 int erts_set_trace_pattern(Process*p, Eterm* mfa, int specified,
-			   struct binary* match_prog_set,
-			   struct binary *meta_match_prog_set,
+			   struct BinaryRef_* match_prog_set,
+			   struct BinaryRef_ *meta_match_prog_set,
 			   int on, struct trace_pattern_flags,
 			   Eterm meta_tracer_pid, int is_blocking);
 void
 erts_get_default_trace_pattern(int *trace_pattern_is_on,
-			       struct binary **match_spec,
-			       struct binary **meta_match_spec,
+			       struct BinaryRef_ **match_spec,
+			       struct BinaryRef_ **meta_match_spec,
 			       struct trace_pattern_flags *trace_pattern_flags,
 			       Eterm *meta_tracer_pid);
 int erts_is_default_trace_enabled(void);

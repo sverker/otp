@@ -352,9 +352,9 @@ void db_do_update_element(DbUpdateHandle* handle,
 void db_finalize_resize(DbUpdateHandle* handle, Uint offset);
 Eterm db_add_counter(Eterm** hpp, Wterm counter, Eterm incr);
 Eterm db_match_set_lint(Process *p, Eterm matchexpr, Uint flags);
-Binary *db_match_set_compile(Process *p, Eterm matchexpr, 
+BinaryRef *db_match_set_compile(Process *p, Eterm matchexpr,
 			     Uint flags);
-void erts_db_match_prog_destructor(Binary *);
+void erts_db_match_prog_destructor(BinaryRef *);
 
 typedef struct match_prog {
     ErlHeapFragment *term_save; /* Only if needed, a list of message 
@@ -426,16 +426,16 @@ typedef struct dmc_err_info {
 					     trace control words or seq_trace tokens will be done. */
 
 
-Binary *db_match_compile(Eterm *matchexpr, Eterm *guards,
+BinaryRef *db_match_compile(Eterm *matchexpr, Eterm *guards,
 			 Eterm *body, int num_matches, 
 			 Uint flags, 
 			 DMCErrInfo *err_info);
 /* Returns newly allocated MatchProg binary with refc == 0*/
 
-Eterm db_match_dbterm(DbTableCommon* tb, Process* c_p, Binary* bprog,
+Eterm db_match_dbterm(DbTableCommon* tb, Process* c_p, BinaryRef* bprog,
 		      int all, DbTerm* obj, Eterm** hpp, Uint extra);
 
-Eterm db_prog_match(Process *p, Binary *prog, Eterm term,
+Eterm db_prog_match(Process *p, BinaryRef *prog, Eterm term,
 		    Eterm *termp, int arity,
 		    enum erts_pam_run_flags in_flags,
 		    Uint32 *return_flags /* Zeroed on enter */);
@@ -449,7 +449,7 @@ Eterm db_format_dmc_err_info(Process *p, DMCErrInfo *ei);
 void db_free_dmc_err_info(DMCErrInfo *ei);
 /* Completely free's an error info structure, including all recorded 
    errors */
-Eterm db_make_mp_binary(Process *p, Binary *mp, Eterm **hpp);
+Eterm db_make_mp_binary(Process *p, BinaryRef *mp, Eterm **hpp);
 /* Convert a match program to a erlang "magic" binary to be returned to userspace,
    increments the reference counter. */
 int erts_db_is_compiled_ms(Eterm term);
@@ -458,7 +458,7 @@ int erts_db_is_compiled_ms(Eterm term);
 ** Convenience when compiling into Binary structures
 */
 #define IsMatchProgBinary(BP) \
-  (((BP)->flags & BIN_FLAG_MAGIC) \
+  ((((BP)->bin)->flags & BIN_FLAG_MAGIC) \
    && ERTS_MAGIC_BIN_DESTRUCTOR((BP)) == erts_db_match_prog_destructor)
 
 #define Binary2MatchProg(BP) \

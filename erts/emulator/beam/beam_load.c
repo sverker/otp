@@ -475,10 +475,10 @@ typedef struct LoaderState {
   } while (0)
 
 
-static void free_loader_state(Binary* magic);
+static void free_loader_state(BinaryRef* magic);
 static ErlHeapFragment* new_literal_fragment(Uint size);
 static void free_literal_fragment(ErlHeapFragment*);
-static void loader_state_dtor(Binary* magic);
+static void loader_state_dtor(BinaryRef* magic);
 static Eterm insert_new_code(Process *c_p, ErtsProcLocks c_p_locks,
 			     Eterm group_leader, Eterm module,
 			     BeamCodeHeader* code, Uint size);
@@ -578,7 +578,7 @@ erts_preload_module(Process *c_p,
 		 byte* code,	/* Points to the code to load */
 		 Uint size)	/* Size of code to load. */
 {
-    Binary* magic = erts_alloc_loader_state();
+    BinaryRef* magic = erts_alloc_loader_state();
     Eterm retval;
 
     ASSERT(!erts_initialized);
@@ -604,7 +604,7 @@ extern void check_allocated_block(Uint type, void *blk);
 
 
 Eterm
-erts_prepare_loading(Binary* magic, Process *c_p, Eterm group_leader,
+erts_prepare_loading(BinaryRef* magic, Process *c_p, Eterm group_leader,
 		     Eterm* modp, byte* code, Uint unloaded_size)
 {
     Eterm retval = am_badfile;
@@ -763,7 +763,7 @@ erts_prepare_loading(Binary* magic, Process *c_p, Eterm group_leader,
 }
 
 Eterm
-erts_finish_loading(Binary* magic, Process* c_p,
+erts_finish_loading(BinaryRef* magic, Process* c_p,
 		    ErtsProcLocks c_p_locks, Eterm* modp)
 {
     Eterm retval;
@@ -825,11 +825,11 @@ erts_finish_loading(Binary* magic, Process* c_p,
     return retval;
 }
 
-Binary*
+BinaryRef*
 erts_alloc_loader_state(void)
 {
     LoaderState* stp;
-    Binary* magic;
+    BinaryRef* magic;
 
     magic = erts_create_magic_binary(sizeof(LoaderState),
 				     loader_state_dtor);
@@ -873,7 +873,7 @@ erts_alloc_loader_state(void)
  * prepared code.
  */
 Eterm
-erts_module_for_prepared_code(Binary* magic)
+erts_module_for_prepared_code(BinaryRef* magic)
 {
     LoaderState* stp;
 
@@ -894,7 +894,7 @@ erts_module_for_prepared_code(Binary* magic)
  */
 
 Eterm
-erts_has_code_on_load(Binary* magic)
+erts_has_code_on_load(BinaryRef* magic)
 {
     LoaderState* stp;
 
@@ -906,7 +906,7 @@ erts_has_code_on_load(Binary* magic)
 }
 
 static void
-free_loader_state(Binary* magic)
+free_loader_state(BinaryRef* magic)
 {
     loader_state_dtor(magic);
     if (erts_refc_dectest(&magic->refc, 0) == 0) {
@@ -940,7 +940,7 @@ static void free_literal_fragment(ErlHeapFragment* bp)
  * This destructor function can safely be called multiple times.
  */
 static void
-loader_state_dtor(Binary* magic)
+loader_state_dtor(BinaryRef* magic)
 {
     LoaderState* stp = ERTS_MAGIC_BIN_DATA(magic);
 
@@ -5841,7 +5841,7 @@ code_get_chunk_2(BIF_ALIST_2)
     Process* p = BIF_P;
     Eterm Bin = BIF_ARG_1;
     Eterm Chunk = BIF_ARG_2;
-    Binary* magic = 0;
+    BinaryRef* magic = 0;
     LoaderState* stp;
     Uint chunk = 0;
     ErlSubBin* sb;
@@ -5918,7 +5918,7 @@ code_module_md5_1(BIF_ALIST_1)
 {
     Process* p = BIF_P;
     Eterm Bin = BIF_ARG_1;
-    Binary* magic;
+    BinaryRef* magic;
     LoaderState* stp;
     byte* bytes;
     byte* temp_alloc = NULL;
@@ -6226,7 +6226,7 @@ patch_funentries(Eterm Patchlist)
 Eterm
 erts_make_stub_module(Process* p, Eterm Mod, Eterm Beam, Eterm Info)
 {
-    Binary* magic;
+    BinaryRef* magic;
     LoaderState* stp;
     BeamInstr Funcs;
     BeamInstr Patchlist;

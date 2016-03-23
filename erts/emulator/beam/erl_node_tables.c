@@ -919,7 +919,7 @@ typedef struct {
 
 typedef struct inserted_bin_ {
     struct inserted_bin_ *next;
-    Binary *bin_val;
+    BinaryRef *bin_val;
 } InsertedBin;
 
 static ReferredNode *referred_nodes;
@@ -1451,8 +1451,8 @@ setup_reference_table(void)
 	ErlOffHeap oh;
 	ProcBin pb[2];
 	int i = 0;
-	Binary *default_match_spec;
-	Binary *default_meta_match_spec;
+	BinaryRef *default_match_spec;
+	BinaryRef *default_meta_match_spec;
 
 	oh.first = NULL;
 	/* Only the ProcBin members thing_word, val and next will be inspected

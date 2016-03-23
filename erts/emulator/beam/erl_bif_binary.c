@@ -239,11 +239,11 @@ static void dump_ac_node(ACNode *node, int indent, int ch);
 /*
  * Callback for the magic binary
  */
-static void cleanup_my_data_ac(Binary *bp)
+static void cleanup_my_data_ac(BinaryRef *bp)
 {
     return;
 }
-static void cleanup_my_data_bm(Binary *bp)
+static void cleanup_my_data_bm(BinaryRef *bp)
 {
     return;
 }
@@ -255,12 +255,12 @@ static void cleanup_my_data_bm(Binary *bp)
  */
 static ACTrie *create_acdata(MyAllocator *my, Uint len,
 			     ACNode ***qbuff /* out */,
-			     Binary **the_bin /* out */)
+			     BinaryRef **the_bin /* out */)
 {
     Uint datasize = AC_SIZE(len);
     ACTrie *act;
     ACNode *acn;
-    Binary *mb = erts_create_magic_binary(datasize,cleanup_my_data_ac);
+    BinaryRef *mb = erts_create_magic_binary(datasize,cleanup_my_data_ac);
     byte *data = ERTS_MAGIC_BIN_DATA(mb);
 
     init_my_allocator(my, datasize, data);
@@ -285,11 +285,11 @@ static ACTrie *create_acdata(MyAllocator *my, Uint len,
  * The same initialization of allocator and basic data for Boyer-Moore.
  */
 static BMData *create_bmdata(MyAllocator *my, byte *x, Uint len,
-			     Binary **the_bin /* out */)
+			     BinaryRef **the_bin /* out */)
 {
     Uint datasize = BM_SIZE(len);
     BMData *bmd;
-    Binary *mb = erts_create_magic_binary(datasize,cleanup_my_data_bm);
+    BinaryRef *mb = erts_create_magic_binary(datasize,cleanup_my_data_bm);
     byte *data = ERTS_MAGIC_BIN_DATA(mb);
     init_my_allocator(my, datasize, data);
     bmd = my_alloc(my, sizeof(BMData));
@@ -901,7 +901,7 @@ static Sint bm_find_all_non_overlapping(BMFindAllState *state,
  * Search functionality interfaces
  */
 
-static int do_binary_match_compile(Eterm argument, Eterm *tag, Binary **binp)
+static int do_binary_match_compile(Eterm argument, Eterm *tag, BinaryRef **binp)
 {
     Eterm t, b, comp_term = NIL;
     Uint characters;
@@ -955,7 +955,7 @@ static int do_binary_match_compile(Eterm argument, Eterm *tag, Binary **binp)
 	byte *temp_alloc = NULL;
 	MyAllocator my;
 	BMData *bmd;
-	Binary *bin;
+	BinaryRef *bin;
 
 	ERTS_GET_BINARY_BYTES(comp_term, bytes, bitoffs, bitsize);
 	if (bitoffs != 0) {
@@ -973,7 +973,7 @@ static int do_binary_match_compile(Eterm argument, Eterm *tag, Binary **binp)
 	ACTrie *act;
 	MyAllocator my;
 	ACNode **qbuff;
-	Binary *bin;
+	BinaryRef *bin;
 
 	act = create_acdata(&my, characters, &qbuff, &bin);
 	t = comp_term;
@@ -1003,7 +1003,7 @@ static int do_binary_match_compile(Eterm argument, Eterm *tag, Binary **binp)
 
 BIF_RETTYPE binary_compile_pattern_1(BIF_ALIST_1)
 {
-    Binary *bin;
+    BinaryRef *bin;
     Eterm tag, ret;
     Eterm *hp;
 
@@ -1204,7 +1204,7 @@ static int parse_split_opts_list(Eterm l, Eterm bin, Uint *posp, Uint *endp, Uin
     }
 }
 
-static int do_binary_find(Process *p, Eterm subject, BinaryFindState *bfs, Binary *bin,
+static int do_binary_find(Process *p, Eterm subject, BinaryFindState *bfs, BinaryRef *bin,
 			  Eterm state_term, Eterm *res_term)
 {
     byte *bytes;
@@ -1405,7 +1405,7 @@ binary_match(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, Uint flags)
 {
     BinaryFindState bfs;
     Eterm *tp;
-    Binary *bin;
+    BinaryRef *bin;
     Eterm bin_term = NIL;
     int runres;
     Eterm result;
@@ -1491,7 +1491,7 @@ binary_split(Process *p, Eterm arg1, Eterm arg2, Eterm arg3)
 {
     BinaryFindState bfs;
     Eterm *tp;
-    Binary *bin;
+    BinaryRef *bin;
     Eterm bin_term = NIL;
     int runres;
     Eterm result;
@@ -1767,7 +1767,7 @@ static BIF_RETTYPE binary_find_trap(BIF_ALIST_3)
 {
     int runres;
     Eterm result;
-    Binary *bin = ((ProcBin *) binary_val(BIF_ARG_3))->val;
+    BinaryRef *bin = ((ProcBin *) binary_val(BIF_ARG_3))->val;
     runres = do_binary_find(BIF_P, BIF_ARG_1, NULL, bin, BIF_ARG_2, &result);
     if (runres == DO_BIN_MATCH_OK) {
 	BIF_RET(result);
@@ -2066,7 +2066,7 @@ static int do_search_backward(CommonData *cd, Uint *posp, Uint *redsp)
     }
 }
 
-static void cleanup_common_data(Binary *bp)
+static void cleanup_common_data(BinaryRef *bp)
 {
     int i;
     CommonData *cd;
@@ -2090,7 +2090,7 @@ static BIF_RETTYPE do_longest_common(Process *p, Eterm list, int direction)
 {
     Eterm l = list;
     int n = 0;
-    Binary *mb;
+    BinaryRef *mb;
     CommonData *cd;
     int i = 0;
     Uint reds = get_reds(p, COMMON_LOOP_FACTOR);
@@ -2201,7 +2201,7 @@ static BIF_RETTYPE do_longest_common_trap(Process *p, Eterm bin_term, Eterm curr
     Uint reds = get_reds(p, COMMON_LOOP_FACTOR);
     Uint save_reds = reds;
     Uint pos;
-    Binary *bin;
+    BinaryRef *bin;
     CommonData *cd;
     int res;
     Eterm epos;
@@ -2563,11 +2563,11 @@ typedef struct {
 
 #define BINARY_COPY_LOOP_FACTOR 100
 
-static void cleanup_copy_bin_state(Binary *bp)
+static void cleanup_copy_bin_state(BinaryRef *bp)
 {
     CopyBinState *cbs = (CopyBinState *) ERTS_MAGIC_BIN_DATA(bp);
     if (cbs->result != NULL) {
-	erts_bin_free(cbs->result);
+	erts_bin_payload_free(cbs->result);
 	cbs->result = NULL;
     }
     switch (cbs->source_type) {
@@ -2632,7 +2632,7 @@ static BIF_RETTYPE do_binary_copy(Process *p, Eterm bin, Eterm en)
 	int i;
 
 	/* We will trap, set up the structure for trapping right away */
-	Binary *mb = erts_create_magic_binary(sizeof(CopyBinState),
+	BinaryRef *mb = erts_create_magic_binary(sizeof(CopyBinState),
 					      cleanup_copy_bin_state);
 	cbs = ERTS_MAGIC_BIN_DATA(mb);
 
@@ -2716,7 +2716,7 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
     Uint reds = get_reds(BIF_P, BINARY_COPY_LOOP_FACTOR);
     byte *t;
     Uint pos;
-    Binary *mb = ((ProcBin *) binary_val(BIF_ARG_2))->val;
+    BinaryRef *mb = ((ProcBin *) binary_val(BIF_ARG_2))->val;
     CopyBinState *cbs = (CopyBinState *) ERTS_MAGIC_BIN_DATA(mb);
     Uint opos;
 
@@ -2738,6 +2738,7 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
 	BIF_TRAP2(&binary_copy_trap_export, BIF_P, BIF_ARG_1, BIF_ARG_2);
     } else {
 	Binary *save;
+        BinaryRef* binref;
 	ProcBin* pb;
 	Uint target_size = cbs->result->orig_size;
 	while (pos < target_size) {
@@ -2747,8 +2748,14 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
 	save =  cbs->result;
 	cbs->result = NULL;
 	cleanup_copy_bin_state(mb); /* now cbs is dead */
+
+        binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+        binref->flags = 0;
+        erts_refc_init(&binref->refc, 1);
+        binref->bin = save;
+
 	pb = (ProcBin *) HAlloc(BIF_P, PROC_BIN_SIZE);
-        ERTS_PROCBIN_INIT(pb, save, NULL);
+        ERTS_PROCBIN_INIT(pb, binref, NULL);
 	pb->size = target_size;
 	pb->next = MSO(BIF_P).first;
 	MSO(BIF_P).first = (struct erl_off_heap_header*) pb;
@@ -2788,7 +2795,7 @@ BIF_RETTYPE binary_referenced_byte_size_1(BIF_ALIST_1)
     }
     pb = (ProcBin *) binary_val(bin);
     if (pb->thing_word == HEADER_PROC_BIN) {
-	res = erts_make_integer((Uint) pb->val->orig_size, BIF_P);
+	res = erts_make_integer((Uint) pb->val->bin->orig_size, BIF_P);
     } else { /* heap binary */
 	res = erts_make_integer((Uint) ((ErlHeapBin *) pb)->size, BIF_P);
     }

@@ -603,7 +603,7 @@ void enif_release_binary(ErlNifBinary* bin)
 	Binary* refbin = bin->ref_bin;
 	ASSERT(bin->bin_term == THE_NON_VALUE);
 	if (erts_refc_dectest(&refbin->refc, 0) == 0) {
-	    erts_bin_free(refbin);
+	    erts_bin_payload_free(refbin);
 	}
     }
 #ifdef DEBUG
@@ -691,12 +691,19 @@ Eterm enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin)
     }
     else if (bin->ref_bin != NULL) {
 	Binary* bptr = bin->ref_bin;
+        BinaryRef* binref;
 	ProcBin* pb;
 	Eterm bin_term;
 	
 	/* !! Copy-paste from new_binary() !! */
+        binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+        binref->flags = 0;
+        erts_refc_init(&binref->refc, 1);
+        binref->bin = bptr;
+
 	pb = (ProcBin *) alloc_heap(env, PROC_BIN_SIZE);
-        ERTS_PROCBIN_INIT(pb, bptr, &MSO(env->proc));
+
+        ERTS_PROCBIN_INIT(pb, binref, &MSO(env->proc));
 
 	bin_term = make_binary(pb);
 	if (erts_refc_read(&bptr->refc, 1) == 1) {
@@ -1239,6 +1246,7 @@ struct enif_resource_type_t resource_type_list;
 typedef struct enif_resource_t
 {
     struct enif_resource_type_t* type;
+    BinaryRef* parent_ref;     /* FIX ME */
 #ifdef DEBUG
     erts_refc_t nif_refc;
 # ifdef ARCH_32
@@ -1419,7 +1427,7 @@ static void rollback_opened_resource_types(void)
 }
 
 
-static void nif_resource_dtor(Binary* bin)
+static void nif_resource_dtor(BinaryRef* bin)
 {
     ErlNifResource* resource = (ErlNifResource*) ERTS_MAGIC_BIN_UNALIGNED_DATA(bin);
     ErlNifResourceType* type = resource->type;
@@ -1442,13 +1450,14 @@ static void nif_resource_dtor(Binary* bin)
 
 void* enif_alloc_resource(ErlNifResourceType* type, size_t size)
 {
-    Binary* bin = erts_create_magic_binary_x(SIZEOF_ErlNifResource(size),
+    BinaryRef* bin = erts_create_magic_binary_x(SIZEOF_ErlNifResource(size),
                                              &nif_resource_dtor,
                                              1); /* unaligned */
     ErlNifResource* resource = ERTS_MAGIC_BIN_UNALIGNED_DATA(bin);
 
     ASSERT(type->owner && type->next && type->prev); /* not allowed in load/upgrade */
     resource->type = type;
+    resource->parent_ref = bin;
     erts_refc_inc(&bin->refc, 1);
 #ifdef DEBUG
     erts_refc_init(&resource->nif_refc, 1);
@@ -1462,12 +1471,15 @@ void enif_release_resource(void* obj)
     ErlNifResource* resource = DATA_TO_RESOURCE(obj);
     ErtsBinary* bin = ERTS_MAGIC_BIN_FROM_UNALIGNED_DATA(resource);
 
-    ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(bin) == &nif_resource_dtor);
+    ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(resource->parent_ref) == &nif_resource_dtor);
+    ASSERT(resource->parent_ref->bin == &bin->binary);
+
 #ifdef DEBUG
     erts_refc_dec(&resource->nif_refc, 0);
 #endif
     if (erts_refc_dectest(&bin->binary.refc, 0) == 0) {
-	erts_bin_free(&bin->binary);
+        ASSERT(erts_refc_read(&resource->parent_ref->refc, 1) == 1);
+	erts_bin_free(resource->parent_ref);
     }
 }
 
@@ -1476,7 +1488,9 @@ void enif_keep_resource(void* obj)
     ErlNifResource* resource = DATA_TO_RESOURCE(obj);
     ErtsBinary* bin = ERTS_MAGIC_BIN_FROM_UNALIGNED_DATA(resource);
 
-    ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(bin) == &nif_resource_dtor);
+    ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(resource->parent_ref) == &nif_resource_dtor);
+    ASSERT(resource->parent_ref->bin == &bin->binary);
+
 #ifdef DEBUG
     erts_refc_inc(&resource->nif_refc, 1);
 #endif
@@ -1486,9 +1500,12 @@ void enif_keep_resource(void* obj)
 ERL_NIF_TERM enif_make_resource(ErlNifEnv* env, void* obj)
 {
     ErlNifResource* resource = DATA_TO_RESOURCE(obj);
-    ErtsBinary* bin = ERTS_MAGIC_BIN_FROM_UNALIGNED_DATA(resource);
     Eterm* hp = alloc_heap(env,PROC_BIN_SIZE);
-    return erts_mk_magic_binary_term(&hp, &MSO(env->proc), &bin->binary);
+#ifdef DEBUG
+    ErtsBinary* bin = ERTS_MAGIC_BIN_FROM_UNALIGNED_DATA(resource);
+    ASSERT(resource->parent_ref->bin == &bin->binary);
+#endif
+    return erts_mk_magic_binary_term(&hp, &MSO(env->proc), resource->parent_ref);
 }
 
 ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv* env, void* obj,
@@ -1506,7 +1523,7 @@ int enif_get_resource(ErlNifEnv* env, ERL_NIF_TERM term, ErlNifResourceType* typ
 		      void** objp)
 {
     ProcBin* pb;
-    Binary* mbin;
+    BinaryRef* mbin;
     ErlNifResource* resource;
     if (!ERTS_TERM_IS_MAGIC_BINARY(term)) {
 	return 0;

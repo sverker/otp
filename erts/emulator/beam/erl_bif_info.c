@@ -164,7 +164,7 @@ bld_bin_list(Uint **hpp, Uint *szp, ErlOffHeap* oh)
 	if (ohh->thing_word == HEADER_PROC_BIN) {
 	    ProcBin* pb = (ProcBin*) ohh;
 	    Eterm val = erts_bld_uword(hpp, szp, (UWord) pb->val);
-	    Eterm orig_size = erts_bld_uint(hpp, szp, pb->val->orig_size);
+	    Eterm orig_size = erts_bld_uint(hpp, szp, pb->val->bin->orig_size);
     
 	    if (szp)
 		*szp += 4+2;
@@ -3705,7 +3705,7 @@ BIF_RETTYPE erts_debug_get_internal_state_1(BIF_ALIST_1)
 			DECL_AM(refc_binary);
 
 			pb = (ProcBin *) binary_val(real_bin);
-			val = pb->val;
+			val = pb->val->bin;
 			(void) erts_bld_uint(NULL, &hsz, pb->size);
 			(void) erts_bld_uint(NULL, &hsz, val->orig_size);
 			hp = HAlloc(BIF_P, hsz);

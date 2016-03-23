@@ -733,8 +733,8 @@ erts_ptab_delete_element(ErtsPTab *ptab,
  * erts_ptab_list() implements BIFs listing the content of the table,
  * e.g. erlang:processes/0.
  */
-static void cleanup_ptab_list_bif_data(Binary *bp);
-static int ptab_list_bif_engine(Process *c_p, Eterm *res_accp, Binary *mbp);
+static void cleanup_ptab_list_bif_data(BinaryRef *bp);
+static int ptab_list_bif_engine(Process *c_p, Eterm *res_accp, BinaryRef *mbp);
 
 
 BIF_RETTYPE
@@ -753,7 +753,7 @@ erts_ptab_list(Process *c_p, ErtsPTab *ptab)
      */
     BIF_RETTYPE ret_val;
     Eterm res_acc = NIL;
-    Binary *mbp = erts_create_magic_binary(sizeof(ErtsPTabListBifData),
+    BinaryRef *mbp = erts_create_magic_binary(sizeof(ErtsPTabListBifData),
 					   cleanup_ptab_list_bif_data);
     ErtsPTabListBifData *ptlbdp = ERTS_MAGIC_BIN_DATA(mbp);
 
@@ -788,7 +788,7 @@ erts_ptab_list(Process *c_p, ErtsPTab *ptab)
 }
 
 static void
-cleanup_ptab_list_bif_data(Binary *bp)
+cleanup_ptab_list_bif_data(BinaryRef *bp)
 {
     ErtsPTabListBifData *ptlbdp = ERTS_MAGIC_BIN_DATA(bp);
     ErtsPTab *ptab = ptlbdp->ptab;
@@ -878,7 +878,7 @@ cleanup_ptab_list_bif_data(Binary *bp)
 }
 
 static int
-ptab_list_bif_engine(Process *c_p, Eterm *res_accp, Binary *mbp)
+ptab_list_bif_engine(Process *c_p, Eterm *res_accp, BinaryRef *mbp)
 {
     ErtsPTabListBifData *ptlbdp = ERTS_MAGIC_BIN_DATA(mbp);
     ErtsPTab *ptab = ptlbdp->ptab;
@@ -1274,7 +1274,7 @@ ptab_list_bif_engine(Process *c_p, Eterm *res_accp, Binary *mbp)
 static BIF_RETTYPE ptab_list_continue(BIF_ALIST_2)
 {
     Eterm res_acc;
-    Binary *mbp;
+    BinaryRef *mbp;
 
     /*
      * This bif cannot be called from erlang code. It can only be

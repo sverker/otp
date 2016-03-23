@@ -313,7 +313,7 @@ struct mp_info {
 				  * = dlists initially */
     unsigned num_lists;         /* Number of elements in "lists",
 				 * = 0 initially */
-    Binary *mp;                 /* The compiled match program */
+    BinaryRef *mp;                 /* The compiled match program */
 };
 
 /* A table segment */
@@ -1288,7 +1288,7 @@ static int db_select_continue_hash(Process *p,
     Sint save_slot_ix;
     Sint chunk_size;
     int all_objects;
-    Binary *mp;
+    BinaryRef *mp;
     int num_left = 1000;
     HashDbTerm *current = 0;
     Eterm match_list;
@@ -1894,7 +1894,7 @@ static int db_select_delete_continue_hash(Process *p,
     int num_left = 1000;
     Uint got;
     Eterm *tptr;
-    Binary *mp;
+    BinaryRef *mp;
     Eterm egot;
     int fixated_by_me = ONLY_WRITER(p,tb) ? 0 : 1; /* ToDo: something nicer */
     erts_smp_rwmtx_t* lck;
@@ -2007,7 +2007,7 @@ static int db_select_count_continue_hash(Process *p,
     int num_left = 1000;
     Uint got;
     Eterm *tptr;
-    Binary *mp;
+    BinaryRef *mp;
     Eterm egot;
     erts_smp_rwmtx_t* lck;
 

@@ -229,7 +229,7 @@ struct mp_info {
     TreeDbTerm *save_term;      /* If the key is completely bound, this
 				 * will be the Tree node we're searching
 				 * for, otherwise it will be useless */
-    Binary *mp;                 /* The compiled match program */
+    BinaryRef *mp;              /* The compiled match program */
 };
 
 /*
@@ -238,7 +238,7 @@ struct mp_info {
 struct select_context {
     Process *p;
     Eterm accum;
-    Binary *mp;
+    BinaryRef *mp;
     Eterm end_condition;
     Eterm *lastobj;
     Sint32 max;
@@ -253,7 +253,7 @@ struct select_context {
  */
 struct select_count_context {
     Process *p;
-    Binary *mp;
+    BinaryRef *mp;
     Eterm end_condition;
     Eterm *lastobj;
     Sint32 max;
@@ -269,7 +269,7 @@ struct select_delete_context {
     Process *p;
     DbTableTree *tb;
     Uint accum;
-    Binary *mp;
+    BinaryRef *mp;
     Eterm end_condition;
     int erase_lastterm;
     TreeDbTerm *lastterm;
@@ -918,7 +918,7 @@ static int db_select_continue_tree(Process *p,
     Eterm *hp; 
     Eterm lastkey;
     Eterm end_condition; 
-    Binary *mp;
+    BinaryRef *mp;
     Eterm key;
     Eterm *tptr;
     Sint chunk_size;
@@ -1187,7 +1187,7 @@ static int db_select_count_continue_tree(Process *p,
     Eterm *hp; 
     Eterm lastkey;
     Eterm end_condition; 
-    Binary *mp;
+    BinaryRef *mp;
     Eterm key;
     Eterm *tptr;
     Eterm egot;
@@ -1533,7 +1533,7 @@ static int db_select_delete_continue_tree(Process *p,
     Eterm *hp; 
     Eterm lastkey;
     Eterm end_condition; 
-    Binary *mp;
+    BinaryRef *mp;
     Eterm key;
     Eterm *tptr;
     Eterm eaccsum;

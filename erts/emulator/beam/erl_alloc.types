@@ -270,6 +270,7 @@ type	PROC_SYS_TSK	SHORT_LIVED	PROCESSES	proc_sys_task
 type	PROC_SYS_TSK_QS	SHORT_LIVED	PROCESSES	proc_sys_task_queues
 type    NEW_TIME_OFFSET	SHORT_LIVED	SYSTEM		new_time_offset
 type	IOB_REQ		SHORT_LIVED	SYSTEM		io_bytes_request
+type    BINARY_REF      FIXED_SIZE      BINARIES        binary_ref
 
 +if threads_no_smp
 # Need thread safe allocs, but std_alloc and fix_alloc are not;

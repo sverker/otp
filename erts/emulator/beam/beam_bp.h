@@ -61,8 +61,8 @@ typedef struct {
 
 typedef struct generic_bp_data {
     Uint flags;
-    Binary* local_ms;		/* Match spec for local call trace */
-    Binary* meta_ms;		/* Match spec for meta trace */
+    BinaryRef* local_ms;		/* Match spec for local call trace */
+    BinaryRef* meta_ms;		/* Match spec for meta trace */
     BpMetaPid* meta_pid;	/* Meta trace pid */
     BpCount* count;		/* For call count */
     BpDataTime* time;		/* For time trace */
@@ -125,16 +125,16 @@ void erts_uninstall_breakpoints(BpFunctions* f);
 void erts_consolidate_bp_data(BpFunctions* f, int local);
 void erts_consolidate_bif_bp_data(void);
 
-void erts_set_trace_break(BpFunctions *f, Binary *match_spec);
+void erts_set_trace_break(BpFunctions *f, BinaryRef *match_spec);
 void erts_clear_trace_break(BpFunctions *f);
 
-void erts_set_call_trace_bif(BeamInstr *pc, Binary *match_spec, int local);
+void erts_set_call_trace_bif(BeamInstr *pc, BinaryRef *match_spec, int local);
 void erts_clear_call_trace_bif(BeamInstr *pc, int local);
 
-void erts_set_mtrace_break(BpFunctions *f, Binary *match_spec,
+void erts_set_mtrace_break(BpFunctions *f, BinaryRef *match_spec,
 			  Eterm tracer_pid);
 void erts_clear_mtrace_break(BpFunctions *f);
-void erts_set_mtrace_bif(BeamInstr *pc, Binary *match_spec,
+void erts_set_mtrace_bif(BeamInstr *pc, BinaryRef *match_spec,
 			 Eterm tracer_pid);
 void erts_clear_mtrace_bif(BeamInstr *pc);
 
@@ -152,10 +152,10 @@ BeamInstr erts_generic_breakpoint(Process* c_p, BeamInstr* I, Eterm* reg);
 BeamInstr erts_trace_break(Process *p, BeamInstr *pc, Eterm *args,
 		      Uint32 *ret_flags, Eterm *tracer_pid);
 
-int erts_is_trace_break(BeamInstr *pc, Binary **match_spec_ret, int local);
-int erts_is_mtrace_break(BeamInstr *pc, Binary **match_spec_ret,
+int erts_is_trace_break(BeamInstr *pc, BinaryRef **match_spec_ret, int local);
+int erts_is_mtrace_break(BeamInstr *pc, BinaryRef **match_spec_ret,
 			 Eterm *tracer_pid_rte);
-int erts_is_mtrace_bif(BeamInstr *pc, Binary **match_spec_ret,
+int erts_is_mtrace_bif(BeamInstr *pc, BinaryRef **match_spec_ret,
 		       Eterm *tracer_pid_ret);
 int erts_is_native_break(BeamInstr *pc);
 int erts_is_count_break(BeamInstr *pc, Uint *count_ret);

@@ -441,7 +441,7 @@ heap_dump(int to, void *to_arg, Eterm x)
 			}
 		    } else if (tag == REFC_BINARY_SUBTAG) {
 			ProcBin* pb = (ProcBin *) binary_val(x);
-			Binary* val = pb->val;
+			Binary* val = pb->val->bin;
 
 			if (erts_smp_atomic_xchg_nob(&val->refc, 0) != 0) {
 			    val->flags = (UWord) all_binaries;

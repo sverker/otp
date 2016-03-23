@@ -904,7 +904,7 @@ dmc_private_copy(DMCContext *context, Eterm c);
 
 #ifdef DMC_DEBUG
 static int test_disassemble_next = 0;
-void db_match_dis(Binary *prog);
+void db_match_dis(BinaryRef *prog);
 #define TRACE erts_fprintf(stderr,"Trace: %s:%d\n",__FILE__,__LINE__)
 #define FENCE_PATTERN_SIZE (1*sizeof(Uint))
 #define FENCE_PATTERN 0xDEADBEEFUL
@@ -1005,15 +1005,15 @@ static Eterm db_set_trace_control_word_fake_1(BIF_ALIST_1)
 */
 
 
-Eterm erts_match_set_get_source(Binary *mpsp)
+Eterm erts_match_set_get_source(BinaryRef *mpsp)
 {
     MatchProg *prog = Binary2MatchProg(mpsp);
     return prog->saved_program;
 }
 
 /* This one is for the tracing */
-Binary *erts_match_set_compile(Process *p, Eterm matchexpr) {
-    Binary *bin;
+BinaryRef *erts_match_set_compile(Process *p, Eterm matchexpr) {
+    BinaryRef *bin;
     Uint sz;
     Eterm *hp;
     
@@ -1030,7 +1030,7 @@ Binary *erts_match_set_compile(Process *p, Eterm matchexpr) {
     return bin;
 }
 
-Binary *db_match_set_compile(Process *p, Eterm matchexpr, 
+BinaryRef *db_match_set_compile(Process *p, Eterm matchexpr,
 			     Uint flags) 
 {
     Eterm l;
@@ -1041,7 +1041,7 @@ Binary *db_match_set_compile(Process *p, Eterm matchexpr,
     int n = 0;
     int num_heads;
     int i;
-    Binary *mps = NULL;
+    BinaryRef *mps = NULL;
     int compiled = 0;
     Eterm *matches,*guards, *bodies;
     Eterm *buff;
@@ -1140,7 +1140,7 @@ Eterm db_match_set_lint(Process *p, Eterm matchexpr, Uint flags)
     Eterm ret;
     int n = 0;
     int num_heads;
-    Binary *mp;
+    BinaryRef *mp;
     Eterm *matches,*guards, *bodies;
     Eterm sbuff[15];
     Eterm *buff = sbuff;
@@ -1225,7 +1225,7 @@ done:
     return ret;
 }
     
-Eterm erts_match_set_run(Process *p, Binary *mpsp, 
+Eterm erts_match_set_run(Process *p, BinaryRef *mpsp,
 			 Eterm *args, int num_args,
 			 enum erts_pam_run_flags in_flags,
 			 Uint32 *return_flags) 
@@ -1251,7 +1251,7 @@ Eterm erts_match_set_run(Process *p, Binary *mpsp,
      */
 }
 
-static Eterm erts_match_set_run_ets(Process *p, Binary *mpsp,
+static Eterm erts_match_set_run_ets(Process *p, BinaryRef *mpsp,
 				    Eterm args, int num_args,
 				    Uint32 *return_flags)
 {
@@ -1309,7 +1309,7 @@ Eterm db_getkey(int keypos, Eterm obj)
 /*
 ** The actual compiling of the match expression and the guards
 */
-Binary *db_match_compile(Eterm *matchexpr, 
+BinaryRef *db_match_compile(Eterm *matchexpr,
 			 Eterm *guards, 
 			 Eterm *body,
 			 int num_progs,
@@ -1327,7 +1327,7 @@ Binary *db_match_compile(Eterm *matchexpr,
     int structure_checked;
     DMCRet res;
     int current_try_label;
-    Binary *bp = NULL;
+    BinaryRef *bp = NULL;
     unsigned clause_start;
 
     DMC_INIT_STACK(stack);
@@ -1700,7 +1700,7 @@ error: /* Here is were we land when compilation failed. */
 /*
 ** Free a match program (in a binary)
 */
-void erts_db_match_prog_destructor(Binary *bprog)
+void erts_db_match_prog_destructor(BinaryRef *bprog)
 {
     MatchProg *prog;
     if (bprog == NULL)
@@ -1714,7 +1714,7 @@ void erts_db_match_prog_destructor(Binary *bprog)
 }
 
 void
-erts_match_prog_foreach_offheap(Binary *bprog,
+erts_match_prog_foreach_offheap(BinaryRef *bprog,
 				void (*func)(ErlOffHeap *, void *),
 				void *arg)
 {
@@ -1753,7 +1753,7 @@ static Eterm dpm_array_to_list(Process *psp, Eterm *arr, int arity)
 ** the parameter 'arity' is only used if 'term' is actually an array,
 ** i.e. 'DCOMP_TRACE' was specified 
 */
-Eterm db_prog_match(Process *c_p, Binary *bprog,
+Eterm db_prog_match(Process *c_p, BinaryRef *bprog,
 		    Eterm term,
 		    Eterm *termp,
 		    int arity,
@@ -2537,7 +2537,7 @@ success:
 /*
  * Convert a match program to a "magic" binary to return up to erlang
  */
-Eterm db_make_mp_binary(Process *p, Binary *mp, Eterm **hpp)
+Eterm db_make_mp_binary(Process *p, BinaryRef *mp, Eterm **hpp)
 {
     return erts_mk_magic_binary_term(hpp, &MSO(p), mp);
 }
@@ -5062,7 +5062,7 @@ BIF_RETTYPE match_spec_test_3(BIF_ALIST_3)
 static Eterm match_spec_test(Process *p, Eterm against, Eterm spec, int trace)
 {
     Eterm lint_res;
-    Binary *mps;
+    BinaryRef *mps;
     Eterm res;
     Eterm ret;
     Eterm flg;
@@ -5188,7 +5188,7 @@ void db_free_tmp_uncompressed(DbTerm* obj)
     erts_free(ERTS_ALC_T_TMP, obj);
 }
 
-Eterm db_match_dbterm(DbTableCommon* tb, Process* c_p, Binary* bprog,
+Eterm db_match_dbterm(DbTableCommon* tb, Process* c_p, BinaryRef* bprog,
 			     int all, DbTerm* obj, Eterm** hpp, Uint extra)
 {
     Uint32 dummy;
@@ -5217,7 +5217,7 @@ Eterm db_match_dbterm(DbTableCommon* tb, Process* c_p, Binary* bprog,
 /*
 ** Disassemble match program
 */
-void db_match_dis(Binary *bp)
+void db_match_dis(BinaryRef *bp)
 {
     MatchProg *prog = Binary2MatchProg(bp);
     UWord *t = prog->text;

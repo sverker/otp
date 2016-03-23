@@ -93,11 +93,11 @@ get_mtime(Process *c_p)
 ** Helpers
 */
 static Eterm do_call_trace(Process* c_p, BeamInstr* I, Eterm* reg,
-			   int local, Binary* ms, Eterm tracer_pid);
-static void set_break(BpFunctions* f, Binary *match_spec, Uint break_flags,
+			   int local, BinaryRef* ms, Eterm tracer_pid);
+static void set_break(BpFunctions* f, BinaryRef *match_spec, Uint break_flags,
 		      enum erts_break_op count_op, Eterm tracer_pid);
 static void set_function_break(BeamInstr *pc,
-			       Binary *match_spec,
+			       BinaryRef *match_spec,
 			       Uint break_flags,
 			       enum erts_break_op count_op,
 			       Eterm tracer_pid);
@@ -434,19 +434,19 @@ uninstall_breakpoint(BeamInstr* pc)
 }
 
 void
-erts_set_trace_break(BpFunctions* f, Binary *match_spec)
+erts_set_trace_break(BpFunctions* f, BinaryRef *match_spec)
 {
     set_break(f, match_spec, ERTS_BPF_LOCAL_TRACE, 0, am_true);
 }
 
 void
-erts_set_mtrace_break(BpFunctions* f, Binary *match_spec, Eterm tracer_pid)
+erts_set_mtrace_break(BpFunctions* f, BinaryRef *match_spec, Eterm tracer_pid)
 {
     set_break(f, match_spec, ERTS_BPF_META_TRACE, 0, tracer_pid);
 }
 
 void
-erts_set_call_trace_bif(BeamInstr *pc, Binary *match_spec, int local)
+erts_set_call_trace_bif(BeamInstr *pc, BinaryRef *match_spec, int local)
 {
     Uint flags = local ? ERTS_BPF_LOCAL_TRACE : ERTS_BPF_GLOBAL_TRACE;
 
@@ -454,7 +454,7 @@ erts_set_call_trace_bif(BeamInstr *pc, Binary *match_spec, int local)
 }
 
 void
-erts_set_mtrace_bif(BeamInstr *pc, Binary *match_spec, Eterm tracer_pid)
+erts_set_mtrace_bif(BeamInstr *pc, BinaryRef *match_spec, Eterm tracer_pid)
 {
     set_function_break(pc, match_spec, ERTS_BPF_META_TRACE, 0, tracer_pid);
 }
@@ -859,7 +859,7 @@ erts_bif_trace(int bif_index, Process* p, Eterm* args, BeamInstr* I)
 
 static Eterm
 do_call_trace(Process* c_p, BeamInstr* I, Eterm* reg,
-	      int local, Binary* ms, Eterm tracer_pid)
+	      int local, BinaryRef* ms, Eterm tracer_pid)
 {
     Eterm* cpp;
     int return_to_trace = 0;
@@ -1084,7 +1084,7 @@ erts_trace_time_return(Process *p, BeamInstr *pc)
 }
 
 int 
-erts_is_trace_break(BeamInstr *pc, Binary **match_spec_ret, int local)
+erts_is_trace_break(BeamInstr *pc, BinaryRef **match_spec_ret, int local)
 {
     Uint flags = local ? ERTS_BPF_LOCAL_TRACE : ERTS_BPF_GLOBAL_TRACE;
     GenericBpData* bp = check_break(pc, flags);
@@ -1099,7 +1099,7 @@ erts_is_trace_break(BeamInstr *pc, Binary **match_spec_ret, int local)
 }
 
 int 
-erts_is_mtrace_break(BeamInstr *pc, Binary **match_spec_ret,
+erts_is_mtrace_break(BeamInstr *pc, BinaryRef **match_spec_ret,
 		     Eterm *tracer_pid_ret)
 {
     GenericBpData* bp = check_break(pc, ERTS_BPF_META_TRACE);
@@ -1390,7 +1390,7 @@ void erts_schedule_time_break(Process *p, Uint schedule) {
 
 
 static void
-set_break(BpFunctions* f, Binary *match_spec, Uint break_flags,
+set_break(BpFunctions* f, BinaryRef *match_spec, Uint break_flags,
 	  enum erts_break_op count_op, Eterm tracer_pid)
 {
     Uint i;
@@ -1405,7 +1405,7 @@ set_break(BpFunctions* f, Binary *match_spec, Uint break_flags,
 }
 
 static void
-set_function_break(BeamInstr *pc, Binary *match_spec, Uint break_flags,
+set_function_break(BeamInstr *pc, BinaryRef *match_spec, Uint break_flags,
 		   enum erts_break_op count_op, Eterm tracer_pid)
 {
     GenericBp* g;

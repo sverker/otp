@@ -600,7 +600,7 @@ static void cleanup_restart_context(RestartContext *rc)
     }
 }
 
-static void cleanup_restart_context_bin(Binary *bp)
+static void cleanup_restart_context_bin(BinaryRef *bp)
 {
     RestartContext *rc = ERTS_MAGIC_BIN_DATA(bp);
     cleanup_restart_context(rc);
@@ -1310,7 +1310,7 @@ handle_iolist:
     BUMP_REDS(p, loop_count / LOOP_FACTOR);
     if (rc == PCRE_ERROR_LOOP_LIMIT) {
 	/* Trap */
-	Binary *mbp = erts_create_magic_binary(sizeof(RestartContext),
+	BinaryRef *mbp = erts_create_magic_binary(sizeof(RestartContext),
 					       cleanup_restart_context_bin);
 	RestartContext *restartp = ERTS_MAGIC_BIN_DATA(mbp);
 	Eterm magic_bin;
@@ -1353,7 +1353,7 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
      /* XXX: Optimize - arg 1 and 2 to be utilized for keeping binary 
 	code and subject */
 {
-    Binary *mbp;
+    BinaryRef *mbp;
     RestartContext *restartp;
     int rc;
     unsigned long loop_count;

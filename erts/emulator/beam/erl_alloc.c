@@ -631,6 +631,8 @@ erts_alloc_init(int *argc, char **argv, ErtsAllocInitOpts *eaiop)
     fix_type_sizes[ERTS_ALC_FIX_TYPE_IX(ERTS_ALC_T_ABIF_TIMER)]
 	= erts_timer_type_size(ERTS_ALC_T_ABIF_TIMER);
 #endif
+    fix_type_sizes[ERTS_ALC_FIX_TYPE_IX(ERTS_ALC_T_BINARY_REF)]
+        = sizeof(BinaryRef);
 
 #ifdef HARD_DEBUG
     hdbg_init();

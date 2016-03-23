@@ -86,14 +86,14 @@ typedef struct erl_heap_bin {
 #define ERTS_PROCBIN_GET_BYTES(PB)                 \
     ((((ProcBin*)PB)->flags & PB_IS_RESOURCE_BINARY ?                   \
       (byte *)((ProcBin*)PB)->offset :                                  \
-      (byte *)((((ProcBin*)PB)->val->orig_bytes +                       \
+      (byte *)((((ProcBin*)PB)->val->bin->orig_bytes +                  \
                 ((ProcBin*)PB)->offset))                                \
         ))
 
 #define ERTS_PROCBIN_INIT(PB, BIN, OH)                                  \
     do {                                                                \
         (PB)->thing_word = HEADER_PROC_BIN;                             \
-        (PB)->size = (BIN)->orig_size;                                  \
+        (PB)->size = (BIN)->bin->orig_size;                             \
         (PB)->val = (BIN);                                              \
         (PB)->flags = 0;                                                \
         (PB)->offset = 0;                                               \
@@ -208,12 +208,13 @@ ERTS_GLB_INLINE Binary *erts_bin_drv_alloc(Uint size);
 ERTS_GLB_INLINE Binary *erts_bin_nrml_alloc(Uint size);
 ERTS_GLB_INLINE Binary *erts_bin_realloc_fnf(Binary *bp, Uint size);
 ERTS_GLB_INLINE Binary *erts_bin_realloc(Binary *bp, Uint size);
-ERTS_GLB_INLINE void erts_bin_free(Binary *bp);
-ERTS_GLB_INLINE Binary *erts_create_magic_binary_x(Uint size,
-                                                  void (*destructor)(Binary *),
-                                                  int unaligned);
-ERTS_GLB_INLINE Binary *erts_create_magic_binary(Uint size,
-						 void (*destructor)(Binary *));
+ERTS_GLB_INLINE void erts_bin_payload_free(Binary *bp);
+ERTS_GLB_INLINE void erts_bin_free(BinaryRef *bp);
+ERTS_GLB_INLINE BinaryRef *erts_create_magic_binary_x(Uint size,
+                                                      void (*destructor)(BinaryRef *),
+                                                      int unaligned);
+ERTS_GLB_INLINE BinaryRef *erts_create_magic_binary(Uint size,
+						 void (*destructor)(BinaryRef *));
 
 #if ERTS_GLB_INLINE_INCL_FUNC_DEF
 
@@ -339,37 +340,52 @@ erts_bin_realloc(Binary *bp, Uint size)
 }
 
 ERTS_GLB_INLINE void
-erts_bin_free(Binary *bp)
+erts_bin_payload_free(Binary *bp)
 {
-    if (bp->flags & BIN_FLAG_MAGIC)
-	ERTS_MAGIC_BIN_DESTRUCTOR(bp)(bp);
     if (bp->flags & BIN_FLAG_DRV)
 	erts_free(ERTS_ALC_T_DRV_BINARY, (void *) bp);
     else
 	erts_free(ERTS_ALC_T_BINARY, (void *) bp);
 }
 
-ERTS_GLB_INLINE Binary *
-erts_create_magic_binary_x(Uint size, void (*destructor)(Binary *),
+ERTS_GLB_INLINE void
+erts_bin_free(BinaryRef *binref)
+{
+    if (binref->bin->flags & BIN_FLAG_MAGIC)
+        ERTS_MAGIC_BIN_DESTRUCTOR(binref)(binref);
+    erts_bin_payload_free(binref->bin);
+    erts_free(ERTS_ALC_T_BINARY_REF, binref);
+}
+
+ERTS_GLB_INLINE BinaryRef *
+erts_create_magic_binary_x(Uint size, void (*destructor)(BinaryRef *),
                            int unaligned)
 {
     Uint bsize = unaligned ? ERTS_MAGIC_BIN_UNALIGNED_SIZE(size)
                            : ERTS_MAGIC_BIN_SIZE(size);
     Binary* bptr = erts_alloc_fnf(ERTS_ALC_T_BINARY, bsize);
+    BinaryRef* binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
     ASSERT(bsize > size);
     if (!bptr)
 	erts_alloc_n_enomem(ERTS_ALC_T2N(ERTS_ALC_T_BINARY), bsize);
     ERTS_CHK_BIN_ALIGNMENT(bptr);
     bptr->flags = BIN_FLAG_MAGIC;
+
     bptr->orig_size = unaligned ? ERTS_MAGIC_BIN_UNALIGNED_ORIG_SIZE(size)
                                 : ERTS_MAGIC_BIN_ORIG_SIZE(size);
-    erts_refc_init(&bptr->refc, 0);
-    ERTS_MAGIC_BIN_DESTRUCTOR(bptr) = destructor;
-    return bptr;
+    erts_refc_init(&bptr->refc, 1);
+    
+    binref->flags = 0;
+    erts_refc_init(&binref->refc, 0);
+    binref->bin = bptr;
+
+    ERTS_MAGIC_BIN_DESTRUCTOR(binref) = destructor;
+
+    return binref;
 }
 
-ERTS_GLB_INLINE Binary *
-erts_create_magic_binary(Uint size, void (*destructor)(Binary *))
+ERTS_GLB_INLINE BinaryRef *
+erts_create_magic_binary(Uint size, void (*destructor)(BinaryRef *))
 {
     return erts_create_magic_binary_x(size, destructor, 0);
 }

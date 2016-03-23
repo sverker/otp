@@ -2788,7 +2788,7 @@ BIF_RETTYPE ets_is_compiled_ms_1(BIF_ALIST_1)
 
 BIF_RETTYPE ets_match_spec_compile_1(BIF_ALIST_1)
 {
-    Binary *mp = db_match_set_compile(BIF_P, BIF_ARG_1, DCOMP_TABLE);
+    BinaryRef *mp = db_match_set_compile(BIF_P, BIF_ARG_1, DCOMP_TABLE);
     Eterm *hp;
     if (mp == NULL) {
 	BIF_ERROR(BIF_P, BADARG);
@@ -2806,7 +2806,7 @@ BIF_RETTYPE ets_match_spec_run_r_3(BIF_ALIST_3)
     Eterm *hp;
     Eterm lst;
     ProcBin *bp;
-    Binary *mp;
+    BinaryRef *mp;
     Eterm res;
     Uint32 dummy;
 

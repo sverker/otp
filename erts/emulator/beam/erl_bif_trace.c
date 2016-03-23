@@ -49,8 +49,8 @@ const struct trace_pattern_flags   erts_trace_pattern_flags_off = {0, 0, 0, 0, 0
  * The following variables are protected by code write permission.
  */
 static int                         erts_default_trace_pattern_is_on;
-static Binary                     *erts_default_match_spec;
-static Binary                     *erts_default_meta_match_spec;
+static BinaryRef                  *erts_default_match_spec;
+static BinaryRef                  *erts_default_meta_match_spec;
 static struct trace_pattern_flags  erts_default_trace_pattern_flags;
 static Eterm                       erts_default_meta_tracer_pid;
 
@@ -121,7 +121,7 @@ trace_pattern(Process* p, Eterm MFA, Eterm Pattern, Eterm flaglist)
     int matches = -1;
     int specified = 0;
     enum erts_break_op on;
-    Binary* match_prog_set;
+    BinaryRef* match_prog_set;
     Eterm l;
     struct trace_pattern_flags flags = erts_trace_pattern_flags_off;
     int is_global;
@@ -401,8 +401,8 @@ static void smp_bp_finisher(void* null)
 
 void
 erts_get_default_trace_pattern(int *trace_pattern_is_on,
-			       Binary **match_spec,
-			       Binary **meta_match_spec,
+			       BinaryRef **match_spec,
+			       BinaryRef **meta_match_spec,
 			       struct trace_pattern_flags *trace_pattern_flags,
 			       Eterm *meta_tracer_pid)
 {
@@ -1054,8 +1054,8 @@ trace_info_pid(Process* p, Eterm pid_spec, Eterm key)
  */
 static int function_is_traced(Process *p,
 			      Eterm mfa[3],
-			      Binary **ms,              /* out */
-			      Binary **ms_meta,         /* out */
+			      BinaryRef **ms,              /* out */
+			      BinaryRef **ms_meta,         /* out */
 			      Eterm   *tracer_pid_meta, /* out */
 			      Uint    *count,           /* out */
 			      Eterm   *call_time)       /* out */
@@ -1118,7 +1118,7 @@ trace_info_func(Process* p, Eterm func_spec, Eterm key)
     Eterm* tp;
     Eterm* hp;
     DeclareTmpHeap(mfa,3,p); /* Not really heap here, but might be when setting pattern */
-    Binary *ms = NULL, *ms_meta = NULL;
+    BinaryRef *ms = NULL, *ms_meta = NULL;
     Uint count = 0;
     Eterm traced = am_false;
     Eterm match_spec = am_false;
@@ -1395,7 +1395,7 @@ trace_info_on_load(Process* p, Eterm key)
 
 int
 erts_set_trace_pattern(Process*p, Eterm* mfa, int specified,
-		       Binary* match_prog_set, Binary *meta_match_prog_set,
+		       BinaryRef* match_prog_set, BinaryRef *meta_match_prog_set,
 		       int on, struct trace_pattern_flags flags,
 		       Eterm meta_tracer_pid, int is_blocking)
 {

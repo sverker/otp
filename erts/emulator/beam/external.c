@@ -102,7 +102,7 @@ static Sint decoded_size(byte *ep, byte* endp, int internal_tags, struct B2TCont
 static BIF_RETTYPE term_to_binary_trap_1(BIF_ALIST_1);
 
 static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint flags, 
-				     Binary *context_b);
+				     BinaryRef *context_b);
 
 static Uint encode_size_struct2(ErtsAtomCacheMap *, Eterm, unsigned);
 struct TTBSizeContext_;
@@ -111,7 +111,7 @@ static int encode_size_struct_int(struct TTBSizeContext_*, ErtsAtomCacheMap *acm
 
 static Export binary_to_term_trap_export;
 static BIF_RETTYPE binary_to_term_trap_1(BIF_ALIST_1);
-static BIF_RETTYPE binary_to_term_int(Process* p, Uint32 flags, Eterm bin, Binary* context_b,
+static BIF_RETTYPE binary_to_term_int(Process* p, Uint32 flags, Eterm bin, BinaryRef* context_b,
 				      Export *bif, Eterm arg0, Eterm arg1);
 
 void erts_init_external(void) {
@@ -1063,7 +1063,7 @@ static BIF_RETTYPE term_to_binary_trap_1(BIF_ALIST_1)
     Eterm *tp = tuple_val(BIF_ARG_1);
     Eterm Term = tp[1];
     Eterm bt = tp[2];
-    Binary *bin = ((ProcBin *) binary_val(bt))->val;
+    BinaryRef *bin = ((ProcBin *) binary_val(bt))->val;
     Eterm res = erts_term_to_binary_int(BIF_P, Term, 0, 0,bin);
     if (is_tuple(res)) {
 	ASSERT(BIF_P->flags & F_DISABLE_GC);
@@ -1371,7 +1371,7 @@ static void b2t_destroy_context(B2TContext* context)
     }
 }
 
-static void b2t_context_destructor(Binary *context_bin)
+static void b2t_context_destructor(BinaryRef *context_bin)
 {
     B2TContext* ctx = (B2TContext*) ERTS_MAGIC_BIN_DATA(context_bin);
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(context_bin) == b2t_context_destructor);
@@ -1381,7 +1381,7 @@ static void b2t_context_destructor(Binary *context_bin)
 
 static BIF_RETTYPE binary_to_term_trap_1(BIF_ALIST_1)
 {
-    Binary *context_bin = ((ProcBin *) binary_val(BIF_ARG_1))->val;
+    BinaryRef *context_bin = ((ProcBin *) binary_val(BIF_ARG_1))->val;
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(context_bin) == b2t_context_destructor);
 
     return binary_to_term_int(BIF_P, 0, THE_NON_VALUE, context_bin, NULL,
@@ -1407,7 +1407,7 @@ static unsigned b2t_rand(void)
 
 static B2TContext* b2t_export_context(Process* p, B2TContext* src)
 {
-    Binary* context_b = erts_create_magic_binary(sizeof(B2TContext),
+    BinaryRef* context_b = erts_create_magic_binary(sizeof(B2TContext),
                                                  b2t_context_destructor);
     B2TContext* ctx = ERTS_MAGIC_BIN_DATA(context_b);
     Eterm* hp;
@@ -1420,7 +1420,7 @@ static B2TContext* b2t_export_context(Process* p, B2TContext* src)
     return ctx;
 }
 
-static BIF_RETTYPE binary_to_term_int(Process* p, Uint32 flags, Eterm bin, Binary* context_b,
+static BIF_RETTYPE binary_to_term_int(Process* p, Uint32 flags, Eterm bin, BinaryRef* context_b,
 				      Export *bif_init, Eterm arg0, Eterm arg1)
 {
     BIF_RETTYPE ret_val;
@@ -1781,7 +1781,7 @@ erts_term_to_binary(Process* p, Eterm Term, int level, Uint flags) {
 #endif
 #define TERM_TO_BINARY_MEMCPY_FACTOR 8
 
-static void ttb_context_destructor(Binary *context_bin)
+static void ttb_context_destructor(BinaryRef *context_bin)
 {
     TTBContext *context = ERTS_MAGIC_BIN_DATA(context_bin);
     if (context->alive) {
@@ -1794,7 +1794,7 @@ static void ttb_context_destructor(Binary *context_bin)
 	    DESTROY_SAVED_WSTACK(&context->s.ec.wstack);
 	    if (context->s.ec.result_bin != NULL) { /* Set to NULL if ever made alive! */
 		ASSERT(erts_refc_read(&(context->s.ec.result_bin->refc),0) == 0);
-		erts_bin_free(context->s.ec.result_bin);
+		erts_bin_payload_free(context->s.ec.result_bin);
 		context->s.ec.result_bin = NULL;
 	    }
 	    break;
@@ -1803,13 +1803,13 @@ static void ttb_context_destructor(Binary *context_bin)
 
 	    if (context->s.cc.destination_bin != NULL) { /* Set to NULL if ever made alive! */
 		ASSERT(erts_refc_read(&(context->s.cc.destination_bin->refc),0) == 0);
-		erts_bin_free(context->s.cc.destination_bin);
+		erts_bin_payload_free(context->s.cc.destination_bin);
 		context->s.cc.destination_bin = NULL;
 	    }
 	    
 	    if (context->s.cc.result_bin != NULL) { /* Set to NULL if ever made alive! */
 		ASSERT(erts_refc_read(&(context->s.cc.result_bin->refc),0) == 0);
-		erts_bin_free(context->s.cc.result_bin);
+		erts_bin_payload_free(context->s.cc.result_bin);
 		context->s.cc.result_bin = NULL;
 	    }
 	    break;
@@ -1818,7 +1818,7 @@ static void ttb_context_destructor(Binary *context_bin)
 }
 
 static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint flags, 
-				     Binary *context_b) 
+				     BinaryRef *context_b)
 {
     Eterm *hp;
     Eterm res;
@@ -1918,12 +1918,19 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 		level = context->s.ec.level;
 		BUMP_REDS(p, (initial_reds - reds) / TERM_TO_BINARY_LOOP_FACTOR);
 		if (level == 0 || real_size < 6) { /* We are done */
+                    BinaryRef* bptr;
 		    ProcBin* pb;
 		return_normal:
 		    context->s.ec.result_bin = NULL;
 		    context->alive = 0;
 		    pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-                    ERTS_PROCBIN_INIT(pb, result_bin, &MSO(p));
+
+                    bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+                    bptr->flags = 0;
+                    erts_refc_init(&bptr->refc, 1);
+                    bptr->bin = result_bin;
+
+                    ERTS_PROCBIN_INIT(pb, bptr, &MSO(p));
 		    erts_refc_inc(&result_bin->refc, 1);
 		    if (context_b && erts_refc_read(&context_b->refc,0) == 0) {
 			erts_bin_free(context_b);
@@ -1978,6 +1985,7 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 		    RETURN_STATE();
 		case Z_STREAM_END:
 		    {
+                        BinaryRef* bptr;
 			byte *dbytes = (byte *) context->s.cc.destination_bin->orig_bytes + 1;
 
 			dbytes[0] = COMPRESSED;
@@ -1987,9 +1995,15 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 						      context->s.cc.dest_len+6);
 			context->s.cc.destination_bin = NULL;
 			pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-                        ERTS_PROCBIN_INIT(pb, result_bin, &(MSO(p)));
+
+                        bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+                        bptr->flags = 0;
+                        erts_refc_init(&bptr->refc, 1);
+                        bptr->bin = result_bin;
+
+                        ERTS_PROCBIN_INIT(pb, bptr, &(MSO(p)));
 			erts_refc_inc(&result_bin->refc, 1);
-			erts_bin_free(context->s.cc.result_bin);
+			erts_bin_payload_free(context->s.cc.result_bin);
 			context->s.cc.result_bin = NULL;
 			context->alive = 0;
 			BUMP_REDS(p, (this_time * CONTEXT_REDS) / TERM_TO_BINARY_COMPRESS_CHUNK);
@@ -1998,17 +2012,24 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 			}
 			return make_binary(pb);
 		    }
-		default: /* Compression error, revert to uncompressed binary (still in 
+		default: {/* Compression error, revert to uncompressed binary (still in
 			    context) */
+                    BinaryRef* bptr;
 		no_use_compressing:
 		    result_bin = context->s.cc.result_bin;
 		    context->s.cc.result_bin = NULL;
 		    pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
                     ASSERT(result_bin->orig_size == context->s.cc.real_size);
-                    ERTS_PROCBIN_INIT(pb, result_bin, &(MSO(p)));
+
+                    bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+                    bptr->flags = 0;
+                    erts_refc_init(&bptr->refc, 1);
+                    bptr->bin = result_bin;
+
+                    ERTS_PROCBIN_INIT(pb, bptr, &(MSO(p)));
 		    erts_refc_inc(&result_bin->refc, 1);
 		    erl_zlib_deflate_finish(&(context->s.cc.stream));
-		    erts_bin_free(context->s.cc.destination_bin);
+		    erts_bin_payload_free(context->s.cc.destination_bin);
 		    context->s.cc.destination_bin = NULL;
 		    context->alive = 0;
 		    BUMP_REDS(p, (this_time * CONTEXT_REDS) / TERM_TO_BINARY_COMPRESS_CHUNK);
@@ -2016,7 +2037,7 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 			erts_bin_free(context_b);
 		    }
 		    return make_binary(pb);
-		}
+		}}
 	    }
 	}
     }
@@ -2679,15 +2700,15 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 			    *ep++ = BINARY_INTERNAL_REF;
 			}
 			if (pb->flags) {
-			    char* before_realloc = pb->val->orig_bytes; 
+			    char* before_realloc = pb->val->bin->orig_bytes;
 			    erts_emasculate_writable_binary(pb);
-			    bytes += (pb->val->orig_bytes - before_realloc);
+			    bytes += (pb->val->bin->orig_bytes - before_realloc);
 			}
 			erts_refc_inc(&pb->val->refc, 2);
 
 			sys_memcpy(&tmp, pb, sizeof(ProcBin));
 			tmp.next = *off_heap;
-                        tmp.offset = bytes - (byte*)tmp.val->orig_bytes;
+                        tmp.offset = bytes - (byte*)tmp.val->bin->orig_bytes;
 			tmp.size = bytesize;
 			sys_memcpy(ep, &tmp, sizeof(ProcBin));
 			*off_heap = (struct erl_off_heap_header*) ep;
@@ -3393,11 +3414,18 @@ dec_term_atom_common:
 		    *objp = make_binary(hb);
 		} else {
 		    Binary* dbin = erts_bin_nrml_alloc(n);
+                    BinaryRef* bptr;
 		    ProcBin* pb;
 		    erts_refc_init(&dbin->refc, 1);
 		    pb = (ProcBin *) hp;
 		    hp += PROC_BIN_SIZE;
-                    ERTS_PROCBIN_INIT(pb, dbin, factory->off_heap);
+
+                    bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+                    bptr->flags = 0;
+                    erts_refc_init(&bptr->refc, 1);
+                    bptr->bin = dbin;
+
+                    ERTS_PROCBIN_INIT(pb, bptr, factory->off_heap);
 		    *objp = make_binary(pb);
                     if (ctx) {
                         int n_limit = reds * B2T_MEMCPY_FACTOR;
@@ -3438,11 +3466,18 @@ dec_term_atom_common:
                     ep += n;
 		} else {
 		    Binary* dbin = erts_bin_nrml_alloc(n);
+                    BinaryRef* bptr;
 		    ProcBin* pb;
 
 		    erts_refc_init(&dbin->refc, 1);
 		    pb = (ProcBin *) hp;
-                    ERTS_PROCBIN_INIT(pb, dbin, factory->off_heap);
+
+                    bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
+                    bptr->flags = 0;
+                    erts_refc_init(&bptr->refc, 1);
+                    bptr->bin = dbin;
+
+                    ERTS_PROCBIN_INIT(pb, bptr, factory->off_heap);
 		    bin = make_binary(pb);
 		    hp += PROC_BIN_SIZE;
                     if (ctx) {

@@ -2260,7 +2260,7 @@ BIF_RETTYPE send_2(BIF_ALIST_2)
 
 static BIF_RETTYPE dsend_continue_trap_1(BIF_ALIST_1)
 {
-    Binary* bin = ((ProcBin*) binary_val(BIF_ARG_1))->val;
+    BinaryRef* bin = ((ProcBin*) binary_val(BIF_ARG_1))->val;
     ErtsSendContext* ctx = (ErtsSendContext*) ERTS_MAGIC_BIN_DATA(bin);
     Sint initial_reds = (Sint) (ERTS_BIF_REDS_LEFT(BIF_P) * TERM_TO_BINARY_LOOP_FACTOR);
     int result;
