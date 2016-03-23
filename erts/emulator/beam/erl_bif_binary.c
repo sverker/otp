@@ -2752,7 +2752,6 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
 	pb->size = target_size;
 	pb->next = MSO(BIF_P).first;
 	MSO(BIF_P).first = (struct erl_off_heap_header*) pb;
-	pb->val = save;
 	pb->offset = t - (byte*)save->orig_bytes;
 
 	OH_OVERHEAD(&(MSO(BIF_P)), target_size / sizeof(Eterm));

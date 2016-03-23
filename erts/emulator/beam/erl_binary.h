@@ -167,7 +167,7 @@ do {									\
  */
 #define binary_bytes(Bin)						\
   (*binary_val(Bin) == HEADER_PROC_BIN ?				\
-   ERTS_PROCBIN_GET_BYTES(Bin) :                                        \
+   ERTS_PROCBIN_GET_BYTES(binary_val(Bin)) :                            \
    (ASSERT(thing_subtag(*binary_val(Bin)) == HEAP_BINARY_SUBTAG),	\
    (byte *)(&(((ErlHeapBin *) binary_val(Bin))->data))))
 

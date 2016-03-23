@@ -344,7 +344,7 @@ erts_mk_magic_binary_term(Eterm **hpp, ErlOffHeap *ohp, Binary *mbp)
     pb->next = ohp->first;
     ohp->first = (struct erl_off_heap_header*) pb;
     pb->val = mbp;
-    pb->offset = UINT_MAX;
+    pb->offset = 0;
     pb->flags = 0;
 
     erts_refc_inc(&mbp->refc, 1);

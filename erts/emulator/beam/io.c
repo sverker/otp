@@ -3247,6 +3247,7 @@ static void deliver_read_message(Port* prt, erts_aint32_t state, Eterm to,
 	sys_memcpy(bptr->orig_bytes, buf, len);
 
 	pb = (ProcBin *) hp;
+        hp += PROC_BIN_SIZE;
         ERTS_PROCBIN_INIT(pb, bptr, ohp);
 	listp = make_binary(pb);
     }
