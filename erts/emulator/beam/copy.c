@@ -791,7 +791,7 @@ Eterm copy_struct_x(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap, Uint 
 			to->size = real_size;
 			to->val = from->val;
 			erts_refc_inc(&to->val->refc, 2);
-			to->bytes = from->bytes + offset;
+			to->offset = from->offset + offset;
 			to->next = off_heap->first;
 			to->flags = 0;
 			off_heap->first = (struct erl_off_heap_header*) to;
@@ -1605,7 +1605,7 @@ Uint copy_shared_perform(Eterm obj, Uint size, erts_shcopy_t *info,
 		    to->size = real_size;
 		    to->val = from->val;
 		    erts_refc_inc(&to->val->refc, 2);
-		    to->bytes = from->bytes + offset;
+		    to->offset = from->offset + offset;
 		    to->next = off_heap->first;
 		    to->flags = 0;
 		    off_heap->first = (struct erl_off_heap_header*) to;

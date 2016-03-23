@@ -1003,8 +1003,8 @@ io_list_to_vec(Eterm obj,	/* io-list */
 		    if (len < size) {
 			goto L_overflow;
 		    }
-		    erts_copy_bits(pb->bytes+offset, bitoffs, 1,
-				   (byte *) buf, 0, 1, size*8);
+		    erts_copy_bits(ERTS_PROCBIN_GET_BYTES(pb)+offset,
+                                   bitoffs, 1, (byte *) buf, 0, 1, size*8);
 		    csize += size;
 		    buf += size;
 		    len -= size;
@@ -1012,7 +1012,7 @@ io_list_to_vec(Eterm obj,	/* io-list */
 		    if (len < size) {
 			goto L_overflow;
 		    }
-		    sys_memcpy(buf, pb->bytes+offset, size);
+		    sys_memcpy(buf, ERTS_PROCBIN_GET_BYTES(pb)+offset, size);
 		    csize += size;
 		    buf += size;
 		    len -= size;
@@ -1026,7 +1026,7 @@ io_list_to_vec(Eterm obj,	/* io-list */
 			erts_emasculate_writable_binary(pb);
 		    }
 		    SET_VEC(iov, binv, Binary2ErlDrvBinary(pb->val),
-			    pb->bytes+offset, size, vlen);
+			    ERTS_PROCBIN_GET_BYTES(pb)+offset, size, vlen);
 		}
 	    } else {
 		ErlHeapBin* hb = (ErlHeapBin *) bptr;
@@ -3247,16 +3247,7 @@ static void deliver_read_message(Port* prt, erts_aint32_t state, Eterm to,
 	sys_memcpy(bptr->orig_bytes, buf, len);
 
 	pb = (ProcBin *) hp;
-	pb->thing_word = HEADER_PROC_BIN;
-	pb->size = len;
-	pb->next = ohp->first;
-	ohp->first = (struct erl_off_heap_header*)pb;
-	pb->val = bptr;
-	pb->bytes = (byte*) bptr->orig_bytes;
-	pb->flags = 0;
-	hp += PROC_BIN_SIZE;
-
-	OH_OVERHEAD(ohp, pb->size / sizeof(Eterm));
+        ERTS_PROCBIN_INIT(pb, bptr, ohp);
 	listp = make_binary(pb);
     }
 
@@ -3398,29 +3389,24 @@ deliver_vec_message(Port* prt,			/* Port */
 	while (vsize--) {
 	    ErlDrvBinary* b;
 	    ProcBin* pb = (ProcBin*) hp;
-	    byte* base;
 
 	    iov--;
 	    binv--;
 	    if ((b = *binv) == NULL) {
 		b = driver_alloc_binary(iov->iov_len);
 		sys_memcpy(b->orig_bytes, iov->iov_base, iov->iov_len);
-		base = (byte*) b->orig_bytes;
+                ERTS_PROCBIN_INIT(pb, ErlDrvBinary2Binary(b), ohp);
 	    } else {
 		/* Must increment reference count, caller calls free */
 		driver_binary_inc_refc(b);
-		base = iov->iov_base;
+                ERTS_PROCBIN_INIT(pb, ErlDrvBinary2Binary(b), NULL);
+                pb->size = iov->iov_len;
+                pb->offset = (byte*)iov->iov_base - (byte*)pb->val->orig_bytes;
+                pb->next = ohp->first;
+                ohp->first = (struct erl_off_heap_header*) pb;
+                OH_OVERHEAD(ohp, iov->iov_len / sizeof(Eterm));
 	    }
-	    pb->thing_word = HEADER_PROC_BIN;
-	    pb->size = iov->iov_len;
-	    pb->next = ohp->first;
-	    ohp->first = (struct erl_off_heap_header*)pb;
-	    pb->val = ErlDrvBinary2Binary(b);
-	    pb->bytes = base;
-	    pb->flags = 0;
 	    hp += PROC_BIN_SIZE;
-	    
-	    OH_OVERHEAD(ohp, iov->iov_len / sizeof(Eterm));
 
 	    if (listp == NIL) {  /* compatible with deliver_bin_message */
 		listp = make_binary(pb);
@@ -3960,14 +3946,7 @@ write_port_control_result(int control_flags,
 	    if (dbin->orig_size > ERL_ONHEAP_BIN_LIMIT) {
 		ProcBin* pb = (ProcBin *) *hpp;
 		*hpp += PROC_BIN_SIZE;
-		pb->thing_word = HEADER_PROC_BIN;
-		pb->size = dbin->orig_size;
-		pb->next = ohp->first;
-		ohp->first = (struct erl_off_heap_header *) pb;
-		pb->val = ErlDrvBinary2Binary(dbin);
-		pb->bytes = (byte*) dbin->orig_bytes;
-		pb->flags = 0;
-		OH_OVERHEAD(ohp, dbin->orig_size / sizeof(Eterm));
+                ERTS_PROCBIN_INIT(pb, ErlDrvBinary2Binary(dbin), ohp);
 		return make_binary(pb);
 	    }
 	    resp_bufp = dbin->orig_bytes;
@@ -5650,7 +5629,7 @@ driver_deliver_term(Eterm to, ErlDrvTermData* data, int len)
 		pb->next = factory.off_heap->first;
 		factory.off_heap->first = (struct erl_off_heap_header*)pb;
 		pb->val = ErlDrvBinary2Binary(b);
-		pb->bytes = ((byte*) b->orig_bytes) + offset;
+                pb->offset = offset;
 		pb->flags = 0;
 		mess =  make_binary(pb);
 		OH_OVERHEAD(factory.off_heap, pb->size / sizeof(Eterm));
@@ -5688,14 +5667,7 @@ driver_deliver_term(Eterm to, ErlDrvTermData* data, int len)
 		sys_memcpy((void *) bp->orig_bytes, (void *) bufp, size);
 		pbp = (ProcBin *) erts_produce_heap(&factory,
 						    PROC_BIN_SIZE, HEAP_EXTRA);
-		pbp->thing_word = HEADER_PROC_BIN;
-		pbp->size = size;
-		pbp->next = factory.off_heap->first;
-		factory.off_heap->first = (struct erl_off_heap_header*)pbp;
-		pbp->val = bp;
-		pbp->bytes = (byte*) bp->orig_bytes;
-		pbp->flags = 0;
-		OH_OVERHEAD(factory.off_heap, pbp->size / sizeof(Eterm));
+                ERTS_PROCBIN_INIT(pbp, bp, factory.off_heap);
 		mess = make_binary(pbp);
 	    }
 	    ptr += 2;

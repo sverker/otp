@@ -1923,14 +1923,7 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 		    context->s.ec.result_bin = NULL;
 		    context->alive = 0;
 		    pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-		    pb->thing_word = HEADER_PROC_BIN;
-		    pb->size = real_size;
-		    pb->next = MSO(p).first;
-		    MSO(p).first = (struct erl_off_heap_header*)pb;
-		    pb->val = result_bin;
-		    pb->bytes = (byte*) result_bin->orig_bytes;
-		    pb->flags = 0;
-		    OH_OVERHEAD(&(MSO(p)), pb->size / sizeof(Eterm));
+                    ERTS_PROCBIN_INIT(pb, result_bin, &MSO(p));
 		    erts_refc_inc(&result_bin->refc, 1);
 		    if (context_b && erts_refc_read(&context_b->refc,0) == 0) {
 			erts_bin_free(context_b);
@@ -1994,14 +1987,7 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 						      context->s.cc.dest_len+6);
 			context->s.cc.destination_bin = NULL;
 			pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-			pb->thing_word = HEADER_PROC_BIN;
-			pb->size = context->s.cc.dest_len+6;
-			pb->next = MSO(p).first;
-			MSO(p).first = (struct erl_off_heap_header*)pb;
-			pb->val = result_bin;
-			pb->bytes = (byte*) result_bin->orig_bytes;
-			pb->flags = 0;
-			OH_OVERHEAD(&(MSO(p)), pb->size / sizeof(Eterm));
+                        ERTS_PROCBIN_INIT(pb, result_bin, &(MSO(p)));
 			erts_refc_inc(&result_bin->refc, 1);
 			erts_bin_free(context->s.cc.result_bin);
 			context->s.cc.result_bin = NULL;
@@ -2018,14 +2004,8 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 		    result_bin = context->s.cc.result_bin;
 		    context->s.cc.result_bin = NULL;
 		    pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-		    pb->thing_word = HEADER_PROC_BIN;
-		    pb->size = context->s.cc.real_size;
-		    pb->next = MSO(p).first;
-		    MSO(p).first = (struct erl_off_heap_header*)pb;
-		    pb->val = result_bin;
-		    pb->bytes = (byte*) result_bin->orig_bytes;
-		    pb->flags = 0;
-		    OH_OVERHEAD(&(MSO(p)), pb->size / sizeof(Eterm));
+                    ASSERT(result_bin->orig_size == context->s.cc.real_size);
+                    ERTS_PROCBIN_INIT(pb, result_bin, &(MSO(p)));
 		    erts_refc_inc(&result_bin->refc, 1);
 		    erl_zlib_deflate_finish(&(context->s.cc.stream));
 		    erts_bin_free(context->s.cc.destination_bin);
@@ -2707,7 +2687,7 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 
 			sys_memcpy(&tmp, pb, sizeof(ProcBin));
 			tmp.next = *off_heap;
-			tmp.bytes = bytes;
+                        tmp.offset = bytes - (byte*)tmp.val->orig_bytes;
 			tmp.size = bytesize;
 			sys_memcpy(ep, &tmp, sizeof(ProcBin));
 			*off_heap = (struct erl_off_heap_header*) ep;
@@ -3417,14 +3397,7 @@ dec_term_atom_common:
 		    erts_refc_init(&dbin->refc, 1);
 		    pb = (ProcBin *) hp;
 		    hp += PROC_BIN_SIZE;
-		    pb->thing_word = HEADER_PROC_BIN;
-		    pb->size = n;
-		    pb->next = factory->off_heap->first;
-		    factory->off_heap->first = (struct erl_off_heap_header*)pb;
-		    OH_OVERHEAD(factory->off_heap, pb->size / sizeof(Eterm));
-		    pb->val = dbin;
-		    pb->bytes = (byte*) dbin->orig_bytes;
-		    pb->flags = 0;
+                    ERTS_PROCBIN_INIT(pb, dbin, factory->off_heap);
 		    *objp = make_binary(pb);
                     if (ctx) {
                         int n_limit = reds * B2T_MEMCPY_FACTOR;
@@ -3469,14 +3442,7 @@ dec_term_atom_common:
 
 		    erts_refc_init(&dbin->refc, 1);
 		    pb = (ProcBin *) hp;
-		    pb->thing_word = HEADER_PROC_BIN;
-		    pb->size = n;
-		    pb->next = factory->off_heap->first;
-		    factory->off_heap->first = (struct erl_off_heap_header*)pb;
-		    OH_OVERHEAD(factory->off_heap, pb->size / sizeof(Eterm));
-		    pb->val = dbin;
-		    pb->bytes = (byte*) dbin->orig_bytes;
-		    pb->flags = 0;
+                    ERTS_PROCBIN_INIT(pb, dbin, factory->off_heap);
 		    bin = make_binary(pb);
 		    hp += PROC_BIN_SIZE;
                     if (ctx) {

@@ -83,6 +83,27 @@ typedef struct erl_heap_bin {
    ((ErlSubBin *) binary_val(Bin))->bitoffs:	\
    0)
 
+#define ERTS_PROCBIN_GET_BYTES(PB)                 \
+    ((((ProcBin*)PB)->flags & PB_IS_RESOURCE_BINARY ?                   \
+      (byte *)((ProcBin*)PB)->offset :                                  \
+      (byte *)((((ProcBin*)PB)->val->orig_bytes +                       \
+                ((ProcBin*)PB)->offset))                                \
+        ))
+
+#define ERTS_PROCBIN_INIT(PB, BIN, OH)                                  \
+    do {                                                                \
+        (PB)->thing_word = HEADER_PROC_BIN;                             \
+        (PB)->size = (BIN)->orig_size;                                  \
+        (PB)->val = (BIN);                                              \
+        (PB)->flags = 0;                                                \
+        (PB)->offset = 0;                                               \
+        if (OH) {                                                       \
+            (PB)->next = ((ErlOffHeap*)(OH))->first;                    \
+            ((ErlOffHeap*)(OH))->first = (struct erl_off_heap_header*) (PB); \
+            OH_OVERHEAD((ErlOffHeap*)(OH), (PB)->size / sizeof(Eterm)); \
+        }                                                               \
+    } while (0)
+
 /*
  * Get the pointer to the actual data bytes in a binary.
  * Works for any type of binary. Always use binary_bytes() if
@@ -107,7 +128,7 @@ do {									\
 	_real_bin = binary_val(_sb->orig);	        		\
     }									\
     if (*_real_bin == HEADER_PROC_BIN) {				\
-	Bytep = ((ProcBin *) _real_bin)->bytes + _offs;			\
+	Bytep = ERTS_PROCBIN_GET_BYTES(_real_bin) + _offs;              \
     } else {								\
 	Bytep = (byte *)(&(((ErlHeapBin *) _real_bin)->data)) + _offs;	\
     }									\
@@ -146,7 +167,7 @@ do {									\
  */
 #define binary_bytes(Bin)						\
   (*binary_val(Bin) == HEADER_PROC_BIN ?				\
-   ((ProcBin *) binary_val(Bin))->bytes :				\
+   ERTS_PROCBIN_GET_BYTES(Bin) :                                        \
    (ASSERT(thing_subtag(*binary_val(Bin)) == HEAP_BINARY_SUBTAG),	\
    (byte *)(&(((ErlHeapBin *) binary_val(Bin))->data))))
 

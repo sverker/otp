@@ -3771,14 +3771,7 @@ do {						\
 	  */
 	 pb = (ProcBin *) HTOP;
 	 HTOP += PROC_BIN_SIZE;
-	 pb->thing_word = HEADER_PROC_BIN;
-	 pb->size = num_bytes;
-	 pb->next = MSO(c_p).first;
-	 MSO(c_p).first = (struct erl_off_heap_header*) pb;
-	 pb->val = bptr;
-	 pb->bytes = (byte*) bptr->orig_bytes;
-	 pb->flags = 0;
-	 OH_OVERHEAD(&(MSO(c_p)), pb->size / sizeof(Eterm));
+         ERTS_PROCBIN_INIT(pb, bptr, &MSO(c_p));
 	 new_binary = make_binary(pb);
 	 goto do_bits_sub_bin;
      }
@@ -3866,15 +3859,7 @@ do {						\
 	  */
 	 pb = (ProcBin *) HTOP;
 	 HTOP += PROC_BIN_SIZE;
-	 pb->thing_word = HEADER_PROC_BIN;
-	 pb->size = BsOp1;
-	 pb->next = MSO(c_p).first;
-	 MSO(c_p).first = (struct erl_off_heap_header*) pb;
-	 pb->val = bptr;
-	 pb->bytes = (byte*) bptr->orig_bytes;
-	 pb->flags = 0;
-	 
-	 OH_OVERHEAD(&(MSO(c_p)), BsOp1 / sizeof(Eterm));
+         ERTS_PROCBIN_INIT(pb, bptr, &MSO(c_p));
 
 	 StoreBifResult(2, make_binary(pb));
      }

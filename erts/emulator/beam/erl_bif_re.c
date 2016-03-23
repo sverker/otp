@@ -1265,7 +1265,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3)
 	if (pb->flags) {
 	    erts_emasculate_writable_binary(pb);
 	}
-	restart.subject = (char *) (pb->bytes+offset);
+	restart.subject = (char *) (ERTS_PROCBIN_GET_BYTES(pb)+offset);
 	restart.flags |= RESTART_FLAG_SUBJECT_IN_BINARY;
     } else {
 #ifdef DEBUG

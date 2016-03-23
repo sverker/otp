@@ -1337,9 +1337,9 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
 	Uint new_size = 2*pb->size;
 	binp = erts_bin_realloc(binp, new_size);
 	pb->val = binp;
-	pb->bytes = (byte *) binp->orig_bytes;
+	pb->offset = 0;
     }
-    erts_current_bin = pb->bytes;
+    erts_current_bin = ERTS_PROCBIN_GET_BYTES(pb);
 
     /*
      * Allocate heap space and build a new sub binary.
@@ -1415,12 +1415,10 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
 	 */
 	pb = (ProcBin *) hp;
 	hp += PROC_BIN_SIZE;
-	pb->thing_word = HEADER_PROC_BIN;
+        ERTS_PROCBIN_INIT(pb, bptr, NULL);
 	pb->size = used_size_in_bytes;
 	pb->next = MSO(c_p).first;
 	MSO(c_p).first = (struct erl_off_heap_header*)pb;
-	pb->val = bptr;
-	pb->bytes = (byte*) bptr->orig_bytes;
 	pb->flags = PB_IS_WRITABLE | PB_ACTIVE_WRITER;
 	OH_OVERHEAD(&(MSO(c_p)), pb->size / sizeof(Eterm));
 
@@ -1510,7 +1508,7 @@ erts_bs_private_append(Process* p, Eterm bin, Eterm build_size_term, Uint unit)
 	     */
 	    binp = erts_bin_realloc(binp, new_size);
 	    pb->val = binp;
-	    pb->bytes = (byte *) binp->orig_bytes;
+	    pb->offset = 0;
 	} else {
 	    /*
 	     * The binary is NOT writable. The only way that is
@@ -1525,13 +1523,13 @@ erts_bs_private_append(Process* p, Eterm bin, Eterm build_size_term, Uint unit)
 	    sys_memcpy(bptr->orig_bytes, binp->orig_bytes, binp->orig_size);
 	    pb->flags |= PB_IS_WRITABLE | PB_ACTIVE_WRITER;
 	    pb->val = bptr;
-	    pb->bytes = (byte *) bptr->orig_bytes;
+	    pb->offset = 0;
 	    if (erts_refc_dectest(&binp->refc, 0) == 0) {
 		erts_bin_free(binp);
 	    }
 	}
     }
-    erts_current_bin = pb->bytes;
+    erts_current_bin = ERTS_PROCBIN_GET_BYTES(pb);
 
     sb->size = pos_in_bits_after_build >> 3;
     sb->bitsize = pos_in_bits_after_build & 7;
@@ -1575,15 +1573,13 @@ erts_bs_init_writable(Process* p, Eterm sz)
      */
     pb = (ProcBin *) hp;
     hp += PROC_BIN_SIZE;
-    pb->thing_word = HEADER_PROC_BIN;
+    ERTS_PROCBIN_INIT(pb, bptr, NULL);
     pb->size = 0;
     pb->next = MSO(p).first;
     MSO(p).first = (struct erl_off_heap_header*) pb;
     pb->val = bptr;
-    pb->bytes = (byte*) bptr->orig_bytes;
     pb->flags = PB_IS_WRITABLE | PB_ACTIVE_WRITER;
-    OH_OVERHEAD(&(MSO(p)), pb->size / sizeof(Eterm));
-    
+
     /*
      * Now allocate the sub binary.
      */
@@ -1616,7 +1612,7 @@ erts_emasculate_writable_binary(ProcBin* pb)
     if (unused >= 8) {
 	binp = erts_bin_realloc(binp, pb->size);
 	pb->val = binp;
-	pb->bytes = (byte *) binp->orig_bytes;
+	pb->offset = 0;
     }
 }
 

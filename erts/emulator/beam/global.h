@@ -312,12 +312,13 @@ typedef struct proc_bin {
     Uint size;			/* Binary size in bytes. */
     struct erl_off_heap_header *next;
     Binary *val;		/* Pointer to Binary structure. */
-    byte *bytes;		/* Pointer to the actual data bytes. */
+    Uint offset;		/* Offset of actual data bytes. */
     Uint flags;			/* Flag word. */
 } ProcBin;
 
 #define PB_IS_WRITABLE 1	/* Writable (only one reference to ProcBin) */
 #define PB_ACTIVE_WRITER 2	/* There is an active writer */
+#define PB_IS_RESOURCE_BINARY 4
 
 /*
  * ProcBin size in Eterm words.
@@ -343,7 +344,7 @@ erts_mk_magic_binary_term(Eterm **hpp, ErlOffHeap *ohp, Binary *mbp)
     pb->next = ohp->first;
     ohp->first = (struct erl_off_heap_header*) pb;
     pb->val = mbp;
-    pb->bytes = (byte *) mbp->orig_bytes;
+    pb->offset = UINT_MAX;
     pb->flags = 0;
 
     erts_refc_inc(&mbp->refc, 1);

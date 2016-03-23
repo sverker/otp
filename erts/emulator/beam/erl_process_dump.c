@@ -450,7 +450,7 @@ heap_dump(int to, void *to_arg, Eterm x)
 			erts_print(to, to_arg,
 				   "Yc" PTR_FMT ":" PTR_FMT ":" PTR_FMT,
 				   val,
-				   pb->bytes - (byte *)val->orig_bytes,
+				   pb->offset,
 				   size);
 		    } else if (tag == SUB_BINARY_SUBTAG) {
 			ErlSubBin* Sb = (ErlSubBin *) binary_val(x);

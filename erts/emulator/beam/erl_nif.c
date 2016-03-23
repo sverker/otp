@@ -696,16 +696,9 @@ Eterm enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin)
 	
 	/* !! Copy-paste from new_binary() !! */
 	pb = (ProcBin *) alloc_heap(env, PROC_BIN_SIZE);
-	pb->thing_word = HEADER_PROC_BIN;
-	pb->size = bptr->orig_size;
-	pb->next = MSO(env->proc).first;
-	MSO(env->proc).first = (struct erl_off_heap_header*) pb;
-	pb->val = bptr;
-	pb->bytes = (byte*) bptr->orig_bytes;
-	pb->flags = 0;
-	
-	OH_OVERHEAD(&(MSO(env->proc)), pb->size / sizeof(Eterm));
-	bin_term = make_binary(pb);	
+        ERTS_PROCBIN_INIT(pb, bptr, &MSO(env->proc));
+
+	bin_term = make_binary(pb);
 	if (erts_refc_read(&bptr->refc, 1) == 1) {
 	    /* Total ownership transfer */
 	    bin->ref_bin = NULL;
@@ -1503,7 +1496,8 @@ ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv* env, void* obj,
 {
     Eterm bin = enif_make_resource(env, obj);
     ProcBin* pb = (ProcBin*) binary_val(bin);
-    pb->bytes = (byte*) data;
+    pb->flags |= PB_IS_RESOURCE_BINARY;
+    pb->offset = (Uint)data;
     pb->size = size;
     return bin;
 }

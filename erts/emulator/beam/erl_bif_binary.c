@@ -2694,7 +2694,7 @@ static BIF_RETTYPE do_binary_copy(Process *p, Eterm bin, Eterm en)
 	    res_term = erts_new_heap_binary(p,NULL,target_size,&t);
 	} else {
 	    res_term = erts_new_mso_binary(p,NULL,target_size);
-	    t = ((ProcBin *) binary_val(res_term))->bytes;
+	    t = ERTS_PROCBIN_GET_BYTES(binary_val(res_term));
 	}
 	pos = 0;
 	while (pos < target_size) {
@@ -2748,13 +2748,12 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
 	cbs->result = NULL;
 	cleanup_copy_bin_state(mb); /* now cbs is dead */
 	pb = (ProcBin *) HAlloc(BIF_P, PROC_BIN_SIZE);
-	pb->thing_word = HEADER_PROC_BIN;
+        ERTS_PROCBIN_INIT(pb, save, NULL);
 	pb->size = target_size;
 	pb->next = MSO(BIF_P).first;
 	MSO(BIF_P).first = (struct erl_off_heap_header*) pb;
 	pb->val = save;
-	pb->bytes = t;
-	pb->flags = 0;
+	pb->offset = t - (byte*)save->orig_bytes;
 
 	OH_OVERHEAD(&(MSO(BIF_P)), target_size / sizeof(Eterm));
 	BUMP_REDS(BIF_P,(pos - opos) / BINARY_COPY_LOOP_FACTOR);
@@ -2883,7 +2882,7 @@ static BIF_RETTYPE do_encode_unsigned(Process *p, Eterm uns, Eterm endianess)
 	    res = erts_new_heap_binary(p,NULL,n,&b);
 	} else {
 	    res = erts_new_mso_binary(p,NULL,n);
-	    b = ((ProcBin *) binary_val(res))->bytes;
+	    b = ERTS_PROCBIN_GET_BYTES(binary_val(res));
 	}
 
 	if (endianess == am_big) {

@@ -98,13 +98,7 @@ new_binary(Process *p, byte *buf, Uint len)
      * Now allocate the ProcBin on the heap.
      */
     pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-    pb->thing_word = HEADER_PROC_BIN;
-    pb->size = len;
-    pb->next = MSO(p).first;
-    MSO(p).first = (struct erl_off_heap_header*)pb;
-    pb->val = bptr;
-    pb->bytes = (byte*) bptr->orig_bytes;
-    pb->flags = 0;
+    ERTS_PROCBIN_INIT(pb, bptr, &MSO(p));
 
     /*
      * Miscellanous updates. Return the tagged binary.
@@ -135,13 +129,7 @@ Eterm erts_new_mso_binary(Process *p, byte *buf, int len)
      * Now allocate the ProcBin on the heap.
      */
     pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
-    pb->thing_word = HEADER_PROC_BIN;
-    pb->size = len;
-    pb->next = MSO(p).first;
-    MSO(p).first = (struct erl_off_heap_header*)pb;
-    pb->val = bptr;
-    pb->bytes = (byte*) bptr->orig_bytes;
-    pb->flags = 0;
+    ERTS_PROCBIN_INIT(pb, bptr, &MSO(p));
 
     /*
      * Miscellanous updates. Return the tagged binary.
@@ -181,7 +169,7 @@ erts_realloc_binary(Eterm bin, size_t size)
 	Binary* newbin = erts_bin_realloc(pb->val, size);
 	pb->val = newbin;
 	pb->size = size;
-	pb->bytes = (byte*) newbin->orig_bytes;
+	pb->offset = 0;
 	pb->flags = 0;
 	bin = make_binary(pb);
     }
@@ -212,7 +200,7 @@ erts_get_aligned_binary_bytes_extra(Eterm bin, byte** base_ptr, ErtsAlcType_t al
 	real_bin = binary_val(sb->orig);
     }
     if (*real_bin == HEADER_PROC_BIN) {
-	bytes = ((ProcBin *) real_bin)->bytes + offs;
+	bytes = ERTS_PROCBIN_GET_BYTES(real_bin) + offs;
     } else {
 	bytes = (byte *)(&(((ErlHeapBin *) real_bin)->data)) + offs;
     }

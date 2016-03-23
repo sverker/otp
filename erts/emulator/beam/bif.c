@@ -3346,7 +3346,7 @@ BIF_RETTYPE binary_to_float_1(BIF_ALIST_1)
 	real_bin = binary_val(sb->orig);
     } 
     if (*real_bin == HEADER_PROC_BIN) {
-	bytes = ((ProcBin *) real_bin)->bytes + offs;
+	bytes = ERTS_PROCBIN_GET_BYTES(real_bin) + offs;
     } else {
 	bytes = (byte *)(&(((ErlHeapBin *) real_bin)->data)) + offs;
     }
