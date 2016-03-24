@@ -26,7 +26,7 @@
 	 parallel/0,
 	 roundtrip/3,roundtrip/4,roundtrip_enc/3,roundtrip_enc/4]).
 
--include_lib("test_server/include/test_server.hrl").
+-include_lib("common_test/include/ct.hrl").
 
 run_dialyzer() ->
     false.
@@ -34,8 +34,8 @@ run_dialyzer() ->
 compile(File, Config, Options) -> compile_all([File], Config, Options).
 
 compile_all(Files, Config, Options) ->
-    DataDir = ?config(data_dir, Config),
-    CaseDir = ?config(case_dir, Config),
+    DataDir = proplists:get_value(data_dir, Config),
+    CaseDir = proplists:get_value(case_dir, Config),
     [compile_file(filename:join(DataDir, F), [{outdir, CaseDir},
 					      debug_info|Options])
          || F <- Files],
@@ -58,7 +58,7 @@ dialyze(Files) ->
     Beams0 = [code:which(module(F)) || F <- Files],
     Beams = [code:which(asn1rt_nif)|Beams0],
     case dialyzer:run([{files,Beams},
-		       {warnings,[no_improper_lists]},
+		       {warnings,[]},
 		       {get_warnings,true}]) of
 	[] ->
 	    ok;
@@ -99,8 +99,8 @@ compile_file(File, Options) ->
     end.
 
 compile_erlang(Mod, Config, Options) ->
-    DataDir = ?config(data_dir, Config),
-    CaseDir = ?config(case_dir, Config),
+    DataDir = proplists:get_value(data_dir, Config),
+    CaseDir = proplists:get_value(case_dir, Config),
     M = list_to_atom(Mod),
     {ok, M} = compile:file(filename:join(DataDir, Mod),
                            [report,{i,CaseDir},{outdir,CaseDir}|Options]).

@@ -215,24 +215,6 @@ AS_HELP_STRING([--enable-fp-exceptions],
   esac
 ],enable_fp_exceptions=auto)
 
-AC_ARG_ENABLE(darwin-universal,
-AS_HELP_STRING([--enable-darwin-universal],
-               [build universal binaries on darwin i386]),
-[ case "$enableval" in
-    no) enable_darwin_universal=no ;;
-    *)  enable_darwin_univeral=yes ;;
-  esac
-],enable_darwin_universal=no)
-
-
-AC_ARG_ENABLE(darwin-64bit,
-AS_HELP_STRING([--enable-darwin-64bit], [build 64bit binaries on darwin]),
-[ case "$enableval" in
-    no) enable_darwin_64bit=no ;;
-    *)  enable_darwin_64bit=yes ;;
-  esac
-],enable_darwin_64bit=no)
-
 AC_ARG_ENABLE(m64-build,
 AS_HELP_STRING([--enable-m64-build],
                [build 64bit binaries using the -m64 flag to (g)cc]),
@@ -247,12 +229,7 @@ AS_HELP_STRING([--enable-m32-build],
                [build 32bit binaries using the -m32 flag to (g)cc]),
 [ case "$enableval" in
     no) enable_m32_build=no ;;
-    *)
-	if test X${enable_darwin_64bit} = Xyes -o  X${enable_m64_build} = Xyes;
-	then
-		AC_MSG_ERROR([(--enable-darwin-64bit or --enable-m64-build) and --enable-m32-build are mutually exclusive]) ;
-	fi ;
-	enable_m32_build=yes ;;
+    *)	enable_m32_build=yes ;;
   esac
 ],enable_m32_build=no)
 
@@ -377,42 +354,7 @@ AC_MSG_CHECKING([OTP version])
 AC_MSG_RESULT([$OTP_VERSION])
 AC_SUBST(OTP_VERSION)
 
-dnl OK, we might have darwin switches off different kinds, lets 
-dnl check it all before continuing.
-TMPSYS=`uname -s`-`uname -m`
-if test X${enable_darwin_universal} = Xyes; then
-	if test X${enable_darwin_64bit} = Xyes; then
-		AC_MSG_ERROR([--enable-darwin-universal and --enable-darwin-64bit mutually exclusive])
-	fi
-	enable_hipe=no
-	case $CFLAGS in
-		*-arch\ ppc*)
-			;;
-		*)
-			CFLAGS="-arch ppc $CFLAGS"
-			;;
-	esac
-	case $CFLAGS in
-		*-arch\ i386*)
-			;;
-		*)
-			CFLAGS="-arch i386 $CFLAGS"
-			;;
-	esac
-fi
-if test X${enable_darwin_64bit} = Xyes; then
-	case "$TMPSYS" in
-	    Darwin-i386|Darwin-x86_64)
-		;;
-	    Darwin*)
-		AC_MSG_ERROR([--enable-darwin-64bit only supported on x86 hosts])
-		;;
-	    *)
-		AC_MSG_ERROR([--enable-darwin-64bit only supported on Darwin])
-		;;
-	esac
-fi
-if test X${enable_darwin_64bit} = Xyes -o X${enable_m64_build} = Xyes; then
+if test X${enable_m64_build} = Xyes; then
 	case $CFLAGS in
 		*-m64*)
 			;;
@@ -474,11 +416,8 @@ case $host_os in
     win32)
 	# The ethread library requires _WIN32_WINNT of at least 0x0403.
 	# -D_WIN32_WINNT=* from CPPFLAGS is saved in ETHR_DEFS.
-	CPPFLAGS="$CPPFLAGS -D_WIN32_WINNT=0x0501 -DWINVER=0x0501"
+	CPPFLAGS="$CPPFLAGS -D_WIN32_WINNT=0x0600 -DWINVER=0x0600"
 	;;
-    darwin*)
-        CPPFLAGS="$CPPFLAGS -D_XOPEN_SOURCE"
-        ;;
     *)
 	;;
 esac
@@ -584,6 +523,7 @@ fi
 if test "x$GCC" = xyes; then
   # Treat certain GCC warnings as errors
   LM_TRY_ENABLE_CFLAG([-Werror=return-type], [WERRORFLAGS])
+  LM_TRY_ENABLE_CFLAG([-Werror=implicit], [WERRORFLAGS])
 
   # until the emulator can handle this, I suggest we turn it off!
   #WFLAGS="-Wall -Wshadow -Wcast-qual -Wmissing-declarations"
@@ -737,32 +677,13 @@ case $ARCH-$OPSYS in
 		esac
 		;;
 	*-darwin*)
-		if test X${enable_darwin_universal} = Xyes; then
-			AC_MSG_NOTICE([Adjusting LDFLAGS for universal binaries])
-			
-			case $LDFLAGS in
-				*-arch\ ppc*)
-					;;
-				*)
-					LDFLAGS="-arch ppc $LDFLAGS"
-					;;
-			esac
-			case $LDFLAGS in
-				*-arch\ i386*)
-					;;
-				*)
-					LDFLAGS="-arch i386 $LDFLAGS"
-					;;
-			esac
-		else
-			case $LDFLAGS in
-				*-m32*)
-					;;
-				*)
-					LDFLAGS="-m32 $LDFLAGS"
-					;;
-			esac
-		fi
+		case $LDFLAGS in
+			*-m32*)
+				;;
+			*)
+				LDFLAGS="-m32 $LDFLAGS"
+				;;
+		esac
 		;;
 	*)
 		if test X${enable_m64_build} = Xyes; then
@@ -1625,7 +1546,7 @@ AC_CHECK_HEADERS(fcntl.h limits.h unistd.h syslog.h dlfcn.h ieeefp.h \
                  sys/ioctl.h sys/time.h sys/uio.h \
                  sys/socket.h sys/sockio.h sys/socketio.h \
                  net/errno.h malloc.h arpa/nameser.h libdlpi.h \
-		 pty.h util.h utmp.h langinfo.h poll.h sdkddkver.h)
+		 pty.h util.h libutil.h utmp.h langinfo.h poll.h sdkddkver.h)
 
 AC_CHECK_MEMBERS([struct ifreq.ifr_hwaddr], [], [],
 	[#ifdef __WIN32__
@@ -2809,44 +2730,6 @@ if test "$cross_compiling" != "yes" && test X${enable_hipe} != Xno; then
   fi
 fi
 
-case $ARCH-$OPSYS in
-	amd64-darwin*|x86-darwin*)
-		AC_MSG_CHECKING([For modern (leopard) style mcontext_t])
-		AC_TRY_COMPILE([
-				#include <stdlib.h>
-				#include <sys/types.h>
-				#include <unistd.h>
-				#include <mach/mach.h>
-				#include <pthread.h>
-				#include <machine/signal.h>
-				#include <ucontext.h>
-				],[
-				#if defined(__APPLE__) && defined(__MACH__) && !defined(__DARWIN__)
-				#define __DARWIN__ 1
-				#endif
-
-				#ifndef __DARWIN__
-				#error inpossible
-				#else
-
-				mcontext_t mc = NULL;
-				int x = mc->__fs.__fpu_mxcsr;
-
-				#endif
-				],darwin_mcontext_leopard=yes,
-				darwin_mcontext_leopard=no)
-				if test X"$darwin_mcontext_leopard" = X"yes"; then
-				   AC_DEFINE(DARWIN_MODERN_MCONTEXT,[],[Modern style mcontext_t in MacOSX])
-				   AC_MSG_RESULT(yes)
-				else
-				   AC_MSG_RESULT(no)
-				fi
-		;;
-	*)
-		darwin_mcontext_leopard=no
-		;;
-esac
-
 if test X${enable_fp_exceptions} = Xauto ; then
    case $host_os in
    	*linux*)
@@ -3787,14 +3670,8 @@ case $host_os in
 				DED_LDFLAGS="-m64 $DED_LDFLAGS"
 				;;
 			*)
-				if test X${enable_darwin_universal} != Xyes; then
-					DED_LDFLAGS="-m32 $DED_LDFLAGS"
-				fi
 				;;
 		esac
-		if test X${enable_darwin_universal} = Xyes; then
-		   	DED_LDFLAGS="-arch ppc -arch i386 $DED_LDFLAGS"
-		fi	
 		DED_LD="$CC"
 		DED_LD_FLAG_RUNTIME_LIBRARY_PATH="$CFLAG_RUNTIME_LIBRARY_PATH"
 	;;
@@ -4071,7 +3948,7 @@ AC_ARG_WITH(ssl-rpath,
 AS_HELP_STRING([--with-ssl-rpath=yes|no|PATHS],
                [runtime library path for OpenSSL. Default is "yes", which equates to a
 	       number of standard locations. If "no", then no runtime
-	       library paths wil be used. Anything else should be a
+	       library paths will be used. Anything else should be a
 	       comma separated list of paths.]),
 [
 case X$with_ssl in

@@ -66,6 +66,7 @@ static Export* gather_io_bytes_trap = NULL;
 static Export *gather_sched_wall_time_res_trap;
 static Export *gather_msacc_res_trap;
 static Export *gather_gc_info_res_trap;
+static Export *gather_system_check_res_trap;
 
 #define DECL_AM(S) Eterm AM_ ## S = am_atom_put(#S, sizeof(#S) - 1)
 
@@ -319,13 +320,11 @@ erts_print_system_version(int to, void *arg, Process *c_p)
     char *ov = otp_version;
 #ifdef ERTS_SMP
     Uint total, online, active;
-#ifdef ERTS_DIRTY_SCHEDULERS
     Uint dirty_cpu, dirty_cpu_onln, dirty_io;
 
-    (void) erts_schedulers_state(&total, &online, &active, &dirty_cpu, &dirty_cpu_onln, &dirty_io, 0);
-#else
-    (void) erts_schedulers_state(&total, &online, &active, NULL, NULL, NULL, 0);
-#endif
+    erts_schedulers_state(&total, &online, &active,
+			  &dirty_cpu, &dirty_cpu_onln, NULL,
+			  &dirty_io, NULL);
 #endif
     for (i = 0; i < sizeof(otp_version)-4; i++) {
 	if (ov[i] == '-' && ov[i+1] == 'r' && ov[i+2] == 'c')
@@ -931,7 +930,7 @@ BIF_RETTYPE process_info_1(BIF_ALIST_1)
 	case ERTS_PI_FAIL_TYPE_AWAIT_EXIT:
 	    ERTS_BIF_AWAIT_X_DATA_TRAP(BIF_P, BIF_ARG_1, am_undefined);
 	default:
-	    erl_exit(ERTS_ABORT_EXIT, "%s:%d: Internal error", __FILE__, __LINE__);
+	    erts_exit(ERTS_ABORT_EXIT, "%s:%d: Internal error", __FILE__, __LINE__);
 	}
     }
 
@@ -971,7 +970,7 @@ BIF_RETTYPE process_info_2(BIF_ALIST_2)
 	    case ERTS_PI_FAIL_TYPE_AWAIT_EXIT:
 		ERTS_BIF_AWAIT_X_DATA_TRAP(BIF_P, BIF_ARG_1, am_undefined);
 	    default:
-		erl_exit(ERTS_ABORT_EXIT, "%s:%d: Internal error",
+		erts_exit(ERTS_ABORT_EXIT, "%s:%d: Internal error",
 			 __FILE__, __LINE__);
 	    }
 	}
@@ -1721,12 +1720,12 @@ info_1_tuple(Process* BIF_P,	/* Pointer to current process. */
 	if (arity == 2) {
 	    Eterm res = THE_NON_VALUE;
 	    char *buf;
-	    int len = is_string(*tp);
+	    Sint len = is_string(*tp);
 	    if (len <= 0)
 		return res;
 	    buf = (char *) erts_alloc(ERTS_ALC_T_TMP, len+1);
 	    if (intlist_to_buf(*tp, buf, len) != len)
-		erl_exit(1, "%s:%d: Internal error\n", __FILE__, __LINE__);
+		erts_exit(ERTS_ERROR_EXIT, "%s:%d: Internal error\n", __FILE__, __LINE__);
 	    buf[len] = '\0';
 	    res = erts_instr_dump_memory_map(buf) ? am_true : am_false;
 	    erts_free(ERTS_ALC_T_TMP, (void *) buf);
@@ -1740,12 +1739,12 @@ info_1_tuple(Process* BIF_P,	/* Pointer to current process. */
 	    else {
 		Eterm res = THE_NON_VALUE;
 		char *buf;
-		int len = is_string(tp[1]);
+		Sint len = is_string(tp[1]);
 		if (len <= 0)
 		    return res;
 		buf = (char *) erts_alloc(ERTS_ALC_T_TMP, len+1);
 		if (intlist_to_buf(tp[1], buf, len) != len)
-		    erl_exit(1, "%s:%d: Internal error\n", __FILE__, __LINE__);
+		    erts_exit(ERTS_ERROR_EXIT, "%s:%d: Internal error\n", __FILE__, __LINE__);
 		buf[len] = '\0';
 		res = erts_instr_dump_stat(buf, 1) ? am_true : am_false;
 		erts_free(ERTS_ALC_T_TMP, (void *) buf);
@@ -2043,12 +2042,18 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
 #ifndef ERTS_SMP
 	BIF_RET(am_disabled);
 #else
+#ifndef ERTS_DIRTY_SCHEDULERS
 	if (erts_no_schedulers == 1)
 	    BIF_RET(am_disabled);
-	else {
-	    BIF_RET(erts_is_multi_scheduling_blocked()
-		    ? am_blocked
-		    : am_enabled);
+	else
+#endif
+	{
+	    int msb = erts_is_multi_scheduling_blocked();
+	    BIF_RET(!msb
+		    ? am_enabled
+		    : (msb > 0
+		       ? am_blocked
+		       : am_blocked_normal));
 	}
 #endif
     } else if (BIF_ARG_1 == am_build_type) {
@@ -2517,77 +2522,120 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
 	res = TUPLE3(hp, make_small(1), make_small(1), make_small(1));
 	BIF_RET(res);
 #else
+	Eterm *hp;
 	Uint total, online, active;
-	switch (erts_schedulers_state(&total,
-				      &online,
-				      &active,
-				      NULL,
-				      NULL,
-				      NULL,
-				      1)) {
-	case ERTS_SCHDLR_SSPND_DONE: {
-	    Eterm *hp = HAlloc(BIF_P, 4);
-	    res = TUPLE3(hp,
-			 make_small(total),
-			 make_small(online),
-			 make_small(active));
-	    BIF_RET(res);
+	erts_schedulers_state(&total, &online, &active,
+			      NULL, NULL, NULL, NULL, NULL);
+	hp = HAlloc(BIF_P, 4);
+	res = TUPLE3(hp,
+		     make_small(total),
+		     make_small(online),
+		     make_small(active));
+	BIF_RET(res);
+#endif
+    } else if (ERTS_IS_ATOM_STR("schedulers_state", BIF_ARG_1)) {
+#ifndef ERTS_SMP
+	Eterm *hp = HAlloc(BIF_P, 4);
+	res = TUPLE3(hp, make_small(1), make_small(1), make_small(1));
+	BIF_RET(res);
+#else
+	Eterm *hp;
+	Uint total, online, active;
+	erts_schedulers_state(&total, &online, &active,
+			      NULL, NULL, NULL, NULL, NULL);
+	hp = HAlloc(BIF_P, 4);
+	res = TUPLE3(hp,
+		     make_small(total),
+		     make_small(online),
+		     make_small(active));
+	BIF_RET(res);
+#endif
+    } else if (ERTS_IS_ATOM_STR("all_schedulers_state", BIF_ARG_1)) {
+#ifndef ERTS_SMP
+	Eterm *hp = HAlloc(BIF_P, 2+5);
+	res = CONS(hp+5,
+		   TUPLE4(hp,
+			  am_normal,
+			  make_small(1),
+			  make_small(1),
+			  make_small(1)),
+		   NIL);
+	BIF_RET(res);
+#else
+	Eterm *hp, tpl;
+	Uint sz, total, online, active,
+	    dirty_cpu_total, dirty_cpu_online, dirty_cpu_active,
+	    dirty_io_total, dirty_io_active;
+	erts_schedulers_state(&total, &online, &active,
+			      &dirty_cpu_total, &dirty_cpu_online, &dirty_cpu_active,
+			      &dirty_io_total, &dirty_io_active);
+
+	sz = 2+5;
+	if (dirty_cpu_total)
+	    sz += 2+5;
+	if (dirty_io_total)
+	    sz += 2+5;
+
+	hp = HAlloc(BIF_P, sz);
+
+	res = NIL;
+	if (dirty_io_total) {
+	    tpl = TUPLE4(hp,
+			 am_dirty_io,
+			 make_small(dirty_io_total),
+			 make_small(dirty_io_total),
+			 make_small(dirty_io_active));
+	    hp += 5;
+	    res = CONS(hp, tpl, res);
+	    hp += 2;
 	}
-	case ERTS_SCHDLR_SSPND_YIELD_RESTART:
-	    ERTS_VBUMP_ALL_REDS(BIF_P);
-	    BIF_TRAP1(bif_export[BIF_system_info_1],
-		      BIF_P, BIF_ARG_1);
-	default:
-	    ASSERT(0);
-	    BIF_ERROR(BIF_P, EXC_INTERNAL_ERROR);
+	if (dirty_cpu_total) {
+	    tpl = TUPLE4(hp,
+			 am_dirty_cpu,
+			 make_small(dirty_cpu_total),
+			 make_small(dirty_cpu_online),
+			 make_small(dirty_cpu_active));
+	    hp += 5;
+	    res = CONS(hp, tpl, res);
+	    hp += 2;
 	}
+	tpl = TUPLE4(hp,
+		     am_normal,
+		     make_small(total),
+		     make_small(online),
+		     make_small(active));
+	hp += 5;
+	res = CONS(hp, tpl, res);
+	BIF_RET(res);
 #endif
     } else if (ERTS_IS_ATOM_STR("schedulers_online", BIF_ARG_1)) {
 #ifndef ERTS_SMP
 	BIF_RET(make_small(1));
 #else
-	Uint total, online, active;
-	switch (erts_schedulers_state(&total, &online, &active, NULL, NULL, NULL, 1)) {
-	case ERTS_SCHDLR_SSPND_DONE:
-	    BIF_RET(make_small(online));
-	case ERTS_SCHDLR_SSPND_YIELD_RESTART:
-	    ERTS_VBUMP_ALL_REDS(BIF_P);
-	    BIF_TRAP1(bif_export[BIF_system_info_1],
-		      BIF_P, BIF_ARG_1);
-	default:
-	    ASSERT(0);
-	    BIF_ERROR(BIF_P, EXC_INTERNAL_ERROR);
-	}
+	Uint online;
+	erts_schedulers_state(NULL, &online, NULL, NULL, NULL, NULL, NULL, NULL);
+	BIF_RET(make_small(online));
 #endif
     } else if (ERTS_IS_ATOM_STR("schedulers_active", BIF_ARG_1)) {
 #ifndef ERTS_SMP
 	BIF_RET(make_small(1));
 #else
-	Uint total, online, active;
-	switch (erts_schedulers_state(&total, &online, &active, NULL, NULL, NULL, 1)) {
-	case ERTS_SCHDLR_SSPND_DONE:
-	    BIF_RET(make_small(active));
-	case ERTS_SCHDLR_SSPND_YIELD_RESTART:
-	    ERTS_VBUMP_ALL_REDS(BIF_P);
-	    BIF_TRAP1(bif_export[BIF_system_info_1],
-		      BIF_P, BIF_ARG_1);
-	default:
-	    ASSERT(0);
-	    BIF_ERROR(BIF_P, EXC_INTERNAL_ERROR);
-	}
+	Uint active;
+	erts_schedulers_state(NULL, NULL, &active, NULL, NULL, NULL, NULL, NULL);
+	BIF_RET(make_small(active));
 #endif
 #if defined(ERTS_SMP) && defined(ERTS_DIRTY_SCHEDULERS)
     } else if (ERTS_IS_ATOM_STR("dirty_cpu_schedulers", BIF_ARG_1)) {
 	Uint dirty_cpu;
-	erts_schedulers_state(NULL, NULL, NULL, &dirty_cpu, NULL, NULL, 1);
+	erts_schedulers_state(NULL, NULL, NULL, &dirty_cpu, NULL, NULL, NULL, NULL);
 	BIF_RET(make_small(dirty_cpu));
     } else if (ERTS_IS_ATOM_STR("dirty_cpu_schedulers_online", BIF_ARG_1)) {
 	Uint dirty_cpu_onln;
-	erts_schedulers_state(NULL, NULL, NULL, NULL, &dirty_cpu_onln, NULL, 1);
+	erts_schedulers_state(NULL, NULL, NULL, NULL, &dirty_cpu_onln, NULL, NULL, NULL);
 	BIF_RET(make_small(dirty_cpu_onln));
     } else if (ERTS_IS_ATOM_STR("dirty_io_schedulers", BIF_ARG_1)) {
 	Uint dirty_io;
-	erts_schedulers_state(NULL, NULL, NULL, NULL, NULL, &dirty_io, 1);
+	erts_schedulers_state(NULL, NULL, NULL, NULL, NULL, NULL, &dirty_io, NULL);
 	BIF_RET(make_small(dirty_io));
 #endif
     } else if (ERTS_IS_ATOM_STR("run_queues", BIF_ARG_1)) {
@@ -2641,7 +2689,16 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
 	if (erts_no_schedulers == 1)
 	    BIF_RET(NIL);
 	else
-	    BIF_RET(erts_multi_scheduling_blockers(BIF_P));
+	    BIF_RET(erts_multi_scheduling_blockers(BIF_P, 0));
+#endif
+    } else if (ERTS_IS_ATOM_STR("normal_multi_scheduling_blockers", BIF_ARG_1)) {
+#ifndef ERTS_SMP
+	BIF_RET(NIL);
+#else
+	if (erts_no_schedulers == 1)
+	    BIF_RET(NIL);
+	else
+	    BIF_RET(erts_multi_scheduling_blockers(BIF_P, 1));
 #endif
     } else if (ERTS_IS_ATOM_STR("modified_timing_level", BIF_ARG_1)) {
 	BIF_RET(ERTS_USE_MODIFIED_TIMING()
@@ -3786,6 +3843,18 @@ BIF_RETTYPE erts_internal_is_system_process_1(BIF_ALIST_1)
     BIF_ERROR(BIF_P, BADARG);
 }
 
+BIF_RETTYPE erts_internal_system_check_1(BIF_ALIST_1)
+{
+    Eterm res;
+    if (ERTS_IS_ATOM_STR("schedulers", BIF_ARG_1)) {
+	res = erts_system_check_request(BIF_P);
+	if (is_non_value(res))
+	    BIF_RET(am_undefined);
+	BIF_TRAP1(gather_system_check_res_trap, BIF_P, res);
+    }
+
+    BIF_ERROR(BIF_P, BADARG);
+}
 
 static erts_smp_atomic_t hipe_test_reschedule_flag;
 
@@ -3800,7 +3869,7 @@ static void broken_halt_test(Eterm bif_arg_2)
 #if defined(ERTS_HAVE_TRY_CATCH)
     erts_get_scheduler_data()->run_queue = NULL;
 #endif
-    erl_exit(ERTS_DUMP_EXIT, "%T", bif_arg_2);
+    erts_exit(ERTS_DUMP_EXIT, "%T", bif_arg_2);
 }
 
 
@@ -4045,7 +4114,7 @@ BIF_RETTYPE erts_debug_set_internal_state_2(BIF_ALIST_2)
 		BIF_RET(am_true);
 	}
 	else if (ERTS_IS_ATOM_STR("abort", BIF_ARG_1)) {
-	    erl_exit(ERTS_ABORT_EXIT, "%T\n", BIF_ARG_2);
+	    erts_exit(ERTS_ABORT_EXIT, "%T\n", BIF_ARG_2);
 	}
 	else if (ERTS_IS_ATOM_STR("kill_dist_connection", BIF_ARG_1)) {
 	    DistEntry *dep = erts_sysname_to_connected_dist_entry(BIF_ARG_2);
@@ -4407,7 +4476,8 @@ erts_bif_info_init(void)
 	= erts_export_put(am_erts_internal, am_gather_io_bytes, 2);
     gather_msacc_res_trap
 	= erts_export_put(am_erts_internal, am_gather_microstate_accounting_result, 2);
-
+    gather_system_check_res_trap
+	= erts_export_put(am_erts_internal, am_gather_system_check_result, 1);
     process_info_init();
     os_info_init();
 }

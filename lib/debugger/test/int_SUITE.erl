@@ -20,7 +20,7 @@
 
 %%
 -module(int_SUITE).
--include_lib("test_server/include/test_server.hrl").
+-include_lib("common_test/include/ct.hrl").
 
 %% Test server specific exports
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
@@ -245,14 +245,13 @@ interpretable(Config) when is_list(Config) ->
     ?line true = int:interpretable(filename:join([DataDir,lists1])),
     ?line true = code:del_path(DataDir),
 
-    %% {error, no_src}
-    ?line PrivDir = filename:join(?config(priv_dir, Config), ""),
-    ?line {ok, _} = file:copy(filename:join([DataDir,"lists1.beam"]),
+    %% true (from source)
+    PrivDir = filename:join(?config(priv_dir, Config), ""),
+    {ok, _} = file:copy(filename:join([DataDir,"lists1.beam"]),
 			      filename:join([PrivDir,"lists1.beam"])),
-    ?line true = code:add_patha(PrivDir),
-
-    ?line {error, no_src} = int:interpretable(lists1),
-    ?line ok = file:delete(filename:join([PrivDir,"lists1.beam"])),
+    true = code:add_patha(PrivDir),
+    true = int:interpretable(lists1),
+    ok = file:delete(filename:join([PrivDir,"lists1.beam"])),
 
     %% {error, no_beam}
     Src = filename:join([PrivDir,"lists1.erl"]),
@@ -266,6 +265,11 @@ interpretable(Config) when is_list(Config) ->
     ?line {error, no_debug_info} = int:interpretable(lists1),
     ?line ok = file:delete(Src),
     ?line true = code:del_path(PrivDir),
+
+    %% {error, no_src}
+    {ok, lists2, Binary} = compile:forms([{attribute,1,module,lists2}], []),
+    code:load_binary(lists2, "unknown", Binary),
+    {error, no_src} = int:interpretable(lists2),
 
     %% {error, badarg}
     ?line {error, badarg} = int:interpretable(pride),

@@ -33,7 +33,6 @@ MODULES= \
 	sasl_report_suite_supervisor \
 	systools_SUITE \
 	systools_rc_SUITE \
-	overload_SUITE \
 	rb_SUITE \
 	rh_test_lib \
 
@@ -55,8 +54,7 @@ RELSYSDIR = $(RELEASE_PATH)/sasl_test
 # FLAGS
 # ----------------------------------------------------
 ERL_MAKE_FLAGS +=
-ERL_COMPILE_FLAGS += -I$(ERL_TOP)/lib/test_server/include \
-		-I$(ERL_TOP)/lib/sasl/src
+ERL_COMPILE_FLAGS += -I$(ERL_TOP)/lib/sasl/src
 
 EBIN = .
 

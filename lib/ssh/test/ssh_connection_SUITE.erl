@@ -36,6 +36,9 @@
 %% suite() ->
 %%     [{ct_hooks,[ts_install_cth]}].
 
+suite() ->
+    [{timetrap,{seconds,40}}].
+
 all() ->
     [
      {group, openssh},
@@ -67,16 +70,10 @@ ptty() ->
 
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    catch crypto:stop(),
-    case catch crypto:start() of
-	ok ->
-	    Config;
-	_Else ->
-	    {skip, "Crypto could not be started!"}
-    end.
+    Config.
 
-end_per_suite(_Config) ->
-    crypto:stop().
+end_per_suite(Config) ->
+    Config.
 
 %%--------------------------------------------------------------------
 init_per_group(openssh, Config) ->
@@ -317,11 +314,7 @@ ptty_alloc_pixel(Config) when is_list(Config) ->
     ssh:close(ConnectionRef).
 
 %%--------------------------------------------------------------------
-
-interrupted_send() ->
-    [{doc, "Use a subsystem that echos n char and then sends eof to cause a channel exit partway through a large send."}].
-
-interrupted_send(Config) when is_list(Config) ->
+interrupted_send(Config) ->
     PrivDir = ?config(priv_dir, Config),
     UserDir = filename:join(PrivDir, nopubkey), % to make sure we don't use public-key-auth
     file:make_dir(UserDir),

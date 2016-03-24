@@ -105,7 +105,9 @@
 -export([garbage_collect/0, garbage_collect/1, garbage_collect/2]).
 -export([garbage_collect_message_area/0, get/0, get/1, get_keys/0, get_keys/1]).
 -export([get_module_info/1, get_stacktrace/0, group_leader/0]).
--export([group_leader/2, halt/0, halt/1, halt/2, hash/2, hibernate/3]).
+-export([group_leader/2]).
+-export([halt/0, halt/1, halt/2, hash/2,
+	 has_prepared_code_on_load/1, hibernate/3]).
 -export([insert_element/3]).
 -export([integer_to_binary/1, integer_to_list/1]).
 -export([iolist_size/1, iolist_to_binary/1]).
@@ -995,6 +997,12 @@ halt(_Status, _Options) ->
       Term :: term(),
       Range :: pos_integer().
 hash(_Term, _Range) ->
+    erlang:nif_error(undefined).
+
+%% has_prepared_code_on_load/1
+-spec erlang:has_prepared_code_on_load(PreparedCode) -> boolean() when
+      PreparedCode :: binary().
+has_prepared_code_on_load(_PreparedCode) ->
     erlang:nif_error(undefined).
 
 %% hibernate/3
@@ -2292,8 +2300,8 @@ subtract(_,_) ->
       MinBinVHeapSize :: non_neg_integer(),
       OldMinBinVHeapSize :: non_neg_integer();
                         (multi_scheduling, BlockState) -> OldBlockState when
-      BlockState :: block | unblock,
-      OldBlockState :: block | unblock | enabled;
+      BlockState :: block | unblock | block_normal | unblock_normal,
+      OldBlockState :: blocked | disabled | enabled;
                         (scheduler_bind_type, How) -> OldBindType when
       How :: scheduler_bind_type() | default_bind,
       OldBindType :: scheduler_bind_type();
@@ -2438,14 +2446,15 @@ tuple_to_list(_Tuple) ->
           logical_processors_available |
           logical_processors_online) -> unknown | pos_integer();
          (machine) -> string();
+         (message_queue_data) -> message_queue_data();
          (min_heap_size) -> {min_heap_size, MinHeapSize :: pos_integer()};
          (min_bin_vheap_size) -> {min_bin_vheap_size,
                                   MinBinVHeapSize :: pos_integer()};
          (modified_timing_level) -> integer() | undefined;
-         (multi_scheduling) -> disabled | blocked | enabled;
+         (multi_scheduling) -> disabled | blocked | blocked_normal | enabled;
          (multi_scheduling_blockers) -> [Pid :: pid()];
          (nif_version) -> string();
-         (message_queue_data) -> message_queue_data();
+         (normal_multi_scheduling_blockers) -> [Pid :: pid()];
          (otp_release) -> string();
          (os_monotonic_time_source) -> [{atom(),term()}];
          (os_system_time_source) -> [{atom(),term()}];

@@ -121,8 +121,10 @@ erts_smp_atomic_t sys_misc_mem_sz;
 static void smp_sig_notify(char c);
 static int sig_notify_fds[2] = {-1, -1};
 
+#if !defined(ETHR_UNUSABLE_SIGUSRX) && defined(ERTS_THR_HAVE_SIG_FUNCS)
 static int sig_suspend_fds[2] = {-1, -1};
 #define ERTS_SYS_SUSPEND_SIGNAL SIGUSR2
+#endif
 
 #endif
 
@@ -631,7 +633,7 @@ break_requested(void)
   fprintf(stderr,"break!\n");
 #endif
   if (ERTS_BREAK_REQUESTED)
-      erl_exit(ERTS_INTR_EXIT, "");
+      erts_exit(ERTS_INTR_EXIT, "");
 
   ERTS_SET_BREAK_REQUESTED;
   ERTS_CHK_IO_AS_INTR(); /* Make sure we don't sleep in poll */
@@ -670,7 +672,7 @@ sigusr1_exit(void)
     }
 
     prepare_crash_dump(secs);
-    erl_exit(1, "Received SIGUSR1\n");
+    erts_exit(ERTS_ERROR_EXIT, "Received SIGUSR1\n");
 }
 
 #ifdef ETHR_UNUSABLE_SIGUSRX
@@ -678,7 +680,7 @@ sigusr1_exit(void)
 
 #else
 
-#ifdef ERTS_SMP
+#ifdef ERTS_SYS_SUSPEND_SIGNAL
 void
 sys_thr_suspend(erts_tid_t tid) {
     erts_thr_kill(tid, ERTS_SYS_SUSPEND_SIGNAL);
@@ -706,7 +708,7 @@ static RETSIGTYPE user_signal1(int signum)
 #endif
 }
 
-#ifdef ERTS_SMP
+#ifdef ERTS_SYS_SUSPEND_SIGNAL
 #if (defined(SIG_SIGSET) || defined(SIG_SIGNAL))
 static RETSIGTYPE suspend_signal(void)
 #else
@@ -719,14 +721,14 @@ static RETSIGTYPE suspend_signal(int signum)
      res = read(sig_suspend_fds[0], buf, sizeof(int));
    } while (res < 0 && errno == EINTR);
 }
-#endif /* #ifdef ERTS_SMP */
+#endif /* #ifdef ERTS_SYS_SUSPEND_SIGNAL */
 
 #endif /* #ifndef ETHR_UNUSABLE_SIGUSRX */
 
 static void
 quit_requested(void)
 {
-    erl_exit(ERTS_INTR_EXIT, "");
+    erts_exit(ERTS_INTR_EXIT, "");
 }
 
 #if (defined(SIG_SIGSET) || defined(SIG_SIGNAL))
@@ -772,11 +774,15 @@ void init_break_handler(void)
    sys_signal(SIGINT, request_break);
 #ifndef ETHR_UNUSABLE_SIGUSRX
    sys_signal(SIGUSR1, user_signal1);
-#ifdef ERTS_SMP
-   sys_signal(ERTS_SYS_SUSPEND_SIGNAL, suspend_signal);
-#endif /* #ifdef ERTS_SMP */
 #endif /* #ifndef ETHR_UNUSABLE_SIGUSRX */
    sys_signal(SIGQUIT, do_quit);
+}
+
+void sys_init_suspend_handler(void)
+{
+#ifdef ERTS_SYS_SUSPEND_SIGNAL
+   sys_signal(ERTS_SYS_SUSPEND_SIGNAL, suspend_signal);
+#endif
 }
 
 int sys_max_files(void)
@@ -1252,7 +1258,7 @@ signal_dispatcher_thread_func(void *unused)
 	if (res < 0) {
 	    if (errno == EINTR)
 		continue;
-	    erl_exit(ERTS_ABORT_EXIT,
+	    erts_exit(ERTS_ABORT_EXIT,
 		     "signal-dispatcher thread got unexpected error: %s (%d)\n",
 		     erl_errno_id(errno),
 		     errno);
@@ -1289,7 +1295,7 @@ signal_dispatcher_thread_func(void *unused)
 		sigusr1_exit();
 		break;
 	    default:
-		erl_exit(ERTS_ABORT_EXIT,
+		erts_exit(ERTS_ABORT_EXIT,
 			 "signal-dispatcher thread received unknown "
 			 "signal notification: '%c'\n",
 			 buf[i]);
@@ -1308,7 +1314,7 @@ init_smp_sig_notify(void)
     thr_opts.name = "sys_sig_dispatcher";
 
     if (pipe(sig_notify_fds) < 0) {
-	erl_exit(ERTS_ABORT_EXIT,
+	erts_exit(ERTS_ABORT_EXIT,
 		 "Failed to create signal-dispatcher pipe: %s (%d)\n",
 		 erl_errno_id(errno),
 		 errno);
@@ -1323,12 +1329,14 @@ init_smp_sig_notify(void)
 
 static void
 init_smp_sig_suspend(void) {
+#ifdef ERTS_SYS_SUSPEND_SIGNAL
   if (pipe(sig_suspend_fds) < 0) {
-    erl_exit(ERTS_ABORT_EXIT,
+    erts_exit(ERTS_ABORT_EXIT,
 	     "Failed to create sig_suspend pipe: %s (%d)\n",
 	     erl_errno_id(errno),
 	     errno);
   }
+#endif
 }
 
 #ifdef __DARWIN__
@@ -1340,7 +1348,7 @@ static void initialize_darwin_main_thread_pipes(void)
 {
     if (pipe(erts_darwin_main_thread_pipe) < 0 || 
 	pipe(erts_darwin_main_thread_result_pipe) < 0) {
-	erl_exit(1,"Fatal error initializing Darwin main thread stealing");
+	erts_exit(ERTS_ERROR_EXIT,"Fatal error initializing Darwin main thread stealing");
     }
 }
 

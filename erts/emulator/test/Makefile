@@ -74,6 +74,7 @@ MODULES= \
 	match_spec_SUITE \
 	module_info_SUITE \
 	monitor_SUITE \
+	multi_load_SUITE \
 	nested_SUITE \
 	nif_SUITE \
 	node_container_SUITE \
@@ -158,7 +159,7 @@ RELSYSDIR = $(RELEASE_PATH)/emulator_test
 # FLAGS
 # ----------------------------------------------------
 ERL_MAKE_FLAGS += 
-ERL_COMPILE_FLAGS += -I$(ERL_TOP)/lib/test_server/include
+ERL_COMPILE_FLAGS +=
 
 # ----------------------------------------------------
 # Targets

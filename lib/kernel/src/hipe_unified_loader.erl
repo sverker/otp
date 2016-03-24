@@ -41,10 +41,11 @@
 % I think the real solution would be to let BIF erlang:load_module/2 redirect all
 % hipe calls to the module and thereby remove post_beam_load.
 
+% SVERK: Can we remove -compile(no_native) now?
+
 -export([chunk_name/1,
 	 %% Only the code and code_server modules may call the entries below!
 	 load_native_code/3,
-	 %%post_beam_load/2,
 	 load_module/4,
 	 load/3]).
 
@@ -105,7 +106,7 @@ load_native_code(Mod, Bin, Architecture) when is_atom(Mod), is_binary(Bin) ->
   case code:get_chunk(Bin, chunk_name(Architecture)) of
     undefined -> no_native;
     NativeCode when is_binary(NativeCode) ->
-      erlang:system_flag(multi_scheduling, block),
+      erlang:system_flag(multi_scheduling, block_normal),
       try
         OldReferencesToPatch = [], %%SVERK patch_to_emu_step1(Mod),
         case load_module(Mod, NativeCode, Bin, OldReferencesToPatch,
@@ -114,25 +115,9 @@ load_native_code(Mod, Bin, Architecture) when is_atom(Mod), is_binary(Bin) ->
           Result -> Result
         end
       after
-        erlang:system_flag(multi_scheduling, unblock)
+        erlang:system_flag(multi_scheduling, unblock_normal)
       end
   end.
-
-%%========================================================================
-
-%% -spec post_beam_load(atom(), hipe_architecture()) -> 'ok'.
-
-%% %% does nothing on a hipe-disabled system
-%% post_beam_load(_Mod, undefined) ->
-%%   ok;
-%% post_beam_load(Mod, _) when is_atom(Mod) ->
-%%   erlang:system_flag(multi_scheduling, block),
-%%   try
-%%     patch_to_emu(Mod)
-%%   after
-%%     erlang:system_flag(multi_scheduling, unblock)
-%%   end,
-%%   ok.
 
 %%========================================================================
 
@@ -151,11 +136,11 @@ version_check(Version, Mod) when is_atom(Mod) ->
                      'bad_crc' | {'module', Mod} when Mod :: atom().
 
 load_module(Mod, Bin, Beam, Architecture) ->
-  erlang:system_flag(multi_scheduling, block),
+  erlang:system_flag(multi_scheduling, block_normal),
   try
     load_module(Mod, Bin, Beam, [], Architecture)
   after
-    erlang:system_flag(multi_scheduling, unblock)
+    erlang:system_flag(multi_scheduling, unblock_normal)
   end.
 
 load_module(Mod, Bin, Beam, [], Architecture) ->
@@ -170,14 +155,14 @@ load_module(Mod, Bin, Beam, [], Architecture) ->
               'bad_crc' | {'module', Mod} when Mod :: atom().
 
 load(Mod, Bin, Architecture) ->
-  erlang:system_flag(multi_scheduling, block),
+  erlang:system_flag(multi_scheduling, block_normal),
   try
     ?debug_msg("********* Loading funs in module ~w *********\n",[Mod]),
     %% Loading just some functions in a module; patch closures separately.
     put(hipe_patch_closures, true),
     load_common(Mod, Bin, [], Architecture)
   after
-    erlang:system_flag(multi_scheduling, unblock)
+    erlang:system_flag(multi_scheduling, unblock_normal)
   end.
 
 %%------------------------------------------------------------------------

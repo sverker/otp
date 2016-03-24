@@ -425,7 +425,7 @@ void erl_grow_estack(ErtsEStack*, Uint need);
 #define ESTACK_CHANGE_ALLOCATOR(s,t)					\
 do {									\
     if ((s).start != ESTK_DEF_STACK(s)) {				\
-	erl_exit(1, "Internal error - trying to change allocator "	\
+	erts_exit(ERTS_ERROR_EXIT, "Internal error - trying to change allocator "	\
 		 "type of active estack\n");				\
     }									\
     (s).alloc_type = (t);						\
@@ -586,7 +586,7 @@ do {	 	                                                  \
 #define WSTACK_CHANGE_ALLOCATOR(s,t)					\
 do {									\
     if (s.wstart != WSTK_DEF_STACK(s)) {				\
-	erl_exit(1, "Internal error - trying to change allocator "	\
+	erts_exit(ERTS_ERROR_EXIT, "Internal error - trying to change allocator "	\
 		 "type of active wstack\n");				\
     }									\
     s.alloc_type = (t);							\
@@ -778,7 +778,7 @@ ErtsPStack s = { (byte*)PSTK_DEF_STACK(s), /* pstart */                    \
 #define PSTACK_CHANGE_ALLOCATOR(s,t)					\
 do {									\
     if (s.pstart != (byte*)PSTK_DEF_STACK(s)) {				\
-	erl_exit(1, "Internal error - trying to change allocator "	\
+	erts_exit(ERTS_ERROR_EXIT, "Internal error - trying to change allocator "	\
 		 "type of active pstack\n");				\
     }									\
     s.alloc_type = (t);							\
@@ -1008,6 +1008,7 @@ typedef struct {
 
 Binary* erts_alloc_loader_state(void);
 Eterm erts_module_for_prepared_code(Binary* magic);
+Eterm erts_has_code_on_load(Binary* magic);
 Eterm erts_prepare_loading(Binary* loader_state,  Process *c_p,
 			   Eterm group_leader, Eterm* modp,
 			   byte* code, Uint size);
@@ -1026,7 +1027,7 @@ Eterm erts_make_stub_module(Process* p, Eterm Mod, Eterm Beam, Eterm Info);
 
 /* beam_ranges.c */
 void erts_init_ranges(void);
-void erts_start_staging_ranges(void);
+void erts_start_staging_ranges(int num_new);
 void erts_end_staging_ranges(int commit);
 void erts_update_ranges(BeamInstr* code, Uint size);
 void erts_remove_from_ranges(BeamInstr* code);
@@ -1047,8 +1048,8 @@ double erts_get_positive_zero_float(void);
 
 /* config.c */
 
-__decl_noreturn void __noreturn erl_exit(int n, char*, ...);
-__decl_noreturn void __noreturn erl_exit_flush_async(int n, char*, ...);
+__decl_noreturn void __noreturn erts_exit(int n, char*, ...);
+__decl_noreturn void __noreturn erts_flush_async_exit(int n, char*, ...);
 void erl_error(char*, va_list);
 
 /* This controls whether sharing-preserving copy is used by Erlang */
@@ -1311,7 +1312,7 @@ int erts_utf8_to_latin1(byte* dest, const byte* source, int slen);
 #define ERTS_UTF8_OK_MAX_CHARS 4
 
 void bin_write(int, void*, byte*, size_t);
-int intlist_to_buf(Eterm, char*, int); /* most callers pass plain char*'s */
+Sint intlist_to_buf(Eterm, char*, Sint); /* most callers pass plain char*'s */
 
 struct Sint_buf {
 #if defined(ARCH_64)
@@ -1384,7 +1385,7 @@ ErlDrvSizeT erts_iolist_to_buf(Eterm, char*, ErlDrvSizeT);
 ErlDrvSizeT erts_iolist_to_buf_yielding(ErtsIOList2BufState *);
 int erts_iolist_size_yielding(ErtsIOListState *state);
 int erts_iolist_size(Eterm, ErlDrvSizeT *);
-int is_string(Eterm);
+Sint is_string(Eterm);
 void erl_at_exit(void (*) (void*), void*);
 Eterm collect_memory(Process *);
 void dump_memory_to_fd(int);

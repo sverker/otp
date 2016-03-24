@@ -22,14 +22,14 @@
 
 -export([test/2]).
 
--include_lib("test_server/include/test_server.hrl").
+-include_lib("common_test/include/ct.hrl").
 
 
 %% testing OTP-5104
 
 test(Opts, Config) ->
     {ok,Msg} = asn1ct:value('P-Record', 'PersonnelRecord',
-			    [{i,?config(case_dir, Config)}]),
+			    [{i,proplists:get_value(case_dir, Config)}]),
     Bytes0 = encode(Opts, 'PersonnelRecord', Msg),
     Bytes1 = iolist_to_binary([Bytes0, <<55,55,55>>]),
     case proplists:get_bool(undec_rest, Opts) of

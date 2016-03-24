@@ -22,7 +22,7 @@
 
 -export([test/1]).
 
--include_lib("test_server/include/test_server.hrl").
+-include_lib("common_test/include/ct.hrl").
 
 test(Config) ->
     ValT_1 = 'ContextSwitchingTypes':'val1-T'(),
@@ -38,7 +38,7 @@ test(Config) ->
     check_EXTERNAL(enc_dec('T', ValT_4)),
 
     {ok,ValT2} = asn1ct:value('ContextSwitchingTypes', 'T',
-			      [{i,?config(case_dir, Config)}]),
+			      [{i,proplists:get_value(case_dir, Config)}]),
     io:format("ValT2 ~p~n",[ValT2]),
     check_EXTERNAL(enc_dec('T', ValT2)),
 

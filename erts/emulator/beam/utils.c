@@ -317,10 +317,10 @@ erl_grow_equeue(ErtsEQueue* q, Eterm* default_equeue)
  * Calculate length of a list.
  * Returns -1 if not a proper list (i.e. not terminated with NIL)
  */
-int
+Sint
 erts_list_length(Eterm list)
 {
-    int i = 0;
+    Sint i = 0;
 
     while(is_list(list)) {
 	i++;
@@ -1069,7 +1069,7 @@ tail_recur:
 	}    
 	
     default:
-	erl_exit(1, "Invalid tag in make_hash(0x%X,0x%X)\n", term, op);
+	erts_exit(ERTS_ERROR_EXIT, "Invalid tag in make_hash(0x%X,0x%X)\n", term, op);
 	return 0;
       }
       if (WSTACK_ISEMPTY(stack)) break;
@@ -1342,7 +1342,7 @@ make_hash2(Eterm term)
                     i = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                     break;
                 default:
-                    erl_exit(1, "bad header");
+                    erts_exit(ERTS_ERROR_EXIT, "bad header");
                 }
                 while (i) {
                     if (is_list(*ptr)) {
@@ -1505,7 +1505,7 @@ make_hash2(Eterm term)
 	    break;
 		    
 	    default:
-		erl_exit(1, "Invalid tag in make_hash2(0x%X)\n", term);
+		erts_exit(ERTS_ERROR_EXIT, "Invalid tag in make_hash2(0x%X)\n", term);
 	    }
 	}
 	break;
@@ -1536,7 +1536,7 @@ make_hash2(Eterm term)
 			UINT32_HASH(NIL_DEF, HCONST_2);
 		    goto hash2_common;
 		default:
-		    erl_exit(1, "Invalid tag in make_hash2(0x%X)\n", term);
+		    erts_exit(ERTS_ERROR_EXIT, "Invalid tag in make_hash2(0x%X)\n", term);
 		}
 	    case _TAG_IMMED1_SMALL:
 	      {
@@ -1552,7 +1552,7 @@ make_hash2(Eterm term)
 	    }
 	    break;
 	default:
-	    erl_exit(1, "Invalid tag in make_hash2(0x%X)\n", term);
+	    erts_exit(ERTS_ERROR_EXIT, "Invalid tag in make_hash2(0x%X)\n", term);
 	hash2_common:
 
 	    /* Uint32 hash always has the hash value of the previous term,
@@ -1747,7 +1747,7 @@ make_internal_hash(Eterm term)
                     i = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                     break;
                 default:
-                    erl_exit(1, "bad header");
+                    erts_exit(ERTS_ERROR_EXIT, "bad header");
                 }
                 while (i) {
                     if (is_list(*ptr)) {
@@ -1923,7 +1923,7 @@ make_internal_hash(Eterm term)
 		goto pop_next;
 	    }
 	    default:
-		erl_exit(1, "Invalid tag in make_hash2(0x%X)\n", term);
+		erts_exit(ERTS_ERROR_EXIT, "Invalid tag in make_hash2(0x%X)\n", term);
 	    }
 	}
 	break;
@@ -1936,7 +1936,7 @@ make_internal_hash(Eterm term)
             goto pop_next;
 
 	default:
-	    erl_exit(1, "Invalid tag in make_hash2(0x%X)\n", term);
+	    erts_exit(ERTS_ERROR_EXIT, "Invalid tag in make_hash2(0x%X)\n", term);
 
 	pop_next:
 	    if (ESTACK_ISEMPTY(s)) {
@@ -2219,7 +2219,7 @@ tail_recur:
 	}
 
     default:
-	erl_exit(1, "Invalid tag in make_broken_hash\n");
+	erts_exit(ERTS_ERROR_EXIT, "Invalid tag in make_broken_hash\n");
 	return 0;
       }
       if (WSTACK_ISEMPTY(stack)) break;
@@ -2893,7 +2893,7 @@ tailrecur_ne:
 			ASSERT(sz > 0 && sz < 17);
 			break;
 		    default:
-			erl_exit(1, "Unknown hashmap subsubtag\n");
+			erts_exit(ERTS_ERROR_EXIT, "Unknown hashmap subsubtag\n");
 		    }
 		    goto term_array;
 		}
@@ -2991,7 +2991,7 @@ static int cmpbytes(byte *s1, int l1, byte *s2, int l2)
 
 #define float_comp(x,y)    (((x)<(y)) ? -1 : (((x)==(y)) ? 0 : 1))
 
-static int cmp_atoms(Eterm a, Eterm b)
+int erts_cmp_atoms(Eterm a, Eterm b)
 {
     Atom *aa = atom_tab(atom_val(a));
     Atom *bb = atom_tab(atom_val(b));
@@ -3010,12 +3010,12 @@ Sint cmp(Eterm a, Eterm b)
     return erts_cmp(a, b, 0, 0);
 }
 
-static Sint erts_cmp_compound(Eterm a, Eterm b, int exact, int eq_only);
+Sint erts_cmp_compound(Eterm a, Eterm b, int exact, int eq_only);
 
 Sint erts_cmp(Eterm a, Eterm b, int exact, int eq_only)
 {
     if (is_atom(a) && is_atom(b)) {
-        return cmp_atoms(a, b);
+        return erts_cmp_atoms(a, b);
     } else if (is_both_small(a, b)) {
         return (signed_val(a) - signed_val(b));
     } else if (is_float(a) && is_float(b)) {
@@ -3032,7 +3032,7 @@ Sint erts_cmp(Eterm a, Eterm b, int exact, int eq_only)
  * exact = 1 -> term-based compare
  * exact = 0 -> arith-based compare
  */
-static Sint erts_cmp_compound(Eterm a, Eterm b, int exact, int eq_only)
+Sint erts_cmp_compound(Eterm a, Eterm b, int exact, int eq_only)
 {
 #define PSTACK_TYPE struct erts_cmp_hashmap_state
     struct erts_cmp_hashmap_state {
@@ -3089,7 +3089,7 @@ static Sint erts_cmp_compound(Eterm a, Eterm b, int exact, int eq_only)
     do {								\
 	if((AN) != (BN)) {						\
             if((AN)->sysname != (BN)->sysname)				\
-                RETURN_NEQ(cmp_atoms((AN)->sysname, (BN)->sysname));	\
+                RETURN_NEQ(erts_cmp_atoms((AN)->sysname, (BN)->sysname));	\
 	    ASSERT((AN)->creation != (BN)->creation);			\
 	    RETURN_NEQ(((AN)->creation < (BN)->creation) ? -1 : 1);	\
 	}								\
@@ -3107,7 +3107,7 @@ tailrecur_ne:
     /* deal with majority (?) cases by brute-force */
     if (is_atom(a)) {
 	if (is_atom(b)) {
-	    ON_CMP_GOTO(cmp_atoms(a, b));
+	    ON_CMP_GOTO(erts_cmp_atoms(a, b));
 	}
     } else if (is_both_small(a, b)) {
 	ON_CMP_GOTO(signed_val(a) - signed_val(b));
@@ -3341,10 +3341,10 @@ tailrecur_ne:
 		    Export* a_exp = *((Export **) (export_val(a) + 1));
 		    Export* b_exp = *((Export **) (export_val(b) + 1));
 
-		    if ((j = cmp_atoms(a_exp->code[0], b_exp->code[0])) != 0) {
+		    if ((j = erts_cmp_atoms(a_exp->code[0], b_exp->code[0])) != 0) {
 			RETURN_NEQ(j);
 		    }
-		    if ((j = cmp_atoms(a_exp->code[1], b_exp->code[1])) != 0) {
+		    if ((j = erts_cmp_atoms(a_exp->code[1], b_exp->code[1])) != 0) {
 			RETURN_NEQ(j);
 		    }
 		    ON_CMP_GOTO((Sint) a_exp->code[2] - (Sint) b_exp->code[2]);
@@ -3659,7 +3659,7 @@ term_array: /* arrays in 'aa' and 'bb', length in 'i' */
 	b = *bb++;
 	if (!is_same(a, b)) {
 	    if (is_atom(a) && is_atom(b)) {
-		if ((j = cmp_atoms(a, b)) != 0) {
+		if ((j = erts_cmp_atoms(a, b)) != 0) {
 		    goto not_equal;
 		}
 	    } else if (is_both_small(a, b)) {
@@ -3930,11 +3930,11 @@ void bin_write(int to, void *to_arg, byte* buf, size_t sz)
 /* Fill buf with the contents of bytelist list 
    return number of chars in list or -1 for error */
 
-int
-intlist_to_buf(Eterm list, char *buf, int len)
+Sint
+intlist_to_buf(Eterm list, char *buf, Sint len)
 {
     Eterm* listptr;
-    int sz = 0;
+    Sint sz = 0;
 
     if (is_nil(list)) 
 	return 0;
@@ -4481,11 +4481,12 @@ int erts_iolist_size(Eterm obj, ErlDrvSizeT* sizep)
     return iolist_size(0, NULL, obj, sizep);
 }
 
-/* return 0 if item is not a non-empty flat list of bytes */
-int
+/* return 0 if item is not a non-empty flat list of bytes
+   otherwise return the nonzero length of the list */
+Sint
 is_string(Eterm list)
 {
-    int len = 0;
+    Sint len = 0;
 
     while(is_list(list)) {
 	Eterm* consp = list_val(list);

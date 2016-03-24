@@ -356,8 +356,6 @@ Some of the available `configure` options are:
     depending on operating system and hardware platform. Note that by
     enabling this you might get a seemingly working system that sometimes
     fail on floating point operations.
-*   `--enable-darwin-universal` - Build universal binaries on darwin i386.
-*   `--enable-darwin-64bit` - Build 64-bit binaries on darwin
 *   `--enable-m64-build` - Build 64-bit binaries using the `-m64` flag to
     `(g)cc`
 *   `--enable-m32-build` - Build 32-bit binaries using the `-m32` flag to
@@ -374,9 +372,15 @@ Some of the available `configure` options are:
     `jinterface` application won't be built)
 *   `--{enable,disable}-dynamic-ssl-lib` - Dynamic OpenSSL libraries
 *   `--{enable,disable}-builtin-zlib` - Use the built-in source for zlib.
-*   `--with-ssl=PATH` - Specify location of OpenSSL include and lib
 *   `--{with,without}-ssl` - OpenSSL (without implies that the `crypto`,
     `ssh`, and `ssl` won't be built)
+*   `--with-ssl=PATH` - Specify location of OpenSSL include and lib
+*   `--with-ssl-incl=PATH` - Location of OpenSSL `include` directory,
+    if different than specified by `--with-ssl=PATH`
+*   `--with-ssl-rpath=yes|no|PATHS` - Runtime library path for OpenSSL.
+    Default is `yes`, which equates to a number of standard locations. If
+    `no`, then no runtime library paths will be used. Anything else should be
+    a comma separated list of paths.
 *   `--with-libatomic_ops=PATH` - Use the `libatomic_ops` library for atomic
     memory accesses. If `configure` should inform you about no native atomic
     implementation available, you typically want to try using the
@@ -400,7 +404,7 @@ Some of the available `configure` options are:
     that has to be the same as the filename. You also have to define
     `STATIC_ERLANG_{NIF,DRIVER}` when compiling the .o files for the nif/driver.
     If your nif/driver depends on some other dynamic library, you now have to link
-    that to the Erlang VM binary. This is easily achived by passing `LIBS=-llibname`
+    that to the Erlang VM binary. This is easily achieved by passing `LIBS=-llibname`
     to configure.
 *   `--without-$app` - By default all applications in Erlang/OTP will be included
 	in a release. If this is not wanted it is possible to specify that Erlang/OTP

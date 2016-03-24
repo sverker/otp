@@ -30,7 +30,9 @@
 %% Common Test interface functions -----------------------------------
 %%--------------------------------------------------------------------
 
-suite() -> [{ct_hooks,[ts_install_cth]}].
+suite() -> [{ct_hooks,[ts_install_cth]},
+	    {timetrap,{seconds,40}}].
+
 
 all() -> [{group,default_algs},
 	  {group,aes_gcm}
@@ -44,16 +46,10 @@ tests() -> [rekey, rekey_limit, renegotiate1, renegotiate2].
 
 %%--------------------------------------------------------------------
 init_per_suite(Config) ->
-    catch crypto:stop(),
-    case catch crypto:start() of
-	ok ->
-	    Config;
-	_Else ->
-	    {skip, "Crypto could not be started!"}
-    end.
+    Config.
+
 end_per_suite(_Config) ->
-    ssh:stop(),
-    crypto:stop().
+    ssh:stop().
 
 %%--------------------------------------------------------------------
 init_per_group(aes_gcm, Config) ->
@@ -87,7 +83,8 @@ end_per_testcase(_TestCase, _Config) ->
 %%--------------------------------------------------------------------
 
 %%% Idle timeout test
-
+rekey() -> [{timetrap,{seconds,90}}].
+    
 rekey(Config) ->
     {Pid, Host, Port} = 
 	ssh_test_lib:std_daemon(Config,
@@ -108,6 +105,8 @@ rekey(Config) ->
 %%--------------------------------------------------------------------
 
 %%% Test rekeying by data volume
+
+rekey_limit() -> [{timetrap,{seconds,400}}].
 
 rekey_limit(Config) ->
     UserDir = ?config(priv_dir, Config),

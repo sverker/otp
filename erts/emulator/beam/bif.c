@@ -2242,7 +2242,7 @@ BIF_RETTYPE send_3(BIF_ALIST_3)
 			    erts_dsend_export_trap_context(p, ctx));
 	break;
     default:
-	erl_exit(ERTS_ABORT_EXIT, "send_3 invalid result %d\n", (int)result);
+	erts_exit(ERTS_ABORT_EXIT, "send_3 invalid result %d\n", (int)result);
 	break;
     }
 
@@ -2286,7 +2286,7 @@ static BIF_RETTYPE dsend_continue_trap_1(BIF_ALIST_1)
 	BIF_TRAP1(&dsend_continue_trap_export, BIF_P, BIF_ARG_1);
     }
     default:
-	erl_exit(ERTS_ABORT_EXIT, "dsend_continue_trap invalid result %d\n", (int)result);
+	erts_exit(ERTS_ABORT_EXIT, "dsend_continue_trap invalid result %d\n", (int)result);
 	break;
     }
     ASSERT(! "Can not arrive here");
@@ -2360,7 +2360,7 @@ Eterm erl_send(Process *p, Eterm to, Eterm msg)
 			    erts_dsend_export_trap_context(p, ctx));
 	break;
     default:
-	erl_exit(ERTS_ABORT_EXIT, "invalid send result %d\n", (int)result);
+	erts_exit(ERTS_ABORT_EXIT, "invalid send result %d\n", (int)result);
 	break;
     }
 
@@ -2837,7 +2837,7 @@ BIF_RETTYPE list_to_atom_1(BIF_ALIST_1)
 {
     Eterm res;
     char *buf = (char *) erts_alloc(ERTS_ALC_T_TMP, MAX_ATOM_CHARACTERS);
-    int i = intlist_to_buf(BIF_ARG_1, buf, MAX_ATOM_CHARACTERS);
+    Sint i = intlist_to_buf(BIF_ARG_1, buf, MAX_ATOM_CHARACTERS);
 
     if (i < 0) {
 	erts_free(ERTS_ALC_T_TMP, (void *) buf);
@@ -2857,7 +2857,7 @@ BIF_RETTYPE list_to_atom_1(BIF_ALIST_1)
  
 BIF_RETTYPE list_to_existing_atom_1(BIF_ALIST_1)
 {
-    int i;
+    Sint i;
     char *buf = (char *) erts_alloc(ERTS_ALC_T_TMP, MAX_ATOM_CHARACTERS);
 
     if ((i = intlist_to_buf(BIF_ARG_1, buf, MAX_ATOM_CHARACTERS)) < 0) {
@@ -2964,7 +2964,7 @@ BIF_RETTYPE list_to_integer_2(BIF_ALIST_2)
      and since we have erts_chars_to_integer now it is simpler
      as well. This could be optmized further if we did not have to
      copy the list to buf. */
-    int i;
+    Sint i;
     Eterm res, dummy;
     int base;
 
@@ -3288,7 +3288,7 @@ static BIF_RETTYPE do_charbuf_to_float(Process *BIF_P,char *buf) {
 
 BIF_RETTYPE list_to_float_1(BIF_ALIST_1)
 {
-    int i;
+    Sint i;
     Eterm res;
     char *buf = NULL;
 
@@ -3405,7 +3405,7 @@ BIF_RETTYPE list_to_tuple_1(BIF_ALIST_1)
     Eterm* cons;
     Eterm res;
     Eterm* hp;
-    int len;
+    Sint len;
 
     if ((len = erts_list_length(list)) < 0 || len > ERTS_MAX_TUPLE_SIZE) {
 	BIF_ERROR(BIF_P, BADARG);
@@ -3746,7 +3746,7 @@ BIF_RETTYPE erts_debug_display_1(BIF_ALIST_1)
     erts_dsprintf_buf_t *dsbufp = erts_create_tmp_dsbuf(64);       
     pres = erts_dsprintf(dsbufp, "%.*T\n", INT_MAX, BIF_ARG_1);
     if (pres < 0)
-	erl_exit(1, "Failed to convert term to string: %d (%s)\n",
+	erts_exit(ERTS_ERROR_EXIT, "Failed to convert term to string: %d (%s)\n",
 		 -pres, erl_errno_id(-pres));
     hp = HAlloc(BIF_P, 2*dsbufp->str_len); /* we need length * 2 heap words */
     res = buf_to_intlist(&hp, dsbufp->str, dsbufp->str_len, NIL);
@@ -3760,7 +3760,7 @@ BIF_RETTYPE display_string_1(BIF_ALIST_1)
 {
     Process* p = BIF_P;
     Eterm string = BIF_ARG_1;
-    int len = is_string(string);
+    Sint len = is_string(string);
     char *str;
 
     if (len <= 0) {
@@ -3768,7 +3768,7 @@ BIF_RETTYPE display_string_1(BIF_ALIST_1)
     }
     str = (char *) erts_alloc(ERTS_ALC_T_TMP, sizeof(char)*(len + 1));
     if (intlist_to_buf(string, str, len) != len)
-	erl_exit(1, "%s:%d: Internal error\n", __FILE__, __LINE__);
+	erts_exit(ERTS_ERROR_EXIT, "%s:%d: Internal error\n", __FILE__, __LINE__);
     str[len] = '\0';
     erts_fprintf(stderr, "%s", str);
     erts_free(ERTS_ALC_T_TMP, (void *) str);
@@ -3788,7 +3788,7 @@ BIF_RETTYPE display_nl_0(BIF_ALIST_0)
 BIF_RETTYPE halt_0(BIF_ALIST_0)
 {
     VERBOSE(DEBUG_SYSTEM,("System halted by BIF halt()\n"));
-    erl_halt(0);
+    erts_halt(0);
     ERTS_BIF_YIELD1(bif_export[BIF_halt_1], BIF_P, am_undefined);
 }
 
@@ -3801,20 +3801,21 @@ static char halt_msg[HALT_MSG_SIZE];
 /* ARGSUSED */
 BIF_RETTYPE halt_1(BIF_ALIST_1)
 {
-    Sint code;
+    Uint code;
     
-    if (is_small(BIF_ARG_1) && (code = signed_val(BIF_ARG_1)) >= 0) {
+    if (term_to_Uint_mask(BIF_ARG_1, &code)) {
+	int pos_int_code = (int) (code & INT_MAX);
 	VERBOSE(DEBUG_SYSTEM,("System halted by BIF halt(%T)\n", BIF_ARG_1));
-	erl_halt((int)(- code));
+	erts_halt(pos_int_code);
 	ERTS_BIF_YIELD1(bif_export[BIF_halt_1], BIF_P, am_undefined);
     }
     else if (ERTS_IS_ATOM_STR("abort", BIF_ARG_1)) {
 	VERBOSE(DEBUG_SYSTEM,("System halted by BIF halt(%T)\n", BIF_ARG_1));
 	erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
-	erl_exit(ERTS_ABORT_EXIT, "");
+	erts_exit(ERTS_ABORT_EXIT, "");
     }
     else if (is_string(BIF_ARG_1) || BIF_ARG_1 == NIL) {
-	int i;
+	Sint i;
 
 	if ((i = intlist_to_buf(BIF_ARG_1, halt_msg, HALT_MSG_SIZE-1)) < 0) {
 	    goto error;
@@ -3822,11 +3823,11 @@ BIF_RETTYPE halt_1(BIF_ALIST_1)
 	halt_msg[i] = '\0';
 	VERBOSE(DEBUG_SYSTEM,("System halted by BIF halt(%T)\n", BIF_ARG_1));
 	erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
-	erl_exit(ERTS_DUMP_EXIT, "%s\n", halt_msg);
+	erts_exit(ERTS_DUMP_EXIT, "%s\n", halt_msg);
     }
     else
 	goto error;
-    return NIL;  /* Pedantic (lint does not know about erl_exit) */
+    return NIL;  /* Pedantic (lint does not know about erts_exit) */
  error:
 	BIF_ERROR(BIF_P, BADARG);
 }
@@ -3837,7 +3838,7 @@ BIF_RETTYPE halt_1(BIF_ALIST_1)
 /* ARGSUSED */
 BIF_RETTYPE halt_2(BIF_ALIST_2)
 {
-    Sint code;
+    Uint code;
     Eterm optlist = BIF_ARG_2;
     int flush = 1;
 
@@ -3864,26 +3865,27 @@ BIF_RETTYPE halt_2(BIF_ALIST_2)
     if (is_not_nil(optlist))
 	goto error;
 
-    if (is_small(BIF_ARG_1) && (code = signed_val(BIF_ARG_1)) >= 0) {
+    if (term_to_Uint_mask(BIF_ARG_1, &code)) {
+	int pos_int_code = (int) (code & INT_MAX);
 	VERBOSE(DEBUG_SYSTEM,
 		("System halted by BIF halt(%T, %T)\n", BIF_ARG_1, BIF_ARG_2));
 	if (flush) {
-	    erl_halt((int)(- code));
+	    erts_halt(pos_int_code);
 	    ERTS_BIF_YIELD1(bif_export[BIF_halt_1], BIF_P, am_undefined);
 	}
 	else {
 	    erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
-	    erl_exit((int)(- code), "");
+            erts_exit(pos_int_code, "");
 	}
     }
     else if (ERTS_IS_ATOM_STR("abort", BIF_ARG_1)) {
 	VERBOSE(DEBUG_SYSTEM,
 		("System halted by BIF halt(%T, %T)\n", BIF_ARG_1, BIF_ARG_2));
 	erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
-	erl_exit(ERTS_ABORT_EXIT, "");
+	erts_exit(ERTS_ABORT_EXIT, "");
     }
     else if (is_string(BIF_ARG_1) || BIF_ARG_1 == NIL) {
-	int i;
+	Sint i;
 
 	if ((i = intlist_to_buf(BIF_ARG_1, halt_msg, HALT_MSG_SIZE-1)) < 0) {
 	    goto error;
@@ -3892,11 +3894,11 @@ BIF_RETTYPE halt_2(BIF_ALIST_2)
 	VERBOSE(DEBUG_SYSTEM,
 		("System halted by BIF halt(%T, %T)\n", BIF_ARG_1, BIF_ARG_2));
 	erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
-	erl_exit(ERTS_DUMP_EXIT, "%s\n", halt_msg);
+	erts_exit(ERTS_DUMP_EXIT, "%s\n", halt_msg);
     }
     else
 	goto error;
-    return NIL;  /* Pedantic (lint does not know about erl_exit) */
+    return NIL;  /* Pedantic (lint does not know about erts_exit) */
  error:
     BIF_ERROR(BIF_P, BADARG);
 }
@@ -3952,7 +3954,7 @@ term2list_dsprintf(Process *p, Eterm term)
     erts_dsprintf_buf_t *dsbufp = erts_create_tmp_dsbuf(64);       
     pres = erts_dsprintf(dsbufp, "%T", term);
     if (pres < 0)
-	erl_exit(1, "Failed to convert term to list: %d (%s)\n",
+	erts_exit(ERTS_ERROR_EXIT, "Failed to convert term to list: %d (%s)\n",
 		 -pres, erl_errno_id(-pres));
     hp = HAlloc(p, 2*dsbufp->str_len); /* we need length * 2 heap words */
     res = buf_to_intlist(&hp, dsbufp->str, dsbufp->str_len, NIL);
@@ -4026,7 +4028,7 @@ BIF_RETTYPE list_to_pid_1(BIF_ALIST_1)
 {
     Uint a = 0, b = 0, c = 0;
     char* cp;
-    int i;
+    Sint i;
     DistEntry *dep = NULL;
     char *buf = (char *) erts_alloc(ERTS_ALC_T_TMP, 65);
     /*
@@ -4203,22 +4205,33 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
     Sint n;
 
     if (BIF_ARG_1 == am_multi_scheduling) {
-	if (BIF_ARG_2 == am_block || BIF_ARG_2 == am_unblock) {
+	if (BIF_ARG_2 == am_block || BIF_ARG_2 == am_unblock
+	    || BIF_ARG_2 == am_block_normal || BIF_ARG_2 == am_unblock_normal) {
 #ifndef ERTS_SMP
 	    BIF_RET(am_disabled);
 #else
+	    int block = (BIF_ARG_2 == am_block
+			 || BIF_ARG_2 == am_block_normal);
+	    int normal = (BIF_ARG_2 == am_block_normal
+			  || BIF_ARG_2 == am_unblock_normal);
 	    if (erts_no_schedulers == 1)
 		BIF_RET(am_disabled);
 	    else {
 		switch (erts_block_multi_scheduling(BIF_P,
 						    ERTS_PROC_LOCK_MAIN,
-						    BIF_ARG_2 == am_block,
+						    block,
+						    normal,
 						    0)) {
 		case ERTS_SCHDLR_SSPND_DONE_MSCHED_BLOCKED:
 		    //SVERK Why not? ASSERT(erts_smp_thr_progress_is_blocking());
 		    BIF_RET(am_blocked);
+		case ERTS_SCHDLR_SSPND_DONE_NMSCHED_BLOCKED:
+		    BIF_RET(am_blocked_normal);
 		case ERTS_SCHDLR_SSPND_YIELD_DONE_MSCHED_BLOCKED:
 		    ERTS_BIF_YIELD_RETURN_X(BIF_P, am_blocked,
+					    am_multi_scheduling);
+		case ERTS_SCHDLR_SSPND_YIELD_DONE_NMSCHED_BLOCKED:
+		    ERTS_BIF_YIELD_RETURN_X(BIF_P, am_blocked_normal,
 					    am_multi_scheduling);
 		case ERTS_SCHDLR_SSPND_DONE:
 		    BIF_RET(am_enabled);
@@ -4252,11 +4265,7 @@ BIF_RETTYPE system_flag_2(BIF_ALIST_2)
 	switch (erts_set_schedulers_online(BIF_P,
 					   ERTS_PROC_LOCK_MAIN,
 					   signed_val(BIF_ARG_2),
-					   &old_no
-#ifdef ERTS_DIRTY_SCHEDULERS
-					   , 0
-#endif
-					   )) {
+					   &old_no, 0)) {
 	case ERTS_SCHDLR_SSPND_DONE:
 	    BIF_RET(make_small(old_no));
 	case ERTS_SCHDLR_SSPND_YIELD_RESTART:
@@ -4626,29 +4635,27 @@ BIF_RETTYPE erts_internal_cmp_term_2(BIF_ALIST_2) {
 /*
  * Processes doing yield on return in a bif ends up in bif_return_trap().
  */
-static BIF_RETTYPE bif_return_trap(
-#ifdef DEBUG
-    BIF_ALIST_2
-#else
-    BIF_ALIST_1
-#endif
-    )
+static BIF_RETTYPE bif_return_trap(BIF_ALIST_2)
 {
-#ifdef DEBUG
+    Eterm res = BIF_ARG_1;
+
     switch (BIF_ARG_2) {
-    case am_multi_scheduling:
 #ifdef ERTS_SMP
-	erts_dbg_multi_scheduling_return_trap(BIF_P, BIF_ARG_1);
-#endif
-	break;
-    case am_schedulers_online:
-	break;
-    default:
+    case am_multi_scheduling: {
+	int msb = erts_is_multi_scheduling_blocked();
+	if (msb > 0)
+	    res = am_blocked;
+	else if (msb < 0)
+	    res = am_blocked_normal;
+	else
+	    ERTS_INTERNAL_ERROR("Unexpected multi scheduling block state");
 	break;
     }
 #endif
-
-    BIF_RET(BIF_ARG_1);
+    default:
+	break;
+    }
+    BIF_RET(res);
 }
 
 /*
@@ -4753,17 +4760,12 @@ void erts_init_bif(void)
     erts_smp_atomic_init_nob(&erts_dead_ports_ptr, (erts_aint_t) NULL);
 
     /*
-     * bif_return_trap/1 is a hidden BIF that bifs that need to
-     * yield the calling process traps to. The only thing it does:
-     * return the value passed as argument.
+     * bif_return_trap/2 is a hidden BIF that bifs that need to
+     * yield the calling process traps to.
      */
-    erts_init_trap_export(&bif_return_trap_export, am_erlang, am_bif_return_trap,
-#ifdef DEBUG
-		     2
-#else
-		     1
-#endif
-		     , &bif_return_trap);
+    erts_init_trap_export(&bif_return_trap_export,
+			  am_erlang, am_bif_return_trap, 2,
+			  &bif_return_trap);
 
     erts_await_result = erts_export_put(am_erts_internal,
 					am_await_result,

@@ -25,7 +25,7 @@
 %% Event handler exports.
 -export([init/1,handle_event/2,terminate/2]).
 
--include_lib("test_server/include/test_server.hrl").
+-include_lib("common_test/include/ct.hrl").
 
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
@@ -48,7 +48,7 @@ end_per_group(_GroupName, Config) ->
     Config.
 
 logfile(Config) ->
-    PrivDir = ?config(priv_dir, Config),
+    PrivDir = proplists:get_value(priv_dir, Config),
     LogDir = filename:join(PrivDir, ?MODULE),
     Log = filename:join(LogDir, "logfile.log"),
     ok = filelib:ensure_dir(Log),
@@ -77,7 +77,7 @@ logfile(Config) ->
     ok.
 
 logfile_truncated(Config) ->
-    PrivDir = ?config(priv_dir, Config),
+    PrivDir = proplists:get_value(priv_dir, Config),
     LogDir = filename:join(PrivDir, ?MODULE),
     Log = filename:join(LogDir, "logfile_truncated.log"),
     ok = filelib:ensure_dir(Log),
@@ -102,7 +102,7 @@ do_one_logfile(Log, Ev, Depth) ->
     analyse_events(Log, Ev, [], Depth).
 
 tty(Config) ->
-    PrivDir = ?config(priv_dir, Config),
+    PrivDir = proplists:get_value(priv_dir, Config),
     LogDir = filename:join(PrivDir, ?MODULE),
     Log = filename:join(LogDir, "tty.log"),
     ok = filelib:ensure_dir(Log),
@@ -125,7 +125,7 @@ tty(Config) ->
     ok.
 
 tty_truncated(Config) ->
-    PrivDir = ?config(priv_dir, Config),
+    PrivDir = proplists:get_value(priv_dir, Config),
     LogDir = filename:join(PrivDir, ?MODULE),
     Log = filename:join(LogDir, "tty_truncated.log"),
     ok = filelib:ensure_dir(Log),
@@ -335,7 +335,7 @@ start_node(Name, Args) ->
 	{ok,Node} ->
 	    {ok,Node};
 	Error  ->
-	    test_server:fail(Error)
+	    ct:fail(Error)
     end.
 
 cleanup(File) ->

@@ -30,7 +30,7 @@
 
 -compile(export_all).
 
--include_lib("test_server/include/test_server.hrl").
+-include_lib("common_test/include/ct.hrl").
 -include_lib("common_test/include/ct_event.hrl").
 
 -define(eh, ct_test_support_eh).
@@ -324,6 +324,8 @@ test_events(one_empty_cth) ->
 
      {?eh,tc_start,{ct_cth_empty_SUITE,test_case}},
      {?eh,cth,{empty_cth,pre_init_per_testcase,[test_case,'$proplist',[]]}},
+     {?eh,cth,{empty_cth,post_init_per_testcase,[test_case,'$proplist','_',[]]}},
+     {?eh,cth,{empty_cth,pre_end_per_testcase,[test_case,'$proplist',[]]}},
      {?eh,cth,{empty_cth,post_end_per_testcase,[test_case,'$proplist','_',[]]}},
      {?eh,tc_done,{ct_cth_empty_SUITE,test_case,ok}},
      
