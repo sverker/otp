@@ -956,7 +956,7 @@ static int db_select_continue_tree(Process *p,
     sc.lastobj = NULL;
     sc.max = 1000;
     sc.keypos = tb->common.keypos;
-    sc.all_objects = mp->flags & BIN_FLAG_ALL_OBJECTS;
+    sc.all_objects = mp->bin->flags & BIN_FLAG_ALL_OBJECTS;
     sc.chunk_size = chunk_size;
     reverse = unsigned_val(tptr[7]);
     sc.got = signed_val(tptr[8]);
@@ -1148,7 +1148,7 @@ static int db_select_tree(Process *p, DbTable *tbl,
     hp = HAlloc(p, 9 + sz + PROC_BIN_SIZE);
     key = copy_struct(key, sz, &hp, &MSO(p));
     if (mpi.all_objects)
-	(mpi.mp)->flags |= BIN_FLAG_ALL_OBJECTS;
+	(mpi.mp)->bin->flags |= BIN_FLAG_ALL_OBJECTS;
     mpb=db_make_mp_binary(p,mpi.mp,&hp);
 	    
     continuation = TUPLE8
@@ -1348,7 +1348,7 @@ static int db_select_count_tree(Process *p, DbTable *tbl,
     }
     key = copy_struct(key, sz, &hp, &MSO(p));
     if (mpi.all_objects)
-	(mpi.mp)->flags |= BIN_FLAG_ALL_OBJECTS;
+	(mpi.mp)->bin->flags |= BIN_FLAG_ALL_OBJECTS;
     mpb = db_make_mp_binary(p,mpi.mp,&hp);
 	    
     continuation = TUPLE5
@@ -1473,7 +1473,7 @@ static int db_select_chunk_tree(Process *p, DbTable *tbl,
 	hp = HAlloc(p, 9 + sz + PROC_BIN_SIZE);
 	key = copy_struct(key, sz, &hp, &MSO(p));
 	if (mpi.all_objects)
-	    (mpi.mp)->flags |= BIN_FLAG_ALL_OBJECTS;
+	    (mpi.mp)->bin->flags |= BIN_FLAG_ALL_OBJECTS;
 	mpb = db_make_mp_binary(p,mpi.mp,&hp);
 	
 	continuation = TUPLE8
@@ -1499,7 +1499,7 @@ static int db_select_chunk_tree(Process *p, DbTable *tbl,
     key = copy_struct(key, sz, &hp, &MSO(p));
 
     if (mpi.all_objects)
-	(mpi.mp)->flags |= BIN_FLAG_ALL_OBJECTS;
+	(mpi.mp)->bin->flags |= BIN_FLAG_ALL_OBJECTS;
     mpb = db_make_mp_binary(p,mpi.mp,&hp);    
     continuation = TUPLE8
 	(hp,

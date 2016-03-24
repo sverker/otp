@@ -1412,7 +1412,7 @@ erts_bs_append(Process* c_p, Eterm* reg, Uint live, Eterm build_size_term,
 	erts_current_bin = (byte *) bptr->orig_bytes;
 
         binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-        binref->flags = 0;
+        binref->some_flags = 0;
         erts_refc_init(&binref->refc, 1);
         binref->bin = bptr;
 	/*
@@ -1529,7 +1529,7 @@ erts_bs_private_append(Process* p, Eterm bin, Eterm build_size_term, Uint unit)
 	    sys_memcpy(bptr->orig_bytes, binp->orig_bytes, binp->orig_size);
 
             binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-            binref->flags = 0;
+            binref->some_flags = 0;
             erts_refc_init(&binref->refc, 1);
             binref->bin = bptr;
 
@@ -1583,7 +1583,7 @@ erts_bs_init_writable(Process* p, Eterm sz)
     erts_refc_init(&bptr->refc, 1);
     
     binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-    binref->flags = 0;
+    binref->some_flags = 0;
     erts_refc_init(&binref->refc, 1);
     binref->bin = bptr;
 

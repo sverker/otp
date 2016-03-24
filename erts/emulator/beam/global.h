@@ -315,7 +315,7 @@ typedef union {
 #define BIN_FLAG_DRV        8
 
 typedef struct BinaryRef_ {
-    UWord flags;       
+    UWord some_flags;            /* Do we need these? */
     erts_refc_t refc;
     Binary* bin;
 } BinaryRef;
@@ -354,7 +354,7 @@ erts_mk_magic_binary_term(Eterm **hpp, ErlOffHeap *ohp, BinaryRef *mbp)
     ProcBin *pb = (ProcBin *) *hpp;
     *hpp += PROC_BIN_SIZE;
 
-    ASSERT(mbp->flags & BIN_FLAG_MAGIC);
+    ASSERT(mbp->bin->flags & BIN_FLAG_MAGIC);
 
     pb->thing_word = HEADER_PROC_BIN;
     pb->size = 0;
@@ -374,7 +374,7 @@ erts_mk_magic_binary_term(Eterm **hpp, ErlOffHeap *ohp, BinaryRef *mbp)
 #define ERTS_TERM_IS_MAGIC_BINARY(T) \
   (is_binary((T)) \
    && (thing_subtag(*binary_val((T))) == REFC_BINARY_SUBTAG) \
-   && (((ProcBin *) binary_val((T)))->val->flags & BIN_FLAG_MAGIC))
+   && (((ProcBin *) binary_val((T)))->val->bin->flags & BIN_FLAG_MAGIC))
 
 
 union erl_off_heap_ptr {

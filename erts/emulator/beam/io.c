@@ -3248,7 +3248,7 @@ static void deliver_read_message(Port* prt, erts_aint32_t state, Eterm to,
 	sys_memcpy(payload->orig_bytes, buf, len);
 
         bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-        bptr->flags = 0;
+        bptr->some_flags = 0;
         erts_refc_init(&bptr->refc, 1);
         bptr->bin = payload;
 
@@ -3399,7 +3399,7 @@ deliver_vec_message(Port* prt,			/* Port */
 	    ProcBin* pb = (ProcBin*) hp;
 
             bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-            bptr->flags = 0;
+            bptr->some_flags = 0;
             erts_refc_init(&bptr->refc, 1);
 
 	    iov--;
@@ -3964,7 +3964,7 @@ write_port_control_result(int control_flags,
 		*hpp += PROC_BIN_SIZE;
 
                 bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-                bptr->flags = 0;
+                bptr->some_flags = 0;
                 erts_refc_init(&bptr->refc, 1);
                 bptr->bin = ErlDrvBinary2Binary(dbin);
 
@@ -5649,7 +5649,7 @@ driver_deliver_term(Eterm to, ErlDrvTermData* data, int len)
 		driver_binary_inc_refc(b);  /* caller will free binary */
 
                 bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-                bptr->flags = 0;
+                bptr->some_flags = 0;
                 erts_refc_init(&bptr->refc, 1);
                 bptr->bin = ErlDrvBinary2Binary(b);
 
@@ -5699,7 +5699,7 @@ driver_deliver_term(Eterm to, ErlDrvTermData* data, int len)
 						    PROC_BIN_SIZE, HEAP_EXTRA);
 
                 bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-                bptr->flags = 0;
+                bptr->some_flags = 0;
                 erts_refc_init(&bptr->refc, 1);
                 bptr->bin = bp;
 

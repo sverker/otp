@@ -1317,7 +1317,7 @@ static int db_select_continue_hash(Process *p,
     mp = ((ProcBin *) binary_val(tptr[4]))->val;
     if (!IsMatchProgBinary(mp))
 	RET_TO_BIF(NIL,DB_ERROR_BADPARAM);
-    all_objects = mp->flags & BIN_FLAG_ALL_OBJECTS;
+    all_objects = mp->bin->flags & BIN_FLAG_ALL_OBJECTS;
     match_list = tptr[5];
     if ((got = signed_val(tptr[6])) < 0)
 	RET_TO_BIF(NIL,DB_ERROR_BADPARAM);
@@ -1560,7 +1560,7 @@ done:
 	Sint rest_size = 0;
 
 	if (mpi.all_objects)
-	    (mpi.mp)->flags |= BIN_FLAG_ALL_OBJECTS;
+	    (mpi.mp)->bin->flags |= BIN_FLAG_ALL_OBJECTS;
 	if (got > chunk_size) { /* Split list in return value and 'rest' */
 	    Eterm tmp = match_list;
 	    rest = match_list;
@@ -1577,7 +1577,7 @@ done:
 	    hp = HAlloc(p,3+7+PROC_BIN_SIZE);
 	    mpb =db_make_mp_binary(p,(mpi.mp),&hp);
 	    if (mpi.all_objects)
-		(mpi.mp)->flags |= BIN_FLAG_ALL_OBJECTS;
+		(mpi.mp)->bin->flags |= BIN_FLAG_ALL_OBJECTS;
 	    continuation = TUPLE6(hp, tb->common.id,make_small(slot_ix), 
 				  make_small(chunk_size),  
 				  mpb, rest, 
@@ -1599,7 +1599,7 @@ done:
 trap:
     BUMP_ALL_REDS(p);
     if (mpi.all_objects)
-	(mpi.mp)->flags |= BIN_FLAG_ALL_OBJECTS;
+	(mpi.mp)->bin->flags |= BIN_FLAG_ALL_OBJECTS;
     hp = HAlloc(p,7+PROC_BIN_SIZE);
     mpb =db_make_mp_binary(p,(mpi.mp),&hp);
     continuation = TUPLE6(hp, tb->common.id, make_small(slot_ix), 

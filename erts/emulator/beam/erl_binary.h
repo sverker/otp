@@ -375,7 +375,7 @@ erts_create_magic_binary_x(Uint size, void (*destructor)(BinaryRef *),
                                 : ERTS_MAGIC_BIN_ORIG_SIZE(size);
     erts_refc_init(&bptr->refc, 1);
     
-    binref->flags = 0;
+    binref->some_flags = 0;
     erts_refc_init(&binref->refc, 0);
     binref->bin = bptr;
 

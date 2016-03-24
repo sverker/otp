@@ -2750,7 +2750,7 @@ BIF_RETTYPE binary_copy_trap(BIF_ALIST_2)
 	cleanup_copy_bin_state(mb); /* now cbs is dead */
 
         binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-        binref->flags = 0;
+        binref->some_flags = 0;
         erts_refc_init(&binref->refc, 1);
         binref->bin = save;
 

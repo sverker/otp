@@ -697,7 +697,7 @@ Eterm enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin)
 	
 	/* !! Copy-paste from new_binary() !! */
         binref = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-        binref->flags = 0;
+        binref->some_flags = 0;
         erts_refc_init(&binref->refc, 1);
         binref->bin = bptr;
 

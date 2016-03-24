@@ -1926,7 +1926,7 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 		    pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
 
                     bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-                    bptr->flags = 0;
+                    bptr->some_flags = 0;
                     erts_refc_init(&bptr->refc, 1);
                     bptr->bin = result_bin;
 
@@ -1997,7 +1997,7 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
 			pb = (ProcBin *) HAlloc(p, PROC_BIN_SIZE);
 
                         bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-                        bptr->flags = 0;
+                        bptr->some_flags = 0;
                         erts_refc_init(&bptr->refc, 1);
                         bptr->bin = result_bin;
 
@@ -2022,7 +2022,7 @@ static Eterm erts_term_to_binary_int(Process* p, Eterm Term, int level, Uint fla
                     ASSERT(result_bin->orig_size == context->s.cc.real_size);
 
                     bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-                    bptr->flags = 0;
+                    bptr->some_flags = 0;
                     erts_refc_init(&bptr->refc, 1);
                     bptr->bin = result_bin;
 
@@ -3421,7 +3421,7 @@ dec_term_atom_common:
 		    hp += PROC_BIN_SIZE;
 
                     bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-                    bptr->flags = 0;
+                    bptr->some_flags = 0;
                     erts_refc_init(&bptr->refc, 1);
                     bptr->bin = dbin;
 
@@ -3473,7 +3473,7 @@ dec_term_atom_common:
 		    pb = (ProcBin *) hp;
 
                     bptr = erts_alloc(ERTS_ALC_T_BINARY_REF, sizeof(BinaryRef));
-                    bptr->flags = 0;
+                    bptr->some_flags = 0;
                     erts_refc_init(&bptr->refc, 1);
                     bptr->bin = dbin;
 
