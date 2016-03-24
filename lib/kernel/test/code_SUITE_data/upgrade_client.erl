@@ -298,22 +298,28 @@ start_tracing() ->
 
 tracer_loop(Receiver) ->
     receive 
-	die_please -> ok;
+	die_please ->
+	    ok;
+	{do_trace_delivered, Tracee} ->
+	    _ = erlang:trace_delivered(Tracee),
+	    tracer_loop(Receiver);
+
 	Msg -> 
 	    Receiver ! Msg,
 	    tracer_loop(Receiver)
     end.
    
 check_tracing(Tracer) ->
-    Tracer ! check_marker,
+    Tracer ! {do_trace_delivered, self()},
     check_tracing_loop(0).
 
 check_tracing_loop(N) ->
+    Self = self(),
     receive 
 	{trace, _Pid, call, {_M, _F, _Args}} = Msg ->
 	    io:format("Trace: ~p\n",[Msg]),
 	    check_tracing_loop(N+1);
-	check_marker ->
+	{trace_delivered, Self, _} ->
 	    N
     end.
 
