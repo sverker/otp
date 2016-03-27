@@ -209,7 +209,7 @@ load_common(Mod, Bin, Beam, Architecture) ->
       ok = patch_consts(LabelMap, ConstAddr, CodeAddress, WriteWord),
       %% Find out which functions are being loaded (and where).
       %% Note: Addresses are sorted descending.
-      {_MFAs,Addresses} = exports(ExportMap, CodeAddress),
+      Addresses = exports(ExportMap, CodeAddress),
       %% Remove references to old versions of the module.
       case Beam of
 	[] -> ok;
@@ -356,21 +356,21 @@ trampoline_map_lookup(Primop, Map) ->
 		 is_exported :: boolean()}).
 
 exports(ExportMap, BaseAddress) ->
-  exports(ExportMap, BaseAddress, [], []).
+  exports(ExportMap, BaseAddress, []).
 
-exports([Offset,M,F,A,IsClosure,IsExported|Rest], BaseAddress, MFAs, Addresses) ->
+exports([Offset,M,F,A,IsClosure,IsExported|Rest], BaseAddress, Addresses) ->
   case IsExported andalso erlang:is_builtin(M, F, A) of
     true ->
-      exports(Rest, BaseAddress, MFAs, Addresses);
+      exports(Rest, BaseAddress, Addresses);
     _false ->
       MFA = {M,F,A},
       Address = BaseAddress + Offset,
       FunDef = #fundef{address=Address, mfa=MFA, is_closure=IsClosure,
 		       is_exported=IsExported},
-      exports(Rest, BaseAddress, [MFA|MFAs], [FunDef|Addresses])
+      exports(Rest, BaseAddress, [FunDef|Addresses])
   end;
-exports([], _, MFAs, Addresses) ->
-  {MFAs, Addresses}.
+exports([], _, Addresses) ->
+  Addresses.
 
 mod({M,_F,_A}) -> M.
 
