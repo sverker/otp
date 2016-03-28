@@ -1045,8 +1045,8 @@ type(hipe_bifs, enter_code, 2, Xs, Opaques) ->
 			     t_sup(t_nil(), t_binary())]) end, Opaques);
 type(hipe_bifs, enter_sdesc, 1, Xs, Opaques) ->
   strict(hipe_bifs, enter_sdesc, 1, Xs, fun (_) -> t_nil() end, Opaques);
-type(hipe_bifs, find_na_or_make_stub, 2, Xs, Opaques) ->
-  strict(hipe_bifs, find_na_or_make_stub, 2, Xs,
+type(hipe_bifs, find_na_or_make_stub, 1, Xs, Opaques) ->
+  strict(hipe_bifs, find_na_or_make_stub, 1, Xs,
 	 fun (_) -> t_integer() end, Opaques); % address
 type(hipe_bifs, fun_to_address, 1, Xs, Opaques) ->
   strict(hipe_bifs, fun_to_address, 1, Xs,
@@ -2359,8 +2359,7 @@ arg_types(hipe_bifs, add_ref, 2) ->
   [t_mfa(), t_tuple([t_mfa(),
 		     t_integer(),
 		     t_sup(t_atom('call'), t_atom('load_mfa')),
-		     t_trampoline(),
-		     t_sup(t_atom('remote'), t_atom('local'))])];
+		     t_trampoline()])];
 arg_types(hipe_bifs, alloc_data, 2) ->
   [t_integer(), t_integer()];
 arg_types(hipe_bifs, array, 2) ->
@@ -2401,8 +2400,8 @@ arg_types(hipe_bifs, enter_code, 2) ->
   [t_binary(), t_sup(t_nil(), t_tuple())];
 arg_types(hipe_bifs, enter_sdesc, 1) ->
   [t_tuple([t_integer(), t_integer(), t_integer(), t_integer(), t_integer(), t_mfa()])];
-arg_types(hipe_bifs, find_na_or_make_stub, 2) ->
-  [t_mfa(), t_boolean()];
+arg_types(hipe_bifs, find_na_or_make_stub, 1) ->
+  [t_mfa()];
 arg_types(hipe_bifs, fun_to_address, 1) ->
   [t_mfa()];
 arg_types(hipe_bifs, get_fe, 2) ->

@@ -1053,9 +1053,6 @@ struct hipe_ref {
 #endif
 };
 #define REF_FLAG_IS_LOAD_MFA		1	/* bit 0: 0 == call, 1 == load_mfa */
-//SVERK #define REF_FLAG_IS_REMOTE		2	/* bit 1: 0 == local, 1 == remote */
-//SVERK #define REF_FLAG_PENDING_REDIRECT	4	/* bit 2: 1 == pending redirect */
-//SVERK #define REF_FLAG_PENDING_REMOVE		8	/* bit 3: 1 == pending remove */
 
 
 static inline void hipe_mfa_info_table_init_lock(void)
@@ -1205,19 +1202,16 @@ static struct hipe_mfa_info *hipe_mfa_info_table_put_rwlocked(Eterm m, Eterm f, 
     return p;
 }
 
-static void hipe_mfa_set_na(Eterm m, Eterm f, unsigned int arity, void *address, int is_exported)
+static void hipe_mfa_set_na(Eterm m, Eterm f, unsigned int arity, void *address)
 {
     struct hipe_mfa_info *p;
 
-    ASSERT(is_exported);  // SVERK
-
     hipe_mfa_info_table_rwlock();
     p = hipe_mfa_info_table_put_rwlocked(m, f, arity);
-    DBG_TRACE_MFA(m,f,arity,"set native address in hipe_mfa_info at %p is_exported=%d",
-		  p, is_exported);
+    DBG_TRACE_MFA(m,f,arity,"set native address in hipe_mfa_info at %p", p);
     ASSERT(!p->local_address);
     p->local_address = address;
-    p->remote_address = is_exported ? address : NULL;
+    p->remote_address = address;
 	
     hipe_mfa_info_table_rwunlock();
 }
@@ -1250,21 +1244,21 @@ BIF_RETTYPE hipe_bifs_set_funinfo_native_address_3(BIF_ALIST_3)
 {
     struct hipe_mfa mfa;
     void *address;
-    int is_exported;
 
-    if (!term_to_mfa(BIF_ARG_1, &mfa))
+    switch (BIF_ARG_3) {
+    case am_true: /* is_exported */
+        if (!term_to_mfa(BIF_ARG_1, &mfa))
+            BIF_ERROR(BIF_P, BADARG);
+        address = term_to_address(BIF_ARG_2);
+        if (!address)
+            BIF_ERROR(BIF_P, BADARG);
+        hipe_mfa_set_na(mfa.mod, mfa.fun, mfa.ari, address);
+        break;
+    case am_false:
+        break; /* ignore local functions */
+    default:
 	BIF_ERROR(BIF_P, BADARG);
-    address = term_to_address(BIF_ARG_2);
-    if (!address)
-	BIF_ERROR(BIF_P, BADARG);
-    if (BIF_ARG_3 == am_true)
-	is_exported = 1;
-    else if (BIF_ARG_3 == am_false) {
-	//is_exported = 0;
-	BIF_RET(NIL);  //SVERK Try ignore local functions
-    } else
-	BIF_ERROR(BIF_P, BADARG);
-    hipe_mfa_set_na(mfa.mod, mfa.fun, mfa.ari, address, is_exported);
+    }
     BIF_RET(NIL);
 }
 
@@ -1299,12 +1293,10 @@ void hipe_delete_code(Module* modp)
     }
 }
 
-static void *hipe_make_stub(Eterm m, Eterm f, unsigned int arity, int is_remote)
+static void *hipe_make_stub(Eterm m, Eterm f, unsigned int arity)
 {
     Export *export_entry;
     void *StubAddress;
-
-    ASSERT(is_remote);
 
     export_entry = erts_export_get_or_make_stub(m, f, arity);
     StubAddress = hipe_make_native_stub(export_entry, arity);
@@ -1313,24 +1305,15 @@ static void *hipe_make_stub(Eterm m, Eterm f, unsigned int arity, int is_remote)
     return StubAddress;
 }
 
-static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, int is_remote, struct hipe_mfa_info **pp)
+static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, struct hipe_mfa_info **pp)
 {
     struct hipe_mfa_info *p;
-    void *address;
 
     p = hipe_mfa_info_table_get_locked(m, f, a);
     if (p) {
 	/* find address, predicting for a runtime apply call */
-	address = is_remote ? p->remote_address : p->local_address;
-	if (address)
-	    return address;
-
-	/* bummer, install stub, checking if one already existed */
-	address = p->remote_address;
-	if (address) {
-	    abort();
-	    return address;
-	}
+	if (p->remote_address)
+	    return p->remote_address;
     }
     /* Caller must take the slow path with the write lock held, but allow
        it to avoid some work if it already holds the write lock.  */
@@ -1339,43 +1322,39 @@ static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, int is_rem
     return NULL;
 }
 
-static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a, int is_remote, struct hipe_mfa_info *p)
+static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a, struct hipe_mfa_info *p)
 {
-    void *address;
-
     if (!p)
 	p = hipe_mfa_info_table_put_rwlocked(m, f, a);
-    address = hipe_make_stub(m, f, a, is_remote);
-    /* XXX: how to tell if a BEAM MFA is exported or not? */
-    p->remote_address = address;
-    return address;
+    p->remote_address = hipe_make_stub(m, f, a);
+    return p->remote_address;
 }
 
-static void *hipe_get_na_nofail_rwlocked(Eterm m, Eterm f, unsigned int a, int is_remote)
+static void *hipe_get_na_nofail_rwlocked(Eterm m, Eterm f, unsigned int a)
 {
     struct hipe_mfa_info *p;
     void *address;
 
-    address = hipe_get_na_try_locked(m, f, a, is_remote, &p);
+    address = hipe_get_na_try_locked(m, f, a, &p);
     if (address)
 	return address;
 
-    address = hipe_get_na_slow_rwlocked(m, f, a, is_remote, p);
+    address = hipe_get_na_slow_rwlocked(m, f, a, p);
     return address;
 }
 
-static void *hipe_get_na_nofail(Eterm m, Eterm f, unsigned int a, int is_remote)
+static void *hipe_get_na_nofail(Eterm m, Eterm f, unsigned int a)
 {
     void *address;
 
     hipe_mfa_info_table_rlock();
-    address = hipe_get_na_try_locked(m, f, a, is_remote, NULL);
+    address = hipe_get_na_try_locked(m, f, a, NULL);
     hipe_mfa_info_table_runlock();
     if (address)
 	return address;
 
     hipe_mfa_info_table_rwlock();
-    address = hipe_get_na_slow_rwlocked(m, f, a, is_remote, NULL);
+    address = hipe_get_na_slow_rwlocked(m, f, a, NULL);
     hipe_mfa_info_table_rwunlock();
     return address;
 }
@@ -1385,7 +1364,7 @@ void *hipe_get_remote_na(Eterm m, Eterm f, unsigned int a)
 {
     if (is_not_atom(m) || is_not_atom(f) || a > 255)
 	return NULL;
-    return hipe_get_na_nofail(m, f, a, 1);
+    return hipe_get_na_nofail(m, f, a);
 }
 
 /* primop, but called like a BIF for error handling purposes */
@@ -1397,25 +1376,19 @@ BIF_RETTYPE hipe_find_na_or_make_stub(BIF_ALIST_3)
     if (is_not_atom(BIF_ARG_1) || is_not_atom(BIF_ARG_2))
 	BIF_ERROR(BIF_P, BADARG);
     arity = unsigned_val(BIF_ARG_3); /* no error check */
-    address = hipe_get_na_nofail(BIF_ARG_1, BIF_ARG_2, arity, 1);
+    address = hipe_get_na_nofail(BIF_ARG_1, BIF_ARG_2, arity);
     BIF_RET((Eterm)address);	/* semi-Ok */
 }
 
-BIF_RETTYPE hipe_bifs_find_na_or_make_stub_2(BIF_ALIST_2)
+BIF_RETTYPE hipe_bifs_find_na_or_make_stub_1(BIF_ALIST_1)
 {
     struct hipe_mfa mfa;
     void *address;
-    int is_remote;
 
     if (!term_to_mfa(BIF_ARG_1, &mfa))
 	BIF_ERROR(BIF_P, BADARG);
-    if (BIF_ARG_2 == am_true)
-	is_remote = 1;
-    else if (BIF_ARG_2 == am_false)
-	is_remote = 0;
-    else
-	BIF_ERROR(BIF_P, BADARG);
-    address = hipe_get_na_nofail(mfa.mod, mfa.fun, mfa.ari, is_remote);
+
+    address = hipe_get_na_nofail(mfa.mod, mfa.fun, mfa.ari);
     BIF_RET(address_to_term(address, BIF_P));
 }
 
@@ -1437,7 +1410,7 @@ BIF_RETTYPE hipe_nonclosure_address(BIF_ALIST_2)
 	f = ep->code[1];
     } else
 	goto badfun;
-    address = hipe_get_na_nofail(m, f, BIF_ARG_2, 1);
+    address = hipe_get_na_nofail(m, f, BIF_ARG_2);
     BIF_RET((Eterm)address);
 
  badfun:
@@ -1487,7 +1460,7 @@ int hipe_find_mfa_from_ra(const void *ra, Eterm *m, Eterm *f, unsigned int *a)
 }
 
 
-/* add_ref(CalleeMFA, {CallerMFA,Address,'call'|'load_mfa',Trampoline,'remote'|'local'})
+/* add_ref(CalleeMFA, {CallerMFA,Address,'call'|'load_mfa',Trampoline})
  */
 BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
 {
@@ -1498,7 +1471,6 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
     void *trampoline;
     unsigned int flags;
     struct hipe_mfa_info *callee_mfa;
-    //SVERK struct hipe_mfa_info *caller_mfa;
     struct hipe_ref *ref;
     Module* modp;
 
@@ -1507,7 +1479,7 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
     if (is_not_tuple(BIF_ARG_2))
 	goto badarg;
     tuple = tuple_val(BIF_ARG_2);
-    if (tuple[0] != make_arityval(5))
+    if (tuple[0] != make_arityval(4))
 	goto badarg;
     if (!term_to_mfa(tuple[1], &caller))
 	goto badarg;
@@ -1530,17 +1502,6 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
 	trampoline = term_to_address(tuple[4]);
 	if (!trampoline)
 	    goto badarg;
-    }
-    switch (tuple[5]) {
-      case am_local:
-	fprintf(stderr, "SVERK doesn't like local refs\r\n");
-	abort();
-	break;
-      case am_remote:
-	//SVERK flags |= REF_FLAG_IS_REMOTE;
-	break;
-      default:
-	goto badarg;
     }
     hipe_mfa_info_table_rwlock();
     callee_mfa = hipe_mfa_info_table_put_rwlocked(callee.mod, callee.fun, callee.ari);
@@ -1716,7 +1677,7 @@ void hipe_redirect_to_module(Module* modp)
 	    void *new_address;
 	    int res;
 	    
-	    new_address = hipe_get_na_nofail_rwlocked(p->m, p->f, p->a, 1);
+	    new_address = hipe_get_na_nofail_rwlocked(p->m, p->f, p->a);
 	    	    
 	    DBG_TRACE_MFA(p->m,p->f,p->a, "  REDIRECT ref at %p FROM %T:%T/%u (%p -> %p)",
 			  ref, ref->caller_m, ref->caller_f, ref->caller_a,

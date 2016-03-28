@@ -792,7 +792,7 @@ add_ref(CalleeMFA, Address, FunDefs, RefType, Trampoline, RemoteOrLocal) ->
     local -> ignore; % SVERK try ignore local refs
     remote ->
       %% io:format("Adding ref ~w\n",[{CallerMFA, CalleeMFA, Address, RefType}]),
-      hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline,RemoteOrLocal})
+      hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline})
   end.
 
 % For FunDefs sorted from low to high addresses
@@ -918,12 +918,13 @@ get_native_address(MFA, FunDefs, RemoteOrLocal) ->
   case mfa_to_address(MFA, FunDefs, RemoteOrLocal) of
     Adr when is_integer(Adr) -> Adr;
     false ->
-      IsRemote =
 	case RemoteOrLocal of
 	  remote -> true;
-	  local -> false
+	  local ->
+	    ?error_msg("Local function ~p not found\n",[MFA]),
+	    exit({function_not_found,MFA})
 	end,
-      hipe_bifs:find_na_or_make_stub(MFA, IsRemote)
+        hipe_bifs:find_na_or_make_stub(MFA)
   end.
 
 mfa_to_address(MFA, [#fundef{address=Adr, mfa=MFA,
