@@ -212,7 +212,9 @@ load_common(Mod, Bin, Beam, Architecture) ->
       %% Note: FunDefs are sorted descending address order.
       FunDefs = exports(ExportMap, CodeAddress),
 
-      erlang:display({"hipe_unified_loader(",Mod,") exports = ",  FunDefs}),
+      %%erlang:display({"hipe_unified_loader(",Mod,") exports = ",  FunDefs}),
+
+      %%erlang:display({"hipe_unified_loader(",Mod,") Refs = ", Refs}),
 
       %% Remove references to old versions of the module.
       case Beam of

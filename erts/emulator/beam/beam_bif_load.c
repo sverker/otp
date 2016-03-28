@@ -73,7 +73,7 @@ BIF_RETTYPE code_make_stub_module_3(BIF_ALIST_3)
     Module* modp;
     Eterm res;
 
-    erts_fprintf(stderr, "SVERK: code_make_stub_module_3(%T) called\r\n", BIF_ARG_1);
+    //erts_fprintf(stderr, "SVERK: code_make_stub_module_3(%T) called\r\n", BIF_ARG_1);
 
     if (!erts_try_seize_code_write_permission(BIF_P)) {
 	ERTS_BIF_YIELD3(bif_export[BIF_code_make_stub_module_3],
@@ -105,14 +105,14 @@ BIF_RETTYPE code_make_stub_module_3(BIF_ALIST_3)
 #endif
     }
     else {
-	erts_fprintf(stderr, "SVERK: staging stub FAILED!!!!!!! res=%lx\r\n", res);
+	//erts_fprintf(stderr, "SVERK: staging stub FAILED!!!!!!! res=%lx\r\n", res);
 	erts_abort_staging_code_ix();
     }
     erts_smp_thr_progress_unblock();
     erts_smp_proc_lock(BIF_P, ERTS_PROC_LOCK_MAIN);
     erts_release_code_write_permission();
 
-    erts_fprintf(stderr, "SVERK: code_make_stub_module_3(%T) returns\r\n", BIF_ARG_1);
+    //erts_fprintf(stderr, "SVERK: code_make_stub_module_3(%T) returns\r\n", BIF_ARG_1);
     return res;
 }
 
@@ -542,7 +542,7 @@ BIF_RETTYPE delete_module_1(BIF_ALIST_1)
     int success = 0;
     Eterm res = NIL;
 
-    erts_fprintf(stderr, "SVERK: delete_module_1(%T) called\r\n", BIF_ARG_1);
+    //erts_fprintf(stderr, "SVERK: delete_module_1(%T) called\r\n", BIF_ARG_1);
 
     if (is_not_atom(BIF_ARG_1)) {
 	BIF_ERROR(BIF_P, BADARG);
@@ -590,7 +590,7 @@ BIF_RETTYPE delete_module_1(BIF_ALIST_1)
 	mod.module = BIF_ARG_1;
 	mod.modp = modp;
 	retval = staging_epilogue(BIF_P, success, res, is_blocking, &mod, 1, 0);
-	erts_fprintf(stderr, "SVERK: delete_module_1(%T) returning\r\n", BIF_ARG_1);
+	//erts_fprintf(stderr, "SVERK: delete_module_1(%T) returning\r\n", BIF_ARG_1);
 	return retval;  
     }
 }

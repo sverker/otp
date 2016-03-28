@@ -54,7 +54,7 @@
 
 #define BeamOpCode(Op)	((Uint)BeamOp(Op))
 
-#define SVERK_DEBUG
+//#define SVERK_DEBUG
 
 #ifdef SVERK_DEBUG
 #define SVERK_TRACE1(FMT,A)           erts_fprintf(stderr, "SVERK: "FMT"\n", A)
@@ -1199,7 +1199,7 @@ static struct hipe_mfa_info *hipe_mfa_info_table_put_rwlocked(Eterm m, Eterm f, 
     p->next_in_mod = modp->first_hipe_mfa;
     modp->first_hipe_mfa = p;
 
-    erts_fprintf(stderr, "hipe_mfa_info created for %T:%T/%u\n", m, f, arity);
+    //erts_fprintf(stderr, "SVERK hipe_mfa_info created for %T:%T/%u\n", m, f, arity);
     DBG_TRACE_MFA(m,f,arity, "hipe_mfa_info allocated at %p", p);
 
     return p;

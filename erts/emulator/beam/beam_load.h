@@ -148,7 +148,10 @@ struct BeamCodeLineTab_ {
 #define LOC_FILE(Loc) ((Loc) >> 24)
 #define LOC_LINE(Loc) ((Loc) & ((1 << 24)-1))
 
-#define ENABLE_DBG_TRACE_MFA
+#ifdef DEBUG
+# define ENABLE_DBG_TRACE_MFA
+#endif
+
 #ifdef  ENABLE_DBG_TRACE_MFA
 
 extern Eterm dbg_trace_m;
@@ -164,6 +167,7 @@ int dbg_is_traced_mfa(Eterm m, Eterm f, Uint a);
   }while(0)
 
 #else
+#  define dbg_set_traced_mfa(M,F,A)
 #  define DBG_TRACE_MFA(M,F,A,FMT, ...) 
 #endif /* ENABLE_DBG_TRACE_MFA */
 
