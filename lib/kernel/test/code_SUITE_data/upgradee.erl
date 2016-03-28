@@ -8,7 +8,9 @@
 -export([exp1/0]).     % only exported in v1
 -export([exp1loc2/0]). % exported in v1, local in v2
 -export([exp1exp2/0]). % exported in v1 and v2
--export([get_fun/0]).
+-export([get_local_fun/0]).
+-export([get_exp1exp2_fun/0]).
+-export([exp1exp2_fun/0]).
 
 exp1() -> ?VERSION.
 loc1() -> ?VERSION.
@@ -21,7 +23,9 @@ loc1() -> ?VERSION.
 -export([exp2/0]).
 -export([loc1exp2/0]).
 -export([exp1exp2/0]).
--export([get_fun/0]).
+-export([get_local_fun/0]).
+-export([get_exp1exp2_fun/0]).
+-export([exp1exp2_fun/0]).
 
 exp2() -> ?VERSION.
 loc2() -> ?VERSION.
@@ -33,7 +37,11 @@ exp1loc2() -> ?VERSION.
 loc1exp2() -> ?VERSION.
 loc1loc2() -> ?VERSION.
 
-get_fun() -> fun() -> ?VERSION end.	    
+get_local_fun() -> fun() -> ?VERSION end.
+get_exp1exp2_fun() -> fun ?MODULE:exp1exp2_fun/0.
+
+exp1exp2_fun() ->
+    ?VERSION.
 
 dispatch_loop() ->
     receive 

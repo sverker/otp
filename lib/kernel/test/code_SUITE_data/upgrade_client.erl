@@ -58,8 +58,11 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc1),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
-    put(fun1, upgradee:get_fun()),
-    ?line 1 = (get(fun1))(),
+    put(loc1_fun, upgradee:get_local_fun()),
+    ?line 1 = (get(loc1_fun))(),
+
+    put(exp1exp2_fun, upgradee:get_exp1exp2_fun()),
+    ?line 1 = (get(exp1exp2_fun))(),
 
     ?line 13 = check_tracing(Tracer),
 
@@ -139,9 +142,11 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, exp2),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
-    ?line 1 = (get(fun1))(),
-    put(fun2, upgradee:get_fun()),
-    ?line 2 = (get(fun2))(),
+    ?line 1 = (get(loc1_fun))(),
+    put(loc2_fun, upgradee:get_local_fun()),
+    ?line 2 = (get(loc2_fun))(),
+
+    ?line 2 = (get(exp1exp2_fun))(),
 
     ?line 10 = check_tracing(Tracer),
 
@@ -197,8 +202,9 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc1loc2),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
-    ?line 1 = (get(fun1))(),
-    ?line 2 = (get(fun2))(),
+    ?line 1 = (get(loc1_fun))(),
+    ?line 2 = (get(loc2_fun))(),
+    ?line 2 = (get(exp1exp2_fun))(),
 
     ?line 10 = check_tracing(Tracer),
 
@@ -210,7 +216,7 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     %%
     io:format("Purge version 1 of 'upgradee'\n",[]),
     %%
-    put(fun1,undefined),
+    put(loc1_fun,undefined),
     code:purge(upgradee),
 
     %%
@@ -262,14 +268,16 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, exp1loc2),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc1loc2),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
+
+    ?line {'EXIT',{undef,_}} = (catch (get(exp1exp2_fun))()),
     
-    ?line 13 = check_tracing(Tracer),
+    ?line 14 = check_tracing(Tracer),
 
     unlink(P),
     exit(P, die_please),
 
     io:format("Purge 'upgradee'\n",[]),
-    put(fun2,undefined),
+    put(loc2_fun,undefined),
     code:purge(upgradee),
 
     io:format("Delete and purge 'other'\n",[]),
