@@ -616,7 +616,6 @@ patch_load_mfa(CodeAddress, DestMFA, FunDefs, RemoteOrLocal) ->
 	add_ref(DestMFA, CodeAddress, FunDefs, 'load_mfa', [], RemoteOrLocal),
 	NativeAddress;
       BifAddress when is_integer(BifAddress) ->
-	patch_instr(CodeAddress, BifAddress, 'load_mfa'),
 	BifAddress
     end,
   patch_instr(CodeAddress, DestAddress, 'load_mfa').
