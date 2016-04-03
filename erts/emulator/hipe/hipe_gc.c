@@ -38,7 +38,7 @@ Eterm *fullsweep_nstack(Process *p, Eterm *n_htop)
     /* known nstack walk state */
     Eterm *nsp;
     Eterm *nsp_end;
-    const struct sdesc *sdesc;
+    const struct hipe_sdesc *sdesc;
     unsigned int sdesc_size;
     unsigned long ra;
     unsigned int i;
@@ -121,7 +121,7 @@ void gensweep_nstack(Process *p, Eterm **ptr_old_htop, Eterm **ptr_n_htop)
     /* known nstack walk state */
     Eterm *nsp;
     Eterm *nsp_end;
-    const struct sdesc *sdesc;
+    const struct hipe_sdesc *sdesc;
     unsigned int sdesc_size;
     unsigned long ra;
     unsigned int i;
