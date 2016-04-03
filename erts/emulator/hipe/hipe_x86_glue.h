@@ -62,7 +62,9 @@ static __inline__ void hipe_arch_glue_init(void)
 
     nbif_return_sdesc.exnra = (unsigned long)nbif_fail;
     nbif_return_sdesc.sdesc.bucket.hvalue = (unsigned long)nbif_return;
-    nbif_return_sdesc.sdesc.summary = (1<<8);
+    nbif_return_sdesc.sdesc.fsize = 0;
+    nbif_return_sdesc.sdesc.has_exnra = 1;
+    nbif_return_sdesc.sdesc.arity = 0;
     nbif_return_sdesc.sdesc.m_aix = atom_val(am_Cookie);
     nbif_return_sdesc.sdesc.f_aix = atom_val(am_return);
 

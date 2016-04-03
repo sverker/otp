@@ -67,7 +67,9 @@ void hipe_print_nstack(Process *p)
     nsp = p->hipe.nsp;
     nsp_end = p->hipe.nstend;
 
-    sdesc0.summary = p->hipe.narity;
+    sdesc0.fsize = 0;
+    sdesc0.has_exnra = 0;
+    sdesc0.arity = p->hipe.narity;
     sdesc0.livebits[0] = ~1;
     sdesc = &sdesc0;
 

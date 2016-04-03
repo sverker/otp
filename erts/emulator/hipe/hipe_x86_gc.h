@@ -65,7 +65,9 @@ nstack_walk_init_sdesc(const Process *p, struct nstack_walk_state *state)
     state->sdesc0 = sdesc;
     return sdesc;
 #else
-    state->sdesc0[0].summary = (0 << 9) | (0 << 8) | p->hipe.narity;
+    state->sdesc0[0].fsize = 0;
+    state->sdesc0[0].has_exnra = 0;
+    state->sdesc0[0].arity = p->hipe.narity;
     state->sdesc0[0].livebits[0] = 0;
     state->sdesc0[0].m_aix = 0;
     state->sdesc0[0].f_aix = atom_val(am_undefined);
