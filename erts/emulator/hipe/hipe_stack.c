@@ -125,27 +125,42 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
 {
     Uint ra, exnra;
     Eterm *live;
-    Uint fsize, arity, nlive, i, nslots, off;
+    Uint fsize, nargs, stk_nargs, nlive, i, nslots, off;
     Uint livebitswords, sdescbytes;
     void *p;
     struct hipe_sdesc *sdesc;
+    Eterm* mfa_tpl;
+    Eterm* tp;
 
-    if (is_not_tuple(arg) ||
-	(tuple_val(arg))[0] != make_arityval(6) ||
-	term_to_Uint((tuple_val(arg))[1], &ra) == 0 ||
-	term_to_Uint((tuple_val(arg))[2], &exnra) == 0 ||
-	is_not_small((tuple_val(arg))[3]) ||
-	(fsize = unsigned_val((tuple_val(arg))[3])) > 65535 ||
-	is_not_small((tuple_val(arg))[4]) ||
-	(arity = unsigned_val((tuple_val(arg))[4])) > 255 ||
-	is_not_tuple((tuple_val(arg))[5]))
+    if (is_not_tuple(arg))
+        return 0;
+
+    tp = tuple_val(arg);
+    if (tp[0] != make_arityval(6) ||
+        term_to_Uint(tp[1], &ra) == 0 ||
+	term_to_Uint(tp[2], &exnra) == 0 ||
+	is_not_small(tp[3]) ||
+	(fsize = unsigned_val(tp[3])) > 65535 ||
+	is_not_small(tp[4]) ||
+	(stk_nargs = unsigned_val(tp[4])) > 255 ||
+	is_not_tuple(tp[5]) ||
+        is_not_tuple(tp[6]) ||
+        (mfa_tpl = tuple_val(tp[6]))[0] != make_arityval(3) ||
+        is_not_atom(mfa_tpl[1]) ||
+        is_not_atom(mfa_tpl[2]) ||
+        is_not_small(mfa_tpl[3]) ||
+        (nargs = unsigned_val(mfa_tpl[3])) > 255)
 	return 0;
+
+    if (stk_nargs != (nargs > NR_ARG_REGS ? nargs - NR_ARG_REGS : 0))
+        return 0;
+
     /* Get tuple with live slots */
-    live = tuple_val((tuple_val(arg))[5]) + 1;
+    live = tuple_val(tp[5]) + 1;
     /* Get number of live slots */
     nlive = arityval(live[-1]);
-    /* Calculate size of frame = locals + ra + arguments */
-    nslots = fsize + 1 + arity;
+    /* Calculate size of frame = locals + ra + stack arguments */
+    nslots = fsize + 1 + stk_nargs;
     /* Check that only valid slots are given. */
     for (i = 0; i < nlive; ++i) {
 	if (is_not_small(live[i]) ||
@@ -155,12 +170,12 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
     }
 
     /* Calculate number of words for the live bitmap. */
-    livebitswords = (fsize + arity + 1 + 31) / 32;
+    livebitswords = (fsize + stk_nargs + 1 + 31) / 32;
     /* Calculate number of bytes needed for the stack descriptor. */
     sdescbytes =
 	(exnra
 	 ? offsetof(struct sdesc_with_exnra, sdesc.livebits)
-	 : offsetof(struct sdesc, livebits))
+	 : offsetof(struct hipe_sdesc, livebits))
 	+ livebitswords * sizeof(int);
     p = erts_alloc(ERTS_ALC_T_HIPE, sdescbytes);
     /* If we have an exception handler use the
@@ -172,10 +187,14 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
     } else
 	sdesc = p;
 
+    sdesc->m_aix = atom_val(mfa_tpl[1]);
+    sdesc->f_aix = atom_val(mfa_tpl[2]);
+
+
     /* Initialise head of sdesc. */
     sdesc->bucket.next = 0;
     sdesc->bucket.hvalue = ra;
-    sdesc->summary = (fsize << 9) | (exnra ? (1<<8) : 0) | arity;
+    sdesc->summary = (fsize << 9) | (exnra ? (1<<8) : 0) | nargs;
     /* Clear all live-bits */
     for (i = 0; i < livebitswords; ++i)
 	sdesc->livebits[i] = 0;
@@ -184,13 +203,5 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
 	off = unsigned_val(live[i]);
 	sdesc->livebits[off / 32] |= (1 << (off & 31));
     }
-#ifdef DEBUG
-    {
-	Eterm mfa_tpl = tuple_val(arg)[6];	
-	sdesc->dbg_M = tuple_val(mfa_tpl)[1];
-	sdesc->dbg_F = tuple_val(mfa_tpl)[2];
-	sdesc->dbg_A = tuple_val(mfa_tpl)[3];
-    }
-#endif
     return sdesc;
 }

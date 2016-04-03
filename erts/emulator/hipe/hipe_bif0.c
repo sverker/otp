@@ -1421,42 +1421,15 @@ BIF_RETTYPE hipe_nonclosure_address(BIF_ALIST_2)
 
 int hipe_find_mfa_from_ra(const void *ra, Eterm *m, Eterm *f, unsigned int *a)
 {
-    struct hipe_mfa_info *mfa;
-    long mfa_offset, ra_offset;
-    struct hipe_mfa_info **bucket;
-    unsigned int i, nrbuckets;
+    const struct hipe_sdesc* sdesc = hipe_find_sdesc((unsigned long)ra);
 
-    /* Note about locking: the table is only updated from the
-       loader, which runs with the rest of the system suspended. */
-    /* XXX: alas not true; see comment at hipe_mfa_info_table.lock */
-    hipe_mfa_info_table_rlock();
-    bucket = hipe_mfa_info_table.bucket;
-    nrbuckets = 1 << hipe_mfa_info_table.log2size;
-    mfa = NULL;
-    mfa_offset = LONG_MAX;
-    for (i = 0; i < nrbuckets; ++i) {
-	struct hipe_mfa_info *b = bucket[i];
-	while (b != NULL) {
-	    ra_offset = (char*)ra - (char*)b->local_address;
-	    if (ra_offset > 0 && ra_offset < mfa_offset) {
-		mfa_offset = ra_offset;
-		mfa = b;
-	    }
-	    ra_offset = (char*)ra - (char*)b->old_address;
-	    if (ra_offset > 0 && ra_offset < mfa_offset) {
-		mfa_offset = ra_offset;
-		mfa = b;
-	    }
-	    b = b->bucket.next;
-	}
-    }
-    if (mfa) {
-	*m = mfa->m;
-	*f = mfa->f;
-	*a = mfa->a;
-    }
-    hipe_mfa_info_table_runlock();
-    return mfa ? 1 : 0;
+    if (!sdesc || sdesc->m_aix == atom_val(am_Cookie))
+        return 0;
+
+    *m = make_atom(sdesc->m_aix);
+    *f = make_atom(sdesc->f_aix);
+    *a = sdesc->summary & 0xFF;
+    return 1;
 }
 
 

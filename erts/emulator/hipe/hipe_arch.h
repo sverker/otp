@@ -35,18 +35,23 @@ extern void *hipe_make_native_stub(void *exp, unsigned int beamArity);
 
 #if defined(__sparc__)
 #include "hipe_sparc.h"
+#include "hipe_sparc_asm.h"
 #endif
 #if defined(__i386__)
 #include "hipe_x86.h"
+#include "hipe_x86_asm.h"
 #endif
 #if defined(__x86_64__)
 #include "hipe_amd64.h"
+#include "hipe_amd64_asm.h"
 #endif
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__)
 #include "hipe_ppc.h"
+#include "hipe_ppc_asm.h"
 #endif
 #if defined(__arm__)
 #include "hipe_arm.h"
+#include "hipe_arm_asm.h"
 #endif
 
 #if !defined(AEXTERN)

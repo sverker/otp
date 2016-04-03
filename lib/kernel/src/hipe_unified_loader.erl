@@ -552,15 +552,15 @@ patch_atom(Address, Atom) ->
   patch_instr(Address, hipe_bifs:atom_to_word(Atom), atom).
 
 patch_sdesc(?STACK_DESC(SymExnRA, FSize, Arity, Live),
-	    Address, {_ConstMap2,CodeAddress}, _FunDefs) ->
+	    Address, {_ConstMap2,CodeAddress}, FunDefs) ->
   ExnRA =
     case SymExnRA of
       [] -> 0; % No catch
       LabelOffset -> CodeAddress + LabelOffset
     end,
   ?ASSERT(assert_local_patch(Address)),
-  DBG_MFA = ?IF_DEBUG(address_to_mfa_lth(Address, _FunDefs), {undefined,undefined,0}),
-  hipe_bifs:enter_sdesc({Address, ExnRA, FSize, Arity, Live, DBG_MFA}).
+  MFA = address_to_mfa_lth(Address, FunDefs),
+  hipe_bifs:enter_sdesc({Address, ExnRA, FSize, Arity, Live, MFA}).
 
 
 %%----------------------------------------------------------------

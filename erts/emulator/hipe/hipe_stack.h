@@ -36,10 +36,8 @@ struct hipe_sdesc {
 	struct hipe_sdesc *next;	/* hash collision chain */
     } bucket;
     unsigned int summary; /* frame size, exn handler presence flag, arity */
-#ifdef DEBUG
-    Eterm dbg_M, dbg_F;
-    unsigned dbg_A;
-#endif
+    Uint32 m_aix;
+    Uint32 f_aix;
     unsigned int livebits[1]; /* size depends on arch & data in summary field */
 };
 
@@ -56,7 +54,8 @@ static __inline__ unsigned int sdesc_fsize(const struct hipe_sdesc *sdesc)
 /* Nr of arguments pushed on stack */
 static __inline__ unsigned int sdesc_arity(const struct hipe_sdesc *sdesc)
 {
-    return sdesc->summary & 0xFF;
+    unsigned int a = (sdesc->summary & 0xFF);
+    return a > NR_ARG_REGS ? a - NR_ARG_REGS : 0;
 }
 
 static __inline__ unsigned long sdesc_exnra(const struct hipe_sdesc *sdesc)
