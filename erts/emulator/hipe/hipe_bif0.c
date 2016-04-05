@@ -1013,12 +1013,13 @@ struct hipe_mfa_info {
     Eterm f;	/* atom */
     unsigned int a;
     void *remote_address;
-    void *local_address;
-    void *old_address;
     struct hipe_ref* first_caller;
     struct hipe_mfa_info* next_in_mod;
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
     void *trampoline;
+#endif
+#ifdef DEBUG
+    Export* dbg_export;
 #endif
 };
 
@@ -1126,12 +1127,13 @@ static struct hipe_mfa_info *hipe_mfa_info_table_alloc(Eterm m, Eterm f, unsigne
     res->f = f;
     res->a = arity;
     res->remote_address = NULL;
-    res->local_address = NULL;
-    res->old_address = NULL;
     res->first_caller = NULL;
     res->next_in_mod = NULL;
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
     res->trampoline = NULL;
+#endif
+#ifdef DEBUG
+    res->dbg_export = NULL;
 #endif
 
     return res;
@@ -1209,8 +1211,9 @@ static void hipe_mfa_set_na(Eterm m, Eterm f, unsigned int arity, void *address)
     hipe_mfa_info_table_rwlock();
     p = hipe_mfa_info_table_put_rwlocked(m, f, arity);
     DBG_TRACE_MFA(m,f,arity,"set native address in hipe_mfa_info at %p", p);
-    ASSERT(!p->local_address);
-    p->local_address = address;
+    ASSERT((!p->remote_address && !p->dbg_export)
+           || (p->remote_address && p->dbg_export
+               && p->dbg_export->code[3] == (BeamInstr)em_call_error_handler));
     p->remote_address = address;
 	
     hipe_mfa_info_table_rwunlock();
@@ -1286,23 +1289,11 @@ void hipe_delete_code(Module* modp)
 
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
 	DBG_TRACE_MFA(p->m,p->f,p->a,"INVALIDATE hipe_mfa_info at %p", p);
-	p->remote_address = NULL; 
-	ASSERT(p->old_address == NULL);
-	p->old_address = p->local_address;
-	p->local_address = NULL;
+	p->remote_address = NULL;
+#ifdef DEBUG
+        p->dbg_export = NULL;
+#endif
     }
-}
-
-static void *hipe_make_stub(Eterm m, Eterm f, unsigned int arity)
-{
-    Export *export_entry;
-    void *StubAddress;
-
-    export_entry = erts_export_get_or_make_stub(m, f, arity);
-    StubAddress = hipe_make_native_stub(export_entry, arity);
-    if (!StubAddress)
-	erts_exit(ERTS_ERROR_EXIT, "hipe_make_stub: code allocation failed\r\n");
-    return StubAddress;
 }
 
 static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, struct hipe_mfa_info **pp)
@@ -1324,9 +1315,21 @@ static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, struct hip
 
 static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a, struct hipe_mfa_info *p)
 {
+    Export *export_entry;
+    void *stubAddress;
+
     if (!p)
 	p = hipe_mfa_info_table_put_rwlocked(m, f, a);
-    p->remote_address = hipe_make_stub(m, f, a);
+
+    export_entry = erts_export_get_or_make_stub(m, f, a);
+    stubAddress = hipe_make_native_stub(export_entry, a);
+    if (!stubAddress)
+	erts_exit(ERTS_ERROR_EXIT, "hipe_make_stub: code allocation failed\r\n");
+
+    p->remote_address = stubAddress;
+#ifdef DEBUG
+    p->dbg_export = export_entry;
+#endif
     return p->remote_address;
 }
 
@@ -1567,7 +1570,6 @@ BIF_RETTYPE hipe_bifs_remove_refs_from_1(BIF_ALIST_1)
 
 void hipe_purge_module(Module* modp)
 {
-    struct hipe_mfa_info* p;
     struct hipe_ref* ref;
 
     ASSERT(modp);
@@ -1596,16 +1598,6 @@ void hipe_purge_module(Module* modp)
     }
     modp->old.first_hipe_ref = NULL;
 
-    for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
-	if (p->old_address) {
-	    DBG_TRACE_MFA(p->m, p->f, p->a, "CLEAR old_address in hipe_mfa_info at %p", p);
-	    p->old_address = NULL;	    
-	}
-	else {
-	    DBG_TRACE_MFA(p->m, p->f, p->a, "NO old_address in hipe_mfa_info at %p", p);
-	}
-    }
-
 #ifdef DEBUG
     sys_memset(modp->old.hipe_code_start, 0xfe, modp->old.hipe_code_size);
 #endif
@@ -1620,12 +1612,18 @@ void hipe_export_beam(Eterm m, Eterm f, Uint a, Export* ep)
     hipe_mfa_info_table_rwlock();
     p = hipe_mfa_info_table_get_locked(m, f, a);
     if (p) {
-	void* StubAddress = hipe_make_native_stub(ep, a);
+        if (!p->remote_address) {
+            void* StubAddress = hipe_make_native_stub(ep, a);
 
-	DBG_TRACE_MFA(m,f,a, "hipe_export_beam at export=%p, hipe stub=%p",
-		      ep, StubAddress);
-	ASSERT(!p->local_address);
-	p->remote_address = StubAddress;
+            DBG_TRACE_MFA(m,f,a, "hipe_export_beam at export=%p, hipe stub=%p",
+                          ep, StubAddress);
+            p->remote_address = StubAddress;
+#ifdef DEBUG
+            ASSERT(!p->dbg_export);
+            p->dbg_export = ep;
+#endif
+        }
+        else ASSERT(p->dbg_export == ep);
     }
     hipe_mfa_info_table_rwunlock();
 }
