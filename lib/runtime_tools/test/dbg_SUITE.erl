@@ -22,6 +22,7 @@
 %% Test functions
 -export([all/0, suite/0,
          big/1, tiny/1, simple/1, message/1, distributed/1, port/1,
+	 send/1,
          ip_port/1, file_port/1, file_port2/1, file_port_schedfix/1,
          ip_port_busy/1, wrap_port/1, wrap_port_time/1,
          with_seq_trace/1, dead_suspend/1, local_trace/1,
@@ -39,6 +40,7 @@ suite() ->
 
 all() -> 
     [big, tiny, simple, message, distributed, port, ip_port,
+     send,
      file_port, file_port2, file_port_schedfix, ip_port_busy,
      wrap_port, wrap_port_time, with_seq_trace, dead_suspend,
      local_trace, saved_patterns, tracer_exit_on_stop,
@@ -150,6 +152,24 @@ message(Config) when is_list(Config) ->
     [{trace,S,call,{dbg,ltp,[]},S},
      {trace,S,call,{dbg,ln,[]},S}] = flush(),
     ok.
+
+send(Config) when is_list(Config) ->
+    {ok, _} = start(),
+    try
+	S = self(),
+	Rcvr = spawn_link(fun F() -> receive M -> S ! {self(), M},
+						      F()
+					 end
+			      end),
+
+	{ok, [{matched, _, 1}]} = dbg:p(self(), send),
+	Rcvr ! "hej",
+	[{trace, S, send, "hej", Rcvr}] = flush_trace(),
+	[{Rcvr, "hej"}] = flush()
+
+    after
+	stop()
+    end.
 
 %% Simple test of distributed tracing
 distributed(Config) when is_list(Config) ->
@@ -857,6 +877,17 @@ flush(Acc) ->
             flush(Acc ++ [X])
     after 1000 ->
               Acc
+    end.
+
+flush_trace() ->
+    flush_trace([]).
+flush_trace(Acc) ->
+    receive
+	X when element(1,X) =:= trace;
+	       element(1,X) =:= trace_ts
+	       -> flush_trace(Acc ++ [X])
+    after 1000 ->
+	    Acc
     end.
 
 start() ->
