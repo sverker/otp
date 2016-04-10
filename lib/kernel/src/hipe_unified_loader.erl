@@ -918,12 +918,12 @@ get_native_address(MFA, FunDefs, RemoteOrLocal) ->
     Adr when is_integer(Adr) -> Adr;
     false ->
 	case RemoteOrLocal of
-	  remote -> true;
+	  remote ->
+	    hipe_bifs:find_na_or_make_stub(MFA);
 	  local ->
 	    ?error_msg("Local function ~p not found\n",[MFA]),
 	    exit({function_not_found,MFA})
-	end,
-        hipe_bifs:find_na_or_make_stub(MFA)
+	end
   end.
 
 mfa_to_address(MFA, [#fundef{address=Adr, mfa=MFA,
