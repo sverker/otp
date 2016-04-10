@@ -1013,6 +1013,7 @@ struct hipe_mfa_info {
     Eterm f;	/* atom */
     unsigned int a;
     void *remote_address;
+    void *new_address;
     struct hipe_ref* first_caller;
     struct hipe_mfa_info* next_in_mod;
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
@@ -1127,6 +1128,7 @@ static struct hipe_mfa_info *hipe_mfa_info_table_alloc(Eterm m, Eterm f, unsigne
     res->f = f;
     res->a = arity;
     res->remote_address = NULL;
+    res->new_address = NULL;
     res->first_caller = NULL;
     res->next_in_mod = NULL;
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
@@ -1211,11 +1213,8 @@ static void hipe_mfa_set_na(Eterm m, Eterm f, unsigned int arity, void *address)
     hipe_mfa_info_table_rwlock();
     p = hipe_mfa_info_table_put_rwlocked(m, f, arity);
     DBG_TRACE_MFA(m,f,arity,"set native address in hipe_mfa_info at %p", p);
-    ASSERT((!p->remote_address && !p->dbg_export)
-           || (p->remote_address && p->dbg_export
-               && p->dbg_export->code[3] == (BeamInstr)em_call_error_handler));
-    p->remote_address = address;
-	
+    p->new_address = address;
+
     hipe_mfa_info_table_rwunlock();
 }
 
@@ -1331,19 +1330,6 @@ static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a, struct 
     p->dbg_export = export_entry;
 #endif
     return p->remote_address;
-}
-
-static void *hipe_get_na_nofail_rwlocked(Eterm m, Eterm f, unsigned int a)
-{
-    struct hipe_mfa_info *p;
-    void *address;
-
-    address = hipe_get_na_try_locked(m, f, a, &p);
-    if (address)
-	return address;
-
-    address = hipe_get_na_slow_rwlocked(m, f, a, p);
-    return address;
 }
 
 static void *hipe_get_na_nofail(Eterm m, Eterm f, unsigned int a)
@@ -1643,7 +1629,22 @@ void hipe_redirect_to_module(Module* modp)
 #endif
 
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
-        void *new_address = hipe_get_na_nofail_rwlocked(p->m, p->f, p->a);
+        if (p->new_address) {
+            p->remote_address = p->new_address;
+            p->new_address = NULL;
+#ifdef DEBUG
+            p->dbg_export = NULL;
+#endif
+        }
+        else {
+            Export* exp = erts_export_get_or_make_stub(p->m, p->f, p->a);
+            p->remote_address = hipe_make_native_stub(exp, p->a);
+            if (!p->remote_address)
+                erts_exit(ERTS_ERROR_EXIT, "hipe_make_stub: code allocation failed\r\n");
+#ifdef DEBUG
+            p->dbg_export = exp;
+#endif
+        }
 
 	DBG_TRACE_MFA(p->m,p->f,p->a,"START REDIRECT towards hipe_mfa_info at %p", p);
 	for (ref = p->first_caller; ref; ref = ref->next) {
@@ -1651,16 +1652,16 @@ void hipe_redirect_to_module(Module* modp)
 	    	    
 	    DBG_TRACE_MFA(p->m,p->f,p->a, "  REDIRECT ref at %p FROM %T:%T/%u (%p -> %p)",
 			  ref, ref->caller_m, ref->caller_f, ref->caller_a,
-			  ref->address, new_address);
+			  ref->address, p->remote_address);
 	    
 	    DBG_TRACE_MFA(ref->caller_m, ref->caller_f, ref->caller_a,
 			  "  REDIRECT ref at %p TO %T:%T/%u (%p -> %p)",
-			  ref, p->m,p->f,p->a, ref->address, new_address);
+			  ref, p->m,p->f,p->a, ref->address, p->remote_address);
 
 	    if (ref->flags & REF_FLAG_IS_LOAD_MFA)
-		res = hipe_patch_insn(ref->address, (Uint)new_address, am_load_mfa);
+		res = hipe_patch_insn(ref->address, (Uint)p->remote_address, am_load_mfa);
 	    else
-		res = hipe_patch_call(ref->address, new_address, ref->trampoline);
+		res = hipe_patch_call(ref->address, p->remote_address, ref->trampoline);
 	    if (res)
 		fprintf(stderr, "%s: patch failed", __FUNCTION__);
 	}

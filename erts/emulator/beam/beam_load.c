@@ -5965,12 +5965,6 @@ make_stub(BeamInstr* fp, Eterm mod, Eterm func, Uint arity, Uint native, BeamIns
     fp[2] = mod;
     fp[3] = func;
     fp[4] = arity;
-#ifdef HIPE
-    if (native) {
-	fp[5] = BeamOpCode(op_move_return_n);
-	//hipe_mfa_save_orig_beam_op(mod, func, arity, fp+5);
-    }
-#endif
     fp[5] = OpCode;
     return fp + WORDS_PER_FUNCTION;
 }

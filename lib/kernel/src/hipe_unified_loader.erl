@@ -220,7 +220,7 @@ load_common(Mod, Bin, Beam, Architecture) ->
       case Beam of
 	[] -> ok;
 	Beam when is_binary(Beam) ->
-	  erlang:delete_module(Mod) % SVERK
+	  ok %%erlang:delete_module(Mod) % SVERK
       end,
 
       %% Patch all dynamic references in the code.
@@ -416,7 +416,7 @@ find_closure_refs([], Refs) ->
 %%------------------------------------------------------------------------
 
 export_funs([FunDef | FunDefs]) ->
-  #fundef{address=Address, mfa=MFA, is_closure=IsClosure,
+  #fundef{address=Address, mfa=MFA, is_closure=_IsClosure,
 	  is_exported=IsExported} = FunDef,
   ?IF_DEBUG({M,F,A} = MFA, no_debug),
   ?IF_DEBUG(
@@ -429,7 +429,7 @@ export_funs([FunDef | FunDefs]) ->
 		    [M,F,A, Address])
      end, no_debug),
   hipe_bifs:set_funinfo_native_address(MFA, Address, IsExported),
-  hipe_bifs:set_native_address(MFA, Address, IsClosure),
+  %%hipe_bifs:set_native_address(MFA, Address, IsClosure),
   export_funs(FunDefs);
 export_funs([]) ->
   ok.
