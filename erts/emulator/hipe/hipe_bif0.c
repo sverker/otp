@@ -1643,12 +1643,11 @@ void hipe_redirect_to_module(Module* modp)
 #endif
 
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
+        void *new_address = hipe_get_na_nofail_rwlocked(p->m, p->f, p->a);
+
 	DBG_TRACE_MFA(p->m,p->f,p->a,"START REDIRECT towards hipe_mfa_info at %p", p);
 	for (ref = p->first_caller; ref; ref = ref->next) {
-	    void *new_address;
 	    int res;
-	    
-	    new_address = hipe_get_na_nofail_rwlocked(p->m, p->f, p->a);
 	    	    
 	    DBG_TRACE_MFA(p->m,p->f,p->a, "  REDIRECT ref at %p FROM %T:%T/%u (%p -> %p)",
 			  ref, ref->caller_m, ref->caller_f, ref->caller_a,
