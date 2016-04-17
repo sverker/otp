@@ -1315,7 +1315,6 @@ delete_code(Module* modp)
     modp->curr.hipe_code_start = NULL;
     modp->curr.hipe_code_size = 0;
 # endif
-    hipe_delete_code(modp);
 #endif
 }
 

@@ -1282,19 +1282,6 @@ int hipe_need_blocking(Module* modp)
     return 0;
 }
 
-void hipe_delete_code(Module* modp)
-{
-    struct hipe_mfa_info *p;
-
-    for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
-	DBG_TRACE_MFA(p->m,p->f,p->a,"INVALIDATE hipe_mfa_info at %p", p);
-	p->remote_address = NULL;
-#ifdef DEBUG
-        p->dbg_export = NULL;
-#endif
-    }
-}
-
 static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, struct hipe_mfa_info **pp)
 {
     struct hipe_mfa_info *p;
