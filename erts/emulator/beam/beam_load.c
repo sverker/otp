@@ -4750,10 +4750,6 @@ final_touch(LoaderState* stp)
 	    address = ep->code+3;
 	}
 	ep->addressv[erts_staging_code_ix()] = address;
-      #ifdef HIPE
-	hipe_export_beam(stp->module, stp->export[i].function,
-			 stp->export[i].arity, ep);
-      #endif
     }
 
     /*

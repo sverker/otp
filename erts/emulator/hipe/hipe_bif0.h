@@ -47,7 +47,6 @@ extern void hipe_primop_set_trampoline(Eterm name, void *trampoline);
 int hipe_need_blocking(Module*);
 void hipe_delete_code(Module*);
 void hipe_purge_module(Module*);
-void hipe_export_beam(Eterm m, Eterm f, Uint a, Export*);
 void hipe_redirect_to_module(Module* modp);
 
 /* these are also needed in hipe_amd64.c */

@@ -707,9 +707,6 @@ BIF_RETTYPE finish_after_on_load_2(BIF_ALIST_2)
 		ep->code[4] != 0) {
 		ep->addressv[code_ix] = (void *) ep->code[4];
 		ep->code[4] = 0;
-	      #ifdef HIPE
-		hipe_export_beam(ep->code[0], ep->code[1], ep->code[2], ep);
-	      #endif
 	    }
 	}
 	modp->curr.code_hdr->on_load_function_ptr = NULL;

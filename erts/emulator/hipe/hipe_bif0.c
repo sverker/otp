@@ -1592,28 +1592,6 @@ void hipe_purge_module(Module* modp)
      */
 }
 
-void hipe_export_beam(Eterm m, Eterm f, Uint a, Export* ep)
-{
-    struct hipe_mfa_info *p;
-    hipe_mfa_info_table_rwlock();
-    p = hipe_mfa_info_table_get_locked(m, f, a);
-    if (p) {
-        if (!p->remote_address) {
-            void* StubAddress = hipe_make_native_stub(ep, a);
-
-            DBG_TRACE_MFA(m,f,a, "hipe_export_beam at export=%p, hipe stub=%p",
-                          ep, StubAddress);
-            p->remote_address = StubAddress;
-#ifdef DEBUG
-            ASSERT(!p->dbg_export);
-            p->dbg_export = ep;
-#endif
-        }
-        else ASSERT(p->dbg_export == ep);
-    }
-    hipe_mfa_info_table_rwunlock();
-}
-
 
 /* redirect_referred_from(CalleeMFA)
  * Redirect all pending-redirect refs in CalleeMFA's referred_from.
