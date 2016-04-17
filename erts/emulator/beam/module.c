@@ -87,6 +87,7 @@ static Module* module_alloc(Module* tmpl)
     obj->old.num_traced_exports = 0;
 #ifdef HIPE
     obj->first_hipe_mfa = NULL;
+    obj->new_hipe_refs = NULL;
     obj->curr.first_hipe_ref = NULL;
     obj->old.first_hipe_ref = NULL;
 # ifdef DEBUG

@@ -1484,8 +1484,8 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
     
     modp = erts_put_active_module(caller.mod);
     ASSERT(modp);
-    ref->next_from_modi = modp->curr.first_hipe_ref;
-    modp->curr.first_hipe_ref = ref;
+    ref->next_from_modi = modp->new_hipe_refs;
+    modp->new_hipe_refs = ref;
 
 #if defined(DEBUG) || defined(SVERK_DEBUG)
     ref->callee = callee_mfa;

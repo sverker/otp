@@ -51,6 +51,7 @@ typedef struct erl_module {
 
 #ifdef HIPE
     struct hipe_mfa_info* first_hipe_mfa;
+    struct hipe_ref* new_hipe_refs;
 #endif
 } Module; 
 
