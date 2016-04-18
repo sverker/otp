@@ -1011,7 +1011,8 @@ struct hipe_mfa_info {
     } bucket;
     Eterm m;	/* atom */
     Eterm f;	/* atom */
-    unsigned int a;
+    unsigned int a : sizeof(int)*8 - 1;
+    unsigned int is_stub : 1;
     void *remote_address;
     void *new_address;
     struct hipe_ref* first_caller;
@@ -1127,6 +1128,7 @@ static struct hipe_mfa_info *hipe_mfa_info_table_alloc(Eterm m, Eterm f, unsigne
     res->m = m;
     res->f = f;
     res->a = arity;
+    res->is_stub = 0;
     res->remote_address = NULL;
     res->new_address = NULL;
     res->first_caller = NULL;
@@ -1312,6 +1314,7 @@ static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a)
             erts_exit(ERTS_ERROR_EXIT, "hipe_make_stub: code allocation failed\r\n");
 
         p->remote_address = stubAddress;
+        p->is_stub = 1;
 #ifdef DEBUG
         p->dbg_export = export_entry;
 #endif
@@ -1596,20 +1599,23 @@ void hipe_redirect_to_module(Module* modp)
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
         if (p->new_address) {
             p->remote_address = p->new_address;
+            p->is_stub = 0;
             p->new_address = NULL;
 #ifdef DEBUG
             p->dbg_export = NULL;
 #endif
         }
-        else {
+        else if (!p->is_stub) {
             Export* exp = erts_export_get_or_make_stub(p->m, p->f, p->a);
             p->remote_address = hipe_make_native_stub(exp, p->a);
             if (!p->remote_address)
                 erts_exit(ERTS_ERROR_EXIT, "hipe_make_stub: code allocation failed\r\n");
+            p->is_stub = 1;
 #ifdef DEBUG
             p->dbg_export = exp;
 #endif
         }
+        else ASSERT(p->remote_address && p->dbg_export);
 
 	DBG_TRACE_MFA(p->m,p->f,p->a,"START REDIRECT towards hipe_mfa_info at %p", p);
 	for (ref = p->first_caller; ref; ref = ref->next) {
