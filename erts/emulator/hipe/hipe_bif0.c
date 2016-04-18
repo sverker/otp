@@ -1288,7 +1288,7 @@ int hipe_need_blocking(Module* modp)
     return 0;
 }
 
-static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, struct hipe_mfa_info **pp)
+static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a)
 {
     struct hipe_mfa_info *p;
 
@@ -1298,30 +1298,24 @@ static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a, struct hip
 	if (p->remote_address)
 	    return p->remote_address;
     }
-    /* Caller must take the slow path with the write lock held, but allow
-       it to avoid some work if it already holds the write lock.  */
-    if (pp)
-	*pp = p;
     return NULL;
 }
 
-static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a, struct hipe_mfa_info *p)
+static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a)
 {
-    Export *export_entry;
-    void *stubAddress;
+    struct hipe_mfa_info *p = hipe_mfa_info_table_put_rwlocked(m, f, a);
 
-    if (!p)
-	p = hipe_mfa_info_table_put_rwlocked(m, f, a);
+    if (!p->remote_address) {
+        Export* export_entry = erts_export_get_or_make_stub(m, f, a);
+        void* stubAddress = hipe_make_native_stub(export_entry, a);
+        if (!stubAddress)
+            erts_exit(ERTS_ERROR_EXIT, "hipe_make_stub: code allocation failed\r\n");
 
-    export_entry = erts_export_get_or_make_stub(m, f, a);
-    stubAddress = hipe_make_native_stub(export_entry, a);
-    if (!stubAddress)
-	erts_exit(ERTS_ERROR_EXIT, "hipe_make_stub: code allocation failed\r\n");
-
-    p->remote_address = stubAddress;
+        p->remote_address = stubAddress;
 #ifdef DEBUG
-    p->dbg_export = export_entry;
+        p->dbg_export = export_entry;
 #endif
+    }
     return p->remote_address;
 }
 
@@ -1330,13 +1324,13 @@ static void *hipe_get_na_nofail(Eterm m, Eterm f, unsigned int a)
     void *address;
 
     hipe_mfa_info_table_rlock();
-    address = hipe_get_na_try_locked(m, f, a, NULL);
+    address = hipe_get_na_try_locked(m, f, a);
     hipe_mfa_info_table_runlock();
     if (address)
 	return address;
 
     hipe_mfa_info_table_rwlock();
-    address = hipe_get_na_slow_rwlocked(m, f, a, NULL);
+    address = hipe_get_na_slow_rwlocked(m, f, a);
     hipe_mfa_info_table_rwunlock();
     return address;
 }
