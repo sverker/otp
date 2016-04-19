@@ -38,6 +38,9 @@
 #include "erl_thr_progress.h"
 #ifdef HIPE
 #  include "hipe_bif0.h"
+#  define IF_HIPE(X) (X)
+#else
+#  define IF_HIPE(X) (0)
 #endif
 
 static void set_default_trace_pattern(Eterm module);
@@ -315,7 +318,7 @@ finish_loading_1(BIF_ALIST_1)
 	if (p[i].modp->curr.num_breakpoints > 0 ||
 	    p[i].modp->curr.num_traced_exports > 0 ||
 	    erts_is_default_trace_enabled() ||
-	    hipe_need_blocking(p[i].modp)) {
+	    IF_HIPE(hipe_need_blocking(p[i].modp))) {
 	    /* tracing or hipe need thread blocking */
 	    erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
 	    erts_smp_thr_progress_block();
@@ -569,7 +572,7 @@ BIF_RETTYPE delete_module_1(BIF_ALIST_1)
 	else {
 	    if (modp->curr.num_breakpoints > 0 ||
 		modp->curr.num_traced_exports > 0 ||
-		hipe_need_blocking(modp)) {
+		IF_HIPE(hipe_need_blocking(modp))) {
 		/* tracing or hipe need to go single threaded */
 		erts_smp_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
 		erts_smp_thr_progress_block();
@@ -1199,9 +1202,7 @@ BIF_RETTYPE erts_internal_purge_module_1(BIF_ALIST_1)
 	     * Unload any NIF library
 	     */
 	    if (modp->old.nif != NULL
-#ifdef HIPE
-		|| modp->old.first_hipe_ref != NULL)
-#endif
+		|| IF_HIPE(modp->old.first_hipe_ref != NULL))
 	    {
 		/* ToDo: Do unload nif without blocking */
 		erts_rwunlock_old_code(code_ix);
