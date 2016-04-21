@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2011. All Rights Reserved.
+%% Copyright Ericsson AB 2011-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -47,6 +47,8 @@ split_block([{set,[R],[_,_,_]=As,{bif,is_record,{f,Lbl}}}|Is], Bl, Acc) ->
     split_block(Is, [], [{bif,is_record,{f,Lbl},As,R}|make_block(Bl, Acc)]);
 split_block([{set,[R],As,{bif,N,{f,Lbl}=Fail}}|Is], Bl, Acc) when Lbl =/= 0 ->
     split_block(Is, [], [{bif,N,Fail,As,R}|make_block(Bl, Acc)]);
+split_block([{set,[R],As,{bif,raise,{f,_}=Fail}}|Is], Bl, Acc) ->
+    split_block(Is, [], [{bif,raise,Fail,As,R}|make_block(Bl, Acc)]);
 split_block([{set,[R],As,{alloc,Live,{gc_bif,N,{f,Lbl}=Fail}}}|Is], Bl, Acc)
   when Lbl =/= 0 ->
     split_block(Is, [], [{gc_bif,N,Fail,Live,As,R}|make_block(Bl, Acc)]);

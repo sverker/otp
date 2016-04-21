@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2001-2013. All Rights Reserved.
+ * Copyright Ericsson AB 2001-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -497,31 +497,7 @@ node_table_hash(void *venp)
     Uint32 cre = ((ErlNode *) venp)->creation;
     HashValue h = atom_tab(atom_val(((ErlNode *) venp)->sysname))->slot.bucket.hvalue;
 
-    h *= PRIME0;
-    h += cre & 0xff;
-
-#if MAX_CREATION >= (1 << 8)
-    h *= PRIME1;
-    h += (cre >> 8) & 0xff;
-#endif
-
-#if MAX_CREATION >= (1 << 16)
-    h *= PRIME2;
-    h += (cre >> 16) & 0xff;
-#endif
-
-#if MAX_CREATION >= (1 << 24)
-    h *= PRIME3;
-    h += (cre >> 24) & 0xff;
-#endif
-
-#if 0
-/* XXX Problems in older versions of GCC */
- #if MAX_CREATION >= (1UL << 32)
- #error "MAX_CREATION larger than size of expected creation storage (Uint32)"
- #endif
-#endif
-    return h;
+    return (h + cre) * PRIME0;
 }
 
 static int
@@ -599,7 +575,7 @@ erts_node_table_info(int to, void *to_arg)
 }
 
 
-ErlNode *erts_find_or_insert_node(Eterm sysname, Uint creation)
+ErlNode *erts_find_or_insert_node(Eterm sysname, Uint32 creation)
 {
     ErlNode *res;
     ErlNode ne;

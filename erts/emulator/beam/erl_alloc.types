@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 2003-2014. All Rights Reserved.
+# Copyright Ericsson AB 2003-2016. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -87,6 +87,9 @@ allocator	EHEAP		true		eheap_alloc
 allocator	ETS		true		ets_alloc
 allocator	FIXED_SIZE	true		fix_alloc
 allocator	LITERAL 	true		literal_alloc
++if exec_alloc
+allocator	EXEC     	true	        exec_alloc
++endif
 
 +else # Non smp build
 
@@ -98,6 +101,9 @@ allocator	EHEAP		false		eheap_alloc
 allocator	ETS		false		ets_alloc
 allocator	FIXED_SIZE	false		fix_alloc
 allocator	LITERAL 	false		literal_alloc
++if exec_alloc
+allocator	EXEC     	false	        exec_alloc
++endif
 
 +endif
 
@@ -270,6 +276,9 @@ type	PROC_SYS_TSK	SHORT_LIVED	PROCESSES	proc_sys_task
 type	PROC_SYS_TSK_QS	SHORT_LIVED	PROCESSES	proc_sys_task_queues
 type    NEW_TIME_OFFSET	SHORT_LIVED	SYSTEM		new_time_offset
 type	IOB_REQ		SHORT_LIVED	SYSTEM		io_bytes_request
+type    TRACER_NIF      LONG_LIVED      SYSTEM          tracer_nif
+type    TRACE_MSG_QUEUE SHORT_LIVED     SYSTEM          trace_message_queue
+type    SCHED_ASYNC_JOB SHORT_LIVED     SYSTEM          async_calls
 
 +if threads_no_smp
 # Need thread safe allocs, but std_alloc and fix_alloc are not;
@@ -335,7 +344,13 @@ type	SL_MPATHS	SHORT_LIVED	SYSTEM		sl_migration_paths
 # Currently most hipe code use this type.
 type	HIPE		SYSTEM		SYSTEM		hipe_data
 
++if exec_alloc
+type	HIPE_EXEC	EXEC            CODE		hipe_code
 +endif
+
++endif
+
+
 
 +if heap_frag_elim_test
 

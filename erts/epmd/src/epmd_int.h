@@ -2,7 +2,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1998-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1998-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -237,8 +237,8 @@ static const struct in6_addr in6addr_loopback =
 #define EPMD_TRUE 1
 
 /* If no activity we let select() return every IDLE_TIMEOUT second
-   A file descriptor that are idle for CLOSE_TIMEOUT seconds and
-   isn't a ALIVE socket is probably hanging and we close it */
+   A file descriptor that has been idle for CLOSE_TIMEOUT seconds and
+   isn't an ALIVE socket has probably hanged and should be closed */
 
 #define IDLE_TIMEOUT 5
 #define CLOSE_TIMEOUT 60

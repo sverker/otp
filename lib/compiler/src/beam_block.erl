@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -88,7 +88,9 @@ collect_block([I|Is]=Is0, Acc) ->
     case collect(I) of
 	error -> {reverse(Acc),Is0};
 	Instr -> collect_block(Is, [Instr|Acc])
-    end.
+    end;
+collect_block([], Acc) ->
+    {reverse(Acc),[]}.
 
 collect({allocate,N,R})      -> {set,[],[],{alloc,R,{nozero,N,0,[]}}};
 collect({allocate_zero,N,R}) -> {set,[],[],{alloc,R,{zero,N,0,[]}}};

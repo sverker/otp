@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2006-2013. All Rights Reserved.
+ * Copyright Ericsson AB 2006-2016. All Rights Reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,6 +48,7 @@
 #include "erl_version.h"
 #include "erl_bif_unique.h"
 #include "dtrace-wrapper.h"
+#include "lttng-wrapper.h"
 
 #ifdef ERTS_SMP
 #define DDLL_SMP 1
@@ -1619,6 +1620,7 @@ static int do_unload_driver_entry(DE_Handle *dh, Eterm *save_name)
 	    if (q->finish) {
 		int fpe_was_unmasked = erts_block_fpe();
 		DTRACE1(driver_finish, q->name);
+                LTTNG1(driver_finish, q->name);
 		(*(q->finish))();
 		erts_unblock_fpe(fpe_was_unmasked);
 	    }
@@ -1735,7 +1737,7 @@ static void notify_proc(Process *proc, Eterm ref, Eterm driver_name, Eterm type,
 	hp += REF_THING_SIZE;
 	mess = TUPLE5(hp,type,r,am_driver,driver_name,tag);
     }
-    erts_queue_message(proc, &rp_locks, mp, mess, am_undefined);
+    erts_queue_message(proc, &rp_locks, mp, mess);
     erts_smp_proc_unlock(proc, rp_locks);
     ERTS_SMP_CHK_NO_PROC_LOCKS;
 }

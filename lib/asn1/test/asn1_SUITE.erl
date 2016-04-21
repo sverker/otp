@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -202,7 +202,9 @@ init_per_testcase(Func, Config) ->
     [{case_dir, CaseDir}|Config].
 
 end_per_testcase(_Func, Config) ->
-    code:del_path(proplists:get_value(case_dir, Config)).
+    CaseDir = proplists:get_value(case_dir, Config),
+    asn1_test_lib:rm_dirs([CaseDir]),
+    code:del_path(CaseDir).
 
 %%------------------------------------------------------------------------------
 %% Test runners

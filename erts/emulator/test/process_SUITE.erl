@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -1003,7 +1003,7 @@ low_prio_test(Config) when is_list(Config) ->
     process_flag(trap_exit, true),
     S = spawn_link(?MODULE, prio_server, [0, 0]),
     PCs = spawn_prio_clients(S, erlang:system_info(schedulers_online)),
-    timer:sleep(2000),
+    ct:sleep({seconds,3}),
     lists:foreach(fun (P) -> exit(P, kill) end, PCs),
     S ! exit,
     receive {'EXIT', S, {A, B}} -> check_prio(A, B) end,

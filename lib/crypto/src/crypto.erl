@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -302,6 +302,8 @@ block_encrypt(aes_ige256, Key, Ivec, Data) ->
     aes_ige_crypt_nif(Key, Ivec, Data, true);
 block_encrypt(aes_gcm, Key, Ivec, {AAD, Data}) ->
     aes_gcm_encrypt(Key, Ivec, AAD, Data);
+block_encrypt(aes_gcm, Key, Ivec, {AAD, Data, TagLength}) ->
+    aes_gcm_encrypt(Key, Ivec, AAD, Data, TagLength);
 block_encrypt(chacha20_poly1305, Key, Ivec, {AAD, Data}) ->
     chacha20_poly1305_encrypt(Key, Ivec, AAD, Data).
 
@@ -917,7 +919,10 @@ aes_cfb_128_decrypt(Key, IVec, Data) ->
 %%
 %% AES - in Galois/Counter Mode (GCM)
 %%
-aes_gcm_encrypt(_Key, _Ivec, _AAD, _In) -> ?nif_stub.
+%% The default tag length is EVP_GCM_TLS_TAG_LEN(16),
+aes_gcm_encrypt(Key, Ivec, AAD, In) ->
+    aes_gcm_encrypt(Key, Ivec, AAD, In, 16).
+aes_gcm_encrypt(_Key, _Ivec, _AAD, _In, _TagLength) -> ?nif_stub.
 aes_gcm_decrypt(_Key, _Ivec, _AAD, _In, _Tag) -> ?nif_stub.
 
 %%

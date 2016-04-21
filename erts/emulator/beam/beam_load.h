@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1999-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,6 @@ typedef struct gen_op_entry {
    int specific;
    int num_specific;
    int transform;
-   int min_window;
 } GenOpEntry;
 
 extern GenOpEntry gen_opc[];

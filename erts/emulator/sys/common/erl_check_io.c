@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2006-2013. All Rights Reserved.
+ * Copyright Ericsson AB 2006-2016. All Rights Reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@
 #include "erl_check_io.h"
 #include "erl_thr_progress.h"
 #include "dtrace-wrapper.h"
+#include "lttng-wrapper.h"
 #define ERTS_WANT_TIMER_WHEEL_API
 #include "erl_time.h"
 
@@ -395,6 +396,7 @@ forget_removed(struct pollset_info* psi)
 	if (drv_ptr) {
 	    int was_unmasked = erts_block_fpe();
 	    DTRACE1(driver_stop_select, drv_ptr->name);
+	    LTTNG1(driver_stop_select, drv_ptr->name);
 	    (*drv_ptr->stop_select) ((ErlDrvEvent) fd, NULL);
 	    erts_unblock_fpe(was_unmasked);
 	    if (drv_ptr->handle) {
@@ -1055,6 +1057,7 @@ done_unknown:
     if (stop_select_fn) {
 	int was_unmasked = erts_block_fpe();
 	DTRACE1(driver_stop_select, name);
+	LTTNG1(driver_stop_select, "unknown");
 	(*stop_select_fn)(e, NULL);
 	erts_unblock_fpe(was_unmasked);
     }

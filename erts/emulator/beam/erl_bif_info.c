@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1999-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 #  include "config.h"
 #endif
 
+#define ERTS_WANT_MEM_MAPPERS
 #include "sys.h"
 #include "erl_vm.h"
 #include "global.h"
@@ -125,6 +126,9 @@ static char erts_system_version[] = ("Erlang/OTP " ERLANG_OTP_RELEASE
 #endif
 #ifdef ERTS_FRMPTR
 				     " [frame-pointer]"
+#endif
+#ifdef USE_LTTNG
+				     " [lttng]"
 #endif
 #ifdef USE_DTRACE
 				     " [dtrace]"
@@ -843,6 +847,7 @@ process_info_list(Process *c_p, Eterm pid, Eterm list, int always_wrap,
 
 	if (unlock_locks)
 	    erts_smp_proc_unlock(rp, unlock_locks);
+
     }
 
     /*
@@ -1480,7 +1485,7 @@ process_info_aux(Process *BIF_P,
     }
 
     case am_last_calls: {
-	struct saved_calls *scb = ERTS_PROC_GET_SAVED_CALLS_BUF(BIF_P);
+	struct saved_calls *scb = ERTS_PROC_GET_SAVED_CALLS_BUF(rp);
 	if (!scb) {
 	    hp = HAlloc(BIF_P, 3);
 	    res = am_false;
@@ -2159,8 +2164,8 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
 	res = build_snifs_term(&hp, NULL, NIL);
 	BIF_RET(res);
     } else if (BIF_ARG_1 == am_sequential_tracer) {
-	val = erts_get_system_seq_tracer();
-	ASSERT(is_internal_pid(val) || is_internal_port(val) || val==am_false);
+	ErtsTracer seq_tracer = erts_get_system_seq_tracer();
+        val = erts_tracer_to_term(BIF_P, seq_tracer);
 	hp = HAlloc(BIF_P, 3);
 	res = TUPLE2(hp, am_sequential_tracer, val);
 	BIF_RET(res);
@@ -2748,6 +2753,9 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
 #elif defined(USE_SYSTEMTAP)
 	DECL_AM(systemtap);
 	BIF_RET(AM_systemtap);
+#elif defined(USE_LTTNG)
+	DECL_AM(lttng);
+	BIF_RET(AM_lttng);
 #else
 	BIF_RET(am_none);
 #endif

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1998-2010. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -26,22 +26,21 @@
 -include_lib("common_test/include/ct.hrl").
 
 all() -> 
-[cleanup].
+    [cleanup].
 
 groups() -> 
     [].
 
 init_per_group(_GroupName, Config) ->
-	Config.
+    Config.
 
 end_per_group(_GroupName, Config) ->
-	Config.
+    Config.
 
 
-cleanup(suite) -> [];
 cleanup(_) ->
-    ?line Mods = int:interpreted(),
-    ?line ok = int:n(Mods),
+    Mods = int:interpreted(),
+    ok = int:n(Mods),
     case whereis(interpret) of
 	undefined ->
 	    ok;

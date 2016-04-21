@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1998-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -787,7 +787,6 @@ start_tracer() ->
     seq_trace:set_system_tracer(Pid),
     Pid.
 
-
 set_token_flags([]) ->
     ok;
 set_token_flags([no_timestamp|Flags]) ->
@@ -836,7 +835,7 @@ check_ts(strict_monotonic_timestamp, Ts) ->
 	    ct:fail({unexpected_timestamp, Ts})
     end,
     ok.
-	
+
 start_node(Name, Param) ->
     test_server:start_node(Name, slave, [{args, Param}]).
 

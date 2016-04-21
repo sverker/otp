@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2015. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -1234,6 +1234,9 @@ on_load_embedded_1(Config) ->
     io:format("LinkName :~p, OnLoadApp: ~p~n",[LinkName,OnLoadApp]),
     case file:make_symlink(OnLoadApp, LinkName) of
 	{error,enotsup} ->
+	    throw({skip,"Support for symlinks required"});
+	{error,eperm} ->
+	    %% On Windows, we may not have permissions to create symlinks.
 	    throw({skip,"Support for symlinks required"});
 	ok -> ok
     end,

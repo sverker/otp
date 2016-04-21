@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -312,7 +312,7 @@ state_after_fault_in_catch(Config) when is_list(Config) ->
 no_exception_in_catch(Config) when is_list(Config) ->
     Errors = do_val(no_exception_in_catch, Config),
     [{{no_exception_in_catch,nested_of_1,4},
-      {{move,{x,3},{x,0}},88,{uninitialized_reg,{x,3}}}}] = Errors,
+      {{move,{x,3},{x,0}},87,{uninitialized_reg,{x,3}}}}] = Errors,
     ok.
 
 undef_label(Config) when is_list(Config) ->

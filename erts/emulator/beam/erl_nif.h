@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2009-2014. All Rights Reserved.
+ * Copyright Ericsson AB 2009-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,16 +87,16 @@ typedef ErlNifSInt64 ErlNifTime;
 #define ERL_NIF_TIME_ERROR ((ErlNifSInt64) ERTS_NAPI_TIME_ERROR__)
 
 typedef enum {
-    ERL_NIF_SEC = ERTS_NAPI_SEC__,
-    ERL_NIF_MSEC = ERTS_NAPI_MSEC__,
-    ERL_NIF_USEC = ERTS_NAPI_USEC__,
-    ERL_NIF_NSEC = ERTS_NAPI_NSEC__
+    ERL_NIF_SEC    = ERTS_NAPI_SEC__,
+    ERL_NIF_MSEC   = ERTS_NAPI_MSEC__,
+    ERL_NIF_USEC   = ERTS_NAPI_USEC__,
+    ERL_NIF_NSEC   = ERTS_NAPI_NSEC__
 } ErlNifTimeUnit;
 
 struct enif_environment_t;
 typedef struct enif_environment_t ErlNifEnv;
 
-typedef struct
+typedef struct enif_func_t
 {
     const char* name;
     unsigned arity;

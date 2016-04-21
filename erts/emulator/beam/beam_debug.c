@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1998-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1998-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -431,7 +431,7 @@ print_op(int to, void *to_arg, int op, int size, BeamInstr* addr)
 		packed >>= 10;
 		break;
 	    case '0':		/* Tight shift */
-		*ap++ = packed & (BEAM_TIGHT_MASK / sizeof(Eterm));
+		*ap++ = packed & BEAM_TIGHT_MASK;
 		packed >>= BEAM_TIGHT_SHIFT;
 		break;
 	    case '6':		/* Shift 16 steps */

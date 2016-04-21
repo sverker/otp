@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2014. All Rights Reserved.
+ * Copyright Ericsson AB 2014-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -196,13 +196,13 @@ erts_maps_get(Eterm key, Eterm map)
 		    return &vs[i];
 		}
 	    }
-	}
-
-	for (i = 0; i < n; i++) {
-	    if (EQ(ks[i], key)) {
-		return &vs[i];
-	    }
-	}
+	} else {
+            for (i = 0; i < n; i++) {
+                if (EQ(ks[i], key)) {
+                    return &vs[i];
+                }
+            }
+        }
 	return NULL;
     }
     ASSERT(is_hashmap(map));

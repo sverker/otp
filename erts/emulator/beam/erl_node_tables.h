@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2001-2012. All Rights Reserved.
+ * Copyright Ericsson AB 2001-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -182,7 +182,7 @@ Uint erts_dist_table_size(void);
 void erts_dist_table_info(int, void *);
 void erts_set_dist_entry_not_connected(DistEntry *);
 void erts_set_dist_entry_connected(DistEntry *, Eterm, Uint);
-ErlNode *erts_find_or_insert_node(Eterm, Uint);
+ErlNode *erts_find_or_insert_node(Eterm, Uint32);
 void erts_schedule_delete_node(ErlNode *);
 void erts_set_this_node(Eterm, Uint);
 Uint erts_node_table_size(void);

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2001-2013. All Rights Reserved.
+ * Copyright Ericsson AB 2001-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1402,7 +1402,7 @@ int hipe_find_mfa_from_ra(const void *ra, Eterm *m, Eterm *f, unsigned int *a)
 {
     const struct hipe_sdesc* sdesc = hipe_find_sdesc((unsigned long)ra);
 
-    if (!sdesc || sdesc->m_aix == atom_val(am_Cookie))
+    if (!sdesc || sdesc->m_aix == atom_val(am_Empty))
         return 0;
 
     *m = make_atom(sdesc->m_aix);

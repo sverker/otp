@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -258,7 +258,7 @@ is_sticky(Mod) when is_atom(Mod) -> call({is_sticky,Mod}).
 
 -spec set_path(Path) -> 'true' | {'error', What} when
       Path :: [Dir :: file:filename()],
-      What :: 'bad_directory' | 'bad_path'.
+      What :: 'bad_directory'.
 set_path(PathList) when is_list(PathList) -> call({set_path,PathList}).
 
 -spec get_path() -> Path when

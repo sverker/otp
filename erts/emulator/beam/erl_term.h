@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2000-2014. All Rights Reserved.
+ * Copyright Ericsson AB 2000-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -558,14 +558,6 @@ _ET_DECLARE_CHECKED(Eterm*,tuple_val,Wterm)
 
 #define _GETBITS(X,Pos,Size) (((X) >> (Pos)) & ~(~((Uint) 0) << (Size)))
 
-/*
- * Creation in node specific data (pids, ports, refs)
- */
-
-#define _CRE_SIZE  		2
-
-/* MAX value for the creation field in pid, port and reference */
-#define MAX_CREATION	(1 << _CRE_SIZE)
 
 /*
  *  PID layout (internal pids):
@@ -579,7 +571,7 @@ _ET_DECLARE_CHECKED(Eterm*,tuple_val,Wterm)
  *
  *  n : number
  *
- *  Old pid layout:
+ *  Very old pid layout:
  *
  *   |3 3 2 2 2 2 2 2|2 2 2 2 1 1 1 1|1 1 1 1 1 1    |               |
  *   |1 0 9 8 7 6 5 4|3 2 1 0 9 8 7 6|5 4 3 2 1 0 9 8|7 6 5 4 3 2 1 0|

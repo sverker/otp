@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2000-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2016. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -1224,18 +1224,22 @@ setup(ProcFlags) ->
 
 shutdown() ->
     trace_off(),
-    {Pid,Mref} = get(slave),
-    try erlang:is_process_alive(Pid) of
-        true ->
-            Pid ! die,
-            receive
-                {'DOWN',Mref,process,Pid,Reason} ->
-                    Reason
+    case get(slave) of
+        {Pid,Mref} ->
+            try erlang:is_process_alive(Pid) of
+                true ->
+                    Pid ! die,
+                    receive
+                        {'DOWN',Mref,process,Pid,Reason} ->
+                            Reason
+                    end;
+                _ ->
+                    not_alive
+            catch _:_ ->
+                    undefined
             end;
         _ ->
-            not_alive
-    catch _:_ ->
-              undefined
+            undefined
     end.
 
 trace_off() ->

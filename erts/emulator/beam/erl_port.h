@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2012-2013. All Rights Reserved.
+ * Copyright Ericsson AB 2012-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -944,7 +944,7 @@ erts_schedule_proc2port_signal(Process *,
 			       ErtsPortTaskHandle *,
 			       ErtsProc2PortSigCallback);
 
-int erts_deliver_port_exit(Port *, Eterm, Eterm, int);
+int erts_deliver_port_exit(Port *, Eterm, Eterm, int, int);
 
 /*
  * Port signal flags

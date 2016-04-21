@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2014. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -337,7 +337,7 @@ static void doit_link_net_exits_sub(ErtsLink *sublnk, void *vlnecp)
 	    erts_destroy_link(rlnk);
 	    if (xres >= 0 && IS_TRACED_FL(rp, F_TRACE_PROCS)) {
 		/* We didn't exit the process and it is traced */
-		trace_proc(NULL, rp, am_getting_unlinked, sublnk->pid);
+		trace_proc(NULL, 0, rp, am_getting_unlinked, sublnk->pid);
 	    }
 	}
 	erts_smp_proc_unlock(rp, rp_locks);
@@ -397,7 +397,7 @@ static void doit_node_link_net_exits(ErtsLink *lnk, void *vnecp)
 	    msgp = erts_alloc_message_heap(rp, &rp_locks,
 					   3, &hp, &ohp);
 	    tup = TUPLE2(hp, am_nodedown, name);
-	    erts_queue_message(rp, &rp_locks, msgp, tup, NIL);
+	    erts_queue_message(rp, &rp_locks, msgp, tup);
 	}
 	erts_smp_proc_unlock(rp, rp_locks);
     }
@@ -906,9 +906,9 @@ erts_dsig_send_msg(Eterm remote, Eterm message, ErtsSendContext* ctx)
 
     if (token != NIL)
 	ctl = TUPLE4(&ctx->ctl_heap[0],
-		     make_small(DOP_SEND_TT), am_Cookie, remote, token);
+		     make_small(DOP_SEND_TT), am_Empty, remote, token);
     else
-	ctl = TUPLE3(&ctx->ctl_heap[0], make_small(DOP_SEND), am_Cookie, remote);
+	ctl = TUPLE3(&ctx->ctl_heap[0], make_small(DOP_SEND), am_Empty, remote);
     DTRACE6(message_send, sender_name, receiver_name,
             msize, tok_label, tok_lastcnt, tok_serial);
     DTRACE7(message_send_remote, sender_name, node_name, receiver_name,
@@ -963,10 +963,10 @@ erts_dsig_send_reg_msg(Eterm remote_name, Eterm message,
 
     if (token != NIL)
 	ctl = TUPLE5(&ctx->ctl_heap[0], make_small(DOP_REG_SEND_TT),
-		     sender->common.id, am_Cookie, remote_name, token);
+		     sender->common.id, am_Empty, remote_name, token);
     else
 	ctl = TUPLE4(&ctx->ctl_heap[0], make_small(DOP_REG_SEND),
-		     sender->common.id, am_Cookie, remote_name);
+		     sender->common.id, am_Empty, remote_name);
     DTRACE6(message_send, sender_name, receiver_name,
             msize, tok_label, tok_lastcnt, tok_serial);
     DTRACE7(message_send_remote, sender_name, node_name, receiver_name,
@@ -1275,7 +1275,7 @@ int erts_net_message(Port *prt,
 	erts_smp_de_links_unlock(dep);
 
 	if (IS_TRACED_FL(rp, F_TRACE_PROCS))
-	    trace_proc(NULL, rp, am_getting_linked, from);
+	    trace_proc(NULL, 0, rp, am_getting_linked, from);
 
 	erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
 	break;
@@ -1300,7 +1300,7 @@ int erts_net_message(Port *prt,
 	lnk = erts_remove_link(&ERTS_P_LINKS(rp), from);
 
 	if (IS_TRACED_FL(rp, F_TRACE_PROCS) && lnk != NULL) {
-	    trace_proc(NULL, rp, am_getting_unlinked, from);
+	    trace_proc(NULL, 0, rp, am_getting_unlinked, from);
 	}
 
 	erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
@@ -1628,7 +1628,11 @@ int erts_net_message(Port *prt,
 					     ERTS_XSIG_FLG_IGN_KILL);
 		if (xres >= 0 && IS_TRACED_FL(rp, F_TRACE_PROCS)) {
 		    /* We didn't exit the process and it is traced */
-		    trace_proc(NULL, rp, am_getting_unlinked, from);
+                    if (rp_locks & ERTS_PROC_LOCKS_XSIG_SEND) {
+                        erts_smp_proc_unlock(rp, ERTS_PROC_LOCKS_XSIG_SEND);
+                        rp_locks &= ~ERTS_PROC_LOCKS_XSIG_SEND;
+                    }
+		    trace_proc(NULL, 0, rp, am_getting_unlinked, from);
 		}
 	    }
 	    erts_smp_proc_unlock(rp, rp_locks);
@@ -1719,7 +1723,7 @@ decode_error:
     }
 data_error:
     UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
-    erts_deliver_port_exit(prt, dep->cid, am_killed, 0);
+    erts_deliver_port_exit(prt, dep->cid, am_killed, 0, 1);
     ERTS_SMP_CHK_NO_PROC_LOCKS;
     return -1;
 }
@@ -2089,7 +2093,7 @@ erts_dist_command(Port *prt, int reds_limit)
     erts_smp_de_runlock(dep);
 
     if (status & ERTS_DE_SFLG_EXITING) {
-	erts_deliver_port_exit(prt, prt->common.id, am_killed, 0);
+	erts_deliver_port_exit(prt, prt->common.id, am_killed, 0, 1);
 	erts_deref_dist_entry(dep);
 	return reds + ERTS_PORT_REDS_DIST_CMD_EXIT;
     }
@@ -3313,7 +3317,7 @@ send_nodes_mon_msg(Process *rp,
     }
 
     ASSERT(hend == hp);
-    erts_queue_message(rp, rp_locksp, mp, msg, NIL);
+    erts_queue_message(rp, rp_locksp, mp, msg);
 }
 
 static void

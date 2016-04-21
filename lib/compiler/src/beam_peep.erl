@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2013. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -83,6 +83,9 @@ peep([{gc_bif,_,_,_,_,Dst}=I|Is], SeenTests0, Acc) ->
     %% Kill all remembered tests that depend on the destination register.
     SeenTests = kill_seen(Dst, SeenTests0),
     peep(Is, SeenTests, [I|Acc]);
+peep([{jump,{f,L}},{label,L}=I|Is], _, Acc) ->
+    %% Sometimes beam_jump has missed this optimization.
+    peep(Is, gb_sets:empty(), [I|Acc]);
 peep([{select,Op,R,F,Vls0}|Is], _, Acc) ->
     case prune_redundant_values(Vls0, F) of
 	[] ->

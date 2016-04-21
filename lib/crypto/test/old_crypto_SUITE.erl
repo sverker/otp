@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -187,7 +187,9 @@ ldd_program() ->
 		    case os:find_executable("otool") of
 			false -> none;
 			Otool -> Otool ++ " -L"
-		    end
+		    end;
+		_ ->
+		    none
 	    end;
  	Ldd when is_list(Ldd) -> Ldd
     end.

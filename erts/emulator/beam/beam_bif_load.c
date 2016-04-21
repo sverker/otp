@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1999-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1999-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -754,13 +754,13 @@ set_default_trace_pattern(Eterm module)
     Binary *match_spec;
     Binary *meta_match_spec;
     struct trace_pattern_flags trace_pattern_flags;
-    Eterm meta_tracer_pid;
+    ErtsTracer meta_tracer;
 
     erts_get_default_trace_pattern(&trace_pattern_is_on,
 				   &match_spec,
 				   &meta_match_spec,
 				   &trace_pattern_flags,
-				   &meta_tracer_pid);
+				   &meta_tracer);
     if (trace_pattern_is_on) {
 	Eterm mfa[1];
 	mfa[0] = module;
@@ -768,7 +768,7 @@ set_default_trace_pattern(Eterm module)
 				      match_spec,
 				      meta_match_spec,
 				      1, trace_pattern_flags,
-				      meta_tracer_pid, 1);
+				      meta_tracer, 1);
     }
 }
 

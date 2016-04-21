@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2001-2014. All Rights Reserved.
+%% Copyright Ericsson AB 2001-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -603,7 +603,8 @@ generate(_N, Range) ->
     %% same BEAM code.
     case rand:export_seed() of
 	undefined ->
-	    rand:seed(exsplus, {1,42,2053});
+	    _ = rand:seed(exsplus, {1,42,2053}),
+	    ok;
 	_ ->
 	    ok
     end,

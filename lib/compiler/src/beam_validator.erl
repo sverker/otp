@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2014. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -509,6 +509,9 @@ valfun_4({bif,element,{f,Fail},[Pos,Tuple],Dst}, Vst0) ->
     TupleType = upgrade_tuple_type({tuple,[get_tuple_size(PosType)]}, TupleType0),
     Vst = set_type(TupleType, Tuple, Vst1),
     set_type_reg(term, Dst, Vst);
+valfun_4({bif,raise,{f,0},Src,_Dst}, Vst) ->
+    validate_src(Src, Vst),
+    kill_state(Vst);
 valfun_4({bif,Op,{f,Fail},Src,Dst}, Vst0) ->
     validate_src(Src, Vst0),
     Vst = branch_state(Fail, Vst0),

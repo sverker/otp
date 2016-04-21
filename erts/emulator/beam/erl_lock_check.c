@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2005-2013. All Rights Reserved.
+ * Copyright Ericsson AB 2005-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -97,6 +97,7 @@ static erts_lc_lock_order_t erts_lock_order[] = {
     {	"dist_entry_links",			"address"		},
     {   "code_write_permission",                NULL                    },
     {	"proc_status",				"pid"			},
+    {	"proc_trace",				"pid"			},
     {   "ports_snapshot",                       NULL                    },
     {	"meta_name_tab",	         	"address"		},
     {	"meta_main_tab_slot",			"address"		},
@@ -148,6 +149,7 @@ static erts_lc_lock_order_t erts_lock_order[] = {
     {	"dist_entry_out_queue",			"address"		},
     {	"port_sched_lock",			"port_id"		},
     {	"sys_msg_q", 				NULL			},
+    {	"tracer_mtx", 				NULL			},
     {   "port_table",                           NULL                    },
 #endif
     {	"mtrace_op",				NULL			},
@@ -160,9 +162,6 @@ static erts_lc_lock_order_t erts_lock_order[] = {
     {	"proclist_pre_alloc_lock",		"address"		},
     {	"xports_list_pre_alloc_lock",		"address"		},
     {	"inet_buffer_stack_lock",		NULL			},
-    {	"gc_info",				NULL			},
-    {	"io_wake",				NULL			},
-    {	"timer_wheel",				NULL			},
     {	"system_block",				NULL			},
     {	"timeofday",				NULL			},
     {	"get_time",				NULL			},

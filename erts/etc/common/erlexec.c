@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2013. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,6 +74,7 @@ static const char plusM_au_allocs[]= {
     'R',	/* driver_alloc		*/
     'S',	/* sl_alloc		*/
     'T',	/* temp_alloc		*/
+    'X',	/* exec_alloc		*/
     'Z',        /* test_alloc           */
     '\0'
 };
@@ -123,6 +124,7 @@ static char *plusM_other_switches[] = {
     "Ytp",
     "Ytt",
     "Iscs",
+    "Xscs",
     NULL
 };
 

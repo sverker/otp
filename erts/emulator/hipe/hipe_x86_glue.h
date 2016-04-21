@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2001-2011. All Rights Reserved.
+ * Copyright Ericsson AB 2001-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ static __inline__ void hipe_arch_glue_init(void)
     nbif_return_sdesc.sdesc.fsize = 0;
     nbif_return_sdesc.sdesc.has_exnra = 1;
     nbif_return_sdesc.sdesc.arity = 0;
-    nbif_return_sdesc.sdesc.m_aix = atom_val(am_Cookie);
+    nbif_return_sdesc.sdesc.m_aix = atom_val(am_Empty);
     nbif_return_sdesc.sdesc.f_aix = atom_val(am_return);
 
     hipe_init_sdesc_table(&nbif_return_sdesc.sdesc);

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2014. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -2298,7 +2298,7 @@ static void do_send_logger_message(Eterm *hp, ErlOffHeap *ohp, ErlHeapFragment *
     {
 	ErtsMessage *mp = erts_alloc_message(0, NULL);
 	mp->data.heap_frag = bp;
-	erts_queue_message(p, NULL /* only used for smp build */, mp, message, NIL);
+	erts_queue_message(p, NULL /* only used for smp build */, mp, message);
     }
 #endif
 }

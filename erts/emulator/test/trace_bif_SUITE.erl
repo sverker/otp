@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2014. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2016. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -247,7 +247,8 @@ receive_trace_msg(Mess) ->
 
 receive_trace_msg_ts({trace_ts, Pid, call, {erlang,F,A}}, PrevTs, TsType) ->
     receive
-        {trace_ts, Pid, call, {erlang, F, A}, Ts} ->
+        {trace_ts, Pid, call, {erlang, F, A}, Ts} = M ->
+            io:format("~p (PrevTs: ~p)~n",[M, PrevTs]),
             check_ts(TsType, PrevTs, Ts),
             Ts;
         Other ->
@@ -260,7 +261,8 @@ receive_trace_msg_ts({trace_ts, Pid, call, {erlang,F,A}}, PrevTs, TsType) ->
 
 receive_trace_msg_ts_return_from({trace_ts, Pid, return_from, {erlang,F,A}}, PrevTs, TsType) ->
     receive
-        {trace_ts, Pid, return_from, {erlang, F, A}, _Value, Ts} ->
+        {trace_ts, Pid, return_from, {erlang, F, A}, _Value, Ts} = M ->
+            io:format("~p (PrevTs: ~p)~n",[M, PrevTs]),
             check_ts(TsType, PrevTs, Ts),
             Ts;
         Other ->
@@ -272,7 +274,8 @@ receive_trace_msg_ts_return_from({trace_ts, Pid, return_from, {erlang,F,A}}, Pre
 
 receive_trace_msg_ts_return_to({trace_ts, Pid, return_to, {M,F,A}}, PrevTs, TsType) ->
     receive
-        {trace_ts, Pid, return_to, {M, F, A}, Ts} ->
+        {trace_ts, Pid, return_to, {M, F, A}, Ts} = Msg ->
+            io:format("~p (PrevTs: ~p)~n",[Msg, PrevTs]),
             check_ts(TsType, PrevTs, Ts),
             Ts;
         Other ->

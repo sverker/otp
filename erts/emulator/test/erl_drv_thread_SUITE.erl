@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2011. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2016. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ drv_case(Config, CaseName, Command, TimeTrap) when is_list(Config),
                                                    is_atom(CaseName),
                                                    is_list(Command),
                                                    is_integer(TimeTrap) ->
-    case test_server:os_type() of
+    case os:type() of
         {Family, _} when Family == unix; Family == win32 ->
             run_drv_case(Config, CaseName, Command, TimeTrap);
         SkipOs ->
