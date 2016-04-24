@@ -239,7 +239,7 @@ load_common(Mod, Bin, Beam, Architecture) ->
 	  lists:foreach(fun({FE, DestAddress}) ->
 			    hipe_bifs:set_native_address_in_fe(FE, DestAddress)
 			end, erase(closures_to_patch)),
-	  export_funs(FunDefs),
+	  set_beam_call_traps(FunDefs),
 	  ok;
 	BeamBinary when is_binary(BeamBinary) ->
 	  %% Find all closures in the code.
@@ -415,9 +415,9 @@ find_closure_refs([], Refs) ->
 
 %%------------------------------------------------------------------------
 
-export_funs([FunDef | FunDefs]) ->
-  #fundef{address=Address, mfa=MFA, is_closure=_IsClosure,
-	  is_exported=IsExported} = FunDef,
+set_beam_call_traps([FunDef | FunDefs]) ->
+  #fundef{address=Address, mfa=MFA, is_closure=IsClosure,
+	  is_exported=_IsExported} = FunDef,
   ?IF_DEBUG({M,F,A} = MFA, no_debug),
   ?IF_DEBUG(
      case IsClosure of
@@ -428,8 +428,26 @@ export_funs([FunDef | FunDefs]) ->
 	 ?debug_msg("LINKING: ~w:~w/~w to closure (0x~.16b)\n",
 		    [M,F,A, Address])
      end, no_debug),
+  hipe_bifs:set_native_address(MFA, Address, IsClosure),
+  set_beam_call_traps(FunDefs);
+set_beam_call_traps([]) ->
+  ok.
+
+export_funs([FunDef | FunDefs]) ->
+  #fundef{address=Address, mfa=MFA, is_closure=_IsClosure,
+	  is_exported=IsExported} = FunDef,
+  ?IF_DEBUG({M,F,A} = MFA, no_debug),
+  ?IF_DEBUG(
+     case _IsClosure of
+       false ->
+	 ?debug_msg("LINKING: ~w:~w/~w to (0x~.16b)\n",
+		    [M,F,A, Address]);
+       true ->
+	 ?debug_msg("LINKING: ~w:~w/~w to closure (0x~.16b)\n",
+		    [M,F,A, Address])
+     end, no_debug),
+  %%SVERK: set new_address
   hipe_bifs:set_funinfo_native_address(MFA, Address, IsExported),
-  %%hipe_bifs:set_native_address(MFA, Address, IsClosure),
   export_funs(FunDefs);
 export_funs([]) ->
   ok.
