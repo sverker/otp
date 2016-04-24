@@ -484,7 +484,7 @@ load_binary(Config) when is_list(Config) ->
 
 
 my_upgrade() -> % SVERK TEST
-    DataDir = "/home/sverker/otp/sverk_tests/kernel_test/code_SUITE_data",
+    DataDir = "/home/sverker/src/otp/release/x86_64-unknown-linux-gnu/kernel_test/code_SUITE_data",
     Config = [{data_dir,DataDir}],
     upgrade(Config).
     
