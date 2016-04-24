@@ -1282,12 +1282,14 @@ int hipe_need_blocking(Module* modp)
 
     /* Need to block if we have at least one native caller to this module
      */
+    hipe_mfa_info_table_rlock();
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
 	if (p->first_caller) {
-	    return 1;
+            break;
 	}
     }
-    return 0;
+    hipe_mfa_info_table_runlock();
+    return (p != NULL);
 }
 
 static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a)
