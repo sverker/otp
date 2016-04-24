@@ -58,8 +58,10 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc1),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
-    put(loc1_fun, upgradee:get_local_fun()),
-    ?line 1 = (get(loc1_fun))(),
+    Env1 = "Env1",
+    put(loc1_fun, upgradee:get_local_fun(Env1)),
+    erlang:display(sverk_break),
+    ?line {1,Env1} = (get(loc1_fun))(),
 
     put(exp1exp2_fun, upgradee:get_exp1exp2_fun()),
     ?line 1 = (get(exp1exp2_fun))(),
@@ -142,9 +144,10 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, exp2),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
-    ?line 1 = (get(loc1_fun))(),
-    put(loc2_fun, upgradee:get_local_fun()),
-    ?line 2 = (get(loc2_fun))(),
+    ?line {1,Env1} = (get(loc1_fun))(),
+    Env2 = "Env2",
+    put(loc2_fun, upgradee:get_local_fun(Env2)),
+    ?line {2,Env2} = (get(loc2_fun))(),
 
     ?line 2 = (get(exp1exp2_fun))(),
 
@@ -202,8 +205,8 @@ run(Dir, Upgradee1, Upgradee2, Other1, Other2) ->
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc1loc2),
     ?line {'EXIT',{undef,_}} = proxy_call(P, other, loc2),
 
-    ?line 1 = (get(loc1_fun))(),
-    ?line 2 = (get(loc2_fun))(),
+    ?line {1,Env1} = (get(loc1_fun))(),
+    ?line {2,Env2} = (get(loc2_fun))(),
     ?line 2 = (get(exp1exp2_fun))(),
 
     ?line 10 = check_tracing(Tracer),
