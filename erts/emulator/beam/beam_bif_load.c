@@ -1202,7 +1202,7 @@ BIF_RETTYPE erts_internal_purge_module_1(BIF_ALIST_1)
 	     * Unload any NIF library
 	     */
 	    if (modp->old.nif != NULL
-		|| IF_HIPE(modp->old.first_hipe_ref != NULL))
+		|| IF_HIPE(hipe_purge_need_blocking(modp)))
 	    {
 		/* ToDo: Do unload nif without blocking */
 		erts_rwunlock_old_code(code_ix);
