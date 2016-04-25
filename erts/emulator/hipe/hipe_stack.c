@@ -152,7 +152,7 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
         (nargs = unsigned_val(mfa_tpl[3])) > 255)
 	return 0;
 
-    if (stk_nargs != (nargs > NR_ARG_REGS ? nargs - NR_ARG_REGS : 0))
+    if (stk_nargs > nargs)
         return 0;
 
     /* Get tuple with live slots */
@@ -189,6 +189,7 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
 
     sdesc->m_aix = atom_val(mfa_tpl[1]);
     sdesc->f_aix = atom_val(mfa_tpl[2]);
+    sdesc->a = nargs;
 
 
     /* Initialise head of sdesc. */
@@ -196,7 +197,7 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
     sdesc->bucket.hvalue = ra;
     sdesc->fsize = fsize;
     sdesc->has_exnra = (exnra ? 1 : 0);
-    sdesc->arity = nargs;
+    sdesc->stk_nargs = stk_nargs;
     /* Clear all live-bits */
     for (i = 0; i < livebitswords; ++i)
 	sdesc->livebits[i] = 0;

@@ -69,7 +69,8 @@ void hipe_print_nstack(Process *p)
 
     sdesc0.fsize = 0;
     sdesc0.has_exnra = 0;
-    sdesc0.arity = p->hipe.narity;
+    sdesc0.stk_nargs = (p->hipe.narity < NR_ARG_REGS ? 0 :
+                        p->hipe.narity - NR_ARG_REGS);
     sdesc0.livebits[0] = ~1;
     sdesc = &sdesc0;
 

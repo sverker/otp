@@ -1409,7 +1409,7 @@ int hipe_find_mfa_from_ra(const void *ra, Eterm *m, Eterm *f, unsigned int *a)
 
     *m = make_atom(sdesc->m_aix);
     *f = make_atom(sdesc->f_aix);
-    *a = sdesc->arity;
+    *a = sdesc->a;
     return 1;
 }
 

@@ -37,10 +37,11 @@ struct hipe_sdesc {
     } bucket;
     unsigned int fsize : 23;    /* frame size */
     unsigned int has_exnra : 1; /* exn handler presence flag */
-    unsigned int arity : 8;     /* total arity including NR_ARG_REGS */
+    unsigned int stk_nargs : 8; /* arguments on stack */
     Uint32 m_aix;
     Uint32 f_aix;
-    unsigned int livebits[1]; /* size depends on arch & data in summary field */
+    Uint32 a;
+    Uint32 livebits[1]; /* size depends on arch & data in summary field */
 };
 
 struct sdesc_with_exnra {
@@ -56,8 +57,7 @@ static __inline__ unsigned int sdesc_fsize(const struct hipe_sdesc *sdesc)
 /* Nr of arguments pushed on stack */
 static __inline__ unsigned int sdesc_arity(const struct hipe_sdesc *sdesc)
 {
-    unsigned int a = sdesc->arity;
-    return a > NR_ARG_REGS ? a - NR_ARG_REGS : 0;
+    return sdesc->stk_nargs;
 }
 
 static __inline__ unsigned long sdesc_exnra(const struct hipe_sdesc *sdesc)
