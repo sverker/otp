@@ -997,6 +997,11 @@ BIF_RETTYPE hipe_bifs_set_native_address_in_fe_2(BIF_ALIST_2)
     BIF_RET(am_true);
 }
 
+struct hipe_ref_head {
+    struct hipe_ref_head* next;
+    struct hipe_ref_head* prev;
+};
+
 /*
  * MFA info hash table:
  * - maps MFA to native code entry point
@@ -1015,7 +1020,7 @@ struct hipe_mfa_info {
     unsigned int is_stub : 1;
     void *remote_address;
     void *new_address;
-    struct hipe_ref* first_caller;
+    struct hipe_ref_head callers;   /* sentinel */
     struct hipe_mfa_info* next_in_mod;
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
     void *trampoline;
@@ -1045,7 +1050,7 @@ static struct {
  * Patch Reference Handling.
  */
 struct hipe_ref {
-    struct hipe_ref* next, **prevp;   /* list of refs to same callee */
+    struct hipe_ref_head head;    /* list of refs to same calleee */
     void *address;
     void *trampoline;
     unsigned int flags;
@@ -1131,7 +1136,8 @@ static struct hipe_mfa_info *hipe_mfa_info_table_alloc(Eterm m, Eterm f, unsigne
     res->is_stub = 0;
     res->remote_address = NULL;
     res->new_address = NULL;
-    res->first_caller = NULL;
+    res->callers.next = &res->callers;
+    res->callers.prev = &res->callers;
     res->next_in_mod = NULL;
 #if defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__) || defined(__arm__)
     res->trampoline = NULL;
@@ -1284,7 +1290,7 @@ int hipe_need_blocking(Module* modp)
      */
     hipe_mfa_info_table_rlock();
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
-	if (p->first_caller) {
+	if (p->callers.next != &p->callers) {
             break;
 	}
     }
@@ -1465,15 +1471,19 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
     ref->trampoline = trampoline;
     ref->flags = flags;
 
-    ASSERT(!callee_mfa->first_caller ||
-	   callee_mfa->first_caller->prevp == &callee_mfa->first_caller);
-    ref->next = callee_mfa->first_caller;
-    ref->prevp = &callee_mfa->first_caller;
-    callee_mfa->first_caller = ref;
-    if (ref->next) {
-	ref->next->prevp = &ref->next;
-    }
-    
+    /*
+     * Link into list of refs to same callee
+     */
+    ASSERT(callee_mfa->callers.next->prev == &callee_mfa->callers);
+    ASSERT(callee_mfa->callers.prev->next == &callee_mfa->callers);
+    ref->head.next = callee_mfa->callers.next;
+    ref->head.prev = &callee_mfa->callers;
+    ref->head.next->prev = &ref->head;
+    ref->head.prev->next = &ref->head;
+
+    /*
+     * Link into list of refs from same module instance
+     */
     modp = erts_put_active_module(caller.mod);
     ASSERT(modp);
     ref->next_from_modi = modp->new_hipe_refs;
@@ -1528,7 +1538,7 @@ static void hipe_purge_all_refs(void)
 	    struct hipe_mfa_info* mfa = bucket[i];
 	    bucket[i] = mfa->bucket.next;
 
-	    ASSERT(mfa->first_caller == NULL);
+	    ASSERT(mfa->callers.next == &mfa->callers);
 	    erts_free(ERTS_ALC_T_HIPE, mfa);
 	}
     }
@@ -1565,12 +1575,14 @@ void hipe_purge_module(Module* modp)
 		      ref->caller_m, ref->caller_f, ref->caller_a);
 	ASSERT(ref->caller_m == make_atom(modp->module));
 
-	if (ref->next) {
-	    ASSERT(ref->next->prevp == &ref->next);
-	    ref->next->prevp = ref->prevp;
-	}
-	ASSERT(*ref->prevp == ref);
-	*ref->prevp = ref->next;
+        /*
+         * Unlink from other refs to same callee
+         */
+        ASSERT(ref->head.next->prev == &ref->head);
+        ASSERT(ref->head.prev->next == &ref->head);
+        ref->head.next->prev = ref->head.prev;
+        ref->head.prev->next = ref->head.next;
+
 	ref = ref->next_from_modi;
 	erts_free(ERTS_ALC_T_HIPE, free_ref);
     }
@@ -1592,7 +1604,7 @@ void hipe_purge_module(Module* modp)
 void hipe_redirect_to_module(Module* modp)
 {
     struct hipe_mfa_info *p;
-    struct hipe_ref* ref;
+    struct hipe_ref_head* refh;
 
 #ifdef ERTS_SMP
     ASSERT(erts_smp_thr_progress_is_blocking());
@@ -1620,7 +1632,8 @@ void hipe_redirect_to_module(Module* modp)
         else ASSERT(p->remote_address && p->dbg_export);
 
 	DBG_TRACE_MFA(p->m,p->f,p->a,"START REDIRECT towards hipe_mfa_info at %p", p);
-	for (ref = p->first_caller; ref; ref = ref->next) {
+	for (refh = p->callers.next; refh != &p->callers; refh = refh->next) {
+            struct hipe_ref* ref = (struct hipe_ref*) refh;
 	    int res;
 	    	    
 	    DBG_TRACE_MFA(p->m,p->f,p->a, "  REDIRECT ref at %p FROM %T:%T/%u (%p -> %p)",
