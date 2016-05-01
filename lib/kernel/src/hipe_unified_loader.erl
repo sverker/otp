@@ -809,7 +809,7 @@ add_ref(CalleeMFA, Address, FunDefs, RefType, Trampoline, RemoteOrLocal) ->
     local -> ignore; % SVERK try ignore local refs
     remote ->
       %% io:format("Adding ref ~w\n",[{CallerMFA, CalleeMFA, Address, RefType}]),
-      hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline})
+      hipe_bifs:add_ref(CalleeMFA, {CallerMFA,Address,RefType,Trampoline,get(hipe_patch_closures)})
   end.
 
 % For FunDefs sorted from low to high addresses

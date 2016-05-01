@@ -1440,7 +1440,7 @@ int hipe_find_mfa_from_ra(const void *ra, Eterm *m, Eterm *f, unsigned int *a)
 }
 
 
-/* add_ref(CalleeMFA, {CallerMFA,Address,'call'|'load_mfa',Trampoline})
+/* add_ref(CalleeMFA, {CallerMFA,Address,'call'|'load_mfa',Trampoline,DoCommit})
  */
 BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
 {
@@ -1453,13 +1453,14 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
     struct hipe_mfa_info *callee_mfa;
     struct hipe_ref *ref;
     Module* modp;
+    int do_commit;
 
     if (!term_to_mfa(BIF_ARG_1, &callee))
 	goto badarg;
     if (is_not_tuple(BIF_ARG_2))
 	goto badarg;
     tuple = tuple_val(BIF_ARG_2);
-    if (tuple[0] != make_arityval(4))
+    if (tuple[0] != make_arityval(5))
 	goto badarg;
     if (!term_to_mfa(tuple[1], &caller))
 	goto badarg;
@@ -1482,6 +1483,11 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
 	trampoline = term_to_address(tuple[4]);
 	if (!trampoline)
 	    goto badarg;
+    }
+    switch (tuple[5]) {
+    case am_true: do_commit = 1; break;
+    case am_false: do_commit = 0; break;
+    default: goto badarg;
     }
     hipe_mfa_info_table_rwlock();
     callee_mfa = hipe_mfa_info_table_put_rwlocked(callee.mod, callee.fun, callee.ari);
@@ -1506,8 +1512,14 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
      */
     modp = erts_put_active_module(caller.mod);
     ASSERT(modp);
-    ref->next_from_modi = modp->new_hipe_refs;
-    modp->new_hipe_refs = ref;
+    if (do_commit) { /* Direct "hipe-patching" of early loaded module */
+        ref->next_from_modi = modp->curr.first_hipe_ref;
+        modp->curr.first_hipe_ref = ref;
+    }
+    else {           /* Normal module loading/upgrade */
+        ref->next_from_modi = modp->new_hipe_refs;
+        modp->new_hipe_refs = ref;
+    }
 
 #if defined(DEBUG) || defined(SVERK_DEBUG)
     ref->callee = callee_mfa;
@@ -1517,10 +1529,10 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
 #endif
     hipe_mfa_info_table_rwunlock();
 
-    DBG_TRACE_MFA(caller.mod, caller.fun, caller.ari, "add_ref at %p TO %T:%T/%u (from %p)",
-		  ref, callee.mod, callee.fun, callee.ari, ref->address);
-    DBG_TRACE_MFA(callee.mod, callee.fun, callee.ari, "add_ref at %p FROM %T:%T/%u (from %p)",
-		  ref, caller.mod, caller.fun, caller.ari, ref->address);
+    DBG_TRACE_MFA(caller.mod, caller.fun, caller.ari, "add_ref at %p TO %T:%T/%u (from %p) do_commit=%d",
+		  ref, callee.mod, callee.fun, callee.ari, ref->address, do_commit);
+    DBG_TRACE_MFA(callee.mod, callee.fun, callee.ari, "add_ref at %p FROM %T:%T/%u (from %p) do_commit=%d",
+		  ref, caller.mod, caller.fun, caller.ari, ref->address, do_commit);
     BIF_RET(NIL);
 
  badarg:
