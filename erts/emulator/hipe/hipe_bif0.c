@@ -1307,10 +1307,12 @@ int hipe_need_blocking(Module* modp)
     struct hipe_mfa_info *p;
 
     /* Need to block if we have at least one native caller to this module
+     * or native code to make unaccessible.
      */
     hipe_mfa_info_table_rlock();
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
-	if (p->callers.next != &p->callers) {
+        ASSERT(!p->new_address);
+        if (p->callers.next != &p->callers || !p->is_stub) {
             break;
 	}
     }
