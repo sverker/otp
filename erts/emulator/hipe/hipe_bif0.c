@@ -1644,10 +1644,14 @@ void hipe_purge_module(Module* modp)
 
     ASSERT(modp);
 
+    DBG_TRACE_MFA(make_atom(modp->module), 0, 0, "hipe_purge_module");
+
     /* 
      * Remove all hipe_ref's (external calls) from the old module instance   
      */
     ref = modp->old.first_hipe_ref;
+    erts_fprintf(stderr, "hipe_purge_module: %T ref=%p\n", make_atom(modp->module), ref);
+
     while (ref) {
 	struct hipe_ref* free_ref = ref;
 
@@ -1746,6 +1750,7 @@ void hipe_redirect_to_module(Module* modp)
                 hipe_free_native_stub(p->remote_address);
                 p->is_stub = 0;
             }
+            DBG_TRACE_MFA(p->m, p->f, p->a, "Commit new_address %p", p->new_address);
             p->remote_address = p->new_address;
             p->new_address = NULL;
 #ifdef DEBUG
@@ -1755,6 +1760,7 @@ void hipe_redirect_to_module(Module* modp)
         else if (!p->is_stub) {
             Export* exp = erts_export_get_or_make_stub(p->m, p->f, p->a);
             p->remote_address = hipe_make_native_stub(exp, p->a);
+            DBG_TRACE_MFA(p->m, p->f, p->a, "Commit stub %p", p->remote_address);
             if (!p->remote_address)
                 erts_exit(ERTS_ERROR_EXIT, "hipe_make_stub: code allocation failed\r\n");
             p->is_stub = 1;
@@ -1762,7 +1768,10 @@ void hipe_redirect_to_module(Module* modp)
             p->dbg_export = exp;
 #endif
         }
-        else ASSERT(p->remote_address && p->dbg_export);
+        else {
+            DBG_TRACE_MFA(p->m, p->f, p->a, "Commit no-op, already stub");
+            ASSERT(p->remote_address && p->dbg_export);
+        }
 
 	DBG_TRACE_MFA(p->m,p->f,p->a,"START REDIRECT towards hipe_mfa_info at %p", p);
 	for (refh = p->callers.next; refh != &p->callers; refh = refh->next) {

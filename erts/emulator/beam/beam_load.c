@@ -1115,6 +1115,7 @@ stub_insert_new_code(Process *c_p, ErtsProcLocks c_p_locks,
     modp->curr.code_length = size;
     modp->curr.catches = BEAM_CATCHES_NIL; /* Will be filled in later. */
 #if defined(HIPE)
+    DBG_TRACE_MFA(make_atom(modp->module), 0, 0, "insert_new_code new_hipe_refs = %p", modp->new_hipe_refs);
     modp->curr.first_hipe_ref = modp->new_hipe_refs;
     modp->curr.first_hipe_sdesc = modp->new_hipe_sdesc;
     modp->curr.hipe_code_start = hipe_code_start;

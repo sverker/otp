@@ -99,6 +99,7 @@ static Module* module_alloc(Module* tmpl)
     obj->old.hipe_code_size = 0;
 # endif
 #endif
+    DBG_TRACE_MFA(make_atom(obj->module), 0, 0, "module_alloc");
     return obj;
 }
 

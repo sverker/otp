@@ -185,7 +185,9 @@ init_export_table(void)
     HashFunctions f;
     int i;
 
-    dbg_set_traced_mfa("other","exp1exp2",0);
+    dbg_set_traced_mfa("global","handle_info",2);
+    dbg_set_traced_mfa("user_sup","start",0);
+    dbg_set_traced_mfa("inet_config","get_file",0);
 
     erts_smp_mtx_init(&export_staging_lock, "export_tab");
     erts_smp_atomic_init_nob(&total_entries_bytes, 0);
