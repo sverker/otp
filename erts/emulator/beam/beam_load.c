@@ -6478,20 +6478,44 @@ static int safe_mul(UWord a, UWord b, UWord* resp)
 
 #ifdef ENABLE_DBG_TRACE_MFA
 
-Eterm dbg_trace_m;
-Eterm dbg_trace_f;
-Uint  dbg_trace_a;
+#define MFA_MAX 10
+Eterm dbg_trace_m[MFA_MAX];
+Eterm dbg_trace_f[MFA_MAX];
+Uint  dbg_trace_a[MFA_MAX];
+unsigned int dbg_trace_ix = 0;
 
 void dbg_set_traced_mfa(const char* m, const char* f, Uint a)
 {
-    dbg_trace_m = am_atom_put(m, strlen(m));
-    dbg_trace_f = am_atom_put(f, strlen(f));
-    dbg_trace_a = a;
+    unsigned i = dbg_trace_ix++;
+    ASSERT(i < MFA_MAX);
+    dbg_trace_m[i] = am_atom_put(m, strlen(m));
+    dbg_trace_f[i] = am_atom_put(f, strlen(f));
+    dbg_trace_a[i] = a;
 }
 
 int dbg_is_traced_mfa(Eterm m, Eterm f, Uint a)
 {
-    return (m == dbg_trace_m) && (f == dbg_trace_f) && (a == dbg_trace_a);
+    unsigned int i;
+    for (i = 0; i < dbg_trace_ix; ++i) {
+        if (m == dbg_trace_m[i] &&
+            (!f || (f == dbg_trace_f[i] && a == dbg_trace_a[i]))) {
+
+            return i+1;
+        }
+    }
+    return 0;
+}
+
+void dbg_vtrace_mfa(unsigned ix, const char* format, ...)
+{
+    va_list arglist;
+    va_start(arglist, format);
+    ASSERT(--ix < MFA_MAX);
+    erts_fprintf(stderr, "MFA TRACE %T:%T/%u: ",
+                 dbg_trace_m[ix], dbg_trace_f[ix], (int)dbg_trace_a[ix]);
+
+    erts_vfprintf(stderr, format, arglist);
+    va_end(arglist);
 }
 
 #endif /* ENABLE_DBG_TRACE_MFA */

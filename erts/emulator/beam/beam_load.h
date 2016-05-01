@@ -153,16 +153,13 @@ struct BeamCodeLineTab_ {
 
 #ifdef  ENABLE_DBG_TRACE_MFA
 
-extern Eterm dbg_trace_m;
-extern Eterm dbg_trace_f;
-extern Uint  dbg_trace_a;
-
 void dbg_set_traced_mfa(const char* m, const char* f, Uint a);
 int dbg_is_traced_mfa(Eterm m, Eterm f, Uint a);
+void dbg_vtrace_mfa(unsigned ix, const char* format, ...);
 #define DBG_TRACE_MFA(M,F,A,FMT, ...) do {\
-    if (dbg_is_traced_mfa(M,F,A)) \
-      erts_fprintf(stderr, "MFA TRACE %T:%T/%u: "FMT"\n",\
-	  dbg_trace_m, dbg_trace_f, (int)dbg_trace_a, ##__VA_ARGS__);\
+    unsigned ix;\
+    if ((ix=dbg_is_traced_mfa(M,F,A))) \
+        dbg_vtrace_mfa(ix, FMT"\n", ##__VA_ARGS__);\
   }while(0)
 
 #else
