@@ -88,7 +88,9 @@ static Module* module_alloc(Module* tmpl)
 #ifdef HIPE
     obj->first_hipe_mfa = NULL;
     obj->new_hipe_refs = NULL;
+    obj->new_hipe_sdesc = NULL;
     obj->curr.first_hipe_ref = NULL;
+    obj->curr.first_hipe_sdesc = NULL;
     obj->curr.hipe_code_start = NULL;
     obj->old.first_hipe_ref = NULL;
     obj->old.hipe_code_start = NULL;
@@ -212,6 +214,7 @@ static ERTS_INLINE void copy_module(Module* dst_mod, Module* src_mod)
 #ifdef HIPE
     dst_mod->first_hipe_mfa = src_mod->first_hipe_mfa;
     dst_mod->new_hipe_refs  = src_mod->new_hipe_refs;
+    dst_mod->new_hipe_sdesc = src_mod->new_hipe_sdesc;
 #endif
 }
 

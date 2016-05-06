@@ -578,7 +578,7 @@ patch_sdesc(?STACK_DESC(SymExnRA, FSize, Arity, Live),
     end,
   ?ASSERT(assert_local_patch(Address)),
   MFA = address_to_mfa_lth(Address, FunDefs),
-  hipe_bifs:enter_sdesc({Address, ExnRA, FSize, Arity, Live, MFA}).
+  hipe_bifs:enter_sdesc({Address, ExnRA, FSize, Arity, Live, MFA, get(hipe_patch_closures)}).
 
 
 %%----------------------------------------------------------------

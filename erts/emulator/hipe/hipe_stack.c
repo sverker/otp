@@ -102,6 +102,28 @@ struct hipe_sdesc *hipe_put_sdesc(struct hipe_sdesc *sdesc)
     return sdesc;
 }
 
+void hipe_destruct_sdesc(struct hipe_sdesc *sdesc)
+{
+    unsigned int i;
+    struct hipe_sdesc** prevp;
+    void* free_me;
+
+    i = (sdesc->bucket.hvalue >> HIPE_RA_LSR_COUNT) & hipe_sdesc_table.mask;
+    prevp = &hipe_sdesc_table.bucket[i];
+
+    for (; *prevp != sdesc; prevp = &(*prevp)->bucket.next)
+        ASSERT(*prevp);
+
+    *prevp = sdesc->bucket.next;
+    hipe_sdesc_table.used -= 1;
+
+    if (sdesc->has_exnra)
+        free_me = ErtsContainerStruct(sdesc, struct sdesc_with_exnra, sdesc);
+    else
+        free_me = sdesc;
+    erts_free(ERTS_ALC_T_HIPE, free_me);
+}
+
 void hipe_init_sdesc_table(struct hipe_sdesc *sdesc)
 {
     unsigned int log2size, size;
@@ -121,7 +143,7 @@ void hipe_init_sdesc_table(struct hipe_sdesc *sdesc)
  * representation. If different representations are needed in
  * the future, this code has to be made target dependent.
  */
-struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
+struct hipe_sdesc *hipe_decode_sdesc(Eterm arg, int* do_commitp)
 {
     Uint ra, exnra;
     Eterm *live;
@@ -136,7 +158,7 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
         return 0;
 
     tp = tuple_val(arg);
-    if (tp[0] != make_arityval(6) ||
+    if (tp[0] != make_arityval(7) ||
         term_to_Uint(tp[1], &ra) == 0 ||
 	term_to_Uint(tp[2], &exnra) == 0 ||
 	is_not_small(tp[3]) ||
@@ -167,6 +189,12 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg)
 	    (off = unsigned_val(live[i]), off >= nslots) ||
 	    off == fsize)
 	    return 0;
+    }
+
+    switch(tp[7]) {
+    case am_true: *do_commitp = 1; break;
+    case am_false: *do_commitp = 0; break;
+    default: return 0;
     }
 
     /* Calculate number of words for the live bitmap. */

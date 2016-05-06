@@ -666,8 +666,10 @@ BIF_RETTYPE hipe_bifs_set_native_address_3(BIF_ALIST_3)
 BIF_RETTYPE hipe_bifs_enter_sdesc_1(BIF_ALIST_1)
 {
     struct hipe_sdesc *sdesc;
+    Module* modp;
+    int do_commit;
 
-    sdesc = hipe_decode_sdesc(BIF_ARG_1);
+    sdesc = hipe_decode_sdesc(BIF_ARG_1, &do_commit);
     if (!sdesc) {
 	fprintf(stderr, "%s: bad sdesc!\r\n", __FUNCTION__);
 	BIF_ERROR(BIF_P, BADARG);
@@ -676,6 +678,21 @@ BIF_RETTYPE hipe_bifs_enter_sdesc_1(BIF_ALIST_1)
 	fprintf(stderr, "%s: duplicate entry!\r\n", __FUNCTION__);
 	BIF_ERROR(BIF_P, BADARG);
     }
+
+    /*
+     * Link into list of sdesc's in same module instance
+     */
+    modp = erts_put_active_module(make_atom(sdesc->m_aix));
+    ASSERT(modp);
+    if (do_commit) { /* Direct "hipe-patching" of early loaded module */
+        sdesc->next_in_modi = modp->curr.first_hipe_sdesc;
+        modp->curr.first_hipe_sdesc = sdesc;
+    }
+    else {           /* Normal module loading/upgrade */
+        sdesc->next_in_modi = modp->new_hipe_sdesc;
+        modp->new_hipe_sdesc = sdesc;
+    }
+
     BIF_RET(NIL);
 }
 
@@ -1616,12 +1633,14 @@ int hipe_purge_need_blocking(Module* modp)
 {
     /* SVERK: Verify if this is really necessary */
     return (modp->old.first_hipe_ref ||
+            modp->old.first_hipe_sdesc ||
             (!modp->curr.code_hdr && modp->first_hipe_mfa));
 }
 
 void hipe_purge_module(Module* modp)
 {
     struct hipe_ref* ref;
+    struct hipe_sdesc* sdesc;
 
     ASSERT(modp);
 
@@ -1666,6 +1685,27 @@ void hipe_purge_module(Module* modp)
     }
     modp->old.first_hipe_ref = NULL;
 
+    /*
+     * Remove all hipe_sdesc's for the old module instance
+     */
+    sdesc = modp->old.first_hipe_sdesc;
+
+    while (sdesc) {
+	struct hipe_sdesc* free_sdesc = sdesc;
+
+        ERTS_SMP_LC_ASSERT(erts_smp_thr_progress_is_blocking());
+
+	DBG_TRACE_MFA(make_atom(sdesc->m_aix), make_atom(sdesc->f_aix), sdesc->a, "PURGE sdesc at %p", (void*)sdesc->bucket.hvalue);
+	ASSERT(sdesc->m_aix == modp->module);
+
+	sdesc = sdesc->next_in_modi;
+        hipe_destruct_sdesc(free_sdesc);
+    }
+    modp->old.first_hipe_sdesc = NULL;
+
+    /*
+     * Remove unreferred hipe_mfa_info's
+     */
     if (modp->curr.code_hdr == NULL) {
         struct hipe_mfa_info** prevp = &modp->first_hipe_mfa;
         struct hipe_mfa_info* p = *prevp;

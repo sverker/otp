@@ -41,6 +41,7 @@ struct hipe_sdesc {
     Uint32 m_aix;
     Uint32 f_aix;
     Uint32 a;
+    struct hipe_sdesc* next_in_modi;
     Uint32 livebits[1]; /* size depends on arch & data in summary field */
 };
 
@@ -79,8 +80,9 @@ struct hipe_sdesc_table {
 extern struct hipe_sdesc_table hipe_sdesc_table;
 
 extern struct hipe_sdesc *hipe_put_sdesc(struct hipe_sdesc*);
+extern void hipe_destruct_sdesc(struct hipe_sdesc*);
 extern void hipe_init_sdesc_table(struct hipe_sdesc*);
-extern struct hipe_sdesc *hipe_decode_sdesc(Eterm);
+extern struct hipe_sdesc *hipe_decode_sdesc(Eterm, int* do_commitp);
 
 #if !defined(__GNUC__) || (__GNUC__ < 2) || (__GNUC__ == 2 && __GNUC_MINOR__ < 96)
 #define __builtin_expect(x, expected_value) (x)
