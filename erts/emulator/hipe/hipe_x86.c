@@ -264,6 +264,11 @@ void *hipe_make_native_stub(void *callee_exp, unsigned int beamArity)
     return code;
 }
 
+void hipe_free_native_stub(void*)
+{
+    /* SVERK: leak leak drip drop */
+}
+
 void hipe_arch_print_pcb(struct hipe_process_state *p)
 {
 #define U(n,x) \

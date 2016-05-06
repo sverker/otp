@@ -1055,9 +1055,9 @@ insert_new_code(Process *c_p, ErtsProcLocks c_p_locks,
     modp->curr.catches = BEAM_CATCHES_NIL; /* Will be filled in later. */
 #if defined(HIPE)
     modp->curr.first_hipe_ref = modp->new_hipe_refs;
+    modp->curr.hipe_code_start = hipe_code_start;
     modp->new_hipe_refs = NULL;
 # ifdef DEBUG
-    modp->curr.hipe_code_start = hipe_code_start;
     modp->curr.hipe_code_size  = hipe_code_size;
 # endif
 #endif

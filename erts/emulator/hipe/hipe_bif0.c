@@ -1325,12 +1325,7 @@ static void *hipe_get_na_try_locked(Eterm m, Eterm f, unsigned int a)
     struct hipe_mfa_info *p;
 
     p = hipe_mfa_info_table_get_locked(m, f, a);
-    if (p) {
-	/* find address, predicting for a runtime apply call */
-	if (p->remote_address)
-	    return p->remote_address;
-    }
-    return NULL;
+    return p ? p->remote_address : NULL;
 }
 
 static void *hipe_get_na_slow_rwlocked(Eterm m, Eterm f, unsigned int a)
@@ -1571,6 +1566,14 @@ static void unlink_mfa_from_mod(struct hipe_mfa_info* unlink_me)
     }
 }
 
+static void purge_mfa(struct hipe_mfa_info* p)
+{
+    ASSERT(p->is_stub);
+    remove_mfa_info(p);
+    hipe_free_native_stub(p->remote_address);
+    erts_free(ERTS_ALC_T_HIPE, p);
+}
+
 /* Called by init:restart after unloading all hipe compiled modules
  * to work around bug causing execution of deallocated beam code.
  * Can be removed when delete/purge of native modules works better.
@@ -1653,10 +1656,9 @@ void hipe_purge_module(Module* modp)
         if (ref->head.next == ref->head.prev) {
             struct hipe_mfa_info* p = ErtsContainerStruct(ref->head.next, struct hipe_mfa_info, callers);
             if (p->is_stub) {
-                remove_mfa_info(p);
                 unlink_mfa_from_mod(p);
-                erts_free(ERTS_ALC_T_HIPE, p);
-            }
+                purge_mfa(p);
+           }
         }
 
 	ref = ref->next_from_modi;
@@ -1671,19 +1673,19 @@ void hipe_purge_module(Module* modp)
         for (; p; p = *prevp) {
             if (p->callers.next == &p->callers) {
                 *prevp = p->next_in_mod;
-                remove_mfa_info(p);
-                erts_free(ERTS_ALC_T_HIPE, p);
+                purge_mfa(p);
             }
             else
                 prevp = &p->next_in_mod;
         }
     }
+    if (modp->old.hipe_code_start) {
 #ifdef DEBUG
-    sys_memset(modp->old.hipe_code_start, 0xfe, modp->old.hipe_code_size);
+        sys_memset(modp->old.hipe_code_start, 0xfe, modp->old.hipe_code_size);
 #endif
-    /*
-     * This could be a good place to deallocate old native code
-     */
+        hipe_free_code(modp->old.hipe_code_start);
+        modp->old.hipe_code_start = NULL;
+    }
 }
 
 
@@ -1700,8 +1702,11 @@ void hipe_redirect_to_module(Module* modp)
 
     for (p = modp->first_hipe_mfa; p; p = p->next_in_mod) {
         if (p->new_address) {
+            if (p->is_stub) {
+                hipe_free_native_stub(p->remote_address);
+                p->is_stub = 0;
+            }
             p->remote_address = p->new_address;
-            p->is_stub = 0;
             p->new_address = NULL;
 #ifdef DEBUG
             p->dbg_export = NULL;

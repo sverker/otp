@@ -1312,8 +1312,8 @@ delete_code(Module* modp)
     modp->curr.nif = NULL;
 #ifdef HIPE
     modp->curr.first_hipe_ref = NULL;
-# ifdef DEBUG
     modp->curr.hipe_code_start = NULL;
+# ifdef DEBUG
     modp->curr.hipe_code_size = 0;
 # endif
 #endif
