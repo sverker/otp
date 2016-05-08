@@ -6328,10 +6328,13 @@ erts_make_stub_module(Process* p, Eterm Mod, Eterm Beam, Eterm Info)
     }
     size = binary_size(Beam);
 
-#if defined(HIPE) && defined(DEBUG)
-    if (!term_to_Uint(tp[4], &hipe_code_start)
-        || !term_to_Uint(tp[5], &hipe_code_size))
+#ifdef HIPE
+    if (!term_to_Uint(tp[4], &hipe_code_start))
         goto error;
+# ifdef DEBUG
+    if (!term_to_Uint(tp[5], &hipe_code_size))
+        goto error;
+# endif
 #endif
 
     /*
