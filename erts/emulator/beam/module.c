@@ -205,6 +205,15 @@ static ErtsCodeIndex dbg_load_code_ix = 0;
 
 static int entries_at_start_staging = 0;
 
+static ERTS_INLINE void copy_module(Module* dst_mod, Module* src_mod)
+{
+    dst_mod->curr = src_mod->curr;
+    dst_mod->old = src_mod->old;
+#ifdef HIPE
+    dst_mod->first_hipe_mfa = src_mod->first_hipe_mfa;
+#endif
+}
+
 void module_start_staging(void)
 {
     IndexTable* src = &module_tables[erts_active_code_ix()];
@@ -223,12 +232,7 @@ void module_start_staging(void)
 	src_mod = (Module*) erts_index_lookup(src, i);
 	dst_mod = (Module*) erts_index_lookup(dst, i);
 	ASSERT(src_mod->module == dst_mod->module);
-
-	dst_mod->curr = src_mod->curr;
-	dst_mod->old = src_mod->old;
-      #ifdef HIPE
-	dst_mod->first_hipe_mfa = src_mod->first_hipe_mfa;
-      #endif
+        copy_module(dst_mod, src_mod);
     }
 
     /*
@@ -240,11 +244,7 @@ void module_start_staging(void)
 	dst_mod = (Module*) index_put_entry(dst, src_mod);
 	ASSERT(dst_mod != src_mod);
 
-	dst_mod->curr = src_mod->curr;
-	dst_mod->old = src_mod->old;
-      #ifdef HIPE
-	dst_mod->first_hipe_mfa = src_mod->first_hipe_mfa;
-      #endif
+        copy_module(dst_mod, src_mod);
     }
     newsz = index_table_sz(dst);
     erts_smp_atomic_add_nob(&tot_module_bytes, (newsz - oldsz));
