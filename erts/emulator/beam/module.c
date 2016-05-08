@@ -211,6 +211,7 @@ static ERTS_INLINE void copy_module(Module* dst_mod, Module* src_mod)
     dst_mod->old = src_mod->old;
 #ifdef HIPE
     dst_mod->first_hipe_mfa = src_mod->first_hipe_mfa;
+    dst_mod->new_hipe_refs  = src_mod->new_hipe_refs;
 #endif
 }
 
