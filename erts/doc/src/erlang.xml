@@ -4371,7 +4371,7 @@ os_prompt% </pre>
         </taglist>
 	<p>
 	  The default <c>message_queue_data</c> process flag is determined
-	  by the <seealso marker="erl#+xmqd"><c>+xmqd</c></seealso>
+	  by the <seealso marker="erl#+hmqd"><c>+hmqd</c></seealso>
 	  <c>erl</c> command line argument.
 	</p>
 	<p>
@@ -4702,7 +4702,7 @@ os_prompt% </pre>
 	       detailed information about garbage collection for this process.
 	       The content of <c><anno>GCInfo</anno></c> can be changed without
 	       prior notice.
-               See <seealso marker="#gc_start">gc_start</seealso> in
+               See <seealso marker="#gc_minor_start">gc_minor_start</seealso> in
                <seealso marker="#trace/3">erlang:trace/3</seealso> for details about
                what each item means.
             </p>
@@ -4878,7 +4878,9 @@ os_prompt% </pre>
           <tag><c>{total_heap_size, <anno>Size</anno>}</c></tag>
           <item>
             <p><c><anno>Size</anno></c> is the total size, in words, of all heap
-	    fragments of the process. This includes the process stack.</p>
+	    fragments of the process. This includes the process stack and
+            any unreceived messages that are considered to be part of the
+            heap. </p>
           </item>
           <tag><c>{trace, <anno>InternalTraceFlags</anno>}</c></tag>
           <item>
@@ -5709,7 +5711,7 @@ true</pre>
 	    flag. <c><anno>MQD</anno></c> should be either <c>off_heap</c>,
 	    <c>on_heap</c>, or <c>mixed</c>. The default
 	    <c>message_queue_data</c> process flag is determined by the
-	    <seealso marker="erl#+xmqd"><c>+xmqd</c></seealso> <c>erl</c>
+	    <seealso marker="erl#+hmqd"><c>+hmqd</c></seealso> <c>erl</c>
 	    command line argument. For more information, see the
 	    documentation of
             <seealso marker="#process_flag_message_queue_data"><c>process_flag(message_queue_data,
@@ -7388,7 +7390,7 @@ ok
             <p>Returns the default value of the <c>message_queue_data</c>
 	    process flag which is either <c>off_heap</c>, <c>on_heap</c>, or <c>mixed</c>.
 	    This default is set by the <c>erl</c> command line argument
-	    <seealso marker="erl#+xmqd"><c>+xmqd</c></seealso>. For more information on the
+	    <seealso marker="erl#+hmqd"><c>+hmqd</c></seealso>. For more information on the
 	    <c>message_queue_data</c> process flag, see documentation of
             <seealso marker="#process_flag_message_queue_data"><c>process_flag(message_queue_data,
 	    MQD)</c></seealso>.</p>
@@ -7966,7 +7968,7 @@ ok
               <c>stack_size</c>, <c>mbuf_size</c>, <c>old_heap_size</c>,
               and <c>old_heap_block_size</c>. These tuples are
               explained in the description of trace message
-              <seealso marker="#gc_start">gc_start</seealso> (see
+              <seealso marker="#gc_minor_start">gc_minor_start</seealso> (see
               <seealso marker="#trace/3">erlang:trace/3</seealso>).
               New tuples can be added, and the order of the tuples in
               the <c>Info</c> list can be changed at any time without
@@ -8556,7 +8558,7 @@ timestamp() ->
           <tag><c>garbage_collection</c></tag>
           <item>
             <p>Traces garbage collections of processes.</p>
-            <p>Message tags: <c><seealso marker="#trace_3_trace_messages_gc_start">gc_start</seealso></c> and <c><seealso marker="#trace_3_trace_messages_gc_end">gc_end</seealso></c>.</p>
+            <p>Message tags: <c><seealso marker="#trace_3_trace_messages_gc_minor_start">gc_minor_start</seealso></c> and <c><seealso marker="#trace_3_trace_messages_gc_minor_end">gc_minor_end</seealso></c>.</p>
           </item>
           <tag><c>timestamp</c></tag>
           <item>
@@ -8637,8 +8639,8 @@ timestamp() ->
             <p>Specifies that a tracer module should be called
             instead of sending a trace message. The tracer module
             can then ignore or change the trace message. For more details
-            on how to write a tracer module see <seealso marker="erl_tracer">
-            erl_tracer</seealso>
+            on how to write a tracer module see
+            <seealso marker="erts:erl_tracer"><c>erl_tracer</c></seealso>
           </p>
           </item>
         </taglist>
@@ -8880,12 +8882,12 @@ timestamp() ->
             </p>
           </item>
           <tag>
-            <marker id="trace_3_trace_messages_gc_start"></marker>
-            <c>{trace, Pid, gc_start, Info}</c>
+            <marker id="trace_3_trace_messages_gc_minor_start"></marker>
+            <c>{trace, Pid, gc_minor_start, Info}</c>
           </tag>
           <item>
-          <marker id="gc_start"></marker>
-            <p>Sent when garbage collection is about to be started.
+          <marker id="gc_minor_start"></marker>
+            <p>Sent when a young garbage collection is about to be started.
               <c>Info</c> is a list of two-element tuples, where
               the first element is a key, and the second is the value.
               Do not depend on any order of the tuples.
@@ -8925,14 +8927,31 @@ timestamp() ->
             <p>All sizes are in words.</p>
           </item>
           <tag>
-            <marker id="trace_3_trace_messages_gc_end"></marker>
-            <c>{trace, Pid, gc_end, Info}</c>
+            <marker id="trace_3_trace_messages_gc_minor_end"></marker>
+            <c>{trace, Pid, gc_minor_end, Info}</c>
           </tag>
           <item>
-            <p>Sent when garbage collection is finished. <c>Info</c>
-              contains the same kind of list as in message <c>gc_start</c>,
+            <p>Sent when young garbage collection is finished. <c>Info</c>
+              contains the same kind of list as in message <c>gc_minor_start</c>,
               but the sizes reflect the new sizes after
               garbage collection.</p>
+          </item>
+          <tag>
+            <marker id="trace_3_trace_messages_gc_major_start"></marker>
+            <c>{trace, Pid, gc_major_start, Info}</c>
+          </tag>
+          <item>
+            <p>Sent when fullsweep garbage collection is about to be started. <c>Info</c>
+                contains the same kind of list as in message <c>gc_minor_start</c>.</p>
+          </item>
+          <tag>
+            <marker id="trace_3_trace_messages_gc_major_end"></marker>
+            <c>{trace, Pid, gc_major_end, Info}</c>
+          </tag>
+          <item>
+            <p>Sent when fullsweep garbage collection is finished. <c>Info</c>
+                contains the same kind of list as in message <c>gc_minor_start</c>
+              but the sizes reflect the new sizes after a fullsweep garbage collection.</p>
           </item>
         </taglist>
         <p>If the tracing process/port dies or the tracer module returns
@@ -8989,7 +9008,7 @@ timestamp() ->
           <c>erlang:trace_delivered(<anno>Tracee</anno>)</c> resides on.
           The special <c><anno>Tracee</anno></c> atom <c>all</c>
           denotes all processes that currently are traced in the node.</p>
-        <p>When used together with an <seealso marker="#erl_tracer">
+        <p>When used together with an <seealso marker="erts:erl_tracer">
           Tracer Module</seealso> any message sent in the trace callback
           is guaranteed to have reached it's recipient before the
           <c>trace_delivered</c> message is sent.</p>

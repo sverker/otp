@@ -116,7 +116,7 @@ static Eterm *full_sweep_heaps(Process *p,
 			       char *oh, Uint oh_size,
 			       Eterm *objv, int nobj);
 static int garbage_collect(Process* p, ErlHeapFragment *live_hf_end,
-			   int need, Eterm* objv, int nobj);
+			   int need, Eterm* objv, int nobj, int fcalls);
 static int major_collection(Process* p, ErlHeapFragment *live_hf_end,
 			    int need, Eterm* objv, int nobj, Uint *recl);
 static int minor_collection(Process* p, ErlHeapFragment *live_hf_end,
@@ -392,15 +392,15 @@ erts_gc_after_bif_call_lhf(Process* p, ErlHeapFragment *live_hf_end,
 		regs = ERTS_PROC_GET_SCHDATA(p)->x_reg_array;
 	    }
 	  #endif
-	    cost = garbage_collect(p, live_hf_end, 0, regs, p->arity);
+	    cost = garbage_collect(p, live_hf_end, 0, regs, p->arity, p->fcalls);
 	} else {
-	    cost = garbage_collect(p, live_hf_end, 0, regs, arity);
+	    cost = garbage_collect(p, live_hf_end, 0, regs, arity, p->fcalls);
 	}
     } else {
 	Eterm val[1];
 
 	val[0] = result;
-	cost = garbage_collect(p, live_hf_end, 0, val, 1);
+	cost = garbage_collect(p, live_hf_end, 0, val, 1, p->fcalls);
 	result = val[0];
     }
     BUMP_REDS(p, cost);
@@ -431,7 +431,7 @@ static ERTS_INLINE void reset_active_writer(Process *p)
 #define ERTS_ABANDON_HEAP_COST 10
 
 static int
-delay_garbage_collection(Process *p, ErlHeapFragment *live_hf_end, int need)
+delay_garbage_collection(Process *p, ErlHeapFragment *live_hf_end, int need, int fcalls)
 {
     ErlHeapFragment *hfrag;
     Eterm *orig_heap, *orig_hend, *orig_htop, *orig_stop;
@@ -506,12 +506,16 @@ delay_garbage_collection(Process *p, ErlHeapFragment *live_hf_end, int need)
 
     /* Make sure that we do a proper GC as soon as possible... */
     p->flags |= F_FORCE_GC;
-    reds_left = ERTS_BIF_REDS_LEFT(p);
+    reds_left = ERTS_REDS_LEFT(p, fcalls);
+    ASSERT(CONTEXT_REDS - reds_left >= ERTS_PROC_GET_SCHDATA(p)->virtual_reds);
+
     if (reds_left > ERTS_ABANDON_HEAP_COST) {
 	int vreds = reds_left - ERTS_ABANDON_HEAP_COST;
-	ERTS_VBUMP_REDS(p, vreds);
+	ERTS_PROC_GET_SCHDATA((p))->virtual_reds += vreds;
     }
-    return ERTS_ABANDON_HEAP_COST;
+
+    ASSERT(CONTEXT_REDS >= ERTS_PROC_GET_SCHDATA(p)->virtual_reds);
+    return reds_left;
 }
 
 static ERTS_FORCE_INLINE Uint
@@ -570,7 +574,7 @@ young_gen_usage(Process *p)
  */
 static int
 garbage_collect(Process* p, ErlHeapFragment *live_hf_end,
-		int need, Eterm* objv, int nobj)
+		int need, Eterm* objv, int nobj, int fcalls)
 {
     Uint reclaimed_now = 0;
     int reds;
@@ -581,8 +585,11 @@ garbage_collect(Process* p, ErlHeapFragment *live_hf_end,
     DTRACE_CHARBUF(pidbuf, DTRACE_TERM_BUF_SIZE);
 #endif
 
+    ASSERT(CONTEXT_REDS - ERTS_REDS_LEFT(p, fcalls)
+	   >= ERTS_PROC_GET_SCHDATA(p)->virtual_reds);
+
     if (p->flags & (F_DISABLE_GC|F_DELAY_GC))
-	return delay_garbage_collection(p, live_hf_end, need);
+	return delay_garbage_collection(p, live_hf_end, need, fcalls);
 
     if (p->abandoned_heap)
 	live_hf_end = ERTS_INVALID_HFRAG_PTR;
@@ -592,10 +599,6 @@ garbage_collect(Process* p, ErlHeapFragment *live_hf_end,
     ERTS_MSACC_SET_STATE_CACHED_M(ERTS_MSACC_STATE_GC);
 
     esdp = erts_get_scheduler_data();
-
-    if (IS_TRACED_FL(p, F_TRACE_GC)) {
-        trace_gc(p, am_gc_start);
-    }
 
     erts_smp_atomic32_read_bor_nob(&p->state, ERTS_PSFLG_GC);
     if (erts_system_monitor_long_gc != 0)
@@ -619,18 +622,29 @@ garbage_collect(Process* p, ErlHeapFragment *live_hf_end,
      */
 
     if (GEN_GCS(p) < MAX_GEN_GCS(p) && !(FLAGS(p) & F_NEED_FULLSWEEP)) {
-	DTRACE2(gc_minor_start, pidbuf, need);
-	reds = minor_collection(p, live_hf_end, need, objv, nobj, &reclaimed_now);
-	DTRACE2(gc_minor_end, pidbuf, reclaimed_now);
-	if (reds < 0)
-	    goto do_major_collection;
-    }
-    else {
-    do_major_collection:
+        if (IS_TRACED_FL(p, F_TRACE_GC)) {
+            trace_gc(p, am_gc_minor_start, need);
+        }
+        DTRACE2(gc_minor_start, pidbuf, need);
+        reds = minor_collection(p, live_hf_end, need, objv, nobj, &reclaimed_now);
+        DTRACE2(gc_minor_end, pidbuf, reclaimed_now);
+        if (IS_TRACED_FL(p, F_TRACE_GC)) {
+            trace_gc(p, am_gc_minor_end, reclaimed_now);
+        }
+        if (reds < 0)
+            goto do_major_collection;
+    } else {
+do_major_collection:
         ERTS_MSACC_SET_STATE_CACHED_M_X(ERTS_MSACC_STATE_GC_FULL);
-	DTRACE2(gc_major_start, pidbuf, need);
-	reds = major_collection(p, live_hf_end, need, objv, nobj, &reclaimed_now);
-	DTRACE2(gc_major_end, pidbuf, reclaimed_now);
+        if (IS_TRACED_FL(p, F_TRACE_GC)) {
+            trace_gc(p, am_gc_major_start, need);
+        }
+        DTRACE2(gc_major_start, pidbuf, need);
+        reds = major_collection(p, live_hf_end, need, objv, nobj, &reclaimed_now);
+        DTRACE2(gc_major_end, pidbuf, reclaimed_now);
+        if (IS_TRACED_FL(p, F_TRACE_GC)) {
+            trace_gc(p, am_gc_major_end, reclaimed_now);
+        }
         ERTS_MSACC_SET_STATE_CACHED_M_X(ERTS_MSACC_STATE_GC);
     }
 
@@ -645,10 +659,6 @@ garbage_collect(Process* p, ErlHeapFragment *live_hf_end,
     ErtsGcQuickSanityCheck(p);
 
     erts_smp_atomic32_read_band_nob(&p->state, ~ERTS_PSFLG_GC);
-
-    if (IS_TRACED_FL(p, F_TRACE_GC)) {
-        trace_gc(p, am_gc_end);
-    }
 
     if (erts_system_monitor_long_gc != 0) {
 	ErtsMonotonicTime end_time;
@@ -700,16 +710,23 @@ garbage_collect(Process* p, ErlHeapFragment *live_hf_end,
 }
 
 int
-erts_garbage_collect_nobump(Process* p, int need, Eterm* objv, int nobj)
+erts_garbage_collect_nobump(Process* p, int need, Eterm* objv, int nobj, int fcalls)
 {
-    return garbage_collect(p, ERTS_INVALID_HFRAG_PTR, need, objv, nobj);
+    int reds = garbage_collect(p, ERTS_INVALID_HFRAG_PTR, need, objv, nobj, fcalls);
+    int reds_left = ERTS_REDS_LEFT(p, fcalls);
+    if (reds > reds_left)
+	reds = reds_left;
+    ASSERT(CONTEXT_REDS - (reds_left - reds) >= ERTS_PROC_GET_SCHDATA(p)->virtual_reds);
+    return reds;
 }
 
 void
 erts_garbage_collect(Process* p, int need, Eterm* objv, int nobj)
 {
-    int reds = garbage_collect(p, ERTS_INVALID_HFRAG_PTR, need, objv, nobj);
+    int reds = garbage_collect(p, ERTS_INVALID_HFRAG_PTR, need, objv, nobj, p->fcalls);
     BUMP_REDS(p, reds);
+    ASSERT(CONTEXT_REDS - ERTS_BIF_REDS_LEFT(p)
+	   >= ERTS_PROC_GET_SCHDATA(p)->virtual_reds);
 }
 
 /*
@@ -2053,8 +2070,26 @@ copy_one_frag(Eterm** hpp, ErlOffHeap* off_heap,
 	    *hp++ = val;
 	    break;
 	case TAG_PRIMARY_LIST:
+#ifdef SHCOPY_SEND
+            if (erts_is_literal(val,list_val(val))) {
+                *hp++ = val;
+            } else {
+                *hp++ = offset_ptr(val, offs);
+            }
+#else
+            *hp++ = offset_ptr(val, offs);
+#endif
+            break;
 	case TAG_PRIMARY_BOXED:
-	    *hp++ = offset_ptr(val, offs);
+#ifdef SHCOPY_SEND
+            if (erts_is_literal(val,boxed_val(val))) {
+                *hp++ = val;
+            } else {
+                *hp++ = offset_ptr(val, offs);
+            }
+#else
+            *hp++ = offset_ptr(val, offs);
+#endif
 	    break;
 	case TAG_PRIMARY_HEADER:
 	    *hp++ = val;
@@ -2988,9 +3023,29 @@ erts_process_gc_info(Process *p, Uint *sizep, Eterm **hpp)
     };
 
     Eterm res = THE_NON_VALUE;
+    ErtsMessage *mp;
 
     ERTS_CT_ASSERT(sizeof(values)/sizeof(*values) == sizeof(tags)/sizeof(*tags));
     ERTS_CT_ASSERT(sizeof(values)/sizeof(*values) == ERTS_PROCESS_GC_INFO_MAX_TERMS);
+
+    if (p->abandoned_heap) {
+        Eterm *htop, *heap;
+        ERTS_GET_ORIG_HEAP(p, heap, htop);
+        values[3] = HIGH_WATER(p) - heap;
+        values[6] = htop - heap;
+    }
+
+    if (p->flags & F_ON_HEAP_MSGQ) {
+        /* If on heap messages in the internal queue are counted
+           as being part of the heap, so we have to add them to the
+           am_mbuf_size value. process_info(total_heap_size) should
+           be the same as adding old_heap_block_size + heap_block_size
+           + mbuf_size.
+        */
+        for (mp = p->msg.first; mp; mp = mp->next)
+            if (mp->data.attached)
+                values[2] += erts_msg_attached_data_size(mp);
+    }
 
     res = erts_bld_atom_uword_2tup_list(hpp,
                                         sizep,

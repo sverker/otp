@@ -42,7 +42,7 @@
      renegotiate/1, prf/5, negotiated_protocol/1, negotiated_next_protocol/1,
 	 connection_information/1, connection_information/2]).
 %% Misc
--export([random_bytes/1, handle_options/2]).
+-export([handle_options/2]).
 
 -deprecated({negotiated_next_protocol, 1, next_major_release}).
 -deprecated({connection_info, 1, next_major_release}).
@@ -581,22 +581,6 @@ format_error(Error) ->
             Other
     end.
 
-%%--------------------------------------------------------------------
--spec random_bytes(integer()) -> binary().
-
-%%
-%% Description: Generates cryptographically secure random sequence if possible
-%% fallbacks on pseudo random function
-%%--------------------------------------------------------------------
-random_bytes(N) ->
-    try crypto:strong_rand_bytes(N) of
-	RandBytes ->
-	    RandBytes
-    catch
-	error:low_entropy ->
-	    crypto:rand_bytes(N)
-    end.
-
 %%%--------------------------------------------------------------
 %%% Internal functions
 %%%--------------------------------------------------------------------
@@ -712,7 +696,7 @@ handle_options(Opts0, Role) ->
 							 default_option_role(server, true, Role), 
 							 server, Role),
 		    renegotiate_at = handle_option(renegotiate_at, Opts, ?DEFAULT_RENEGOTIATE_AT),
-		    hibernate_after = handle_option(hibernate_after, Opts, undefined),
+		    hibernate_after = handle_option(hibernate_after, Opts, infinity),
 		    erl_dist = handle_option(erl_dist, Opts, false),
 		    alpn_advertised_protocols =
 			handle_option(alpn_advertised_protocols, Opts, undefined),
@@ -901,10 +885,13 @@ validate_option(client_renegotiation, Value) when is_boolean(Value) ->
 validate_option(renegotiate_at, Value) when is_integer(Value) ->
     erlang:min(Value, ?DEFAULT_RENEGOTIATE_AT);
 
-validate_option(hibernate_after, undefined) ->
-    undefined;
+validate_option(hibernate_after, undefined) -> %% Backwards compatibility
+    infinity;
+validate_option(hibernate_after, infinity) ->
+    infinity;
 validate_option(hibernate_after, Value) when is_integer(Value), Value >= 0 ->
     Value;
+
 validate_option(erl_dist,Value) when is_boolean(Value) ->
     Value;
 validate_option(Opt, Value)
@@ -1105,10 +1092,7 @@ binary_cipher_suites(Version, []) ->
     %% Defaults to all supported suites that does
     %% not require explicit configuration
     ssl_cipher:filter_suites(ssl_cipher:suites(Version));
-binary_cipher_suites(Version, [{_,_,_,_}| _] = Ciphers0) -> %% Backwards compatibility
-    Ciphers = [{KeyExchange, Cipher, Hash} || {KeyExchange, Cipher, Hash, _} <- Ciphers0],
-    binary_cipher_suites(Version, Ciphers);
-binary_cipher_suites(Version, [{_,_,_}| _] = Ciphers0) ->
+binary_cipher_suites(Version, [Tuple|_] = Ciphers0) when is_tuple(Tuple) ->
     Ciphers = [ssl_cipher:suite(C) || C <- Ciphers0],
     binary_cipher_suites(Version, Ciphers);
 

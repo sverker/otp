@@ -551,7 +551,7 @@ last_delay_timer({_,_}, TRef, {_, LastClient}) ->
 new_id(_, 0, _, _) ->
     <<>>;
 new_id(Port, Tries, Cache, CacheCb) ->
-    Id = crypto:rand_bytes(?NUM_OF_SESSION_ID_BYTES),
+    Id = ssl_cipher:random_bytes(?NUM_OF_SESSION_ID_BYTES),
     case CacheCb:lookup(Cache, {Port, Id}) of
 	undefined ->
 	    Now = erlang:monotonic_time(),
@@ -610,8 +610,8 @@ server_register_session(Port, Session, #state{session_cache_server_max = Max,
 
 do_register_session(Key, Session, Max, Pid, Cache, CacheCb) ->
     try CacheCb:size(Cache) of
-	N when N > Max  ->
-	  invalidate_session_cache(Pid, CacheCb, Cache);
+	Max ->
+	    invalidate_session_cache(Pid, CacheCb, Cache);
 	_ ->	
 	    CacheCb:update(Cache, Key, Session),
 	    Pid

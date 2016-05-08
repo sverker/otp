@@ -206,15 +206,15 @@ int erts_no_line_info = 0;	/* -L: Don't load line information */
 
 ErtsModifiedTimings erts_modified_timings[] = {
     /* 0 */	{make_small(0), CONTEXT_REDS, INPUT_REDUCTIONS},
-    /* 1 */	{make_small(0), 2*CONTEXT_REDS, 2*INPUT_REDUCTIONS},
+    /* 1 */	{make_small(0), (3*CONTEXT_REDS)/4, 2*INPUT_REDUCTIONS},
     /* 2 */	{make_small(0), CONTEXT_REDS/2, INPUT_REDUCTIONS/2},
-    /* 3 */	{make_small(0), 3*CONTEXT_REDS, 3*INPUT_REDUCTIONS},
+    /* 3 */	{make_small(0), (7*CONTEXT_REDS)/8, 3*INPUT_REDUCTIONS},
     /* 4 */	{make_small(0), CONTEXT_REDS/3, 3*INPUT_REDUCTIONS},
-    /* 5 */	{make_small(0), 4*CONTEXT_REDS, INPUT_REDUCTIONS/2},
+    /* 5 */	{make_small(0), (10*CONTEXT_REDS)/11, INPUT_REDUCTIONS/2},
     /* 6 */	{make_small(1), CONTEXT_REDS/4, 2*INPUT_REDUCTIONS},
-    /* 7 */	{make_small(1), 5*CONTEXT_REDS, INPUT_REDUCTIONS/3},
+    /* 7 */	{make_small(1), (5*CONTEXT_REDS)/7, INPUT_REDUCTIONS/3},
     /* 8 */	{make_small(10), CONTEXT_REDS/5, 3*INPUT_REDUCTIONS},
-    /* 9 */	{make_small(10), 6*CONTEXT_REDS, INPUT_REDUCTIONS/4}
+    /* 9 */	{make_small(10), (6*CONTEXT_REDS)/7, INPUT_REDUCTIONS/4}
 };
 
 #define ERTS_MODIFIED_TIMING_LEVELS \
@@ -578,6 +578,8 @@ void erts_usage(void)
 	       VH_DEFAULT_SIZE);
     erts_fprintf(stderr, "-hpds size     initial process dictionary size (default %d)\n",
 	       erts_pd_initial_size);
+    erts_fprintf(stderr, "-hmqd  val     set default message queue data flag for processes,\n");
+    erts_fprintf(stderr, "               valid values are: off_heap | on_heap | mixed\n");
 
     /*    erts_fprintf(stderr, "-i module  set the boot module (default init)\n"); */
 
@@ -655,8 +657,6 @@ void erts_usage(void)
 
     erts_fprintf(stderr, "-W<i|w|e>      set error logger warnings mapping,\n");
     erts_fprintf(stderr, "               see error_logger documentation for details\n");
-    erts_fprintf(stderr, "-xmqd  val     set default message queue data flag for processes,\n");
-    erts_fprintf(stderr, "               valid values are: off_heap | on_heap | mixed\n");
     erts_fprintf(stderr, "-zdbbl size    set the distribution buffer busy limit in kilobytes\n");
     erts_fprintf(stderr, "               valid range is [1-%d]\n", INT_MAX/1024);
     erts_fprintf(stderr, "-zdntgc time   set delayed node table gc in seconds\n");
@@ -1487,6 +1487,7 @@ erl_start(int argc, char **argv)
 	     * h|ms  - min_heap_size
 	     * h|mbs - min_bin_vheap_size
 	     * h|pds - erts_pd_initial_size
+	     * h|mqd - message_queue_data
 	     *
 	     */
 	    if (has_prefix("mbs", sub_param)) {
@@ -1512,6 +1513,23 @@ erl_start(int argc, char **argv)
 		}
 		VERBOSE(DEBUG_SYSTEM, ("using initial process dictionary size %d\n",
 			    erts_pd_initial_size));
+            } else if (has_prefix("mqd", sub_param)) {
+		arg = get_arg(sub_param+3, argv[i+1], &i);
+		if (sys_strcmp(arg, "mixed") == 0)
+		    erts_default_spo_flags &= ~(SPO_ON_HEAP_MSGQ|SPO_OFF_HEAP_MSGQ);
+		else if (sys_strcmp(arg, "on_heap") == 0) {
+		    erts_default_spo_flags &= ~SPO_OFF_HEAP_MSGQ;
+		    erts_default_spo_flags |= SPO_ON_HEAP_MSGQ;
+		}
+		else if (sys_strcmp(arg, "off_heap") == 0) {
+		    erts_default_spo_flags &= ~SPO_ON_HEAP_MSGQ;
+		    erts_default_spo_flags |= SPO_OFF_HEAP_MSGQ;
+		}
+		else {
+		    erts_fprintf(stderr,
+				 "Invalid message_queue_data flag: %s\n", arg);
+		    erts_usage();
+		}
 	    } else {
 	        /* backward compatibility */
 		arg = get_arg(argv[i]+2, argv[i+1], &i);
@@ -2046,32 +2064,6 @@ erl_start(int argc, char **argv)
 		erts_usage();
 	    }
 	    break;
-
-	case 'x': {
-	    char *sub_param = argv[i]+2;
-	    if (has_prefix("mqd", sub_param)) {
-		arg = get_arg(sub_param+3, argv[i+1], &i);
-		if (sys_strcmp(arg, "mixed") == 0)
-		    erts_default_spo_flags &= ~(SPO_ON_HEAP_MSGQ|SPO_OFF_HEAP_MSGQ);
-		else if (sys_strcmp(arg, "on_heap") == 0) {
-		    erts_default_spo_flags &= ~SPO_OFF_HEAP_MSGQ;
-		    erts_default_spo_flags |= SPO_ON_HEAP_MSGQ;
-		}
-		else if (sys_strcmp(arg, "off_heap") == 0) {
-		    erts_default_spo_flags &= ~SPO_ON_HEAP_MSGQ;
-		    erts_default_spo_flags |= SPO_OFF_HEAP_MSGQ;
-		}
-		else {
-		    erts_fprintf(stderr,
-				 "Invalid message_queue_data flag: %s\n", arg);
-		    erts_usage();
-		}
-	    } else {
-		erts_fprintf(stderr, "bad -x option %s\n", argv[i]);
-		erts_usage();
-	    }
-	    break;
-        }
 
 	case 'z': {
 	    char *sub_param = argv[i]+2;

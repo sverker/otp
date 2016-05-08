@@ -72,6 +72,10 @@ ERL_NIF_INIT(erl_tracer, nif_funcs, load, NULL, upgrade, unload)
     ATOM_DECL(trace);                              \
     ATOM_DECL(trace_ts);                           \
     ATOM_DECL(true);                               \
+    ATOM_DECL(gc_minor_start);                     \
+    ATOM_DECL(gc_minor_end);                       \
+    ATOM_DECL(gc_major_start);                     \
+    ATOM_DECL(gc_major_end);                       \
     ATOM_DECL(undefined);
 
 #define ATOM_DECL(A) static ERL_NIF_TERM atom_##A
@@ -124,6 +128,9 @@ static ERL_NIF_TERM enabled(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
         if (!enif_is_port_alive(env, &to_port))
             /* tracer is dead so we should remove this trace point */
             return atom_remove;
+    } else {
+        /* The state was not a pid or a port */
+        return atom_remove;
     }
 
     /* Only generate trace for when tracer != tracee */
