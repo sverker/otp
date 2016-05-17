@@ -1219,15 +1219,23 @@ static int outc(int c)
 
 static int move_cursor(int from, int to)
 {
+    int col_from = COL(from);
+    int col_to = COL(to);
     int dc, dl;
 
     update_cols();
 
-    dc = COL(to) - COL(from);
+    dc = col_to - col_from;
     dl = LINE(to) - LINE(from);
-    if (dl > 0)
-      move_down(dl);
-    else if (dl < 0)
+
+    if (dl > 0) {
+	move_left(col_from);
+	move_down(dl);
+	move_right(col_to);
+	return TRUE;
+    }
+
+    if (dl < 0)
       move_up(-dl);
     if (dc > 0)
       move_right(dc);
