@@ -1287,6 +1287,8 @@ static int start_termcap(void)
     cols = tgetnum("co");
     if (cols <= 0)
 	cols = DEF_WIDTH;
+    cols_needs_update = TRUE;
+
     xn = tgetflag("xn");
     up = tgetstr("up", &c);
     if (!(down = tgetstr("do", &c)))
