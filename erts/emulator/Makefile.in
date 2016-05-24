@@ -168,7 +168,7 @@ endif
 
 
 #
-# NOTE: When adding a new type update ERL_BUILD_TYPE_MARKER in sys/unix/sys.c
+# NOTE: When adding a new type update ERL_BUILD_TYPE_MARKER in sys/unix/sys_drivers.c
 #
 
 ifeq ($(FLAVOR),smp)
