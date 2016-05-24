@@ -49,6 +49,9 @@
 #define ERTS_SEQTFLGS2TFLGS(SEQTFLGS)                                   \
     (ERTS_SEQTFLGS2TSTYPE(SEQTFLGS) << ERTS_TRACE_FLAGS_TS_TYPE_SHIFT)
 
+#define erts_tracer_true am_true
+#define erts_tracer_nil NIL
+
 #endif /* ERL_TRACE_H__FLAGS__ */
 
 #if !defined(ERL_TRACE_H__) && !defined(ERTS_ONLY_INCLUDE_TRACE_FLAGS)
@@ -206,12 +209,6 @@ int erts_tracer_nif_clear(void);
 
 #define erts_tracer_update(t,n) do { if (*(t) != (n)) erts_tracer_update(t,n); } while(0)
 #define ERTS_TRACER_CLEAR(t) erts_tracer_update(t, erts_tracer_nil)
-
-static const ErtsTracer
-ERTS_DECLARE_DUMMY(erts_tracer_true) = am_true;
-
-static const ErtsTracer
-ERTS_DECLARE_DUMMY(erts_tracer_nil) = NIL;
 
 #define ERTS_TRACER_COMPARE(t1, t2)                     \
     (EQ((t1), (t2)))
