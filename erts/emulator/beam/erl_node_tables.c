@@ -849,9 +849,11 @@ static Eterm AM_system;
 static Eterm AM_timer;
 static Eterm AM_delayed_delete_timer;
 
+#ifndef MICROBEAM
 static void setup_reference_table(void);
 static Eterm reference_table_term(Uint **hpp, Uint *szp);
 static void delete_reference_table(void);
+#endif
 
 #if BIG_UINT_HEAP_SIZE > 3 /* 2-tuple */
 #define ID_HEAP_SIZE BIG_UINT_HEAP_SIZE
@@ -907,6 +909,9 @@ static InsertedBin *inserted_bins;
 Eterm
 erts_get_node_and_dist_references(struct process *proc)
 {
+#ifdef MICROBEAM
+    return NIL;
+#else
     Uint *hp;
     Uint size;
     Eterm res;
@@ -960,6 +965,7 @@ erts_get_node_and_dist_references(struct process *proc)
     erts_smp_thr_progress_unblock();
     erts_smp_proc_lock(proc, ERTS_PROC_LOCK_MAIN);
     return res;
+#endif /* !MICROBEAM */
 }
 
 #define HEAP_REF 1
@@ -1283,6 +1289,7 @@ insert_delayed_delete_dist_entry(void *state,
     UnUseTmpHeapNoproc(3);
 }
 
+#ifndef MICROBEAM
 static void
 setup_reference_table(void)
 {
@@ -1738,6 +1745,7 @@ delete_reference_table(void)
 	erts_free(ERTS_ALC_T_NC_TMP, (void *)ib);
     }
 }
+#endif /* !MICROBEAM */
 
 void
 erts_debug_test_node_tab_delayed_delete(Sint64 millisecs)

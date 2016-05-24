@@ -1230,6 +1230,9 @@ int
 erts_decode_dist_message(Process *proc, ErtsProcLocks proc_locks,
 			 ErtsMessage *msgp, int force_off_heap)
 {
+#ifdef MICROBEAM
+    return 0;
+#else
     ErtsHeapFactory factory;
     Eterm msg;
     ErlHeapFragment *bp;
@@ -1298,6 +1301,7 @@ erts_decode_dist_message(Process *proc, ErtsProcLocks proc_locks,
 	msgp->data.heap_frag = factory.heap_frags;
 
     return 1;
+#endif
 }
 
 /*

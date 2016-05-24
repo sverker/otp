@@ -900,6 +900,7 @@ call_ext u==0 u$func:erlang:yield/0 => i_yield
 call_ext_last u==0 u$func:erlang:yield/0 D => i_yield | deallocate_return D
 call_ext_only u==0 u$func:erlang:yield/0 => i_yield | return
 
+%unless MICROBEAM
 #
 # The hibernate/3 BIF is an instruction.
 #
@@ -994,6 +995,7 @@ call_ext_only Arity u$func:erlang:dt_append_vm_tag_data/1 => \
 # Can happen after one of the transformations above.
 move Discarded x==0 | move Something x==0 => move Something x=0
 
+%endif
 %endif
 
 call_ext u==0 u$func:os:perf_counter/0 => \

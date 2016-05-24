@@ -3537,7 +3537,9 @@ do {						\
 	     */
 	    BifFunction vbf;
 	    ErlHeapFragment *live_hf_end;
-
+#ifdef MICROBEAM
+        ASSERT(!"call_nif called in micro beam");
+#else
             if (!((FCALLS - 1) > 0 || (FCALLS - 1) > neg_o_reds)) {
                 /* If we have run out of reductions, we do a context
                    switch before calling the nif */
@@ -3583,6 +3585,7 @@ do {						\
 
 	    DTRACE_NIF_RETURN(c_p, (Eterm)I[-3], (Eterm)I[-2], (Uint)I[-1]);
 	    goto apply_bif_or_nif_epilogue;
+#endif /* !MICROBEAM */
 	 
 	OpCase(apply_bif):
 	    /*
@@ -3676,22 +3679,30 @@ do {						\
 
  OpCase(i_get_sd):
     {
+#ifdef MICROBEAM
+     ASSERT(!"proc dict used i micro beam");
+#else
 	Eterm arg;
 	Eterm result;
 
 	GetArg1(0, arg);
 	result = erts_pd_hash_get(c_p, arg);
 	StoreBifResult(1, result);
+#endif
     }
 
  OpCase(i_get_hash_cId):
     {
+#ifdef MICROBEAM
+     ASSERT(!"proc dict used i micro beam");
+#else
 	Eterm arg;
 	Eterm result;
 
 	GetArg1(0, arg);
 	result = erts_pd_hash_get_with_hx(c_p, Arg(1), arg);
 	StoreBifResult(2, result);
+#endif
     }
 
     {
@@ -4701,6 +4712,9 @@ do {						\
      */
 
  OpCase(return_trace): {
+#ifdef MICROBEAM
+     ASSERT(!"return_trace in micro beam");
+#else
      BeamInstr* code = (BeamInstr *) (UWord) E[0];
      
      SWAPOUT;		/* Needed for shared heap */
@@ -4712,9 +4726,13 @@ do {						\
      SET_I((BeamInstr *) cp_val(E[2]));
      E += 3;
      Goto(*I);
+#endif
  }
 
  OpCase(i_generic_breakpoint): {
+#ifdef MICROBEAM
+     ASSERT(!"breakpoint in micro beam");
+#else
      BeamInstr real_I;
      ASSERT(I[-5] == (BeamInstr) BeamOp(op_i_func_info_IaaI));
      HEAVY_SWAPOUT;
@@ -4722,9 +4740,13 @@ do {						\
      HEAVY_SWAPIN;
      ASSERT(VALID_INSTR(real_I));
      Goto(real_I);
+#endif
  }
 
  OpCase(i_return_time_trace): {
+#ifdef MICROBEAM
+     ASSERT(!"return_time_trace in micro beam");
+#else
      BeamInstr *pc = (BeamInstr *) (UWord) E[0];
      SWAPOUT;
      erts_trace_time_return(c_p, pc);
@@ -4733,9 +4755,13 @@ do {						\
      SET_I((BeamInstr *) cp_val(E[1]));
      E += 2;
      Goto(*I);
+#endif
  }
 
  OpCase(i_return_to_trace): {
+#ifdef MICROBEAM
+     ASSERT(!"return_to_trace in micro beam");
+#else
      if (IS_TRACED_FL(c_p, F_TRACE_RETURN_TO)) {
 	 Uint *cpp = (Uint*) E;
 	 for(;;) {
@@ -4757,6 +4783,7 @@ do {						\
      SET_I((BeamInstr *) cp_val(E[0]));
      E += 1;
      Goto(*I);
+#endif
  }
 
  /*
@@ -5014,6 +5041,9 @@ do {						\
  }
 
  OpCase(i_hibernate): {
+#ifdef MICROBEAM
+     ASSERT(!"hibernate in micro beam");
+#else
      HEAVY_SWAPOUT;
      if (erts_hibernate(c_p, r(0), x(1), x(2), reg)) {
 	 FCALLS = c_p->fcalls;
@@ -5024,6 +5054,7 @@ do {						\
 	 I = handle_error(c_p, I, reg, hibernate_3);
 	 goto post_error_handling;
      }
+#endif
  }
 
  /* This is optimised as an instruction because
@@ -5120,10 +5151,12 @@ do {						\
      beam_apply[1]             = (BeamInstr) OpCode(normal_exit);
      beam_exit[0]              = (BeamInstr) OpCode(error_action_code);
      beam_continue_exit[0]     = (BeamInstr) OpCode(continue_exit);
+#ifndef MICROBEAM
      beam_return_to_trace[0]   = (BeamInstr) OpCode(i_return_to_trace);
      beam_return_trace[0]      = (BeamInstr) OpCode(return_trace);
      beam_exception_trace[0]   = (BeamInstr) OpCode(return_trace); /* UGLY */
      beam_return_time_trace[0] = (BeamInstr) OpCode(i_return_time_trace);
+#endif
 
      /*
       * Enter all BIFs into the export table.
@@ -5183,11 +5216,15 @@ translate_gc_bif(void* gcf)
 	return round_1;
     } else if (gcf == erts_gc_trunc_1) {
 	return round_1;
-    } else if (gcf == erts_gc_binary_part_2) {
+    }
+#ifndef MICROBEAM
+    else if (gcf == erts_gc_binary_part_2) {
 	return binary_part_2;
     } else if (gcf == erts_gc_binary_part_3) {
 	return binary_part_3;
-    } else {
+    }
+#endif
+    else {
 	erts_exit(ERTS_ERROR_EXIT, "bad gc bif");
     }
 }
@@ -6064,6 +6101,7 @@ fixed_apply(Process* p, Eterm* reg, Uint arity)
     return ep->addressv[erts_active_code_ix()];
 }
 
+#ifndef MICROBEAM
 int
 erts_hibernate(Process* c_p, Eterm module, Eterm function, Eterm args, Eterm* reg)
 {
@@ -6184,6 +6222,7 @@ erts_hibernate(Process* c_p, Eterm module, Eterm function, Eterm args, Eterm* re
     c_p->flags |= F_HIBERNATE_SCHED; /* Needed also when woken! */
     return 1;
 }
+#endif /* MICROBEAM */
 
 static BeamInstr*
 call_fun(Process* p,		/* Current process. */

@@ -37,6 +37,15 @@
 #include "dist.h"
 #include "erl_version.h"
 
+#ifdef MICROBEAM
+
+#define MICROERROR() ASSERT(!"proc dict used in micro beam")
+BIF_RETTYPE get_1(BIF_ALIST_1) {MICROERROR();}
+BIF_RETTYPE put_2(BIF_ALIST_2) {MICROERROR();}
+BIF_RETTYPE erase_1(BIF_ALIST_1) {MICROERROR();}
+
+#else
+
 /* #define HARDDEBUG */
 
 /*
@@ -1089,3 +1098,4 @@ static int hdebugf(char *format, ...)
 
 #endif /* HARDDEBUG */
 
+#endif /* !MICROBEAM */

@@ -2249,6 +2249,7 @@ do_allocate_logger_message(Eterm gleader, Eterm **hp, ErlOffHeap **ohp,
 static void do_send_logger_message(Eterm *hp, ErlOffHeap *ohp, ErlHeapFragment *bp,
 				   Process *p, Eterm message)
 {
+#ifndef MICROBEAM
 #ifdef HARDDEBUG
     erts_fprintf(stderr, "%T\n", message);
 #endif
@@ -2265,6 +2266,7 @@ static void do_send_logger_message(Eterm *hp, ErlOffHeap *ohp, ErlHeapFragment *
 	mp->data.heap_frag = bp;
 	erts_queue_message(p, 0, mp, message, am_system);
     }
+#endif
 #endif
 }
 

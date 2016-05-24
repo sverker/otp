@@ -61,6 +61,12 @@
 #include <valgrind/memcheck.h>
 #endif
 
+#ifdef MICROBEAM
+BIF_RETTYPE process_info_1(BIF_ALIST_1) {ASSERT(!"process_info/1 in micro beam");}
+BIF_RETTYPE process_info_2(BIF_ALIST_2) {ASSERT(!"process_info/2 in micro beam");}
+#else
+
+
 static Export* alloc_info_trap = NULL;
 static Export* alloc_sizes_trap = NULL;
 static Export* gather_io_bytes_trap = NULL;
@@ -4516,3 +4522,5 @@ erts_bif_info_init(void)
     process_info_init();
     os_info_init();
 }
+
+#endif /* !MICROBEAM */

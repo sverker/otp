@@ -20,6 +20,7 @@
 
 #ifndef ERL_TRACE_H__FLAGS__
 #define ERL_TRACE_H__FLAGS__
+
 /*
  * NOTE! The bits used for these flags matter. The flag with
  * the least significant bit will take precedence!
@@ -67,6 +68,8 @@ typedef struct
 
 extern ErtsTracingEvent erts_send_tracing[];
 extern ErtsTracingEvent erts_receive_tracing[];
+
+#ifndef MICROBEAM
 
 /* erl_bif_trace.c */
 Eterm erl_seq_trace_info(Process *p, Eterm arg1);
@@ -222,5 +225,39 @@ int erts_tracer_nif_clear(void);
 
 #define ERTS_TRACER_FROM_ETERM(termp) \
     ((ErtsTracer*)(termp))
+
+#else /* MICROBEAM */
+
+#define erts_init_trace()
+#define erts_tracer_replace(A, B)
+#define erts_tracer_nif_clear()
+#define erts_get_default_proc_tracing(A, B)
+#define erts_is_default_trace_enabled() (0)
+#define erts_is_tracer_proc_enabled(P, L, A) (0)
+#define erts_trace_exception(P, A, B, C, T)
+#define erts_trace_return_to(P, PC)
+#define erts_trace_return(P, A, B, T)
+#define trace_send(P, A, B)
+#define trace_receive(P, A, B, E)
+#define trace_sched(P, L, A)
+#define trace_proc_spawn(P, A, B, C, D, E)
+#define trace_proc(P, A, B, C, D)
+#define trace_gc(P, A, B, C)
+#define seq_trace_output(token, msg, type, receiver, process)
+#define save_calls(P, E)
+#define monitor_long_schedule_proc(P, IN, OUT, T)
+#define monitor_generic(P, T, S)
+#define monitor_long_gc(P, T)
+#define monitor_large_heap(P)
+#define profile_scheduler(A, B)
+#define profile_runnable_proc(P, S)
+#define seq_trace_update_send(P)
+#define erts_trace_check_exiting(E)
+
+#define ERTS_TRACER_IS_NIL(t1) (1)
+#define ERTS_TRACER_CLEAR(t)
+#define IS_TRACER_VALID(tracer) (1)
+
+#endif /* MICROBEAM */
 
 #endif /* ERL_TRACE_H__ */

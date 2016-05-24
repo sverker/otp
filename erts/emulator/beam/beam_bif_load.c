@@ -37,6 +37,13 @@
 #include "erl_bits.h"
 #include "erl_thr_progress.h"
 
+#ifdef MICROBEAM
+BIF_RETTYPE erts_internal_check_process_code_2(BIF_ALIST_2)
+{
+    ASSERT(!"check_process_code called in micro beam");
+}
+#else
+
 static void set_default_trace_pattern(Eterm module);
 static Eterm check_process_code(Process* rp, Module* modp, Uint flags, int *redsp, int fcalls);
 static void delete_code(Module* modp);
@@ -726,6 +733,7 @@ BIF_RETTYPE finish_after_on_load_2(BIF_ALIST_2)
 static void
 set_default_trace_pattern(Eterm module)
 {
+#ifndef MICROBEAM
     int trace_pattern_is_on;
     Binary *match_spec;
     Binary *meta_match_spec;
@@ -746,6 +754,7 @@ set_default_trace_pattern(Eterm module)
 				      1, trace_pattern_flags,
 				      meta_tracer, 1);
     }
+#endif
 }
 
 static ERTS_INLINE int
@@ -1296,3 +1305,5 @@ beam_make_current_old(Process *c_p, ErtsProcLocks c_p_locks, Eterm module)
     }
     return NIL;
 }
+
+#endif /* !MICROBEAM */

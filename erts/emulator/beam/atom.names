@@ -215,6 +215,12 @@ atom driver
 atom driver_options
 atom dsend
 atom dsend_continue_trap
+atom dt_get_tag
+atom dt_get_tag_data
+atom dt_prepend_vm_tag_data
+atom dt_put_tag
+atom dt_restore_tag
+atom dt_spread_tag
 atom dunlink
 atom duplicate_bag
 atom duplicated
@@ -303,6 +309,7 @@ atom heap_sizes
 atom heap_type
 atom heart_port
 atom heir
+atom hibernate
 atom hidden
 atom hide
 atom high

@@ -1183,6 +1183,7 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
 #endif
 }
 
+#ifndef MICROBEAM
 BIF_RETTYPE hibernate_3(BIF_ALIST_3)
 {
     /*
@@ -1202,6 +1203,7 @@ BIF_RETTYPE hibernate_3(BIF_ALIST_3)
     }
     return THE_NON_VALUE;
 }
+#endif
 
 /**********************************************************************/
 
@@ -2194,6 +2196,7 @@ do_send(Process *p, Eterm to, Eterm msg, Eterm *refp, ErtsSendContext* ctx)
     }
 }
 
+#ifndef MICROBEAM
 HIPE_WRAPPER_BIF_DISABLE_GC(send, 3)
 
 BIF_RETTYPE send_3(BIF_ALIST_3)
@@ -2311,6 +2314,7 @@ done:
     UnUseTmpHeap(sizeof(ErtsSendContext)/sizeof(Eterm), BIF_P);
     return retval;
 }
+#endif /* !MICROBEAM */
 
 HIPE_WRAPPER_BIF_DISABLE_GC(send, 2)
 
@@ -2483,6 +2487,7 @@ BIF_RETTYPE tl_1(BIF_ALIST_1)
 /**********************************************************************/
 /* return the size of an I/O list */
 
+#ifndef MICROBEAM
 static Eterm
 accumulate(Eterm acc, Uint size)
 {
@@ -2625,6 +2630,8 @@ BIF_RETTYPE iolist_size_1(BIF_ALIST_1)
 }
 
 /**********************************************************************/
+#endif /* !MICROBEAM */
+
 
 /* return the N'th element of a tuple */
 
@@ -2689,6 +2696,7 @@ BIF_RETTYPE setelement_3(BIF_ALIST_3)
 
 /**********************************************************************/
 
+#ifndef MICROBEAM
 BIF_RETTYPE make_tuple_2(BIF_ALIST_2)
 {
     Sint n;
@@ -3484,6 +3492,7 @@ BIF_RETTYPE list_to_tuple_1(BIF_ALIST_1)
 }
 
 /**********************************************************************/
+#endif /* !MICROBEAM */
 
 /* return the pid of our own process, in most cases this has been replaced by
    a machine instruction */
@@ -3495,6 +3504,7 @@ BIF_RETTYPE self_0(BIF_ALIST_0)
 
 /**********************************************************************/
 
+#ifndef MICROBBEAM
 /* return the time of day */
 
 BIF_RETTYPE time_0(BIF_ALIST_0)
@@ -3739,6 +3749,7 @@ BIF_RETTYPE now_0(BIF_ALIST_0)
 }
 
 /**********************************************************************/
+#endif /* MICROBEAM */
 
 BIF_RETTYPE garbage_collect_0(BIF_ALIST_0)
 {
@@ -3748,6 +3759,9 @@ BIF_RETTYPE garbage_collect_0(BIF_ALIST_0)
 }
 
 /**********************************************************************/
+
+
+#ifndef MICROBEAM
 /*
  * The erlang:processes/0 BIF.
  */
@@ -3776,7 +3790,7 @@ BIF_RETTYPE throw_1(BIF_ALIST_1)
 }
 
 /**********************************************************************/
-
+#endif /* MICROBEAM */
 
 /* 
  * Non-standard, undocumented, dirty BIF, meant for debugging.
@@ -3788,6 +3802,8 @@ BIF_RETTYPE display_1(BIF_ALIST_1)
     BIF_RET(am_true);
 }
 
+
+#ifndef MICROBEAM
 /*
  * erts_debug:display/1 is for debugging erlang:display/1
  */
@@ -3835,6 +3851,7 @@ BIF_RETTYPE display_nl_0(BIF_ALIST_0)
 }
 
 /**********************************************************************/
+#endif /* !MICROBEAM */
 
 /* stop the system */
 /* ARGSUSED */
@@ -3846,6 +3863,8 @@ BIF_RETTYPE halt_0(BIF_ALIST_0)
 }
 
 /**********************************************************************/
+
+#ifndef MICROBEAM
 
 #define HALT_MSG_SIZE	200
 static char halt_msg[HALT_MSG_SIZE];
@@ -4751,6 +4770,10 @@ BIF_RETTYPE erts_internal_cmp_term_2(BIF_ALIST_2) {
     }
     BIF_RET(make_small(0));
 }
+
+#endif /* !MICROBEAM */
+
+
 /*
  * Processes doing yield on return in a bif ends up in bif_return_trap().
  */
@@ -4973,6 +4996,8 @@ BIF_RETTYPE send_to_logger_2(BIF_ALIST_2)
 }
 #endif /* HARDDEBUG */
 
+#ifndef MICROBEAM
+
 BIF_RETTYPE get_module_info_1(BIF_ALIST_1)
 {
     Eterm ret = erts_module_info_0(BIF_P, BIF_ARG_1);
@@ -5182,4 +5207,4 @@ BIF_RETTYPE dt_restore_tag_1(BIF_ALIST_1)
     BIF_RET(am_true);
 }
 
-
+#endif /* MICROBEAM */

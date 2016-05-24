@@ -62,6 +62,11 @@
 #include <limits.h>
 #include <stddef.h> /* offsetof */
 
+#ifdef MICROBEAM
+BIF_RETTYPE load_nif_2(BIF_ALIST_2) {ASSERT(!"load_nif in micro beam");}
+#else
+
+
 
 /* Information about a loaded nif library.
  * Each successful call to erlang:load_nif will allocate an instance of
@@ -4655,3 +4660,4 @@ ERL_NIF_TERM erl_nif_user_trace_n(ErlNifEnv* env, int argc,
 }
 
 #endif /* HAVE_USE_DTRACE */
+#endif /* MICROBEAM */
