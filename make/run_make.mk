@@ -31,7 +31,7 @@ include $(ERL_TOP)/make/target.mk
 
 .PHONY: valgrind
 
-opt debug purify quantify purecov valgrind gcov gprof lcnt frmptr icount:
+opt debug purify quantify purecov valgrind gcov gprof lcnt frmptr icount micro:
 	$(make_verbose)$(MAKE) -f $(TARGET)/Makefile TYPE=$@
 
 plain smp frag smp_frag:

@@ -129,11 +129,19 @@ TYPEMARKER = .icount
 TYPE_FLAGS = @CFLAGS@ -DERTS_OPCODE_COUNTER_SUPPORT
 else
 
+ifeq ($(TYPE),micro)
+PURIFY =
+TYPEMARKER = .micro
+TYPE_FLAGS = $(DEBUG_CFLAGS) -DDEBUG
+ENABLE_ALLOC_TYPE_VARS += micro
+else
+
 # If type isn't one of the above, it *is* opt type...
 override TYPE=opt
 PURIFY =
 TYPEMARKER =
 TYPE_FLAGS = @CFLAGS@
+endif
 endif
 endif
 endif

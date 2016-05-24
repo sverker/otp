@@ -249,6 +249,11 @@ while [ $# -gt 0 ]; do
 	    TYPE=.valgrind
 	    run_valgrind=yes
 	    ;;
+	"-micro")
+	    shift
+	    cargs="$cargs -micro"
+	    TYPE=.micro
+	    ;;
 	*)
 	    break
 	    ;;
