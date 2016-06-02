@@ -30,7 +30,8 @@
 
 %% internal exports
 
--export([accept_loop/3,do_accept/7,do_setup/7,getstat/1,tick/2,setopts/2]).
+-export([accept_loop/3,do_accept/7,do_setup/7,getstat/1,tick/2,
+	 setopts/2, getopts/2]).
 
 -import(error_logger,[error_msg/2]).
 
@@ -217,7 +218,8 @@ do_accept(Driver, Kernel, AcceptPid, Socket, MyNode, Allowed, SetupTime) ->
 		      f_address = fun(S, Node) -> get_remote_id(Driver, S, Node) end,
 		      mf_tick = fun(S) -> ?MODULE:tick(Driver, S) end,
 		      mf_getstat = fun ?MODULE:getstat/1,
-		      mf_setopts = fun ?MODULE:setopts/2
+		      mf_setopts = fun ?MODULE:setopts/2,
+		      mf_getopts = fun ?MODULE:getopts/2
 		     },
 		    dist_util:handshake_other_started(HSData);
 		{false,IP} ->
@@ -334,6 +336,7 @@ do_setup(Driver, Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
 			      mf_tick = fun(S) -> ?MODULE:tick(Driver, S) end,
 			      mf_getstat = fun ?MODULE:getstat/1,
 			      mf_setopts = fun ?MODULE:setopts/2,
+			      mf_getopts = fun ?MODULE:getopts/2,
 
 			      request_type = Type
 			     },
@@ -502,3 +505,6 @@ setopts(S, Opts) ->
 	[] -> inet:setopts(S,Opts);
 	Opts1 -> {error, {badopts,Opts1}}
     end.
+
+getopts(S, Opts) ->
+    inet:getopts(S, Opts).

@@ -75,6 +75,7 @@
 	                     %% a given socket. This is a {M,F}, 
 	                     %% returning {error, Reason on failure}
 	  mf_setopts,        %% netkernel:setopts on active connection
+	  mf_getopts,        %% netkernel:getopts on active connection
 
 	  request_type = normal
 }).

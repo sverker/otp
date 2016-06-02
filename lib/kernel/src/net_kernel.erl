@@ -60,6 +60,7 @@
 	 monitor_nodes/1,
 	 monitor_nodes/2,
 	 setopts/2,
+	 getopts/2,
 	 start/1,
 	 stop/0]).
 
@@ -589,6 +590,27 @@ handle_call({setopts, Node, Opts}, From, State) ->
 		Owner ! {self(), setopts, Opts},
 		receive
 		    {Owner, setopts, Ret} ->
+			monitor_node(Node, false),
+			Ret;
+		    {nodedown, Node} ->
+			{error, bad_node}
+		end;
+
+	    _ ->
+		{error, bad_node}
+    end,
+    async_reply({reply, Return, State}, From);
+
+handle_call({getopts, Node, Opts}, From, State) ->
+    Return =
+	case ets:lookup(sys_dist, Node) of
+	    [Conn] when Conn#connection.state =:= up;
+			Conn#connection.state =:= pending ->
+		monitor_node(Node, true),
+		Owner = Conn#connection.owner,
+		Owner ! {self(), getopts, Opts},
+		receive
+		    {Owner, getopts, Ret} ->
 			monitor_node(Node, false),
 			Ret;
 		    {nodedown, Node} ->
@@ -1665,3 +1687,7 @@ merge_opts([H|T], B0) ->
     {Key, _} = H,
     B1 = lists:filter(fun({K,_}) -> K =/= Key end, B0),
     merge_opts(T, [H | B1]).
+
+getopts(Node, Opts) when is_atom(Node) ->
+    request({getopts, Node, Opts}).
+
