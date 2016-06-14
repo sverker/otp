@@ -30,7 +30,7 @@
 
 %% internal exports
 
--export([accept_loop/3,do_accept/7,do_setup/7,getstat/1]).
+-export([accept_loop/3,do_accept/7,do_setup/7,getstat/1,tick/2,setopts/2]).
 
 -import(error_logger,[error_msg/2]).
 
@@ -215,8 +215,9 @@ do_accept(Driver, Kernel, AcceptPid, Socket, MyNode, Allowed, SetupTime) ->
 					inet:getll(S)
 				end,
 		      f_address = fun(S, Node) -> get_remote_id(Driver, S, Node) end,
-		      mf_tick = fun(S) -> tick(Driver, S) end,
-		      mf_getstat = fun ?MODULE:getstat/1
+		      mf_tick = fun(S) -> ?MODULE:tick(Driver, S) end,
+		      mf_getstat = fun ?MODULE:getstat/1,
+		      mf_setopts = fun ?MODULE:setopts/2
 		     },
 		    dist_util:handshake_other_started(HSData);
 		{false,IP} ->
@@ -320,6 +321,7 @@ do_setup(Driver, Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
 					  {packet, 4},
 					  nodelay()])
 			      end,
+
 			      f_getll = fun inet:getll/1,
 			      f_address = 
 			      fun(_,_) ->
@@ -329,8 +331,10 @@ do_setup(Driver, Kernel, Node, Type, MyNode, LongOrShortNames, SetupTime) ->
 				   protocol = tcp,
 				   family = AddressFamily}
 			      end,
-			      mf_tick = fun(S) -> tick(Driver, S) end,
+			      mf_tick = fun(S) -> ?MODULE:tick(Driver, S) end,
 			      mf_getstat = fun ?MODULE:getstat/1,
+			      mf_setopts = fun ?MODULE:setopts/2,
+
 			      request_type = Type
 			     },
 			    dist_util:handshake_we_started(HSData);
@@ -492,3 +496,9 @@ split_stat([], R, W, P) ->
     {ok, R, W, P}.
 
 
+setopts(S, Opts) ->
+    case [Opt || {K,_}=Opt <- Opts,
+		 K =:= active orelse K =:= deliver orelse K =:= packet] of
+	[] -> inet:setopts(S,Opts);
+	Opts1 -> {error, {badopts,Opts1}}
+    end.

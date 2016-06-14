@@ -59,6 +59,7 @@
 	 connect_node/1,
 	 monitor_nodes/1,
 	 monitor_nodes/2,
+	 setopts/2,
 	 start/1,
 	 stop/0]).
 
@@ -111,7 +112,7 @@
 	 }).
 
 -record(listen, {
-		 listen,     %% listen pid
+		 listen,     %% listen socket
 		 accept,     %% accepting pid
 		 address,    %% #net_address
 		 module      %% proto module
@@ -553,6 +554,51 @@ handle_call({new_ticktime,_T,_TP},
 	    From,
 	    #state{tick = #tick_change{time = T}} = State) ->
     async_reply({reply, {ongoing_change_to, T}, State}, From);
+
+handle_call({setopts, new, Opts}, From, State) ->
+    ConnectOpts = case application:get_env(kernel, inet_dist_connect_options) of
+		      {ok, CO} -> CO;
+		      _ -> []
+		  end,
+    application:set_env(kernel, inet_dist_connect_options,
+			merge_opts(Opts,ConnectOpts)),
+    ListenOpts = case application:get_env(kernel, inet_dist_listen_options) of
+		      {ok, LO} -> LO;
+		      _ -> []
+		  end,
+    application:set_env(kernel, inet_dist_listen_options,
+			merge_opts(Opts, ListenOpts)),
+    case lists:keyfind(nodelay, 1, Opts) of
+	{nodelay, ND} when is_boolean(ND) ->
+	    application:set_env(kernel, dist_nodelay, ND);
+	_ -> ignore
+    end,
+    lists:foreach(
+      fun(#listen {listen = LSocket, module = Mod}) ->
+	      Mod:setopts(LSocket, Opts)
+      end, State#state.listen),
+    async_reply({reply, ok, State}, From);
+
+handle_call({setopts, Node, Opts}, From, State) ->
+    Return =
+	case ets:lookup(sys_dist, Node) of
+	    [Conn] when Conn#connection.state =:= up;
+			Conn#connection.state =:= pending ->
+		monitor_node(Node, true),
+		Owner = Conn#connection.owner,
+		Owner ! {self(), setopts, Opts},
+		receive
+		    {Owner, setopts, Ret} ->
+			monitor_node(Node, false),
+			Ret;
+		    {nodedown, Node} ->
+			{error, bad_node}
+		end;
+
+	    _ ->
+		{error, bad_node}
+    end,
+    async_reply({reply, Return, State}, From);
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
@@ -1608,3 +1654,14 @@ async_gen_server_reply(From, Msg) ->
         {'EXIT', _} ->
             ok
     end.
+
+
+setopts(Node, Opts) when is_atom(Node) ->
+    request({setopts, Node, Opts}).
+
+merge_opts([], B) ->
+    B;
+merge_opts([H|T], B0) ->
+    {Key, _} = H,
+    B1 = lists:filter(fun({K,_}) -> K =/= Key end, B0),
+    merge_opts(T, [H | B1]).
