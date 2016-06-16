@@ -2498,21 +2498,36 @@ rename_unnamed_do(Opts) ->
 %% Rename a table with many fixations, and at the same time delete it.
 evil_rename(Config) when is_list(Config) ->
     EtsMem = etsmem(),
+    process_flag(trap_exit, true),
     evil_rename_1(old_hash, new_hash, [public,named_table]),
     evil_rename_1(old_tree, new_tree, [public,ordered_set,named_table]),
     wait_for_test_procs(true),
+    process_flag(trap_exit, false),
+    flush(),
     verify_etsmem(EtsMem).
 
 evil_rename_1(Old, New, Flags) ->
-    process_flag(trap_exit, true),
     Old = ets_new(Old, Flags),
     Fixer = fun() -> ets:safe_fixtable(Old, true) end,
-    crazy_fixtable(15000, Fixer),
+    Pids = crazy_fixtable(15000, Fixer),
     erlang:yield(),
     New = ets:rename(Old, New),
     erlang:yield(),
     ets:delete(New),
+    lists:foreach(fun(P) -> unlink(P), exit(P, kill) end, Pids),
+    flush(),
     ok.
+
+flush() ->
+    receive
+	{'EXIT',_,normal} ->
+	    flush();
+	Msg ->
+	    io:format("flush got: ~p\n", [Msg]),
+	    flush()
+    after 0 ->
+	    ok
+    end.
 
 crazy_fixtable(N, Fixer) ->
     Dracula = ets_new(count_dracula, [public]),
@@ -2524,9 +2539,9 @@ crazy_fixtable(N, Fixer) ->
 			   _ -> erlang:hibernate(erlang, error, [dont_wake_me])
 		       end
 	       end,
-    crazy_fixtable_1(N, SpawnFun),
+    Pids = crazy_fixtable_1(N, SpawnFun, []),
     crazy_fixtable_wait(N, Dracula),
-    Dracula.
+    Pids.
 
 crazy_fixtable_wait(N, Dracula) ->
     case ets:lookup(Dracula, count) of
@@ -2538,12 +2553,12 @@ crazy_fixtable_wait(N, Dracula) ->
 	    crazy_fixtable_wait(N, Dracula)
     end.
 
-crazy_fixtable_1(0, _) ->
-    ok;
-crazy_fixtable_1(N, Fun) ->
+crazy_fixtable_1(0, _, Pids) ->
+    Pids;
+crazy_fixtable_1(N, Fun, Pids) ->
     %%FIXME my_spawn_link(Fun),
-    my_spawn_link(Fun),
-    crazy_fixtable_1(N-1, Fun).
+    P = my_spawn_link(Fun),
+    crazy_fixtable_1(N-1, Fun, [P | Pids]).
 
 evil_creater_destroyer() ->
     T1 = evil_create_fixed_tab(),
@@ -5708,6 +5723,9 @@ etsmem() ->
     {Mem,AllTabs}.
 
 verify_etsmem({MemInfo,AllTabs}) ->
+    verify_etsmem({MemInfo,AllTabs}, 3, ok).
+
+verify_etsmem({MemInfo,AllTabs}, N, Ret) ->
     wait_for_test_procs(),
     case etsmem() of
 	{MemInfo,_} ->
@@ -5717,7 +5735,7 @@ verify_etsmem({MemInfo,AllTabs}) ->
 		    %% Use 'erl +Mea max' to do more complete memory leak testing.
 		    {comment,"Incomplete or no mem leak testing"};
 		_ ->
-		    ok
+		    Ret
 	    end;
 	{MemInfo2, AllTabs2} ->
 	    io:format("Expected: ~p", [MemInfo]),
@@ -5725,7 +5743,13 @@ verify_etsmem({MemInfo,AllTabs}) ->
 	    io:format("Changed tables before: ~p\n",[AllTabs -- AllTabs2]),
 	    io:format("Changed tables after: ~p\n", [AllTabs2 -- AllTabs]),
 	    ets_test_spawn_logger ! {failed_memcheck, get('__ETS_TEST_CASE__')},
-	    {comment, "Failed memory check"}
+	    case N of
+		0 ->
+		    {comment, "Failed memory check"};
+		_ ->
+		    receive after 1000 -> ok end,
+		    verify_etsmem({MemInfo,AllTabs}, N-1, {comment, "Temp mem fail"})
+	    end
     end.
 
 
