@@ -63,7 +63,7 @@
 	  f_getll,               %% Get low level port or pid.
 	  f_address,         %% The address of the "socket", 
 	                     %% generated from Socket,Node
-	  %% These two are used in the tick loop,
+	  %% These three are used in the tick loop,
 	  %% so they are not fun's to avoid holding old code.
 	  mf_tick,           %% Takes the socket as parameters and
 	                     %% sends a tick, this is no fun, it
@@ -74,6 +74,9 @@
 			     %% {ok, RecvCnt, SendCnt, SendPend} for
 	                     %% a given socket. This is a {M,F}, 
 	                     %% returning {error, Reason on failure}
+	  mf_setopts,        %% netkernel:setopts on active connection
+	  mf_getopts,        %% netkernel:getopts on active connection
+
 	  request_type = normal
 }).
 	  
