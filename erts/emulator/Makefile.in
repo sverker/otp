@@ -675,6 +675,9 @@ $(OBJDIR)/beam_emu.o: beam/beam_emu.c
 	$(V_EMU_CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
 endif
 
+$(OBJDIR)/erl_gc.o: beam/erl_gc.c
+	$(V_CC) $(subst -O2, -O0, $(CFLAGS)) $(INCLUDES) -c $< -o $@
+
 $(OBJDIR)/%.o: beam/%.c
 	$(V_CC) $(subst -O2, $(GEN_OPT_FLGS), $(CFLAGS)) $(INCLUDES) -c $< -o $@
 
