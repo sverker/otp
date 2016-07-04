@@ -43,6 +43,15 @@
 #include "erl_bif_unique.h"
 #include "dist.h"
 
+ErlHeapFragment* mbuf_saved;
+Uint mbuf_sz_saved;
+Uint msg_on_heap_saved;
+Uint heap_size_saved;
+ErtsMessage* msg_frag_saved;
+ErlHeapFragment* live_hf_end_saved;
+Eterm* abandoned_heap_saved;
+
+
 #define ERTS_INACT_WR_PB_LEAVE_MUCH_LIMIT 1
 #define ERTS_INACT_WR_PB_LEAVE_MUCH_PERCENTAGE 20
 #define ERTS_INACT_WR_PB_LEAVE_LIMIT 10
@@ -524,17 +533,17 @@ delay_garbage_collection(Process *p, ErlHeapFragment *live_hf_end, int need, int
 static ERTS_FORCE_INLINE Uint
 young_gen_usage(Process *p)
 {
-    Uint hsz;
+    Uint hsz = 0;
+    Uint msg_sz = 0;
     Eterm *aheap;
-
-    hsz = p->mbuf_sz;
 
     if (p->flags & F_ON_HEAP_MSGQ) {
 	ErtsMessage *mp;
 	for (mp = p->msg.first; mp; mp = mp->next)
 	    if (mp->data.attached)
-		hsz += erts_msg_attached_data_size(mp);
+		msg_sz += erts_msg_attached_data_size(mp);
     }
+    msg_on_heap_saved = msg_sz;
 
     aheap = p->abandoned_heap;
     if (!aheap)
@@ -548,6 +557,10 @@ young_gen_usage(Process *p)
 	/* Remove unused part in latest fragment */
 	hsz -= p->hend - p->htop;
     }
+    heap_size_saved = hsz;
+
+    hsz += p->mbuf_sz + msg_sz;
+
     return hsz;
 }
 
@@ -1132,16 +1145,11 @@ minor_collection(Process* p, ErlHeapFragment *live_hf_end,
         do_minor(p, live_hf_end, (char *) mature, mature_size*sizeof(Eterm),
 		 new_sz, objv, nobj);
 
-	if (p->flags & F_ON_HEAP_MSGQ)
-	    move_msgq_to_heap(p);
-
 	new_mature = p->old_htop - prev_old_htop;
 
 	size_after = new_mature;
         size_after += HEAP_TOP(p) - HEAP_START(p) + p->mbuf_sz;
         *recl += (size_before - size_after);
-
-	ErtsGcQuickSanityCheck(p);
 
         GEN_GCS(p)++;
         need_after = ((HEAP_TOP(p) - HEAP_START(p))
@@ -1277,6 +1285,12 @@ do_minor(Process *p, ErlHeapFragment *live_hf_end,
     Eterm* n_heap;
     char* oh = (char *) OLD_HEAP(p);
     Uint oh_size = (char *) OLD_HTOP(p) - oh;
+
+    mbuf_saved = p->mbuf;
+    mbuf_sz_saved = p->mbuf_sz;
+    msg_frag_saved = p->msg_frag;
+    live_hf_end_saved = p->live_hf_end;
+    abandoned_heap_saved = p->abandoned_heap;
 
     VERBOSE(DEBUG_SHCOPY, ("[pid=%T] MINOR GC: %p %p %p %p\n", p->common.id,
                            HEAP_START(p), HEAP_END(p), OLD_HEAP(p), OLD_HEND(p)));
@@ -1479,7 +1493,25 @@ do_minor(Process *p, ErlHeapFragment *live_hf_end,
 #ifdef HARDDEBUG
     disallow_heap_frag_ref_in_heap(p);
 #endif
-    remove_message_buffers(p);
+
+    ErtsGcQuickSanityCheck(p);
+
+    //remove_message_buffers(p);
+    MBUF(p) = NULL;
+    p->msg_frag = NULL;
+    MBUF_SIZE(p) = 0;
+
+    if (p->flags & F_ON_HEAP_MSGQ)
+        move_msgq_to_heap(p);
+
+    ErtsGcQuickSanityCheck(p);
+
+    if (mbuf_saved != NULL) {
+        free_message_buffer(mbuf_saved);
+    }
+    if (msg_frag_saved) {
+        erts_cleanup_messages(msg_frag_saved);
+    }
 }
 
 /*
