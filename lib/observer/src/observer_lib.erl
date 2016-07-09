@@ -128,8 +128,8 @@ display_info(Frame, Info) ->
     Add = fun(BoxInfo) ->
 		  case create_box(Panel, BoxInfo) of
 		      {Box, InfoFs} ->
-			  wxSizer:add(Sizer, Box, [{flag, ?wxEXPAND bor ?wxALL},
-						   {border, 5}]),
+			  wxSizer:add(Sizer, Box,
+				      [{flag, ?wxEXPAND bor ?wxALL}, {border, 5}]),
 			  wxSizer:addSpacer(Sizer, 5),
 			  InfoFs;
 		      undefined ->
@@ -432,12 +432,12 @@ create_box(Panel, {scroll_boxes,Data}) ->
     {OuterBox, Boxes};
 
 create_box(Parent, Data) ->
-    {Title, Align, Info} = get_box_info(Data),
+    {Title, _Align, Info} = get_box_info(Data),
     Top = wxStaticBoxSizer:new(?wxVERTICAL, Parent, [{label, Title}]),
     Panel = wxPanel:new(Parent),
     Box = wxBoxSizer:new(?wxVERTICAL),
-    LeftSize = get_max_width(Panel,Info),
-    RightProportion = [{flag, Align bor ?wxEXPAND}],
+    LeftSize = 30 + get_max_width(Panel,Info),
+    RightProportion = [{flag, ?wxEXPAND}],
     AddRow = fun({Desc0, Value0}) ->
 		     Desc = Desc0++":",
 		     Line = wxBoxSizer:new(?wxHORIZONTAL),
@@ -453,14 +453,19 @@ create_box(Parent, Data) ->
 				 link_entry(Panel,Value);
 			     _ ->
 				 Value = to_str(Value0),
-				 TCtrl = wxStaticText:new(Panel, ?wxID_ANY,Value),
-				 length(Value) > 50 andalso
-				     wxWindow:setToolTip(TCtrl,wxToolTip:new(Value)),
-				 TCtrl
+				 case length(Value) > 100 of
+				     true ->
+					 Shown = lists:sublist(Value, 80),
+					 TCtrl = wxStaticText:new(Panel, ?wxID_ANY, [Shown,"..."]),
+					 wxWindow:setToolTip(TCtrl,wxToolTip:new(Value)),
+					 TCtrl;
+				     false ->
+					 wxStaticText:new(Panel, ?wxID_ANY, Value)
+				 end
 			 end,
 		     wxSizer:add(Line, 10, 0), % space of size 10 horisontally
 		     wxSizer:add(Line, Field, RightProportion),
-		     wxSizer:add(Box, Line, [{proportion,1},{flag,?wxEXPAND}]),
+		     wxSizer:add(Box, Line, [{proportion,1}]),
 		     Field;
 		(undefined) ->
 		     undefined

@@ -2833,7 +2833,8 @@ BIF_RETTYPE ets_match_spec_run_r_3(BIF_ALIST_3)
 	    BIF_TRAP3(bif_export[BIF_ets_match_spec_run_r_3],
 		      BIF_P,lst,BIF_ARG_2,ret);
 	}
-	res = db_prog_match(BIF_P, mp, CAR(list_val(lst)), NULL, 0,
+	res = db_prog_match(BIF_P, BIF_P,
+                            mp, CAR(list_val(lst)), NULL, 0,
 			    ERTS_PAM_COPY_RESULT, &dummy);
 	if (is_value(res)) {
 	    hp = HAlloc(BIF_P, 2);
@@ -3461,7 +3462,7 @@ static void fix_table_locked(Process* p, DbTable* tb)
     fix = tb->common.fixations;
     if (fix == NULL) {
 	tb->common.time.monotonic
-	    = erts_get_monotonic_time(ERTS_PROC_GET_SCHDATA(p));
+	    = erts_get_monotonic_time(erts_proc_sched_data(p));
 	tb->common.time.offset = erts_get_time_offset();
     }
     else {

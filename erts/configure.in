@@ -62,9 +62,6 @@ if test x"${ERL_TOP}/erts" != x"$srcdir"; then
 fi
 erl_top=${ERL_TOP}
 
-# Remove old configuration information
-/bin/rm -f "$ERL_TOP/erts/CONF_INFO"
-
 # echo XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # echo X
 # echo "X srcdir  = $srcdir"
@@ -102,7 +99,7 @@ ERL_XCOMP_SYSROOT_INIT
 
 AC_ISC_POSIX
 
-AC_CONFIG_HEADER($host/config.h:config.h.in include/internal/$host/ethread_header_config.h:include/internal/ethread_header_config.h.in include/$host/erl_int_sizes_config.h:include/erl_int_sizes_config.h.in include/$host/erl_native_features_config.h:include/erl_native_features_config.h.in)
+AC_CONFIG_HEADER($host/config.h:config.h.in include/internal/$host/ethread_header_config.h:include/internal/ethread_header_config.h.in include/$host/erl_int_sizes_config.h:include/erl_int_sizes_config.h.in)
 dnl ----------------------------------------------------------------------
 dnl Optional features.
 dnl ----------------------------------------------------------------------
@@ -140,7 +137,7 @@ AS_HELP_STRING([--enable-dirty-schedulers], [enable dirty scheduler support]),
 [ case "$enableval" in
     no) enable_dirty_schedulers=no ;;
     *)  enable_dirty_schedulers=yes ;;
-  esac ], enable_dirty_schedulers=no)
+  esac ], enable_dirty_schedulers=default)
 
 AC_ARG_ENABLE(smp-support,
 AS_HELP_STRING([--enable-smp-support], [enable smp support])
@@ -729,8 +726,27 @@ esac
 	
 AC_SUBST(LIBCARBON)
 
-dnl Check if we should/can build a sharing-preserving emulator
+_search_path=/bin:/usr/bin:/usr/local/bin:$PATH
 
+AC_PATH_PROG(RM, rm, false, $_search_path)
+if test "$ac_cv_path_RM" = false; then
+  AC_MSG_ERROR([No 'rm' command found])
+fi
+
+AC_PATH_PROG(MKDIR, mkdir, false, $_search_path)
+if test "$ac_cv_path_MKDIR" = false; then
+  AC_MSG_ERROR([No 'mkdir' command found])
+fi
+
+_search_path=
+
+
+# Remove old configuration information.
+# Next line should be placed after AC_PATH_PROG(RM, ...), but before
+# first output to CONN_INFO. So this is just the right place.
+$RM -f "$ERL_TOP/erts/CONF_INFO"
+
+dnl Check if we should/can build a sharing-preserving emulator
 AC_MSG_CHECKING(if we are building a sharing-preserving emulator)
 if test "$enable_sharing_preserving" = "yes"; then
         AC_DEFINE(SHCOPY, [1],
@@ -760,27 +776,13 @@ if test "$ac_cv_prog_AR" = false; then
   AC_MSG_ERROR([No 'ar' command found in PATH])
 fi
 
-_search_path=/bin:/usr/bin:/usr/local/bin:$PATH
-
-AC_PATH_PROG(RM, rm, false, $_search_path)
-if test "$ac_cv_path_RM" = false; then
-  AC_MSG_ERROR([No 'rm' command found])
-fi
-
-AC_PATH_PROG(MKDIR, mkdir, false, $_search_path)
-if test "$ac_cv_path_MKDIR" = false; then
-  AC_MSG_ERROR([No 'mkdir' command found])
-fi
-
-_search_path=
-
 #
 # Get programs needed for building the documentation 
 #
 
 ## Delete previous failed configure results
 if test -f doc/CONF_INFO; then
-   rm doc/CONF_INFO
+   $RM doc/CONF_INFO
 fi
 
 AC_CHECK_PROGS(XSLTPROC, xsltproc)
@@ -1004,6 +1006,23 @@ case $ERTS_BUILD_SMP_EMU in
 	;;
 esac
 
+AC_MSG_CHECKING(whether dirty schedulers should be enabled)
+case $ERTS_BUILD_SMP_EMU-$enable_dirty_schedulers in
+     yes-yes)
+	DIRTY_SCHEDULER_SUPPORT=yes;;
+     yes-default)
+	## Maybe yes for OTP 19...
+	DIRTY_SCHEDULER_SUPPORT=no;;
+     no-default)
+	DIRTY_SCHEDULER_SUPPORT=no;;
+     no-yes)
+	AC_MSG_ERROR([No smp emulator will be built, but dirty schedulers requested]);;
+     *)
+	DIRTY_SCHEDULER_SUPPORT=no;;
+esac
+AC_MSG_RESULT($DIRTY_SCHEDULER_SUPPORT)
+AC_SUBST(DIRTY_SCHEDULER_SUPPORT)
+
 if test $ERTS_BUILD_SMP_EMU = yes; then
 
 	if test $found_threads = no; then
@@ -1206,14 +1225,6 @@ esac
 if test $emu_threads != yes; then
 	enable_lock_check=no
 	enable_lock_count=no
-        AC_MSG_CHECKING(whether dirty schedulers should be enabled)
-	if test "x$enable_dirty_schedulers" != "xno"; then
-	    AC_DEFINE(ERL_NIF_DIRTY_SCHEDULER_SUPPORT, 1, [Dirty scheduler support])
-	    AC_DEFINE(ERL_DRV_DIRTY_SCHEDULER_SUPPORT, 1, [Dirty scheduler support])
-	    AC_MSG_RESULT(yes)
-	else
-	    AC_MSG_RESULT(no)
-	fi
 else
 	# Threads enabled for emulator
 	EMU_THR_LIB_NAME=$ETHR_LIB_NAME
@@ -1231,17 +1242,6 @@ else
 	AC_MSG_RESULT($enable_lock_count)
 	if test "x$enable_lock_count" != "xno"; then
 	    EMU_THR_DEFS="$EMU_THR_DEFS -DERTS_ENABLE_LOCK_COUNT"
-	fi
-
-        AC_MSG_CHECKING(whether dirty schedulers should be enabled)
-	if test "x$enable_dirty_schedulers" != "xno"; then
-	    EMU_THR_DEFS="$EMU_THR_DEFS -DERTS_DIRTY_SCHEDULERS"
-	    AC_DEFINE(ERTS_DIRTY_SCHEDULERS, 1, [Define if the emulator supports dirty schedulers])
-	    AC_DEFINE(ERL_NIF_DIRTY_SCHEDULER_SUPPORT, 1, [Dirty scheduler support])
-	    AC_DEFINE(ERL_DRV_DIRTY_SCHEDULER_SUPPORT, 1, [Dirty scheduler support])
-	    AC_MSG_RESULT(yes)
-	else
-	    AC_MSG_RESULT(no)
 	fi
 
 	case $host_os in
@@ -2116,7 +2116,7 @@ fi
 dnl Need by run_erl.
 AC_CHECK_FUNCS([openpty])
 
-AC_CHECK_HEADERS(net/if_dl.h ifaddrs.h netpacket/packet.h)
+AC_CHECK_HEADERS(net/if_dl.h ifaddrs.h netpacket/packet.h sys/un.h)
 AC_CHECK_FUNCS([getifaddrs])
 
 dnl Checks for variables in6addr_any and in6addr_loopback,
@@ -3823,7 +3823,7 @@ if test "$enable_dtrace_test" = "yes" ; then
 		    [$RM -f $DTRACE_2STEP_TEST
 		     dtrace -G $DTRACE_CPP $DTRACE_BITS_FLAG -Iemulator/beam -o $DTRACE_2STEP_TEST -s emulator/beam/erlang_dtrace.d conftest.$OBJEXT 2>&AS_MESSAGE_LOG_FD
                      if test -f $DTRACE_2STEP_TEST; then
-			rm $DTRACE_2STEP_TEST
+			$RM $DTRACE_2STEP_TEST
                         DTRACE_ENABLED_2STEP=yes
 		     fi],
                     [])
@@ -3858,17 +3858,17 @@ if test "$enable_lttng_test" = "yes" ; then
     AC_COMPILE_IFELSE(
         [AC_LANG_PROGRAM(
             [#include <lttng/tracepoint.h>
-             #define TRACEPOINT_PROVIDER com_ericsson_otp
+             #define TRACEPOINT_PROVIDER org_erlang_otp
              TRACEPOINT_EVENT(
-                 com_ericsson_otp,
+                 org_erlang_otp,
                  dummy,
                  TP_ARGS(int, my_int),
                  TP_FIELDS(ctf_integer(int, my_int, my_int)))
              #define TRACEPOINT_CREATE_PROBES
              #define TRACEPOINT_DEFINE],
-            [if(tracepoint_enabled(com_ericsson_otp,dummy)) do {} while(0)])],
+            [if(tracepoint_enabled(org_erlang_otp,dummy)) do {} while(0)])],
         [AC_MSG_RESULT([yes])],
-        [AC_MSG_ERROR([no (must be present)])])
+        [AC_MSG_ERROR([no (available in lttng-ust v2.7)])])
     if test "x$ac_cv_header_lttng_tracepoint_h" = "xyes" \
         -a "x$ac_cv_header_lttng_tracepoint_event_h" = "xyes"; then
         # No straight forward way to test for liblttng-ust when no public symbol exists,
@@ -4030,7 +4030,7 @@ ssl_done=yes # Default only one run
 
 # Remove all SKIP files from previous runs
 for a in ssl crypto ssh; do
-  /bin/rm -f $ERL_TOP/lib/$a/SKIP
+  $RM -f $ERL_TOP/lib/$a/SKIP
 done
 
 SSL_DYNAMIC_ONLY=$enable_dynamic_ssl
@@ -4627,7 +4627,7 @@ need_java="jinterface ic/java_src"
 
 # Remove all SKIP files from previous runs
 for a in $need_java ; do
-  /bin/rm -f $ERL_TOP/lib/$a/SKIP
+  $RM -f $ERL_TOP/lib/$a/SKIP
 done
 
 if test "X$with_javac" = "Xno"; then
@@ -4678,7 +4678,7 @@ dnl this deliberately does not believe that 'gcc' is a C++ compiler
 AC_CHECK_TOOLS(CXX, [$CCC c++ g++ CC cxx cc++ cl], false)
 
 # Remove SKIP file from previous run
-/bin/rm -f $ERL_TOP/lib/orber/SKIP
+$RM -f $ERL_TOP/lib/orber/SKIP
 
 if test "$CXX" = false; then
   echo "No C++ compiler found" > $ERL_TOP/lib/orber/SKIP

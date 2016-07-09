@@ -56,6 +56,15 @@
 
 struct binary;
 
+typedef struct
+{
+    int on;
+    struct binary* match_spec;
+} ErtsTracingEvent;
+
+extern ErtsTracingEvent erts_send_tracing[];
+extern ErtsTracingEvent erts_receive_tracing[];
+
 /* erl_bif_trace.c */
 Eterm erl_seq_trace_info(Process *p, Eterm arg1);
 void erts_system_monitor_clear(Process *c_p);
@@ -91,7 +100,7 @@ void erts_send_sys_msg_proc(Eterm, Eterm, Eterm, ErlHeapFragment *);
 #endif
 
 void trace_send(Process*, Eterm, Eterm);
-void trace_receive(Process *, Eterm);
+void trace_receive(Process*, Eterm, Eterm, ErtsTracingEvent*);
 Uint32 erts_call_trace(Process *p, BeamInstr mfa[], struct binary *match_spec,
                        Eterm* args, int local, ErtsTracer *tracer);
 void erts_trace_return(Process* p, BeamInstr* fi, Eterm retval,
@@ -103,7 +112,7 @@ void trace_sched(Process*, ErtsProcLocks, Eterm);
 void trace_proc(Process*, ErtsProcLocks, Process*, Eterm, Eterm);
 void trace_proc_spawn(Process*, Eterm what, Eterm pid, Eterm mod, Eterm func, Eterm args);
 void save_calls(Process *p, Export *);
-void trace_gc(Process *p, Eterm what, Uint size);
+void trace_gc(Process *p, Eterm what, Uint size, Eterm msg);
 /* port tracing */
 void trace_virtual_sched(Process*, ErtsProcLocks, Eterm);
 void trace_sched_ports(Port *pp, Eterm);
@@ -184,8 +193,10 @@ int erts_finish_breakpointing(void);
 
 /* Nif tracer functions */
 int erts_is_tracer_proc_enabled(Process *c_p, ErtsProcLocks c_p_locks,
-                                ErtsPTabElementCommon *t_p, Eterm type);
-int erts_is_tracer_enabled(Process *c_p, const ErtsTracer tracer);
+                                ErtsPTabElementCommon *t_p);
+int erts_is_tracer_proc_enabled_send(Process* c_p, ErtsProcLocks c_p_locks,
+                                     ErtsPTabElementCommon *t_p);
+int erts_is_tracer_enabled(const ErtsTracer tracer, ErtsPTabElementCommon *t_p);
 Eterm erts_tracer_to_term(Process *p, ErtsTracer tracer);
 ErtsTracer erts_term_to_tracer(Eterm prefix, Eterm term);
 void erts_tracer_replace(ErtsPTabElementCommon *t_p,
@@ -214,10 +225,5 @@ ERTS_DECLARE_DUMMY(erts_tracer_nil) = NIL;
 
 #define ERTS_TRACER_FROM_ETERM(termp) \
     ((ErtsTracer*)(termp))
-
-#define ERTS_TRACER_PROC_IS_ENABLED(PROC)                               \
-    (!ERTS_TRACER_IS_NIL(ERTS_TRACER(PROC))                             \
-     && erts_is_tracer_proc_enabled(PROC, ERTS_PROC_LOCK_MAIN,          \
-                                    &(PROC)->common, am_trace_status))
 
 #endif /* ERL_TRACE_H__ */

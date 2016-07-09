@@ -57,10 +57,14 @@ struct enif_environment_t /* ErlNifEnv */
     struct enif_tmp_obj_t* tmp_obj_list;
     int exception_thrown; /* boolean */
     Process *tracee;
+    int exiting; /* boolean (dirty nifs might return in exiting state) */
 };
 extern void erts_pre_nif(struct enif_environment_t*, Process*,
 			 struct erl_module_nif*, Process* tracee);
 extern void erts_post_nif(struct enif_environment_t* env);
+extern void erts_pre_dirty_nif(ErtsSchedulerData *,
+			       struct enif_environment_t*, Process*,
+			       struct erl_module_nif*, Process* tracee);
 extern Eterm erts_nif_taints(Process* p);
 extern void erts_print_nif_taints(int to, void* to_arg);
 void erts_unload_nif(struct erl_module_nif* nif);
@@ -946,7 +950,7 @@ ERTS_GLB_INLINE Eterm erts_equeue_get(ErtsEQueue *q) {
 
 void erts_emasculate_writable_binary(ProcBin* pb);
 Eterm erts_new_heap_binary(Process *p, byte *buf, int len, byte** datap);
-Eterm erts_new_mso_binary(Process*, byte*, int);
+Eterm erts_new_mso_binary(Process*, byte*, Uint);
 Eterm new_binary(Process*, byte*, Uint);
 Eterm erts_realloc_binary(Eterm bin, size_t size);
 
@@ -1151,6 +1155,7 @@ void print_pass_through(int, byte*, int);
 int catchlevel(Process*);
 void init_emulator(void);
 void process_main(void);
+void erts_dirty_process_main(ErtsSchedulerData *);
 Eterm build_stacktrace(Process* c_p, Eterm exc);
 Eterm expand_error_value(Process* c_p, Uint freason, Eterm Value);
 void erts_save_stacktrace(Process* p, struct StackTrace* s, int depth);
@@ -1483,9 +1488,19 @@ do {								\
 
 #define MatchSetGetSource(MPSP) erts_match_set_get_source(MPSP)
 
-extern Binary *erts_match_set_compile(Process *p, Eterm matchexpr);
+extern Binary *erts_match_set_compile(Process *p, Eterm matchexpr, Eterm MFA);
 Eterm erts_match_set_lint(Process *p, Eterm matchexpr); 
 extern void erts_match_set_release_result(Process* p);
+ERTS_GLB_INLINE void erts_match_set_release_result_trace(Process* p, Eterm);
+
+#if ERTS_GLB_INLINE_INCL_FUNC_DEF
+ERTS_GLB_INLINE
+void erts_match_set_release_result_trace(Process* p, Eterm pam_result)
+{
+    if (is_not_immed(pam_result))
+        erts_match_set_release_result(p);
+}
+#endif /* ERTS_GLB_INLINE_INCL_FUNC_DEF */
 
 enum erts_pam_run_flags {
     ERTS_PAM_TMP_RESULT=1,
@@ -1493,10 +1508,12 @@ enum erts_pam_run_flags {
     ERTS_PAM_CONTIGUOUS_TUPLE=4,
     ERTS_PAM_IGNORE_TRACE_SILENT=8
 };
-extern Eterm erts_match_set_run(Process *p, Binary *mpsp, 
-				Eterm *args, int num_args,
-				enum erts_pam_run_flags in_flags,
-				Uint32 *return_flags);
+extern Eterm erts_match_set_run_trace(Process *p,
+                                      Process *self,
+                                      Binary *mpsp,
+                                      Eterm *args, int num_args,
+                                      enum erts_pam_run_flags in_flags,
+                                      Uint32 *return_flags);
 extern Eterm erts_match_set_get_source(Binary *mpsp);
 extern void erts_match_prog_foreach_offheap(Binary *b,
 					    void (*)(ErlOffHeap *, void *),

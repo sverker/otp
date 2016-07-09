@@ -257,7 +257,7 @@ static void send_reply(ErtsMsAcc *msacc, ErtsMSAccReq *msaccrp) {
 
     if (msacc->unmanaged) erts_mtx_unlock(&msacc->mtx);
 
-    erts_queue_message(rp, &rp_locks, msgp, msg);
+    erts_queue_message(rp, rp_locks, msgp, msg, am_system);
 
     if (esdp && msaccrp->req_sched == esdp->no)
 	rp_locks &= ~ERTS_PROC_LOCK_MAIN;
@@ -338,7 +338,7 @@ erts_msacc_request(Process *c_p, int action, Eterm *threads)
 {
 #ifdef ERTS_ENABLE_MSACC
     ErtsMsAcc *msacc =  ERTS_MSACC_TSD_GET();
-    ErtsSchedulerData *esdp = ERTS_PROC_GET_SCHDATA(c_p);
+    ErtsSchedulerData *esdp = erts_proc_sched_data(c_p);
     Eterm ref;
     ErtsMSAccReq *msaccrp;
     Eterm *hp;

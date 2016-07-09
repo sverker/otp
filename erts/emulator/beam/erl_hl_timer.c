@@ -1247,8 +1247,8 @@ hlt_bif_timer_timeout(ErtsHLTimer *tmr, Uint32 roflgs)
 	if (!ERTS_PROC_IS_EXITING(proc)) {
 	    ErtsMessage *mp = erts_alloc_message(0, NULL);
 	    mp->data.heap_frag = tmr->btm.bp;
-	    erts_queue_message(proc, &proc_locks, mp,
-			       tmr->btm.message);
+	    erts_queue_message(proc, proc_locks, mp,
+			       tmr->btm.message, am_clock_service);
 	    erts_smp_proc_unlock(proc, ERTS_PROC_LOCKS_MSG_SEND);
 	    queued_message = 1;
 	    proc_locks &= ~ERTS_PROC_LOCKS_MSG_SEND;
@@ -1766,7 +1766,7 @@ setup_bif_timer(Process *c_p, ErtsMonotonicTime timeout_pos,
     if (is_not_internal_pid(rcvr) && is_not_atom(rcvr))
 	goto badarg;
 
-    esdp = ERTS_PROC_GET_SCHDATA(c_p);
+    esdp = erts_proc_sched_data(c_p);
 
     hp = HAlloc(c_p, REF_THING_SIZE);
     ref = erts_sched_make_ref_in_buffer(esdp, hp);
@@ -1871,7 +1871,7 @@ access_sched_local_btm(Process *c_p, Eterm pid,
     if (!c_p)
 	esdp = erts_get_scheduler_data();
     else {
-	esdp = ERTS_PROC_GET_SCHDATA(c_p);
+	esdp = erts_proc_sched_data(c_p);
 	ERTS_HLT_ASSERT(esdp == erts_get_scheduler_data());
     }
 
@@ -1980,7 +1980,7 @@ access_sched_local_btm(Process *c_p, Eterm pid,
 
 	ERTS_HLT_ASSERT(hp + (async ? 4 : 3) == hp_end);
 
-	erts_queue_message(proc, &proc_locks, mp, msg);
+	erts_queue_message(proc, proc_locks, mp, msg, am_clock_service);
 
 	if (c_p)
 	    proc_locks &= ~ERTS_PROC_LOCK_MAIN;
@@ -2111,7 +2111,7 @@ try_access_sched_remote_btm(ErtsSchedulerData *esdp,
 
 	msg = TUPLE3(hp, tag, tref, res);
 
-	erts_queue_message(c_p, &proc_locks, mp, msg);
+        erts_queue_message(c_p, proc_locks, mp, msg, am_clock_service);
 
 	proc_locks &= ~ERTS_PROC_LOCK_MAIN;
 	if (proc_locks)
@@ -2138,7 +2138,7 @@ access_bif_timer(Process *c_p, Eterm tref, int cancel, int async, int info)
 	    goto no_timer;
     }
 
-    esdp = ERTS_PROC_GET_SCHDATA(c_p);
+    esdp = erts_proc_sched_data(c_p);
 
     trefn = internal_ref_numbers(tref);
     sid = erts_get_ref_numbers_thr_id(trefn);
@@ -2363,7 +2363,7 @@ typedef struct {
 
 int erts_cancel_bif_timers(Process *p, ErtsBifTimers *btm, void **vyspp)
 {
-    ErtsSchedulerData *esdp = ERTS_PROC_GET_SCHDATA(p);
+    ErtsSchedulerData *esdp = erts_proc_sched_data(p);
     ErtsBifTimerYieldState ys = {btm, {ERTS_RBT_YIELD_STAT_INITER}};
     ErtsBifTimerYieldState *ysp;
     int res;
@@ -2409,7 +2409,7 @@ detach_bif_timer(ErtsHLTimer *tmr, void *vesdp)
 
 int erts_detach_accessor_bif_timers(Process *p, ErtsBifTimers *btm, void **vyspp)
 {
-    ErtsSchedulerData *esdp = ERTS_PROC_GET_SCHDATA(p);
+    ErtsSchedulerData *esdp = erts_proc_sched_data(p);
     ErtsBifTimerYieldState ys = {btm, {ERTS_RBT_YIELD_STAT_INITER}};
     ErtsBifTimerYieldState *ysp;
     int res;
@@ -2516,7 +2516,7 @@ BIF_RETTYPE send_after_3(BIF_ALIST_3)
     ErtsMonotonicTime timeout_pos;
     int short_time, tres;
 
-    tres = parse_timeout_pos(ERTS_PROC_GET_SCHDATA(BIF_P), BIF_ARG_1, NULL,
+    tres = parse_timeout_pos(erts_proc_sched_data(BIF_P), BIF_ARG_1, NULL,
 			     0, &timeout_pos, &short_time);
     if (tres != 0)
 	BIF_ERROR(BIF_P, BADARG);
@@ -2534,7 +2534,7 @@ BIF_RETTYPE send_after_4(BIF_ALIST_4)
     if (!parse_bif_timer_options(BIF_ARG_4, NULL, NULL, &abs, &accessor))
 	BIF_ERROR(BIF_P, BADARG);
     
-    tres = parse_timeout_pos(ERTS_PROC_GET_SCHDATA(BIF_P), BIF_ARG_1, NULL,
+    tres = parse_timeout_pos(erts_proc_sched_data(BIF_P), BIF_ARG_1, NULL,
 			     abs, &timeout_pos, &short_time);
     if (tres != 0)
 	BIF_ERROR(BIF_P, BADARG);
@@ -2548,7 +2548,7 @@ BIF_RETTYPE start_timer_3(BIF_ALIST_3)
     ErtsMonotonicTime timeout_pos;
     int short_time, tres;
 
-    tres = parse_timeout_pos(ERTS_PROC_GET_SCHDATA(BIF_P), BIF_ARG_1, NULL,
+    tres = parse_timeout_pos(erts_proc_sched_data(BIF_P), BIF_ARG_1, NULL,
 			     0, &timeout_pos, &short_time);
     if (tres != 0)
 	BIF_ERROR(BIF_P, BADARG);
@@ -2566,7 +2566,7 @@ BIF_RETTYPE start_timer_4(BIF_ALIST_4)
     if (!parse_bif_timer_options(BIF_ARG_4, NULL, NULL, &abs, &accessor))
 	BIF_ERROR(BIF_P, BADARG);
 
-    tres = parse_timeout_pos(ERTS_PROC_GET_SCHDATA(BIF_P), BIF_ARG_1, NULL,
+    tres = parse_timeout_pos(erts_proc_sched_data(BIF_P), BIF_ARG_1, NULL,
 			     abs, &timeout_pos, &short_time);
     if (tres != 0)
 	BIF_ERROR(BIF_P, BADARG);
@@ -2720,7 +2720,7 @@ set_proc_timer_common(Process *c_p, ErtsSchedulerData *esdp, Sint64 tmo,
 int
 erts_set_proc_timer_term(Process *c_p, Eterm etmo)
 {
-    ErtsSchedulerData *esdp = ERTS_PROC_GET_SCHDATA(c_p);
+    ErtsSchedulerData *esdp = erts_proc_sched_data(c_p);
     ErtsMonotonicTime tmo, timeout_pos;
     int short_time, tres;
 
@@ -2742,7 +2742,7 @@ erts_set_proc_timer_term(Process *c_p, Eterm etmo)
 void
 erts_set_proc_timer_uword(Process *c_p, UWord tmo)
 {
-    ErtsSchedulerData *esdp = ERTS_PROC_GET_SCHDATA(c_p);
+    ErtsSchedulerData *esdp = erts_proc_sched_data(c_p);
 
     ERTS_HLT_ASSERT(erts_smp_atomic_read_nob(&c_p->common.timer)
 		    == ERTS_PTMR_NONE);
@@ -2776,7 +2776,7 @@ erts_cancel_proc_timer(Process *c_p)
 	erts_smp_atomic_set_nob(&c_p->common.timer, ERTS_PTMR_NONE);
 	return;
     }
-    continue_cancel_ptimer(ERTS_PROC_GET_SCHDATA(c_p),
+    continue_cancel_ptimer(erts_proc_sched_data(c_p),
 			   (ErtsTimer *) tval);
 }
 

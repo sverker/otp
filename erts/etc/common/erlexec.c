@@ -150,6 +150,9 @@ static char *plush_val_switches[] = {
     "ms",
     "mbs",
     "pds",
+    "max",
+    "maxk",
+    "maxel",
     "mqd",
     "",
     NULL
@@ -192,6 +195,7 @@ static char *plusz_val_switches[] = {
 #endif
 
 void usage(const char *switchname);
+static void usage_format(char *format, ...);
 void start_epmd(char *epmd);
 void error(char* format, ...);
 
@@ -792,6 +796,24 @@ int main(int argc, char **argv)
 			    get_start_erl_data((char *) NULL);
 		    }
 #endif
+		    else if (strcmp(argv[i], "-start_epmd") == 0) {
+			if (i+1 >= argc)
+			    usage("-start_epmd");
+
+			if (strcmp(argv[i+1], "true") == 0) {
+			    /* The default */
+			    no_epmd = 0;
+			}
+			else if (strcmp(argv[i+1], "false") == 0) {
+			    no_epmd = 1;
+			}
+			else
+			    usage_format("Expected boolean argument for \'-start_epmd\'.\n");
+
+			add_arg(argv[i]);
+			add_arg(argv[i+1]);
+			i++;
+		    }
 		    else
 			add_arg(argv[i]);
 		
@@ -842,7 +864,6 @@ int main(int argc, char **argv)
 			  if (argv[i][3] != '\0')
 			      goto the_default;
 		      }
-#ifdef ERTS_DIRTY_SCHEDULERS
 		      else if (argv[i][2] == 'D') {
 			  char* type = argv[i]+3;
 			  if (strncmp(type, "cpu", 3) != 0 &&
@@ -854,7 +875,6 @@ int main(int argc, char **argv)
 			      (argv[i][3] == 'i' && argv[i][5] != '\0'))
 			      goto the_default;
 		      }
-#endif
 		      else if (argv[i][2] != '\0')
 			  goto the_default;
 		      if (i+1 >= argc)
@@ -1172,7 +1192,7 @@ usage_aux(void)
 	  "]"
 #endif
 	  "] "
-	  "[-make] [-man [manopts] MANPAGE] [-x] [-emu_args] "
+	  "[-make] [-man [manopts] MANPAGE] [-x] [-emu_args] [-start_epmd BOOLEAN] "
 	  "[-args_file FILENAME] [+A THREADS] [+a SIZE] [+B[c|d|i]] [+c [BOOLEAN]] "
 	  "[+C MODE] [+h HEAP_SIZE_OPTION] [+K BOOLEAN] "
 	  "[+l] [+M<SUBSWITCH> <ARGUMENT>] [+P MAX_PROCS] [+Q MAX_PORTS] "

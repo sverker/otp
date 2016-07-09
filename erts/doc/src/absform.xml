@@ -68,22 +68,12 @@
       <item>If D is a module declaration consisting of the forms
       <c>F_1</c>, ..., <c>F_k</c>, then
        Rep(D) = <c>[Rep(F_1), ..., Rep(F_k)]</c>.</item>
-      <item>If F is an attribute <c>-behavior(Behavior)</c>, then
-       Rep(F) = <c>{attribute,LINE,behavior,Behavior}</c>.</item>
-      <item>If F is an attribute <c>-behaviour(Behaviour)</c>, then
-       Rep(F) = <c>{attribute,LINE,behaviour,Behaviour}</c>.</item>
-      <item>If F is an attribute <c>-compile(Options)</c>, then
-       Rep(F) = <c>{attribute,LINE,compile,Options}</c>.</item>
       <item>If F is an attribute <c>-export([Fun_1/A_1, ..., Fun_k/A_k])</c>, then
        Rep(F) = <c>{attribute,LINE,export,[{Fun_1,A_1}, ..., {Fun_k,A_k}]}</c>.</item>
-      <item>If F is an attribute <c>-export_type([Type_1/A_1, ..., Type_k/A_k])</c>, then
-       Rep(F) = <c>{attribute,LINE,export_type,[{Type_1,A_1}, ..., {Type_k,A_k}]}</c>.</item>
       <item>If F is an attribute <c>-import(Mod,[Fun_1/A_1, ..., Fun_k/A_k])</c>, then
        Rep(F) = <c>{attribute,LINE,import,{Mod,[{Fun_1,A_1}, ..., {Fun_k,A_k}]}}</c>.</item>
       <item>If F is an attribute <c>-module(Mod)</c>, then
        Rep(F) = <c>{attribute,LINE,module,Mod}</c>.</item>
-      <item>If F is an attribute <c>-optional_callbacks([Fun_1/A_1, ..., Fun_k/A_k])</c>, then
-       Rep(F) = <c>{attribute,LINE,optional_callbacks,[{Fun_1,A_1}, ..., {Fun_k,A_k}]}</c>.</item>
       <item>If F is an attribute <c>-file(File,Line)</c>, then
        Rep(F) = <c>{attribute,LINE,file,{File,Line}}</c>.</item>
       <item>If F is a function declaration
@@ -162,9 +152,11 @@
     <list type="bulleted">
       <item>If L is an atom literal, then
        Rep(L) = <c>{atom,LINE,L}</c>.</item>
+      <item>If L is a character literal, then
+       Rep(L) = <c>{char,LINE,L}</c>.</item>
       <item>If L is a float literal, then
        Rep(L) = <c>{float,LINE,L}</c>.</item>
-      <item>If L is an integer or character literal, then
+      <item>If L is an integer literal, then
        Rep(L) = <c>{integer,LINE,L}</c>.</item>
       <item>If L is a string literal consisting of the characters
       <c>C_1</c>, ..., <c>C_k</c>, then

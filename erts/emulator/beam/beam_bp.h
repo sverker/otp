@@ -80,16 +80,16 @@ typedef struct generic_bp {
 #define ERTS_BP_CALL_TIME_SCHEDULE_EXITING (2)
 
 #ifdef ERTS_SMP
-#define bp_sched2ix_proc(p) ((p)->scheduler_data->no - 1)
+#define bp_sched2ix_proc(p) (erts_proc_sched_data(p)->no - 1)
 #else
 #define bp_sched2ix_proc(p) (0)
 #endif
 
 enum erts_break_op{
-    erts_break_nop   =  0, /* Must be false */
-    erts_break_set   = !0, /* Must be true */
-    erts_break_reset,
-    erts_break_stop
+    ERTS_BREAK_NOP   =  0, /* Must be false */
+    ERTS_BREAK_SET   = !0, /* Must be true */
+    ERTS_BREAK_RESTART,
+    ERTS_BREAK_PAUSE
 };
 
 typedef Uint32 ErtsBpIndex;

@@ -162,7 +162,8 @@ handle_call({?util, D, PC}, {Client, _Tag},
 	#state{os_type = {unix, Flavor}} = State) 
 	when Flavor == sunos;
 	     Flavor == linux;
-	     Flavor == freebsd ->
+	     Flavor == freebsd;
+	     Flavor == darwin ->
     case measurement_server_call(State#state.server, {?util, D, PC, Client}) of
 	{error, Reason} -> 
 	    {	reply, 
@@ -531,11 +532,11 @@ measurement_server_loop(State) ->
 		    measurement_server_loop(State)
 	    end;
 	{Pid, Request} ->
-	    try get_uint32_measurement(Request, State) of
-		Result -> Pid ! {data, Result}
-	    catch
-		Error -> Pid ! {error, Error}
-	    end,
+            _ = try get_uint32_measurement(Request, State) of
+                    Result -> Pid ! {data, Result}
+                catch
+                    Error -> Pid ! {error, Error}
+                end,
 	    measurement_server_loop(State);
         {'EXIT', OldPid, _n} when State#internal.port == OldPid ->
 	    {ok, NewPid} = port_server_start_link(),

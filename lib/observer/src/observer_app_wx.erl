@@ -221,21 +221,21 @@ handle_event(#wx{id=?ID_PROC_KILL, event=#wxCommand{type=command_menu_selected}}
 %%% Trace api
 handle_event(#wx{id=?ID_TRACE_PID, event=#wxCommand{type=command_menu_selected}},
 	     State = #state{sel={Box,_}}) ->
-    observer_trace_wx:add_processes(observer_wx:get_tracer(), [box_to_pid(Box)]),
+    observer_trace_wx:add_processes([box_to_pid(Box)]),
     {noreply, State};
 handle_event(#wx{id=?ID_TRACE_NAME, event=#wxCommand{type=command_menu_selected}},
 	     State = #state{sel={Box,_}}) ->
-    observer_trace_wx:add_processes(observer_wx:get_tracer(), [box_to_reg(Box)]),
+    observer_trace_wx:add_processes([box_to_reg(Box)]),
     {noreply, State};
 handle_event(#wx{id=?ID_TRACE_TREE_PIDS, event=#wxCommand{type=command_menu_selected}},
 	     State = #state{sel=Sel}) ->
     Get = fun(Box) -> box_to_pid(Box) end,
-    observer_trace_wx:add_processes(observer_wx:get_tracer(), tree_map(Sel, Get)),
+    observer_trace_wx:add_processes(tree_map(Sel, Get)),
     {noreply, State};
 handle_event(#wx{id=?ID_TRACE_TREE_NAMES, event=#wxCommand{type=command_menu_selected}},
 	     State = #state{sel=Sel}) ->
     Get = fun(Box) -> box_to_reg(Box) end,
-    observer_trace_wx:add_processes(observer_wx:get_tracer(), tree_map(Sel, Get)),
+    observer_trace_wx:add_processes(tree_map(Sel, Get)),
     {noreply, State};
 
 handle_event(Event, _State) ->
@@ -302,7 +302,9 @@ handle_info({delivery, _Pid, app, _Curr, {[], [], [], []}},
 handle_info({delivery, Pid, app, Curr, AppData},
 	    State = #state{panel=Panel, appmon=Pid, current=Curr, usegc=UseGC,
 			   app_w=AppWin, paint=#paint{font=Font}}) ->
-    GC = make_gc(AppWin, UseGC),
+    GC = if UseGC -> {?wxGC:create(AppWin), false};
+	    true ->  {false, wxWindowDC:new(AppWin)}
+	 end,
     setFont(GC, Font, {0,0,0}),
     App = build_tree(AppData, GC),
     destroy_gc(GC),

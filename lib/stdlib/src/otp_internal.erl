@@ -35,7 +35,7 @@
 obsolete(Module, Name, Arity) ->
     case obsolete_1(Module, Name, Arity) of
 	{deprecated=Tag,{_,_,_}=Replacement} ->
-	    {Tag,Replacement,"in a future release"};
+	    {Tag,Replacement,"a future release"};
 	{_,String}=Ret when is_list(String) ->
 	    Ret;
 	{_,_,_}=Ret ->
@@ -541,6 +541,8 @@ obsolete_1(random, _, _) ->
      "use the 'rand' module instead"};
 obsolete_1(code, rehash, 0) ->
     {deprecated, "deprecated because the code path cache feature has been removed"};
+obsolete_1(queue, lait, 1) ->
+    {deprecated, {queue,liat,1}};
 
 %% Removed in OTP 19.
 

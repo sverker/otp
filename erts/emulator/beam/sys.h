@@ -34,6 +34,10 @@
   (((__GNUC__ << 24) | (__GNUC_MINOR__ << 12) | __GNUC_PATCHLEVEL__) >= (((MAJ) << 24) | ((MIN) << 12) | (PL)))
 #endif
 
+#if defined(ERTS_DIRTY_SCHEDULERS) && !defined(ERTS_SMP)
+# error "Dirty schedulers not supported without smp support"
+#endif
+
 #ifdef ERTS_INLINE
 #  ifndef ERTS_CAN_INLINE
 #    define ERTS_CAN_INLINE 1
@@ -93,8 +97,7 @@
     ((UWord)((char*)(ptr) - (char*)(start)) < (nbytes))
 
 #define ErtsContainerStruct(ptr, type, member) \
-    ((void)(&((type*)0)->member - (ptr)),    \
-     (type*)((char*)(ptr) - offsetof(type,member)))
+    ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
 
 #if defined (__WIN32__)
 #  include "erl_win_sys.h"
@@ -151,8 +154,9 @@ typedef ERTS_SYS_FD_TYPE ErtsSysFdType;
 #  define ERTS_WRITE_UNLIKELY(X) X
 #endif
 
+/* clang may have too low __GNUC__ versions but can handle it */
 #ifdef __GNUC__
-#  if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 5)
+#  if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 5) || defined(__clang__)
 #    define ERTS_DECLARE_DUMMY(X) X __attribute__ ((unused))
 #  else
 #    define ERTS_DECLARE_DUMMY(X) X

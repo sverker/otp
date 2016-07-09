@@ -28,7 +28,6 @@
 #  include "config.h"
 #endif
 
-#include "erl_native_features_config.h"
 #include "erl_drv_nif.h"
 
 /* Version history:
@@ -50,9 +49,10 @@
 ** 2.8: 18.0 add enif_has_pending_exception
 ** 2.9: 18.2 enif_getenv
 ** 2.10: Time API
+** 2.11: 19.0 enif_snprintf
 */
 #define ERL_NIF_MAJOR_VERSION 2
-#define ERL_NIF_MINOR_VERSION 10
+#define ERL_NIF_MINOR_VERSION 11
 
 /*
  * The emulator will refuse to load a nif-lib with a major version
@@ -167,13 +167,11 @@ typedef int ErlNifTSDKey;
 
 typedef ErlDrvThreadOpts ErlNifThreadOpts;
 
-#ifdef ERL_NIF_DIRTY_SCHEDULER_SUPPORT
 typedef enum
 {
-    ERL_NIF_DIRTY_JOB_CPU_BOUND = ERL_DRV_DIRTY_JOB_CPU_BOUND,
-    ERL_NIF_DIRTY_JOB_IO_BOUND  = ERL_DRV_DIRTY_JOB_IO_BOUND
+    ERL_NIF_DIRTY_JOB_CPU_BOUND = ERL_DIRTY_JOB_CPU_BOUND,
+    ERL_NIF_DIRTY_JOB_IO_BOUND  = ERL_DIRTY_JOB_IO_BOUND
 }ErlNifDirtyTaskFlags;
-#endif
 
 typedef struct /* All fields all internal and may change */
 {
@@ -210,6 +208,17 @@ typedef enum {
 typedef enum {
     ERL_NIF_BIN2TERM_SAFE = 0x20000000
 } ErlNifBinaryToTerm;
+
+/*
+ * Return values from enif_thread_type(). Negative values
+ * reserved for specific types of non-scheduler threads.
+ * Positive values reserved for scheduler thread types.
+ */
+
+#define ERL_NIF_THR_UNDEFINED 0
+#define ERL_NIF_THR_NORMAL_SCHEDULER 1
+#define ERL_NIF_THR_DIRTY_CPU_SCHEDULER 2
+#define ERL_NIF_THR_DIRTY_IO_SCHEDULER 3
 
 #if (defined(__WIN32__) || defined(_WIN32) || defined(_WIN32_))
 #  define ERL_NIF_API_FUNC_DECL(RET_TYPE, NAME, ARGS) RET_TYPE (*NAME) ARGS
@@ -257,11 +266,7 @@ extern TWinDynNifCallbacks WinDynNifCallbacks;
 #  define ERL_NIF_INIT_DECL(MODNAME) ERL_NIF_INIT_EXPORT ErlNifEntry* nif_init(ERL_NIF_INIT_ARGS)
 #endif
 
-#ifdef ERL_NIF_DIRTY_SCHEDULER_SUPPORT
-#  define ERL_NIF_ENTRY_OPTIONS ERL_NIF_DIRTY_NIF_OPTION
-#else
-#  define ERL_NIF_ENTRY_OPTIONS 0
-#endif
+#define ERL_NIF_ENTRY_OPTIONS ERL_NIF_DIRTY_NIF_OPTION
 
 #ifdef __cplusplus
 }
