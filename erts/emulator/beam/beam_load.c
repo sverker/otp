@@ -4819,9 +4819,9 @@ final_touch(LoaderState* stp, struct erl_module_instance* inst_p)
 	     * code callable.
 	     */
 	    ep->code[4] = (BeamInstr) address;
-	    address = ep->code+3;
 	}
-	ep->addressv[erts_staging_code_ix()] = address;
+        else
+            ep->addressv[erts_staging_code_ix()] = address;
     }
 
     /*
