@@ -93,6 +93,7 @@ static Module* module_alloc(Module* tmpl)
     obj->curr.first_hipe_sdesc = NULL;
     obj->curr.hipe_code_start = NULL;
     obj->old.first_hipe_ref = NULL;
+    obj->old.first_hipe_sdesc = NULL;
     obj->old.hipe_code_start = NULL;
 # ifdef DEBUG
     obj->curr.hipe_code_size = 0;
