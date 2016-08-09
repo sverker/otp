@@ -1677,6 +1677,10 @@ async_gen_server_reply(From, Msg) ->
             ok
     end.
 
+-spec setopts(Node, Options) -> ok | {error, Reason} when
+      Node :: node() | new,
+      Options :: [inet:socket_setopt()],
+      Reason :: inet:posix() | noconnection.
 
 setopts(Node, Opts) when is_atom(Node) ->
     request({setopts, Node, Opts}).
