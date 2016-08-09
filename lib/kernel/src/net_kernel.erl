@@ -1692,6 +1692,13 @@ merge_opts([H|T], B0) ->
     B1 = lists:filter(fun({K,_}) -> K =/= Key end, B0),
     merge_opts(T, [H | B1]).
 
+-spec getopts(Node, Options) ->
+	{'ok', OptionValues} | {'error', Reason} when
+      Node :: node(),
+      Options :: [inet:socket_getopt()],
+      OptionValues :: [inet:socket_setopt()],
+      Reason :: inet:posix() | noconnection.
+
 getopts(Node, Opts) when is_atom(Node) ->
     request({getopts, Node, Opts}).
 
