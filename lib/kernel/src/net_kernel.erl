@@ -593,11 +593,11 @@ handle_call({setopts, Node, Opts}, From, State) ->
 			monitor_node(Node, false),
 			Ret;
 		    {nodedown, Node} ->
-			{error, bad_node}
+			{error, noconnection}
 		end;
 
 	    _ ->
-		{error, bad_node}
+		{error, noconnection}
     end,
     async_reply({reply, Return, State}, From);
 
