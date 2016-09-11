@@ -45,7 +45,7 @@ struct hipe_sdesc {
     Uint32 livebits[1]; /* size depends on arch & data in summary field */
 };
 
-struct sdesc_with_exnra {
+struct hipe_sdesc_with_exnra {
     unsigned long exnra;
     struct hipe_sdesc sdesc;
 };
@@ -65,8 +65,8 @@ static __inline__ unsigned long sdesc_exnra(const struct hipe_sdesc *sdesc)
 {
     if (sdesc->has_exnra) {
 	const char *tmp;
-	tmp = (const char*)sdesc - offsetof(struct sdesc_with_exnra, sdesc);
-	return ((const struct sdesc_with_exnra*)tmp)->exnra;
+	tmp = (const char*)sdesc - offsetof(struct hipe_sdesc_with_exnra, sdesc);
+	return ((const struct hipe_sdesc_with_exnra*)tmp)->exnra;
     }
     return 0;
 }

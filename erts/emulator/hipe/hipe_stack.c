@@ -118,7 +118,7 @@ void hipe_destruct_sdesc(struct hipe_sdesc *sdesc)
     hipe_sdesc_table.used -= 1;
 
     if (sdesc->has_exnra)
-        free_me = ErtsContainerStruct(sdesc, struct sdesc_with_exnra, sdesc);
+        free_me = ErtsContainerStruct(sdesc, struct hipe_sdesc_with_exnra, sdesc);
     else
         free_me = sdesc;
     erts_free(ERTS_ALC_T_HIPE, free_me);
@@ -202,14 +202,14 @@ struct hipe_sdesc *hipe_decode_sdesc(Eterm arg, int* do_commitp)
     /* Calculate number of bytes needed for the stack descriptor. */
     sdescbytes =
 	(exnra
-	 ? offsetof(struct sdesc_with_exnra, sdesc.livebits)
+	 ? offsetof(struct hipe_sdesc_with_exnra, sdesc.livebits)
 	 : offsetof(struct hipe_sdesc, livebits))
 	+ livebitswords * sizeof(int);
     p = erts_alloc(ERTS_ALC_T_HIPE, sdescbytes);
     /* If we have an exception handler use the
        special sdesc_with_exnra structure. */
     if (exnra) {
-	struct sdesc_with_exnra *sdesc_we = p;
+	struct hipe_sdesc_with_exnra *sdesc_we = p;
 	sdesc_we->exnra = exnra;
 	sdesc = &(sdesc_we->sdesc);
     } else
