@@ -27,6 +27,7 @@
 -export([sign/4, verify/5]).
 -export([generate_key/2, generate_key/3, compute_key/4]).
 -export([hmac/3, hmac/4, hmac_init/2, hmac_update/2, hmac_final/1, hmac_final_n/2]).
+-export([cmac/3, cmac/4]).
 -export([exor/2, strong_rand_bytes/1, mod_pow/3]).
 -export([rand_uniform/2]).
 -export([block_encrypt/3, block_decrypt/3, block_encrypt/4, block_decrypt/4]).
@@ -271,10 +272,18 @@ hmac_final(Context) ->
 hmac_final_n(Context, HashLen) ->
     notsup_to_error(hmac_final_nif(Context, HashLen)).
 
+-spec cmac(_, iodata(), iodata()) -> binary().
+-spec cmac(_, iodata(), iodata(), integer()) -> binary().
+
+cmac(Type, Key, Data) ->
+    notsup_to_error(cmac_nif(Type, Key, Data)).
+cmac(Type, Key, Data, MacSize) ->
+    erlang:binary_part(cmac(Type, Key, Data), 0, MacSize).
+
 %% Ecrypt/decrypt %%%
 
 -spec block_encrypt(des_cbc | des_cfb |
-                    des3_cbc | des3_cbf | des_ede3 |
+                    des3_cbc | des3_cbf | des3_cfb | des_ede3 |
                     blowfish_cbc | blowfish_cfb64 | blowfish_ofb64 |
                     aes_cbc128 | aes_cfb8 | aes_cfb128 | aes_cbc256 | aes_ige256 |
 		    aes_cbc |
@@ -301,6 +310,9 @@ block_encrypt(Type, Key0, Ivec, Data) when Type =:= des3_cbc;
 block_encrypt(des3_cbf, Key0, Ivec, Data) ->
     Key = check_des3_key(Key0),
     block_crypt_nif(des_ede3_cbf, Key, Ivec, Data, true);
+block_encrypt(des3_cfb, Key0, Ivec, Data) ->
+    Key = check_des3_key(Key0),
+    block_crypt_nif(des_ede3_cfb, Key, Ivec, Data, true);
 block_encrypt(aes_ige256, Key, Ivec, Data) ->
     aes_ige_crypt_nif(Key, Ivec, Data, true);
 block_encrypt(aes_gcm, Key, Ivec, {AAD, Data}) ->
@@ -311,7 +323,7 @@ block_encrypt(chacha20_poly1305, Key, Ivec, {AAD, Data}) ->
     chacha20_poly1305_encrypt(Key, Ivec, AAD, Data).
 
 -spec block_decrypt(des_cbc | des_cfb |
-                    des3_cbc | des3_cbf | des_ede3 |
+                    des3_cbc | des3_cbf | des3_cfb | des_ede3 |
                     blowfish_cbc | blowfish_cfb64 | blowfish_ofb64 |
                     aes_cbc128 | aes_cfb8 | aes_cfb128 | aes_cbc256 | aes_ige256 |
 		    aes_cbc |
@@ -338,6 +350,9 @@ block_decrypt(Type, Key0, Ivec, Data) when Type =:= des3_cbc;
 block_decrypt(des3_cbf, Key0, Ivec, Data) ->
     Key = check_des3_key(Key0),
     block_crypt_nif(des_ede3_cbf, Key, Ivec, Data, false);
+block_decrypt(des3_cfb, Key0, Ivec, Data) ->
+    Key = check_des3_key(Key0),
+    block_crypt_nif(des_ede3_cfb, Key, Ivec, Data, false);
 block_decrypt(aes_ige256, Key, Ivec, Data) ->
     notsup_to_error(aes_ige_crypt_nif(Key, Ivec, Data, false));
 block_decrypt(aes_gcm, Key, Ivec, {AAD, Data, Tag}) ->
@@ -782,6 +797,10 @@ hmac_update_nif(_Context, _Data) -> ?nif_stub.
 hmac_final_nif(_Context) -> ?nif_stub.
 hmac_final_nif(_Context, _MacSize) -> ?nif_stub.
 
+%% CMAC
+
+cmac_nif(_Type, _Key, _Data) -> ?nif_stub.
+
 %%
 %%  MD5_MAC
 %%
@@ -857,10 +876,10 @@ des_ede3_cbc_decrypt(Key1, Key2, Key3, IVec, Data) ->
 			     binary().
 
 des3_cfb_encrypt(Key1, Key2, Key3, IVec, Data) ->
-    block_encrypt(des3_cbf, [Key1, Key2, Key3], IVec, Data).
+    block_encrypt(des3_cfb, [Key1, Key2, Key3], IVec, Data).
 
 des3_cfb_decrypt(Key1, Key2, Key3, IVec, Data) ->
-    block_decrypt(des3_cbf, [Key1, Key2, Key3], IVec, Data).
+    block_decrypt(des3_cfb, [Key1, Key2, Key3], IVec, Data).
 
 %%
 %% Blowfish
@@ -1460,6 +1479,7 @@ mod_exp_nif(_Base,_Exp,_Mod,_bin_hdr) -> ?nif_stub.
 
 -define(FUNC_LIST, [hash, hash_init, hash_update, hash_final,
 		    hmac, hmac_init, hmac_update, hmac_final, hmac_final_n,
+		    cmac,
 		    %% deprecated
 		    md4, md4_init, md4_update, md4_final,
 		    md5, md5_init, md5_update, md5_final,

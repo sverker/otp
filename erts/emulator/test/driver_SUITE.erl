@@ -114,7 +114,7 @@
 -define(MAX_DATA_SIZE, 16384).
 
 % This is the allowed delay when testing the driver timer functionality
--define(delay, 100).
+-define(delay, 400).
 
 -define(heap_binary_size, 64).
 
@@ -401,7 +401,7 @@ try_timeouts(Port, Timeout) ->
                 true ->
                     try_timeouts(Port, Timeout div 2)
             end
-    after Timeout + ?delay ->
+    after Timeout + 100*?delay ->
               ct:fail("driver failed to timeout")
     end.
 
@@ -437,7 +437,7 @@ try_cancel(Port, Timeout) ->
                           Timeout == 0 -> ok;
                           true -> try_cancel(Port, Timeout div 2)
                       end
-              after ?delay ->
+              after 100*?delay ->
                         ct:fail("No message from driver")
               end
     end.
@@ -505,7 +505,7 @@ try_change_timer(Port, Timeout) ->
                 true ->
                     try_timeouts(Port, Timeout div 2)
             end
-    after Timeout + ?delay ->
+    after Timeout + 100*?delay ->
               ct:fail("driver failed to timeout")
     end.
 
@@ -2427,7 +2427,7 @@ erl_millisecs() ->
     erl_millisecs(erlang:monotonic_time()).
 
 erl_millisecs(MonotonicTime) ->
-    (1000*MonotonicTime)/erlang:convert_time_unit(1,seconds,native).
+    (1000*MonotonicTime)/erlang:convert_time_unit(1,second,native).
 
 %% Start/stop drivers.
 start_driver(Config, Name, Binary) ->
@@ -2481,7 +2481,7 @@ start_node(Config) when is_list(Config) ->
                         ++ "-"
                         ++ atom_to_list(proplists:get_value(testcase, Config))
                         ++ "-"
-                        ++ integer_to_list(erlang:system_time(seconds))
+                        ++ integer_to_list(erlang:system_time(second))
                         ++ "-"
                         ++ integer_to_list(erlang:unique_integer([positive]))),
     test_server:start_node(Name, slave, [{args, "-pa "++Pa}]).

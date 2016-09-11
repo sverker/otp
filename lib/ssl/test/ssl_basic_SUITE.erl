@@ -40,6 +40,7 @@
 -define(SLEEP, 500).
 -define(RENEGOTIATION_DISABLE_TIME, 12000).
 -define(CLEAN_SESSION_DB, 60000).
+-define(SEC_RENEGOTIATION_TIMEOUT, 30).
 
 %%--------------------------------------------------------------------
 %% Common Test interface functions -----------------------------------
@@ -340,7 +341,7 @@ init_per_testcase(TestCase, Config) when TestCase == client_renegotiate;
 					 TestCase == renegotiate_dos_mitigate_passive;
 					 TestCase == renegotiate_dos_mitigate_absolute ->
     ssl_test_lib:ct_log_supported_protocol_versions(Config),
-    ct:timetrap({seconds, 30}),
+    ct:timetrap({seconds, ?SEC_RENEGOTIATION_TIMEOUT + 5}),
     Config;
 
 init_per_testcase(TestCase, Config) when TestCase == psk_cipher_suites;
@@ -350,6 +351,11 @@ init_per_testcase(TestCase, Config) when TestCase == psk_cipher_suites;
 					 TestCase == ciphers_dsa_signed_certs;
 					 TestCase == ciphers_dsa_signed_certs_openssl_names;
 					 TestCase == anonymous_cipher_suites;
+					 TestCase == ciphers_ecdsa_signed_certs;
+					 TestCase == ciphers_ecdsa_signed_certs_openssl_names;
+					 TestCase == anonymous_cipher_suites;
+					 TestCase == psk_anon_cipher_suites;
+					 TestCase == psk_anon_with_hint_cipher_suites;
 					 TestCase == versions_option,
 					 TestCase == tls_tcp_connect_big ->
     ssl_test_lib:ct_log_supported_protocol_versions(Config),
@@ -408,8 +414,13 @@ init_per_testcase(TestCase, Config) when TestCase == tls_ssl_accept_timeout;
     ssl_test_lib:ct_log_supported_protocol_versions(Config),
     ct:timetrap({seconds, 15}),
     Config;
-init_per_testcase(clear_pem_cache, Config) ->
+init_per_testcase(TestCase, Config) when TestCase == clear_pem_cache;
+						TestCase == der_input;
+						TestCase == defaults ->
     ssl_test_lib:ct_log_supported_protocol_versions(Config),
+    %% White box test need clean start
+    ssl:stop(),
+    ssl:start(),
     ct:timetrap({seconds, 20}),
     Config;
 init_per_testcase(raw_ssl_option, Config) ->
@@ -430,7 +441,9 @@ init_per_testcase(accept_pool, Config) ->
 	    ssl_test_lib:ct_log_supported_protocol_versions(Config),
 	    Config
     end;
-
+init_per_testcase(controller_dies, Config) ->
+    ct:timetrap({seconds, 10}),
+    Config;
 init_per_testcase(_TestCase, Config) ->
     ssl_test_lib:ct_log_supported_protocol_versions(Config),
     ct:timetrap({seconds, 5}),
@@ -567,8 +580,8 @@ prf(Config) when is_list(Config) ->
 connection_info() ->
     [{doc,"Test the API function ssl:connection_information/1"}].
 connection_info(Config) when is_list(Config) -> 
-    ClientOpts = ssl_test_lib:ssl_options(client_opts, Config),
-    ServerOpts = ssl_test_lib:ssl_options(server_opts, Config),
+    ClientOpts = ssl_test_lib:ssl_options(client_verification_opts, Config),
+    ServerOpts = ssl_test_lib:ssl_options(server_verification_opts, Config),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
 
     Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0}, 
@@ -1144,8 +1157,8 @@ cipher_suites_mix() ->
 
 cipher_suites_mix(Config) when is_list(Config) -> 
     CipherSuites = [{ecdh_rsa,aes_128_cbc,sha256,sha256}, {rsa,aes_128_cbc,sha}],
-    ClientOpts = ssl_test_lib:ssl_options(client_opts, Config),
-    ServerOpts = ssl_test_lib:ssl_options(server_opts, Config),
+    ClientOpts = ssl_test_lib:ssl_options(client_verification_opts, Config),
+    ServerOpts = ssl_test_lib:ssl_options(server_verification_opts, Config),
 
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
 
@@ -4288,7 +4301,7 @@ erlang_ssl_receive(Socket, Data) ->
 	    erlang_ssl_receive(Socket, tl(Data));
 	Other ->
 	    ct:fail({unexpected_message, Other})
-    after ?SLEEP * 3 *  test_server:timetrap_scale_factor() ->
+    after timer:seconds(?SEC_RENEGOTIATION_TIMEOUT) * test_server:timetrap_scale_factor() ->
 	    ct:fail({did_not_get, Data})
     end.
 
@@ -4409,14 +4422,14 @@ run_suites(Ciphers, Version, Config, Type) ->
     {ClientOpts, ServerOpts} =
 	case Type of
 	    rsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
-		 ssl_test_lib:ssl_options(server_opts, Config)};
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
+		 ssl_test_lib:ssl_options(server_verification_opts, Config)};
 	    dsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 ssl_test_lib:ssl_options(server_dsa_opts, Config)};
 	    anonymous ->
 		%% No certs in opts!
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 ssl_test_lib:ssl_options(server_anon, Config)};
 	    psk ->
 		{ssl_test_lib:ssl_options(client_psk, Config),
@@ -4440,31 +4453,31 @@ run_suites(Ciphers, Version, Config, Type) ->
 		{ssl_test_lib:ssl_options(client_srp_dsa, Config),
 		 ssl_test_lib:ssl_options(server_srp_dsa, Config)};
 	    ecdsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 ssl_test_lib:ssl_options(server_ecdsa_opts, Config)};
 	    ecdh_rsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 ssl_test_lib:ssl_options(server_ecdh_rsa_opts, Config)};
 	    rc4_rsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 [{ciphers, Ciphers} |
-		  ssl_test_lib:ssl_options(server_opts, Config)]};
+		  ssl_test_lib:ssl_options(server_verification_opts, Config)]};
 	    rc4_ecdh_rsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 [{ciphers, Ciphers} |
 		  ssl_test_lib:ssl_options(server_ecdh_rsa_opts, Config)]};
 	    rc4_ecdsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 [{ciphers, Ciphers} |
 		  ssl_test_lib:ssl_options(server_ecdsa_opts, Config)]};
 	    des_dhe_rsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 [{ciphers, Ciphers} |
-		  ssl_test_lib:ssl_options(server_opts, Config)]};
+		  ssl_test_lib:ssl_options(server_verification_opts, Config)]};
 	    des_rsa ->
-		{ssl_test_lib:ssl_options(client_opts, Config),
+		{ssl_test_lib:ssl_options(client_verification_opts, Config),
 		 [{ciphers, Ciphers} |
-		  ssl_test_lib:ssl_options(server_opts, Config)]}
+		  ssl_test_lib:ssl_options(server_verification_opts, Config)]}
 	end,
 
     Result =  lists:map(fun(Cipher) ->

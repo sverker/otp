@@ -30,7 +30,7 @@
 	 progex_bit_syntax/1, progex_records/1, 
 	 progex_lc/1, progex_funs/1,
 	 otp_5990/1, otp_6166/1, otp_6554/1,
-	 otp_7184/1, otp_7232/1, otp_8393/1, otp_10302/1]).
+	 otp_7184/1, otp_7232/1, otp_8393/1, otp_10302/1, otp_13719/1]).
 
 -export([ start_restricted_from_shell/1, 
 	  start_restricted_on_command_line/1,restricted_local/1]).
@@ -91,7 +91,7 @@ groups() ->
        progex_funs]},
      {tickets, [],
       [otp_5990, otp_6166, otp_6554, otp_7184,
-       otp_7232, otp_8393, otp_10302]}].
+       otp_7232, otp_8393, otp_10302, otp_13719]}].
 
 init_per_suite(Config) ->
     Config.
@@ -573,7 +573,7 @@ otp_5327(Config) when is_list(Config) ->
         (catch evaluate(<<"<<32/unit:8>>.">>, [])),
     ok.
 
-%% OTP-5435. sys_pre_expand not in the path.
+%% OTP-5435. compiler application not in the path.
 otp_5435(Config) when is_list(Config) ->
     true = <<103133:64/float>> =:=
         evaluate(<<"<<103133:64/float>> = <<103133:64/float>>.">>, []),
@@ -591,8 +591,9 @@ start_node(Name) ->
 
 otp_5435_2() ->
     true = code:del_path(compiler),
-    %% sys_pre_expand can no longer be found
-    %% OTP-5876. But erl_expand_records can!
+    %% Make sure record evaluation is not dependent on the compiler
+    %% application being in the path.
+    %% OTP-5876.
     [{attribute,_,record,{bar,_}},ok] =
         scan(<<"rd(foo,{bar}), 
                 rd(bar,{foo = (#foo{})#foo.bar}),
@@ -2808,6 +2809,19 @@ otp_10302(Config) when is_list(Config) ->
     " .\n" = t({Node,Test13}),
 
     test_server:stop_node(Node),
+    ok.
+
+otp_13719(Config) when is_list(Config) ->
+    Test = <<"-module(otp_13719).
+              -record(bar, {}).
+              -record(foo, {bar :: #bar{}}).">>,
+    File = filename("otp_13719.erl", Config),
+    Beam = filename("otp_13719.beam", Config),
+    ok = compile_file(Config, File, Test, []),
+    RR = "rr(\"" ++ Beam ++ "\"). #foo{}.",
+    "[bar,foo]\n#foo{bar = undefined}.\n" = t(RR),
+    file:delete(filename("test.beam", Config)),
+    file:delete(File),
     ok.
 
 scan(B) ->

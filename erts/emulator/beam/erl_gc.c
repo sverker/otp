@@ -517,6 +517,8 @@ delay_garbage_collection(Process *p, ErlHeapFragment *live_hf_end, int need, int
 	erts_proc_sched_data((p))->virtual_reds += vreds;
     }
 
+    ERTS_CHK_MBUF_SZ(p);
+
     ASSERT(CONTEXT_REDS >= erts_proc_sched_data(p)->virtual_reds);
     return reds_left;
 }
@@ -526,6 +528,8 @@ young_gen_usage(Process *p)
 {
     Uint hsz;
     Eterm *aheap;
+
+    ERTS_CHK_MBUF_SZ(p);
 
     hsz = p->mbuf_sz;
 
@@ -589,6 +593,8 @@ garbage_collect(Process* p, ErlHeapFragment *live_hf_end,
 #ifdef USE_VM_PROBES
     DTRACE_CHARBUF(pidbuf, DTRACE_TERM_BUF_SIZE);
 #endif
+
+    ERTS_CHK_MBUF_SZ(p);
 
     ASSERT(CONTEXT_REDS - ERTS_REDS_LEFT(p, fcalls)
 	   >= erts_proc_sched_data(p)->virtual_reds);
@@ -672,6 +678,7 @@ do_major_collection:
        killed before a GC could be done. */
     if (reds == -2) {
         ErtsProcLocks locks = ERTS_PROC_LOCKS_ALL;
+        int res;
 
         erts_smp_proc_lock(p, ERTS_PROC_LOCKS_ALL_MINOR);
         erts_send_exit_signal(p, p->common.id, p, &locks,
@@ -683,7 +690,9 @@ do_major_collection:
         erts_smp_atomic32_read_band_nob(&p->state, ~ERTS_PSFLG_GC);
 
         /* We have to make sure that we have space for need on the heap */
-        return delay_garbage_collection(p, live_hf_end, need, fcalls);
+        res = delay_garbage_collection(p, live_hf_end, need, fcalls);
+        ERTS_MSACC_POP_STATE_M();
+        return res;
     }
 
     erts_smp_atomic32_read_band_nob(&p->state, ~ERTS_PSFLG_GC);
@@ -882,6 +891,58 @@ erts_garbage_collect_hibernate(Process* p)
 }
 
 
+/*
+ * HiPE native code stack scanning procedures:
+ * - fullsweep_nstack()
+ * - gensweep_nstack()
+ * - offset_nstack()
+ * - sweep_literals_nstack()
+ */
+#if defined(HIPE)
+
+#define GENSWEEP_NSTACK(p,old_htop,n_htop)				\
+	do {								\
+		Eterm *tmp_old_htop = old_htop;				\
+		Eterm *tmp_n_htop = n_htop;				\
+		gensweep_nstack((p), &tmp_old_htop, &tmp_n_htop);	\
+		old_htop = tmp_old_htop;				\
+		n_htop = tmp_n_htop;					\
+	} while(0)
+
+/*
+ * offset_nstack() can ignore the descriptor-based traversal the other
+ * nstack procedures use and simply call offset_heap_ptr() instead.
+ * This relies on two facts:
+ * 1. The only live non-Erlang terms on an nstack are return addresses,
+ *    and they will be skipped thanks to the low/high range check.
+ * 2. Dead values, even if mistaken for pointers into the low/high area,
+ *    can be offset safely since they won't be dereferenced.
+ *
+ * XXX: WARNING: If HiPE starts storing other non-Erlang values on the
+ * nstack, such as floats, then this will have to be changed.
+ */
+static ERTS_INLINE void offset_nstack(Process* p, Sint offs,
+				      char* area, Uint area_size)
+{
+    if (p->hipe.nstack) {
+	ASSERT(p->hipe.nsp && p->hipe.nstend);
+	offset_heap_ptr(hipe_nstack_start(p), hipe_nstack_used(p),
+			offs, area, area_size);
+    }
+    else {
+	ASSERT(!p->hipe.nsp && !p->hipe.nstend);
+    }
+}
+
+#else /* !HIPE */
+
+#define fullsweep_nstack(p,n_htop)		        	(n_htop)
+#define GENSWEEP_NSTACK(p,old_htop,n_htop)	        	do{}while(0)
+#define offset_nstack(p,offs,area,area_size)	        	do{}while(0)
+#define sweep_literals_nstack(p,old_htop,area,area_size)	(old_htop)
+
+#endif /* HIPE */
+
 void
 erts_garbage_collect_literals(Process* p, Eterm* literals,
 			      Uint byte_lit_size,
@@ -944,7 +1005,7 @@ erts_garbage_collect_literals(Process* p, Eterm* literals,
     area_size = byte_lit_size;
     n = setup_rootset(p, p->arg_reg, p->arity, &rootset);
     roots = rootset.roots;
-    old_htop = p->old_htop;
+    old_htop = sweep_literals_nstack(p, p->old_htop, area, area_size);
     while (n--) {
         Eterm* g_ptr = roots->v;
         Uint g_sz = roots->sz;
@@ -1210,56 +1271,6 @@ minor_collection(Process* p, ErlHeapFragment *live_hf_end,
      */
     return -1;
 }
-
-/*
- * HiPE native code stack scanning procedures:
- * - fullsweep_nstack()
- * - gensweep_nstack()
- * - offset_nstack()
- */
-#if defined(HIPE)
-
-#define GENSWEEP_NSTACK(p,old_htop,n_htop)				\
-	do {								\
-		Eterm *tmp_old_htop = old_htop;				\
-		Eterm *tmp_n_htop = n_htop;				\
-		gensweep_nstack((p), &tmp_old_htop, &tmp_n_htop);	\
-		old_htop = tmp_old_htop;				\
-		n_htop = tmp_n_htop;					\
-	} while(0)
-
-/*
- * offset_nstack() can ignore the descriptor-based traversal the other
- * nstack procedures use and simply call offset_heap_ptr() instead.
- * This relies on two facts:
- * 1. The only live non-Erlang terms on an nstack are return addresses,
- *    and they will be skipped thanks to the low/high range check.
- * 2. Dead values, even if mistaken for pointers into the low/high area,
- *    can be offset safely since they won't be dereferenced.
- *
- * XXX: WARNING: If HiPE starts storing other non-Erlang values on the
- * nstack, such as floats, then this will have to be changed.
- */
-static ERTS_INLINE void offset_nstack(Process* p, Sint offs,
-				      char* area, Uint area_size)
-{
-    if (p->hipe.nstack) {
-	ASSERT(p->hipe.nsp && p->hipe.nstend);
-	offset_heap_ptr(hipe_nstack_start(p), hipe_nstack_used(p),
-			offs, area, area_size);
-    }
-    else {
-	ASSERT(!p->hipe.nsp && !p->hipe.nstend);
-    }
-}
-
-#else /* !HIPE */
-
-#define fullsweep_nstack(p,n_htop)		(n_htop)
-#define GENSWEEP_NSTACK(p,old_htop,n_htop)	do{}while(0)
-#define offset_nstack(p,offs,area,area_size)	do{}while(0)
-
-#endif /* HIPE */
 
 static void
 do_minor(Process *p, ErlHeapFragment *live_hf_end,
@@ -2152,26 +2163,18 @@ copy_one_frag(Eterm** hpp, ErlOffHeap* off_heap,
 	    *hp++ = val;
 	    break;
 	case TAG_PRIMARY_LIST:
-#ifdef SHCOPY_SEND
             if (erts_is_literal(val,list_val(val))) {
                 *hp++ = val;
             } else {
                 *hp++ = offset_ptr(val, offs);
             }
-#else
-            *hp++ = offset_ptr(val, offs);
-#endif
             break;
 	case TAG_PRIMARY_BOXED:
-#ifdef SHCOPY_SEND
             if (erts_is_literal(val,boxed_val(val))) {
                 *hp++ = val;
             } else {
                 *hp++ = offset_ptr(val, offs);
             }
-#else
-            *hp++ = offset_ptr(val, offs);
-#endif
 	    break;
 	case TAG_PRIMARY_HEADER:
 	    *hp++ = val;
@@ -2257,10 +2260,12 @@ move_msgq_to_heap(Process *p)
 		    ASSERT(mp->data.dist_ext->heap_size >= 0);
 		    if (is_not_nil(ERL_MESSAGE_TOKEN(mp))) {
 			bp = erts_dist_ext_trailer(mp->data.dist_ext);
+                        /* Tokens does not use literal optimization */
 			ERL_MESSAGE_TOKEN(mp) = copy_struct(ERL_MESSAGE_TOKEN(mp),
 							    bp->used_size,
-							    &factory.hp,
-							    factory.off_heap);
+                                                            &factory.hp,
+                                                            factory.off_heap);
+
 			erts_cleanup_offheap(&bp->off_heap);
 		    }
 		    ERL_MESSAGE_TERM(mp) = erts_decode_dist_ext(&factory,

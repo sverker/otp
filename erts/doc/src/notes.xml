@@ -32,6 +32,54 @@
   <p>This document describes the changes made to the ERTS application.</p>
 
 
+<section><title>Erts 8.0.3</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Fixed a race that could cause a lost wakeup of a process
+	    that timed out in a <c>receive ... after</c>. This bug
+	    was introduced in ERTS version 7.0.</p>
+          <p>
+	    Own Id: OTP-13798 Aux Id: OTP-11997 </p>
+        </item>
+        <item>
+          <p>
+	    Fixed segfault after writing an erl crash dump.</p>
+          <p>
+	    Own Id: OTP-13799</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Erts 8.0.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Fix scheduler deadlock bug in <c>ets:update_counter/4</c>
+	    when key is not found and inserting the default object
+	    causes the table to grow.</p>
+          <p>
+	    Own Id: OTP-13731 Aux Id: ERL-188 </p>
+        </item>
+        <item>
+          <p>
+	    Fix VM abort "Overrun stack and heap" in garbage
+	    collection triggered by a <c>bsl</c> operation and some
+	    very specific heap conditions.</p>
+          <p>
+	    Own Id: OTP-13732 Aux Id: seq13142 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
 <section><title>Erts 8.0.1</title>
 
     <section><title>Fixed Bugs and Malfunctions</title>
@@ -541,9 +589,7 @@
 	    Own Id: OTP-13440</p>
         </item>
         <item>
-          <p>
-	    Add the following NIF API functions:</p>
-          <p>
+          <p>Add the following NIF API functions:</p>
 	    <list> <item><seealso
 	    marker="erl_nif#enif_cpu_time"><c>enif_cpu_time</c></seealso></item>
 	    <item><seealso
@@ -560,9 +606,9 @@
 	    marker="erl_nif#enif_binary_to_term"><c>enif_binary_to_term</c></seealso></item>
 	    <item><seealso
 	    marker="erl_nif#enif_port_command"><c>enif_port_command</c></seealso></item>
-	    </list></p>
+	    </list>
           <p>
-	    for details of what each function does, see the erl_nif
+	    For details of what each function does, see the erl_nif
 	    documentation.</p>
           <p>
 	    Own Id: OTP-13442</p>
@@ -9334,9 +9380,9 @@
 	    dynamically linking against <c>libssl.so</c> and
 	    <c>libcrypto.so</c>. The runtime library search path has
 	    also been extended. </item><item> The <c>configure</c>
-	    scripts of <c>erl_interface</c> and <c>odbc</c> now
+	    scripts of Erl_interface and ODBC now
 	    search for thread libraries and thread library quirks the
-	    same way as <c>erts</c> do. </item><item> The
+	    same way as ERTS do. </item><item> The
 	    <c>configure</c> script of the <c>odbc</c> application
 	    now also looks for odbc libraries in <c>lib64</c> and
 	    <c>lib/64</c> directories when building on a 64-bit
@@ -10452,7 +10498,7 @@
         </item>
         <item>
           <p>
-	    A corrected bug in <c>ets</c> for <c>bag</c> and
+	    A corrected bug in ETS for <c>bag</c> and
 	    <c>duplicate_bag</c>. A <c>delete/2</c> or
 	    <c>lookup_element/3</c> could miss objects in a fixed
 	    table if one or more objects with the same key had
@@ -10894,7 +10940,7 @@
       <list>
         <item>
           <p>
-	    A corrected bug in <c>ets</c> for <c>bag</c> and
+	    A corrected bug in ETS for <c>bag</c> and
 	    <c>duplicate_bag</c>. A <c>delete/2</c> or
 	    <c>lookup_element/3</c> could miss objects in a fixed
 	    table if one or more objects with the same key had

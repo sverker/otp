@@ -332,8 +332,6 @@ erl_init(int ncpu,
 	 int node_tab_delete_delay,
 	 ErtsDbSpinCount db_spin_count)
 {
-    init_benchmarking();
-
     erts_bif_unique_init();
     erts_init_monitors();
     erts_init_time(time_correction, time_warp_mode);
@@ -384,6 +382,7 @@ erl_init(int ncpu,
     erts_init_unicode(); /* after RE to get access to PCRE unicode */
     erts_init_external();
     erts_init_map();
+    erts_beam_bif_load_init();
     erts_delay_trap = erts_export_put(am_erlang, am_delay_trap, 2);
     erts_late_init_process();
 #if HAVE_ERTS_MSEG
@@ -2250,7 +2249,40 @@ erl_start(int argc, char **argv)
     otp_ring0_pid = erl_first_process_otp("otp_ring0", NULL, 0,
 					  boot_argc, boot_argv);
 
-    (void) erl_system_process_otp(otp_ring0_pid, "erts_code_purger");
+    {
+	/*
+	 * The erts_code_purger and the erts_literal_area_collector
+	 * system processes are *always* alive. If they terminate
+	 * they bring the whole VM down.
+	 */
+	Eterm pid;
+
+	pid = erl_system_process_otp(otp_ring0_pid, "erts_code_purger");
+	erts_code_purger
+	    = (Process *) erts_ptab_pix2intptr_ddrb(&erts_proc,
+						    internal_pid_index(pid));
+	ASSERT(erts_code_purger && erts_code_purger->common.id == pid);
+	erts_proc_inc_refc(erts_code_purger); 
+
+	pid = erl_system_process_otp(otp_ring0_pid, "erts_literal_area_collector");
+	erts_literal_area_collector
+	    = (Process *) erts_ptab_pix2intptr_ddrb(&erts_proc,
+						    internal_pid_index(pid));
+	ASSERT(erts_literal_area_collector
+	       && erts_literal_area_collector->common.id == pid);
+	erts_proc_inc_refc(erts_literal_area_collector);
+
+#ifdef ERTS_DIRTY_SCHEDULERS
+	pid = erl_system_process_otp(otp_ring0_pid, "erts_dirty_process_code_checker");
+	erts_dirty_process_code_checker
+	    = (Process *) erts_ptab_pix2intptr_ddrb(&erts_proc,
+						    internal_pid_index(pid));
+	ASSERT(erts_dirty_process_code_checker
+	       && erts_dirty_process_code_checker->common.id == pid);
+	erts_proc_inc_refc(erts_dirty_process_code_checker);
+#endif
+
+    }
 
 #ifdef ERTS_SMP
     erts_start_schedulers();
@@ -2268,7 +2300,7 @@ erl_start(int argc, char **argv)
 #endif
 	set_main_stack_size();
 	erts_sched_init_time_sup(esdp);
-	process_main();
+	process_main(esdp->x_reg_array, esdp->f_reg_array);
     }
 #endif
 }
@@ -2345,10 +2377,11 @@ erts_exit_vv(int n, int flush_async, char *fmt, va_list args1, va_list args2)
 {
     system_cleanup(flush_async);
 
-    save_statistics();
-
     if (erts_mtrace_enabled)
 	erts_mtrace_exit((Uint32) n);
+
+    if (fmt != NULL && *fmt != '\0')
+	erl_error(fmt, args2);	/* Print error message. */
 
     /* Produce an Erlang core dump if error */
     if (((n == ERTS_ERROR_EXIT && erts_no_crash_dump == 0) || n == ERTS_DUMP_EXIT)
@@ -2356,8 +2389,6 @@ erts_exit_vv(int n, int flush_async, char *fmt, va_list args1, va_list args2)
 	erl_crash_dump_v((char*) NULL, 0, fmt, args1);
     }
 
-    if (fmt != NULL && *fmt != '\0')
-	  erl_error(fmt, args2);	/* Print error message. */
     sys_tty_reset(n);
 
     if (n == ERTS_INTR_EXIT)

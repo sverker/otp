@@ -19,7 +19,7 @@
 
 {application, compiler,
  [{description, "ERTS  CXC 138 10"},
-  {vsn, "6.0.3"},
+  {vsn, "7.0.1"},
   {modules, [
 	     beam_a,
 	     beam_asm,
@@ -63,7 +63,6 @@
 	     sys_core_fold_lists,
 	     sys_core_inline,
 	     sys_pre_attributes,
-	     sys_pre_expand,
 	     v3_codegen,
 	     v3_core,
 	     v3_kernel,

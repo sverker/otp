@@ -32,6 +32,23 @@
   <p>This document describes the changes made to the Compiler
     application.</p>
 
+<section><title>Compiler 7.0.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    A literal binary matching regression was introduced in
+	    19.0 where a match could fail to resolve to the right
+	    clause. This has now been fixed.</p>
+          <p>
+	    Own Id: OTP-13738</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
 <section><title>Compiler 7.0</title>
 
     <section><title>Fixed Bugs and Malfunctions</title>
@@ -263,7 +280,7 @@
         <item>
           <p>
 	    The <c>cerl</c> and <c>cerl_trees</c> modules in the
-	    <c>compiler</c> application are now documented.</p>
+	    Compiler application are now documented.</p>
           <p>
 	    Own Id: OTP-11978</p>
         </item>
@@ -1965,7 +1982,7 @@
 	    <c>RightExpr</c> or vice versa. The evaluation order is
 	    only important if the expressions contains and/or depends
 	    on operations with side-effects, such as message passing
-	    or <c>ets</c> operations.</p>
+	    or ETS operations.</p>
           <p>
 	    Own Id: OTP-7206</p>
         </item>

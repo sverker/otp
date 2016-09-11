@@ -135,10 +135,14 @@ split_paths([], _S, Path, Paths) ->
 
 -spec call(term()) -> term().
 call(Req) ->
+    Ref = erlang:monitor(process, ?MODULE),
     ?MODULE ! {code_call, self(), Req},
     receive 
 	{?MODULE, Reply} ->
-	    Reply
+            erlang:demonitor(Ref,[flush]),
+	    Reply;
+        {'DOWN',Ref,process,_,_} ->
+            exit({'DOWN',code_server,Req})
     end.
 
 reply(Pid, Res) ->
@@ -933,14 +937,20 @@ del_ebin(Dir) ->
     filename:join(del_ebin_1(filename:split(Dir))).
 
 del_ebin_1([Parent,App,"ebin"]) ->
-    Ext = archive_extension(),
-    case filename:basename(Parent, Ext) of
-	Parent ->
-	    %% Plain directory.
+    case filename:basename(Parent) of
+	[] ->
+	    %% Parent is the root directory
 	    [Parent,App];
-	Archive ->
-	    %% Archive.
-	    [Archive]
+	_ ->
+	    Ext = archive_extension(),
+	    case filename:basename(Parent, Ext) of
+		Parent ->
+		    %% Plain directory.
+		    [Parent,App];
+		Archive ->
+		    %% Archive.
+		    [Archive]
+	    end
     end;
 del_ebin_1([H|T]) ->
     [H|del_ebin_1(T)];
@@ -1390,7 +1400,7 @@ finish_on_load_report(Mod, Term) ->
     %% from the code_server process.
     spawn(fun() ->
 		  F = "The on_load function for module "
-		      "~s returned ~P\n",
+		      "~s returned:~n~P\n",
 
 		  %% Express the call as an apply to simplify
 		  %% the ext_mod_dep/1 test case.

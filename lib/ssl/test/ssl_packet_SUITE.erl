@@ -41,7 +41,7 @@
 
 -define(MANY, 1000).
 -define(SOME, 50).
--define(BASE_TIMEOUT_SECONDS, 15).
+-define(BASE_TIMEOUT_SECONDS, 30).
 -define(SOME_SCALE, 20).
 -define(MANY_SCALE, 20).
 
@@ -140,6 +140,7 @@ init_per_suite(Config) ->
     catch crypto:stop(),
     try crypto:start() of
 	ok ->
+	    ssl:stop(),
 	    ssl:start(),
 	    {ok, _} = make_certs:all(proplists:get_value(data_dir, Config),
 				     proplists:get_value(priv_dir, Config)),
@@ -162,6 +163,7 @@ init_per_group(GroupName, Config) ->
 		    {skip, "Missing crypto support"}
 	    end;
 	_ ->
+	    ssl:stop(),
 	    ssl:start(),
 	    Config
     end.

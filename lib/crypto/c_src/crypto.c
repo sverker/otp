@@ -37,7 +37,9 @@
 #include <openssl/opensslconf.h>
 
 #include <openssl/crypto.h>
+#ifndef OPENSSL_NO_DES
 #include <openssl/des.h>
+#endif /* #ifndef OPENSSL_NO_DES */
 /* #include <openssl/idea.h> This is not supported on the openssl OTP requires */
 #include <openssl/dsa.h>
 #include <openssl/rsa.h>
@@ -108,6 +110,7 @@
 #if OPENSSL_VERSION_NUMBER >= OpenSSL_version_plain(1,0,1)
 # define HAVE_EVP_AES_CTR
 # define HAVE_GCM
+# define HAVE_CMAC
 # if OPENSSL_VERSION_NUMBER < OpenSSL_version(1,0,1,'d')
 #  define HAVE_GCM_EVP_DECRYPT_BUG
 # endif
@@ -119,6 +122,10 @@
 
 #if OPENSSL_VERSION_NUMBER <= OpenSSL_version(0,9,8,'l')
 # define HAVE_ECB_IVEC_BUG
+#endif
+
+#if defined(HAVE_CMAC)
+#include <openssl/cmac.h>
 #endif
 
 #if defined(HAVE_EC)
@@ -224,6 +231,7 @@ static ERL_NIF_TERM hmac_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
 static ERL_NIF_TERM hmac_init_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM hmac_update_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM hmac_final_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM cmac_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM block_crypt_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM aes_cfb_8_crypt(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM aes_ige_crypt_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
@@ -294,6 +302,7 @@ static ErlNifFunc nif_funcs[] = {
     {"hmac_update_nif", 2, hmac_update_nif},
     {"hmac_final_nif", 1, hmac_final_nif},
     {"hmac_final_nif", 2, hmac_final_nif},
+    {"cmac_nif", 3, cmac_nif},
     {"block_crypt_nif", 5, block_crypt_nif},
     {"block_crypt_nif", 4, block_crypt_nif},
     {"aes_ige_crypt_nif", 4, aes_ige_crypt_nif},
@@ -458,16 +467,29 @@ struct cipher_type_t {
     const size_t key_len;      /* != 0 to also match on key_len */
 };
 
+#ifdef OPENSSL_NO_DES
+#define COND_NO_DES_PTR(Ptr) (NULL)
+#else
+#define COND_NO_DES_PTR(Ptr) (Ptr)
+#endif
+
 struct cipher_type_t cipher_types[] =
 {
     {{"rc2_cbc"}, {&EVP_rc2_cbc}},
-    {{"des_cbc"}, {&EVP_des_cbc}},
-    {{"des_cfb"}, {&EVP_des_cfb8}},
-    {{"des_ecb"}, {&EVP_des_ecb}},
-    {{"des_ede3_cbc"}, {&EVP_des_ede3_cbc}},
-    {{"des_ede3_cbf"},
+    {{"des_cbc"}, {COND_NO_DES_PTR(&EVP_des_cbc)}},
+    {{"des_cfb"}, {COND_NO_DES_PTR(&EVP_des_cfb8)}},
+    {{"des_ecb"}, {COND_NO_DES_PTR(&EVP_des_ecb)}},
+    {{"des_ede3_cbc"}, {COND_NO_DES_PTR(&EVP_des_ede3_cbc)}},
+    {{"des_ede3_cbf"}, /* Misspelled, retained */
 #ifdef HAVE_DES_ede3_cfb_encrypt
-     {&EVP_des_ede3_cfb8}
+     {COND_NO_DES_PTR(&EVP_des_ede3_cfb8)}
+#else
+     {NULL}
+#endif
+    },
+    {{"des_ede3_cfb"},
+#ifdef HAVE_DES_ede3_cfb_encrypt
+     {COND_NO_DES_PTR(&EVP_des_ede3_cfb8)}
 #else
      {NULL}
 #endif
@@ -749,7 +771,7 @@ static ERL_NIF_TERM algo_hash[8];   /* increase when extending the list */
 static int algo_pubkey_cnt;
 static ERL_NIF_TERM algo_pubkey[7]; /* increase when extending the list */
 static int algo_cipher_cnt;
-static ERL_NIF_TERM algo_cipher[20]; /* increase when extending the list */
+static ERL_NIF_TERM algo_cipher[23]; /* increase when extending the list */
 
 static void init_algorithms_types(ErlNifEnv* env)
 {
@@ -785,10 +807,13 @@ static void init_algorithms_types(ErlNifEnv* env)
     algo_pubkey[algo_pubkey_cnt++] = enif_make_atom(env, "srp");
 
     algo_cipher_cnt = 0;
+#ifndef OPENSSL_NO_DES
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env, "des3_cbc");
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env, "des_ede3");
 #ifdef HAVE_DES_ede3_cfb_encrypt
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env, "des3_cbf");
+    algo_cipher[algo_cipher_cnt++] = enif_make_atom(env, "des3_cfb");
+#endif
 #endif
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env, "aes_cbc");
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env, "aes_cbc128");
@@ -800,8 +825,11 @@ static void init_algorithms_types(ErlNifEnv* env)
 #ifdef HAVE_AES_IGE
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env,"aes_ige256");
 #endif
+#ifndef OPENSSL_NO_DES
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env,"des_cbc");
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env,"des_cfb");
+    algo_cipher[algo_cipher_cnt++] = enif_make_atom(env,"des_ecb");
+#endif
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env,"blowfish_cbc");
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env,"blowfish_cfb64");
     algo_cipher[algo_cipher_cnt++] = enif_make_atom(env,"blowfish_ofb64");
@@ -1344,6 +1372,53 @@ static ERL_NIF_TERM hmac_final_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
     memcpy(mac_bin, mac_buf, mac_len);
 
     return ret;
+}
+
+static ERL_NIF_TERM cmac_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{/* (Type, Key, Data) */
+#if defined(HAVE_CMAC)
+    struct cipher_type_t *cipherp = NULL;
+    const EVP_CIPHER     *cipher;
+    CMAC_CTX             *ctx;
+    ErlNifBinary         key;
+    ErlNifBinary         data;
+    ERL_NIF_TERM         ret;
+    size_t               ret_size;
+
+    if (!enif_inspect_iolist_as_binary(env, argv[1], &key)
+        || !(cipherp = get_cipher_type(argv[0], key.size))
+        || !enif_inspect_iolist_as_binary(env, argv[2], &data)) {
+        return enif_make_badarg(env);
+    }
+    cipher = cipherp->cipher.p;
+    if (!cipher) {
+        return enif_raise_exception(env, atom_notsup);
+    }
+
+    ctx = CMAC_CTX_new();
+    if (!CMAC_Init(ctx, key.data, key.size, cipher, NULL)) {
+        CMAC_CTX_free(ctx);
+        return atom_notsup;
+    }
+
+    if (!CMAC_Update(ctx, data.data, data.size) ||
+        !CMAC_Final(ctx,
+                    enif_make_new_binary(env, EVP_CIPHER_block_size(cipher), &ret),
+                    &ret_size)) {
+        CMAC_CTX_free(ctx);
+        return atom_notsup;
+    }
+    ASSERT(ret_size == (unsigned)EVP_CIPHER_block_size(cipher));
+
+    CMAC_CTX_free(ctx);
+    CONSUME_REDS(env, data);
+    return ret;
+#else
+    /* The CMAC functionality was introduced in OpenSSL 1.0.1
+     * Although OTP requires at least version 0.9.8, the versions 0.9.8 and 1.0.0 are
+     * no longer maintained. */
+    return atom_notsup;
+#endif
 }
 
 static ERL_NIF_TERM block_crypt_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
