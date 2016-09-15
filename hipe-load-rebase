@@ -1,0 +1,21 @@
+Refactor, rename some structs
+349e38648986d1ba60c97af14cd7346cb44f973b7
+
+Rename struct 'sdesc' to 'hipe_sdesc'
+48e6dbcb2086d6d8ea65aa78eb10b2afbda2eb11
+
+Refactor hipe_sdesc.summary into bit fields
+85061a466b27142f12e7445f249ec8cbf3e13640
+
+Improve super bad hash function
+58385dfbcb6f342eaa4c54d2240d4b151a0638ea
+
+Refactor module_start_staging
+7889f2680e06a75da5d3768aefe039ee55c1fd48
+
+Deallocate native code and stubs
+74c91e1feeb97bc92486128209729734174e3233
+
+Deallocate stack descriptors
+d2a2f5421cbc2d7b5ae0477232f86562cceace90
+
