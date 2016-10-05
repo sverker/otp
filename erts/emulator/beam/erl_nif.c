@@ -1899,22 +1899,26 @@ int enif_snprintf(char *buffer, size_t size, const char* format, ...)
  **       Memory managed (GC'ed) "resource" objects       **
  ***********************************************************/
 
-
+#if 0
 struct enif_resource_type_t
 {
     struct enif_resource_type_t* next;   /* list of all resource types */
     struct enif_resource_type_t* prev;    
     struct erl_module_nif* owner;  /* that created this type and thus implements the destructor*/
     ErlNifResourceDtor* dtor;      /* user destructor function */
+    ErlNifResourceStop* stop;
+    ErlNifResourceExit* exit;
     erts_refc_t refc;  /* num of resources of this type (HOTSPOT warning)
                           +1 for active erl_module_nif */
     Eterm module;
     Eterm name;
 };
+#endif
 
 /* dummy node in circular list */
 struct enif_resource_type_t resource_type_list; 
 
+#if 0
 typedef struct enif_resource_t
 {
     struct enif_resource_type_t* type;
@@ -1927,9 +1931,9 @@ typedef struct enif_resource_t
 
     char data[1];
 }ErlNifResource;
+#endif
 
 #define SIZEOF_ErlNifResource(SIZE) (offsetof(ErlNifResource,data) + (SIZE))
-#define DATA_TO_RESOURCE(PTR) ((ErlNifResource*)((char*)(PTR) - offsetof(ErlNifResource,data)))
 
 static ErlNifResourceType* find_resource_type(Eterm module, Eterm name)
 {
@@ -1992,24 +1996,35 @@ struct opened_resource_type
 
     ErlNifResourceFlags op;
     ErlNifResourceType* type;
-    ErlNifResourceDtor* new_dtor;
+    ErlNifResourceTypeInit new_callbacks;
 };
 static struct opened_resource_type* opened_rt_list = NULL;
 
 ErlNifResourceType*
 enif_open_resource_type(ErlNifEnv* env,
-			const char* module_str, 
-			const char* name_str, 
+                        const char* module_str,
+                        const char* name_str,
 			ErlNifResourceDtor* dtor,
 			ErlNifResourceFlags flags,
 			ErlNifResourceFlags* tried)
+{
+    ErlNifResourceTypeInit init =  {dtor, NULL, NULL};
+    ASSERT(module_str == NULL); /* for now... */
+    return enif_open_resource_type_x(env, name_str, &init, flags, tried);
+}
+
+ErlNifResourceType*
+enif_open_resource_type_x(ErlNifEnv* env,
+                          const char* name_str,
+                          const ErlNifResourceTypeInit* init,
+                          ErlNifResourceFlags flags,
+                          ErlNifResourceFlags* tried)
 {
     ErlNifResourceType* type = NULL;
     ErlNifResourceFlags op = flags;
     Eterm module_am, name_am;
 
     ASSERT(erts_smp_thr_progress_is_blocking());
-    ASSERT(module_str == NULL); /* for now... */
     module_am = make_atom(env->mod_nif->mod->module);
     name_am = enif_make_atom(env, name_str);
 
@@ -2043,7 +2058,7 @@ enif_open_resource_type(ErlNifEnv* env,
 						sizeof(struct opened_resource_type));
 	ort->op = op;
 	ort->type = type;
-	ort->new_dtor = dtor;
+	ort->new_callbacks = *init;  /* WARNING sizeof(*init) */
 	ort->next = opened_rt_list;
 	opened_rt_list = ort;
     }
@@ -2071,7 +2086,9 @@ static void commit_opened_resource_types(struct erl_module_nif* lib)
 	}
 
 	type->owner = lib;
-	type->dtor = ort->new_dtor;
+	type->dtor = ort->new_callbacks.dtor;
+        type->stop = ort->new_callbacks.stop;
+        type->exit = ort->new_callbacks.exit;
 
 	if (type->dtor != NULL) {
 	    erts_refc_inc(&lib->rt_dtor_cnt, 1);
@@ -2117,6 +2134,15 @@ static void nif_resource_dtor(Binary* bin)
 	steal_resource_type(type);
 	erts_free(ERTS_ALC_T_NIF, type);
     }
+}
+
+void erts_resource_stop(ErlNifResource* resource)
+{
+    struct enif_msg_environment_t msg_env;
+    ASSERT(resource->type->stop);
+    pre_nif_noproc(&msg_env, resource->type->owner, NULL);
+    resource->type->stop(&msg_env.env, resource->data);
+    post_nif_noproc(&msg_env);
 }
 
 void* enif_alloc_resource(ErlNifResourceType* type, size_t size)

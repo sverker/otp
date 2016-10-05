@@ -52,7 +52,7 @@
 ** 2.11: 19.0 enif_snprintf
 */
 #define ERL_NIF_MAJOR_VERSION 2
-#define ERL_NIF_MINOR_VERSION 11
+#define ERL_NIF_MINOR_VERSION 12
 
 /*
  * The emulator will refuse to load a nif-lib with a major version
@@ -134,8 +134,28 @@ typedef struct
     void* ref_bin;
 }ErlNifBinary;
 
+typedef struct {
+    void (*dtor)(ErlNifEnv* env, void* obj);
+    void (*stop)(ErlNifEnv* env, void* obj); /* at ERL_NIF_SELECT_STOP event */
+    void (*exit)(ErlNifEnv* env, void* obj); /* at exit of connected process */
+} ErlNifResourceTypeInit;
+
 typedef struct enif_resource_type_t ErlNifResourceType;
 typedef void ErlNifResourceDtor(ErlNifEnv*, void*);
+typedef void ErlNifResourceStop(ErlNifEnv*, void*);
+typedef void ErlNifResourceExit(ErlNifEnv*, void*);
+
+enum ErlNifSelectFlags {
+    ERL_NIF_SELECT_STOP      = (0 << 0),
+    ERL_NIF_SELECT_READ      = (1 << 0),
+    ERL_NIF_SELECT_WRITE     = (1 << 2),
+    ERL_NIF_SELECT_READWRITE = ERL_NIF_SELECT_READ | ERL_NIF_SELECT_READ
+};
+
+//#ifndef ERL_SYS_DRV
+typedef int ErlNifEvent; /* An event to be selected on. */
+//#endif
+
 typedef enum
 {
     ERL_NIF_RT_CREATE = 1,
