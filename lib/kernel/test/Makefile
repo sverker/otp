@@ -78,6 +78,8 @@ MODULES= \
 	ignore_cores \
 	zlib_SUITE \
 	loose_node \
+	netmarks_SUITE netmarks_client netmarks_server netmarks_udp_server\
+	sverk_tcp \
 	sendfile_SUITE \
 	standard_error_SUITE \
 	multi_load_SUITE
@@ -148,7 +150,7 @@ release_tests_spec: make_emakefile
 	$(INSTALL_DIR) "$(RELSYSDIR)"
 	$(INSTALL_DATA) $(ERL_FILES) "$(RELSYSDIR)"
 	$(INSTALL_DATA) $(APP_FILES) "$(RELSYSDIR)"
-	$(INSTALL_DATA) kernel.spec kernel_smoke.spec  $(EMAKEFILE)\
+	$(INSTALL_DATA) kernel.spec kernel_smoke.spec kernel_bench.spec $(EMAKEFILE)\
 		$(COVERFILE) "$(RELSYSDIR)"
 	chmod -R u+w "$(RELSYSDIR)"
 	@tar cf - *_SUITE_data | (cd "$(RELSYSDIR)"; tar xf -)

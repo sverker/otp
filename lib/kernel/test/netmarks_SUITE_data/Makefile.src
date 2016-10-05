@@ -1,0 +1,29 @@
+CC = @CC@
+LD = @LD@
+CFLAGS = @CFLAGS@ @DEFS@
+CROSSLDFLAGS = @CROSSLDFLAGS@
+
+PROGS = client@exe@ server@exe@ udp_client@exe@
+
+all: $(PROGS) sverk_tcp@dll@
+
+@SHLIB_RULES@
+
+client@exe@: client@obj@
+	$(LD) $(CROSSLDFLAGS) -o client client@obj@ @LIBS@
+
+server@exe@: server@obj@
+	$(LD) $(CROSSLDFLAGS) -o server server@obj@ @LIBS@
+
+udp_client@exe@: udp_client@obj@
+	$(LD) $(CROSSLDFLAGS) -o udp_client udp_client@obj@ @LIBS@
+
+
+client@obj@: client.c
+	$(CC) -c -o client@obj@ $(CFLAGS) client.c
+
+server@obj@: server.c
+	$(CC) -c -o server@obj@ $(CFLAGS) server.c
+
+udp_client@obj@: udp_client.c
+	$(CC) -c -o udp_client@obj@ $(CFLAGS) udp_client.c
