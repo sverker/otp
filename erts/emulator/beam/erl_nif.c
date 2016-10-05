@@ -1076,6 +1076,24 @@ int enif_realloc_binary(ErlNifBinary* bin, size_t size)
     return 1;
 }
 
+void enif_copy_binary(ErlNifBinary* to, ErlNifBinary* from)
+{
+    ASSERT(to != from);
+    if (from->ref_bin != NULL) {
+	Binary* refbin = from->ref_bin;
+	ASSERT(from->bin_term == THE_NON_VALUE);
+        to->size = from->size;
+        to->data = from->data;
+        to->bin_term = THE_NON_VALUE;
+        to->ref_bin = refbin;
+	erts_refc_inc(&refbin->refc, 2);
+    }
+    else {
+        enif_alloc_binary(from->size, to);
+        sys_memcpy(to->data, from->data, from->size);
+    }
+}
+
 
 void enif_release_binary(ErlNifBinary* bin)
 {
