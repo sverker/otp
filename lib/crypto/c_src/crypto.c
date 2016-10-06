@@ -516,14 +516,15 @@ struct cipher_type_t cipher_types[] =
 
 static struct cipher_type_t* get_cipher_type(ERL_NIF_TERM type, size_t key_len);
 
-/*
+
 #define PRINTF_ERR0(FMT) enif_fprintf(stderr, FMT "\n")
 #define PRINTF_ERR1(FMT, A1) enif_fprintf(stderr, FMT "\n", A1)
 #define PRINTF_ERR2(FMT, A1, A2) enif_fprintf(stderr, FMT "\n", A1, A2)
-*/
+/*
 #define PRINTF_ERR0(FMT)
 #define PRINTF_ERR1(FMT,A1)
 #define PRINTF_ERR2(FMT,A1,A2)
+*/
 
 #if OPENSSL_VERSION_NUMBER >= OpenSSL_version_plain(1,0,0)
 /* Define resource types for OpenSSL context structures. */
@@ -602,8 +603,10 @@ static int init(ErlNifEnv* env, ERL_NIF_TERM load_info)
     ErlNifBinary lib_bin;
     char lib_buf[1000];
 
-    if (!verify_lib_version())
-	return __LINE__;
+    if (!verify_lib_version()) {
+	PRINTF_ERR0("CRYPTO: init failed, keeping loaded anyway.\nCRYPTO: Do not use any crypto functions except crypto:info_lib().");
+	return 0;
+    }
 
     /* load_info: {301, <<"/full/path/of/this/library">>} */
     if (!enif_get_tuple(env, load_info, &tpl_arity, &tpl_array)
