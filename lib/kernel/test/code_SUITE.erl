@@ -492,7 +492,8 @@ upgrade(Config) ->
             _ ->
                 case hipe:llvm_support_available() of
                     false -> [beam,hipe];
-                    true  -> [beam,hipe,hipe_llvm]
+                    true  -> %% We could combine all three but that takes time
+                        [beam,hipe_llvm]
                 end
         end,
 
