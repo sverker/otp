@@ -696,6 +696,9 @@ $(OBJDIR)/%.o: drivers/$(ERLANG_OSTYPE)/%.c
 $(OBJDIR)/%.o: nifs/common/%.c
 	$(V_CC) $(CFLAGS) -DLIBSCTP=$(LIBSCTP) $(INCLUDES) -Inifs/common -Inifs/$(ERLANG_OSTYPE) -c $< -o $@
 
+$(OBJDIR)/%.o: nifs/$(ERLANG_OSTYPE)/%.c
+	$(V_CC) $(CFLAGS) $(INCLUDES) -Inifs/common -Inifs/$(ERLANG_OSTYPE) -I../etc/$(ERLANG_OSTYPE) -c $< -o $@
+
 # ----------------------------------------------------------------------
 # Specials
 #
@@ -786,7 +789,8 @@ RUN_OBJS = \
 	$(OBJDIR)/erl_msacc.o
 
 LTTNG_OBJS = $(OBJDIR)/erlang_lttng.o
-NIF_OBJS = $(OBJDIR)/erl_tracer_nif.o
+NIF_OBJS = $(OBJDIR)/erl_tracer_nif.o \
+	   $(OBJDIR)/ttsl_nif.o
 
 ifeq ($(TARGET),win32)
 DRV_OBJS = \
@@ -1052,6 +1056,7 @@ BEAM_SRC=$(wildcard beam/*.c)
 DRV_COMMON_SRC=$(wildcard drivers/common/*.c)
 DRV_OSTYPE_SRC=$(wildcard drivers/$(ERLANG_OSTYPE)/*.c)
 NIF_COMMON_SRC=$(wildcard nifs/common/*.c)
+NIF_OSTYPE_SRC=$(wildcard nifs/$(ERLANG_OSTYPE)/*.c)
 ALL_SYS_SRC=$(wildcard sys/$(ERLANG_OSTYPE)/*.c) $(wildcard sys/common/*.c)
 # We use $(shell ls) here instead of wildcard as $(wildcard ) resolved at
 # loadtime of the makefile and at that time these files are not generated yet.
@@ -1110,6 +1115,8 @@ $(TTF_DIR)/depend.mk: $(TTF_DIR)/GENERATED $(PRELOAD_SRC)
 	$(V_at)$(DEP_CC) $(DEP_FLAGS) -I../etc/$(ERLANG_OSTYPE) $(DRV_OSTYPE_SRC) \
 		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk
 	$(V_at)$(DEP_CC) $(DEP_FLAGS) $(NIF_COMMON_SRC) \
+		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk
+	$(V_at)$(DEP_CC) $(DEP_FLAGS) $(NIF_OSTYPE_SRC) \
 		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk
 	$(V_at)$(DEP_CC) $(DEP_FLAGS) $(SYS_SRC) \
 		| $(SED_DEPEND) >> $(TTF_DIR)/depend.mk

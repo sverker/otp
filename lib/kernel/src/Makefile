@@ -115,6 +115,7 @@ MODULES = \
 	rpc \
 	seq_trace \
 	standard_error \
+	ttsl \
 	user \
 	user_drv \
 	user_sup \

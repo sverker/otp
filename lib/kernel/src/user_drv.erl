@@ -36,6 +36,8 @@
 -define(CTRL_OP_GET_UNICODE_STATE,101).
 -define(CTRL_OP_SET_UNICODE_STATE,102).
 
+-define(TTY_BUFFSIZE, 1024).
+
 %% start()
 %% start(ArgumentList)
 %% start(PortName, Shell)
@@ -47,7 +49,8 @@
 -spec start() -> pid().
 
 start() ->					%Default line editing shell
-    spawn(user_drv, server, ['tty_sl -c -e',{shell,start,[init]}]).
+    %%spawn(user_drv, server, ['tty_sl -c -e',{shell,start,[init]}]).
+    spawn(user_drv, server, ['ttsl',{shell,start,[init]}]).
 
 start([Pname]) ->
     spawn(user_drv, server, [Pname,{shell,start,[init]}]);
@@ -90,6 +93,11 @@ interfaces(UserDrv) ->
 
 server(Pid, Shell) when is_pid(Pid) ->
     server1(Pid, Pid, Shell);
+server(ttsl, Shell) ->
+    process_flag(trap_exit, true),
+    ttsl:init(),
+    ttsl:start(<<"ttsl -c -e">>),
+    server1(ttsl, ttsl, Shell);
 server(Pname, Shell) ->
     process_flag(trap_exit, true),
     case catch open_port({spawn,Pname}, [eof]) of
@@ -168,6 +176,10 @@ server_loop(Iport, Oport, User, Gr, IOQueue) ->
 
 server_loop(Iport, Oport, Curr, User, Gr, {Resp, IOQ} = IOQueue) ->
     receive
+        {select, _, _, ready_input} ->
+            BsBin = ttsl:read(),
+	    Unicode = unicode:characters_to_list(BsBin,utf8),
+	    port_bytes(Unicode, Iport, Oport, Curr, User, Gr, IOQueue);
 	{Iport,{data,Bs}} ->
 	    BsBin = list_to_binary(Bs),
 	    Unicode = unicode:characters_to_list(BsBin,utf8),
@@ -244,7 +256,7 @@ handle_req(next,Iport,Oport,{false,IOQ}=IOQueue) ->
         {empty,_} ->
 	    IOQueue;
         {{value,{Origin,Req}},ExecQ} ->
-            case io_request(Req, Iport, Oport) of
+            case io_request_maybe_sync(Req, Iport, Oport, Origin) of
                 ok ->
 		    handle_req(next,Iport,Oport,{false,ExecQ});
                 Reply ->
@@ -254,7 +266,7 @@ handle_req(next,Iport,Oport,{false,IOQ}=IOQueue) ->
 handle_req(Msg,Iport,Oport,{false,IOQ}=IOQueue) ->
     empty = queue:peek(IOQ),
     {Origin,Req} = Msg,
-    case io_request(Req, Iport, Oport) of
+    case io_request_maybe_sync(Req, Iport, Oport, Origin) of
 	ok ->
 	    IOQueue;
 	Reply ->
@@ -494,15 +506,18 @@ get_line_timeout(more_chars) -> infinity.
 
 % Let driver report window geometry,
 % definitely outside of the common interface
-get_tty_geometry(Iport) ->
+get_tty_geometry(Iport) when is_port(Iport) ->
     case (catch port_control(Iport,?CTRL_OP_GET_WINSIZE,[])) of
 	List when length(List) =:= 8 -> 
 	    <<W:32/native,H:32/native>> = list_to_binary(List),
 	    {W,H};
 	_ ->
 	    error
-    end.
-get_unicode_state(Iport) ->
+    end;
+get_tty_geometry(_) ->
+    ttsl:get_window_size().
+
+get_unicode_state(Iport) when is_port(Iport) ->
     case (catch port_control(Iport,?CTRL_OP_GET_UNICODE_STATE,[])) of
 	[Int] when Int > 0 -> 
 	    true;
@@ -510,9 +525,11 @@ get_unicode_state(Iport) ->
 	    false;
 	_ ->
 	    error
-    end.
+    end;
+get_unicode_state(_) ->
+    ttsl:get_unicode_state().
 
-set_unicode_state(Iport, Bool) ->
+set_unicode_state(Iport, Bool) when is_port(Iport) ->
     Data = case Bool of
 	       true -> [1];
 	       false -> [0]
@@ -524,12 +541,38 @@ set_unicode_state(Iport, Bool) ->
 	    {unicode, false};
 	_ ->
 	    error
+    end;
+set_unicode_state(_, Bool) ->
+    case ttsl:set_unicode_state(Bool) of
+	true ->
+	    {unicode, utf8};
+	false ->
+	    {unicode, false}
+    end.
+
+
+io_request_maybe_sync(Request, Iport, Oport, Origin) ->
+    case io_request(Request, Iport, Oport) of
+        ok -> ok;
+        {now,Reply} ->
+            Origin ! {reply,Reply},
+            ok;
+        {later,Reply} ->
+            Reply
     end.
 
 %% io_request(Request, InPort, OutPort)
 %% io_requests(Requests, InPort, OutPort)
 %% Note: InPort is unused.
 
+io_request(Request, ttsl, ttsl) ->
+    try nif_command(Request)
+    catch
+        {requests,Rs} ->
+            io_requests(Rs, ttsl, ttsl);
+        _ ->
+            ok
+    end;
 io_request(Request, Iport, Oport) ->
     try io_command(Request) of
         {command,_} = Command ->
@@ -574,6 +617,33 @@ io_command(beep) ->
     {command,[?OP_BEEP]};
 io_command(Else) ->
     throw(Else).
+
+nif_command({put_chars_sync, unicode,Cs,Reply}) ->
+    QueLen = ttsl:putc(unicode:characters_to_binary(Cs,utf8)),
+    case QueLen < ?TTY_BUFFSIZE of
+        true -> {now, Reply};
+        false ->
+            erlang:display("put_chars_sync buffer full"),
+            {later, Reply}
+    end;
+nif_command({put_chars, unicode,Cs}) ->
+    ttsl:putc(unicode:characters_to_binary(Cs,utf8)),
+    ok;
+nif_command({move_rel,N}) ->
+    ttsl:move_rel(N),
+    ok;
+nif_command({insert_chars,unicode,Cs}) ->
+    ttsl:insc(unicode:characters_to_binary(Cs,utf8)),
+    ok;
+nif_command({delete_chars,N}) ->
+    ttsl:delc(N),
+    ok;
+nif_command(beep) ->
+    ttsl:beep(),
+    ok;
+nif_command(Else) ->
+    throw(Else).
+
 
 %% gr_new()
 %% gr_get_num(Group, Index)

@@ -18,7 +18,7 @@
  * %CopyrightEnd%
  */
 /*
- * Tty driver that reads one character at the time and provides a
+ * Tty nif lib that reads one character at the time and provides a
  * smart line for output.
  */
 
@@ -26,10 +26,8 @@
 #  include "config.h"
 #endif
 
-#include "erl_driver.h"
-
-static int ttysl_init(void);
-static ErlDrvData ttysl_start(ErlDrvPort, char*);
+#define STATIC_ERLANG_NIF 1
+#include "erl_nif.h"
 
 #ifdef HAVE_TERMCAP  /* else make an empty driver that can not be opened */
 
@@ -128,38 +126,37 @@ static int lpos;                /* The current "cursor position" in the line buf
 #define NL '\n'
 
 /* Main interface functions. */
-static void ttysl_stop(ErlDrvData);
-static void ttysl_from_erlang(ErlDrvData, char*, ErlDrvSizeT);
-static void ttysl_to_tty(ErlDrvData, ErlDrvEvent);
-static void ttysl_flush_tty(ErlDrvData);
-static void ttysl_from_tty(ErlDrvData, ErlDrvEvent);
-static void ttysl_stop_select(ErlDrvEvent, void*);
-static Sint16 get_sint16(char*);
+static void ttsl_rt_stop(ErlNifEnv* env, void* resource, int, int);
 
-static ErlDrvPort ttysl_port;
+static int ttsl_is_started = 0;
 static int ttysl_fd;
-static int ttysl_terminate = 0;
-static int ttysl_send_ok = 0;
-static ErlDrvBinary *putcbuf;
+//static int ttysl_terminate = 0;
 static int putcpos;
-static int putclen;
+static ErlNifResourceType* ttsl_resource_type;
+
+struct ttsl_resource_t {
+    int Dum_di_dum_dum;
+};
+
+struct ttsl_resource_t* ttsl_resource;
+
 
 /* Functions that work on the line buffer. */
 static int start_lbuf(void);
 static int stop_lbuf(void);
-static int put_chars(const byte*,int);
+static int put_chars(byte*,int);
 static int move_rel(int);
 static int ins_chars(byte *,int);
 static int del_chars(int);
 static int step_over_chars(int);
-static int insert_buf(const byte*,int);
-static int write_buf(const Uint32 *,int);
+static int insert_buf(byte*,int);
+static int write_buf(Uint32 *,int);
 static int outc(int c);
 static int move_cursor(int,int);
 
 /* Termcap functions. */
 static int start_termcap(void);
-static int stop_termcap(void);
+//static int stop_termcap(void);
 static int move_left(int);
 static int move_right(int);
 static int move_up(int);
@@ -170,15 +167,14 @@ static void update_cols(void);
 static int tty_init(int,int,int,int);
 static int tty_set(int);
 static int tty_reset(int);
-static ErlDrvSSizeT ttysl_control(ErlDrvData, unsigned int,
-				  char *, ErlDrvSizeT, char **, ErlDrvSizeT);
+
 #ifdef ERTS_NOT_USED
 static RETSIGTYPE suspend(int);
 #endif
 static RETSIGTYPE cont(int);
 static RETSIGTYPE winch(int);
 
-/*#define LOG_DEBUG*/
+#define LOG_DEBUG
 
 #ifdef LOG_DEBUG
 FILE *debuglog = NULL;
@@ -217,41 +213,29 @@ static int utf8buf_size; /* size of incomplete input */
 #  define IF_IMPL(x) NULL
 #endif /* HAVE_TERMCAP */
 
-/* Define the driver table entry. */
-struct erl_drv_entry ttsl_driver_entry = {
-    ttysl_init,
-    ttysl_start,
-    IF_IMPL(ttysl_stop),
-    IF_IMPL(ttysl_from_erlang),
-    IF_IMPL(ttysl_from_tty),
-    IF_IMPL(ttysl_to_tty),
-    "tty_sl", /* driver_name */
-    NULL, /* finish */
-    NULL, /* handle */
-    IF_IMPL(ttysl_control),
-    NULL, /* timeout */
-    NULL, /* outputv */
-    NULL, /* ready_async */
-    IF_IMPL(ttysl_flush_tty),
-    NULL, /* call */
-    NULL, /* event */
-    ERL_DRV_EXTENDED_MARKER,
-    ERL_DRV_EXTENDED_MAJOR_VERSION,
-    ERL_DRV_EXTENDED_MINOR_VERSION,
-    0, /* ERL_DRV_FLAGs */
-    NULL, /* handle2 */
-    NULL, /* process_exit */
-    IF_IMPL(ttysl_stop_select)
-};
+static ERL_NIF_TERM atom_ok;
+static ERL_NIF_TERM atom_true;
+static ERL_NIF_TERM atom_false;
+static ERL_NIF_TERM atom_error;
+static ERL_NIF_TERM atom_undefined;
 
-
-static int ttysl_init(void)
+static int ttsl_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
 #ifdef HAVE_TERMCAP
-    ttysl_port = (ErlDrvPort)-1;
+    ErlNifResourceTypeInit rt_init = {NULL, ttsl_rt_stop};
     ttysl_fd = -1;
     lbuf = NULL;		/* For line buffer handling */
     capbuf = NULL;		/* For termcap handling */
+
+    ttsl_resource_type = enif_open_resource_type_x(env, "tty_sl", &rt_init,
+                                                   ERL_NIF_RT_CREATE, NULL);
+
+    atom_ok = enif_make_atom(env, "ok");
+    atom_true = enif_make_atom(env, "true");
+    atom_false = enif_make_atom(env, "false");
+    atom_error = enif_make_atom(env, "error");
+    atom_undefined = enif_make_atom(env, "undefined");
+
 #endif
 #ifdef LOG_DEBUG
     {
@@ -267,27 +251,39 @@ static int ttysl_init(void)
     return 0;
 }
 
-static ErlDrvData ttysl_start(ErlDrvPort port, char* buf)
+static ERL_NIF_TERM start_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
 #ifndef HAVE_TERMCAP
-    return ERL_DRV_ERROR_GENERAL;
+    return __LINE__;
 #else
-    char *s, *t, *l;
+    ErlNifBinary buf_bin;
+    char *buf, *s, *t, *l;
     int canon, echo, sig;	/* Terminal characteristics */
     int flag;
     extern int using_oldshell; /* set this to let the rest of erts know */
 
-    DEBUGLOG(("ttysl_start: driver input \"%s\", ttysl_port = %d (-1 expected)", buf, ttysl_port));
+    if (!enif_inspect_binary(env, argv[0], &buf_bin)) {
+        enif_make_badarg(env);
+    }
+    /* A null terminated and writable copy */
+    buf = enif_alloc(buf_bin.size+1);
+    memcpy(buf, buf_bin.data, buf_bin.size);
+    buf[buf_bin.size] = 0;
+
+    DEBUGLOG(("ttysl_start: driver input \"%s\", started = %d (0 expected)",
+              buf, ttsl_is_started));
     utf8buf_size = 0;
-    if (ttysl_port != (ErlDrvPort)-1) {
-        DEBUGLOG(("ttysl_start: failure with ttysl_port = %d, not initialized properly?\n", ttysl_port));
-        return ERL_DRV_ERROR_GENERAL;
+    if (ttsl_is_started) {
+        DEBUGLOG(("ttsl_start: failure, already started?\n"));
+        goto error;
     }
 
-    DEBUGLOG(("ttysl_start: isatty(0) = %d (1 expected), isatty(1) = %d (1 expected)", isatty(0), isatty(1)));
+    DEBUGLOG(("ttysl_start: isatty(0) = %d (1 expected), isatty(1) = %d (1 expected)",
+              isatty(0), isatty(1)));
     if (!isatty(0) || !isatty(1)) {
-        DEBUGLOG(("ttysl_start: failure in isatty, isatty(0) = %d, isatty(1) = %d", isatty(0), isatty(1)));
-	return ERL_DRV_ERROR_GENERAL;
+        DEBUGLOG(("ttysl_start: failure in isatty, isatty(0) = %d, isatty(1) = %d",
+                  isatty(0), isatty(1)));
+	goto error;
     }
 
     /* Set the terminal modes to default leave as is. */
@@ -307,7 +303,7 @@ static ErlDrvData ttysl_start(ErlDrvPort port, char* buf)
         }
         else if ((ttysl_fd = open(s, O_RDWR, 0)) < 0) {
             DEBUGLOG(("ttysl_start: failed to open ttysl_fd, open(%s, O_RDWR, 0)) = %d\n", s, ttysl_fd));
-            return ERL_DRV_ERROR_GENERAL;
+            goto error;
         }
     }
 
@@ -317,9 +313,9 @@ static ErlDrvData ttysl_start(ErlDrvPort port, char* buf)
     if (tty_init(ttysl_fd, canon, echo, sig) < 0 ||
         tty_set(ttysl_fd) < 0) {
         DEBUGLOG(("ttysl_start: failed init tty or set tty\n"));
-	ttysl_port = (ErlDrvPort)-1;
+	ttsl_is_started = 0;
 	tty_reset(ttysl_fd);
-	return ERL_DRV_ERROR_GENERAL;
+	goto error;
     }
 
     /* Set up smart line and termcap stuff. */
@@ -327,7 +323,7 @@ static ErlDrvData ttysl_start(ErlDrvPort port, char* buf)
         DEBUGLOG(("ttysl_start: failed to start_lbuf or start_termcap\n"));
 	stop_lbuf();		/* Must free this */
 	tty_reset(ttysl_fd);
-	return ERL_DRV_ERROR_GENERAL;
+        goto error;
     }
 
     SET_NONBLOCKING(ttysl_fd);
@@ -353,14 +349,20 @@ static ErlDrvData ttysl_start(ErlDrvPort port, char* buf)
     sys_signal(SIGCONT, cont);
     sys_signal(SIGWINCH, winch);
 
-    driver_select(port, (ErlDrvEvent)(UWord)ttysl_fd, ERL_DRV_READ|ERL_DRV_USE, 1);
-    ttysl_port = port;
+    ttsl_resource = enif_alloc_resource(ttsl_resource_type, sizeof(struct ttsl_resource_t));
+    enif_select(env, (ErlNifEvent)(UWord)ttysl_fd, ERL_NIF_SELECT_READ,
+                ttsl_resource, atom_undefined);
+    ttsl_is_started = 1;
 
     /* we need to know this when we enter the break handler */
     using_oldshell = 0;
 
     DEBUGLOG(("ttysl_start: successful start\n"));
-    return (ErlDrvData)ttysl_port;	/* Nothing important to return */
+    return atom_ok;
+
+error:
+    enif_free(buf);
+    return atom_error;
 #endif /* HAVE_TERMCAP */
 }
 
@@ -386,65 +388,51 @@ static void ttysl_get_window_size(Uint32 *width, Uint32 *height)
     *height = DEF_HEIGHT;
 }
     
-static ErlDrvSSizeT ttysl_control(ErlDrvData drv_data,
-				  unsigned int command,
-				  char *buf, ErlDrvSizeT len,
-				  char **rbuf, ErlDrvSizeT rlen)
+static ERL_NIF_TERM get_window_size_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    char resbuff[2*sizeof(Uint32)];
-    ErlDrvSizeT res_size;
-    switch (command) {
-    case CTRL_OP_GET_WINSIZE:
-	{
-	    Uint32 w,h;
-	    ttysl_get_window_size(&w,&h);
-	    memcpy(resbuff,&w,sizeof(Uint32));
-	    memcpy(resbuff+sizeof(Uint32),&h,sizeof(Uint32));
-	    res_size = 2*sizeof(Uint32);
-	}
-	break;
-    case CTRL_OP_GET_UNICODE_STATE:
-	*resbuff = (utf8_mode) ? 1 : 0;
-	res_size = 1;
-	break;
-    case CTRL_OP_SET_UNICODE_STATE:
-	if (len > 0) {
-	    int m = (int) *buf;
-	    *resbuff = (utf8_mode) ? 1 : 0;
-	    res_size = 1;
-	    utf8_mode = (m) ? 1 : 0;
-	} else {
-	    return 0;
-	}
-	break;
-    default:
-	return 0;
-    }
-    if (rlen < res_size) {
-	*rbuf = driver_alloc(res_size);
-    }
-    memcpy(*rbuf,resbuff,res_size);
-    return res_size;
+    Uint32 w,h;
+    ttysl_get_window_size(&w,&h);
+    return enif_make_tuple2(env, enif_make_uint(env, w), enif_make_uint(env, h));
+}
+
+static ERL_NIF_TERM get_unicode_state_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    return utf8_mode ? atom_true : atom_false;
+}
+
+static ERL_NIF_TERM set_unicode_state_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    ERL_NIF_TERM res = get_unicode_state_nif(env, 0, argv);
+
+    if (argv[0] == atom_true)
+        utf8_mode = 1;
+    else if (argv[0] == atom_false)
+        utf8_mode = 0;
+    else
+        return enif_make_badarg(env);
+
+    return res;
 }
 
 
-static void ttysl_stop(ErlDrvData ttysl_data)
+/*
+static void ttysl_stop(void)
 {
-    DEBUGLOG(("ttysl_stop: ttysl_port = %d\n",ttysl_port));
-    if (ttysl_port != (ErlDrvPort)-1) {
+    DEBUGLOG(("ttysl_stop: is_started = %d\n",ttsl_is_started));
+    if (ttsl_is_started) {
 	stop_lbuf();
 	stop_termcap();
 	tty_reset(ttysl_fd);
-	driver_select(ttysl_port, (ErlDrvEvent)(UWord)ttysl_fd,
-                      ERL_DRV_WRITE|ERL_DRV_READ|ERL_DRV_USE, 0);
+	enif_select(env, (ErlNifEvent)(UWord)ttysl_fd,
+                    ERL_NIF_SELECT_STOP, ttsl_resource, atom_undefined);
 	sys_signal(SIGCONT, SIG_DFL);
 	sys_signal(SIGWINCH, SIG_DFL);
     }
-    ttysl_port = (ErlDrvPort)-1;
+    ttsl_is_started = 0;
     ttysl_fd = -1;
     ttysl_terminate = 0;
-    /* return TRUE; */
 }
+*/
 
 static int put_utf8(int ch, byte *target, int sz, int *pos)
 {
@@ -498,10 +486,10 @@ static int put_utf8(int ch, byte *target, int sz, int *pos)
 }
     
 
-static int pick_utf8(const byte *s, int sz, int *pos)
+static int pick_utf8(byte *s, int sz, int *pos) 
 {
     int size = sz - (*pos);
-    const byte *source;
+    byte *source;
     Uint unipoint;
 
     if (size > 0) {
@@ -624,7 +612,7 @@ static void octal_or_hex_format(Uint ch, byte *buf, int *pos)
  * Check that there is enough room in all buffers to copy all pad chars
  * and stiff we need If not, realloc lbuf.
  */
-static int check_buf_size(const byte *s, int n)
+static int check_buf_size(byte *s, int n)
 {
     int pos = 0;
     int ch;
@@ -677,9 +665,9 @@ static int check_buf_size(const byte *s, int n)
     if (size + lpos >= lbuf_size) {
 
 	lbuf_size = size + lpos + BUFSIZ;
-	if ((lbuf = driver_realloc(lbuf, lbuf_size * sizeof(Uint32))) == NULL) {
+	if ((lbuf = enif_realloc(lbuf, lbuf_size * sizeof(Uint32))) == NULL) {
             DEBUGLOG(("check_buf_size: alloc failure of %d bytes", lbuf_size * sizeof(Uint32)));
-	    driver_failure(ttysl_port, -1);
+	    abort(); //driver_failure(ttysl_port, -1);
 	    return(0);
 	}
     }
@@ -688,171 +676,190 @@ static int check_buf_size(const byte *s, int n)
 }
 
 
-static void ttysl_from_erlang(ErlDrvData ttysl_data, char* buf, ErlDrvSizeT count)
+struct queued_buf
 {
-    ErlDrvSizeT sz;
+    struct queued_buf* next;
+    int nbytes;
+    byte buf[1];
+};
 
-    sz = driver_sizeq(ttysl_port);
+static struct queued_buf* ttsl_q_head = NULL;
+static struct queued_buf* ttsl_q_tail = NULL;
+static struct queued_buf* putcbuf;
+static unsigned int ttsl_q_head_written = 0;
+static unsigned int ttsl_q_total = 0;
+static int waiting_to_write = 0;
 
-    putclen = count > TTY_BUFFSIZE ? TTY_BUFFSIZE : count;
-    putcbuf = driver_alloc_binary(putclen);
+static void alloc_buf(int count);
+static ERL_NIF_TERM try_write(ErlNifEnv*);
+static ERL_NIF_TERM do_write(ErlNifEnv*);
+
+static ERL_NIF_TERM putc_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    ErlNifBinary bin;
+    if (!enif_inspect_binary(env, argv[0], &bin)) {
+        enif_make_badarg(env);
+    }
+    DEBUGLOG(("ttysl_from_erlang: OP: Putc(%lu)",(unsigned long) bin.size));
+
+    alloc_buf(bin.size + 1); // SVERK: Really? Only 1 extra byte?
+    check_buf_size(bin.data, bin.size);
+    put_chars(bin.data, bin.size);
+    return try_write(env);
+}
+
+static ERL_NIF_TERM move_rel_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    int n;
+    if (!enif_get_int(env, argv[0], &n))
+        enif_make_badarg(env);
+
+    alloc_buf(3); // SVERK: Really? Only 3 bytes?
+    move_rel(n);
+    return try_write(env);
+}
+
+static ERL_NIF_TERM insc_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    ErlNifBinary bin;
+    if (!enif_inspect_binary(env, argv[0], &bin))
+        enif_make_badarg(env);
+
+    alloc_buf(bin.size + 1); // SVERK: Really? Only 1 extra byte?
+    check_buf_size(bin.data, bin.size);
+    ins_chars(bin.data, bin.size);
+    return try_write(env);
+}
+
+static ERL_NIF_TERM delc_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    int n;
+    if (!enif_get_int(env, argv[0], &n))
+        enif_make_badarg(env);
+
+    alloc_buf(3); // SVERK: Really? Only 3 bytes?
+    del_chars(n);
+    return try_write(env);
+}
+
+static ERL_NIF_TERM beep_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    alloc_buf(1);
+    outc('\007');
+    return try_write(env);
+}
+
+static ERL_NIF_TERM continue_write_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    waiting_to_write = 0;
+    return do_write(env);
+}
+
+static void alloc_buf(int count)
+{
+    if (count > TTY_BUFFSIZE)
+        count = TTY_BUFFSIZE;
+    putcbuf = enif_alloc(sizeof(struct queued_buf) + count);
+    putcbuf->nbytes = count;
     putcpos = 0;
 
     if (lpos > MAXSIZE) 
-	put_chars((byte*)"\n", 1);
-
-    DEBUGLOG(("ttysl_from_erlang: OP = %d", buf[0]));
-
-    switch (buf[0]) {
-    case OP_PUTC_SYNC:
-        /* Using sync means that we have to send an ok to the
-           controlling process for each command call. We delay
-           sending ok if the driver queue exceeds a certain size.
-           We do not set ourselves as a busy port, as this
-           could be very bad for user_drv, if it gets blocked on
-           the port_command. */
-        /* fall through */
-    case OP_PUTC:
-	DEBUGLOG(("ttysl_from_erlang: OP: Putc(%lu)",(unsigned long) count-1));
-	if (check_buf_size((byte*)buf+1, count-1) == 0)
-	    return; 
-	put_chars((byte*)buf+1, count-1);
-	break;
-    case OP_MOVE:
-	move_rel(get_sint16(buf+1));
-	break;
-    case OP_INSC:
-	if (check_buf_size((byte*)buf+1, count-1) == 0)
-	    return;
-	ins_chars((byte*)buf+1, count-1);
-	break;
-    case OP_DELC:
-	del_chars(get_sint16(buf+1));
-	break;
-    case OP_BEEP:
-	outc('\007');
-	break;
-    default:
-	/* Unknown op, just ignore. */
-	break;
-    }
-
-    driver_enq_bin(ttysl_port,putcbuf,0,putcpos);
-    driver_free_binary(putcbuf);
-
-    if (sz == 0) {
-        for (;;) {
-            int written, qlen;
-            SysIOVec *iov;
-
-            iov = driver_peekq(ttysl_port,&qlen);
-            if (iov)
-                written = writev(ttysl_fd, iov, qlen > MAXIOV ? MAXIOV : qlen);
-            else
-                written = 0;
-            if (written < 0) {
-                if (errno == ERRNO_BLOCK || errno == EINTR) {
-                    driver_select(ttysl_port,(ErlDrvEvent)(long)ttysl_fd,
-                                  ERL_DRV_USE|ERL_DRV_WRITE,1);
-                    break;
-                } else {
-                    DEBUGLOG(("ttysl_from_erlang: driver failure in writev(%d,..) = %d (errno = %d)\n", ttysl_fd, written, errno));
-		    driver_failure_posix(ttysl_port, errno);
-		    return;
-                }
-            } else {
-                if (driver_deq(ttysl_port, written) == 0)
-                    break;
-            }
-        }
-    }
-
-    if (buf[0] == OP_PUTC_SYNC) {
-        if (driver_sizeq(ttysl_port) > TTY_BUFFSIZE && !ttysl_terminate) {
-            /* We delay sending the ack until the buffer has been consumed */
-            ttysl_send_ok = 1;
-        } else {
-            ErlDrvTermData spec[] = {
-                ERL_DRV_PORT, driver_mk_port(ttysl_port),
-                ERL_DRV_ATOM, driver_mk_atom("ok"),
-                ERL_DRV_TUPLE, 2
-            };
-            ASSERT(ttysl_send_ok == 0);
-            erl_drv_output_term(driver_mk_port(ttysl_port), spec,
-                                sizeof(spec) / sizeof(spec[0]));
-        }
-    }
-
-    return; /* TRUE; */
+        put_chars((byte*)"\n", 1);
 }
 
-static void ttysl_to_tty(ErlDrvData ttysl_data, ErlDrvEvent fd) {
+static void enqueue_buf(void)
+{
+    putcbuf->nbytes = putcpos;
+    putcbuf->next = NULL;
+    if (ttsl_q_tail) {
+        ASSERT(ttsl_q_head);
+        ttsl_q_tail->next = putcbuf;
+    }
+    else {
+        ASSERT(!ttsl_q_head);
+        ASSERT(ttsl_q_total == 0);
+        ttsl_q_head = putcbuf;
+        ttsl_q_head_written = 0;
+    }
+    ttsl_q_tail = putcbuf;
+    ttsl_q_total += putcpos;
+}
+
+static ERL_NIF_TERM try_write(ErlNifEnv* env)
+{
+    enqueue_buf();
+
+    if (!waiting_to_write) {
+        return do_write(env);
+    }
+    else
+        return enif_make_uint(env, ttsl_q_total);
+}
+
+static ERL_NIF_TERM do_write(ErlNifEnv* env)
+{
+    ASSERT(ttsl_q_head);
     for (;;) {
-        int written, qlen;
-        SysIOVec *iov;
-        ErlDrvSizeT sz;
-
-        iov = driver_peekq(ttysl_port,&qlen);
-        
-        DEBUGLOG(("ttysl_to_tty: qlen = %d", qlen));
-
-        if (iov)
-            written = writev(ttysl_fd, iov, qlen > MAXIOV ? MAXIOV : qlen);
-        else
-            written = 0;
+        int written = write(ttysl_fd,
+                            ttsl_q_head->buf + ttsl_q_head_written,
+                            ttsl_q_head->nbytes - ttsl_q_head_written);
         if (written < 0) {
-            if (errno == EINTR) {
-	        continue;
-	    } else if (errno != ERRNO_BLOCK){
-                DEBUGLOG(("ttysl_to_tty: driver failure in writev(%d,..) = %d (errno = %d)\n", ttysl_fd, written, errno));
-	        driver_failure_posix(ttysl_port, errno);
-            }
-            break;
-        } else {
-            sz = driver_deq(ttysl_port, written);
-            if (sz < TTY_BUFFSIZE && ttysl_send_ok) {
-                ErlDrvTermData spec[] = {
-                    ERL_DRV_PORT, driver_mk_port(ttysl_port),
-                    ERL_DRV_ATOM, driver_mk_atom("ok"),
-                    ERL_DRV_TUPLE, 2
-                };
-                ttysl_send_ok = 0;
-                erl_drv_output_term(driver_mk_port(ttysl_port), spec,
-                                    sizeof(spec) / sizeof(spec[0]));
-            }
-            if (sz == 0) {
-                driver_select(ttysl_port,(ErlDrvEvent)(long)ttysl_fd,
-                              ERL_DRV_WRITE,0);
-                if (ttysl_terminate) {
-                    /* flush has been called, which means we should terminate
-                       when queue is empty. This will not send any exit
-                       message */
-                    DEBUGLOG(("ttysl_to_tty: ttysl_terminate normal\n"));
-                    driver_failure_atom(ttysl_port, "normal");
-		}
+            if (errno == ERRNO_BLOCK) {
+                enif_select(env, (ErlNifEvent)(long)ttysl_fd,
+                            ERL_NIF_SELECT_WRITE, ttsl_resource, atom_undefined);
+                waiting_to_write = 1;
                 break;
             }
+            else if (errno == EINTR) {
+                continue;
+            }
+            else {
+                ERL_NIF_TERM errno_term = enif_make_int(env, errno); 
+                return enif_make_tuple3(env, enif_make_atom(env, "error"),
+                                        enif_make_string(env, "write errno=", ERL_NIF_LATIN1),
+                                        errno_term);
+            }
+        } else {
+            ttsl_q_head_written += written;
+            ttsl_q_total -= written;
+            if (ttsl_q_head_written >= ttsl_q_head->nbytes) {
+                struct queued_buf* free_me = ttsl_q_head;
+                ASSERT(ttsl_q_head_written == ttsl_q_head->nbytes);
+                ttsl_q_head = ttsl_q_head->next;
+                ttsl_q_head_written = 0;
+                enif_free(free_me);
+                if (!ttsl_q_head) {
+                    ASSERT(ttsl_q_tail == free_me);
+                    ASSERT(ttsl_q_total == 0);
+                    ttsl_q_tail = NULL;
+                    break;
+                }
+            }
         }
     }
-
-    return;
+    return enif_make_uint(env, ttsl_q_total);
 }
 
+/*
 static void ttysl_flush_tty(ErlDrvData ttysl_data) {
     DEBUGLOG(("ttysl_flush_tty: .."));
     ttysl_terminate = 1;
     return;
 }
+*/
 
-static void ttysl_from_tty(ErlDrvData ttysl_data, ErlDrvEvent fd)
+#define READ_BUF_SZ 1024
+
+static ERL_NIF_TERM read_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    byte b[1024];
+    byte b[READ_BUF_SZ];
     ssize_t i;
     int ch = 0, pos = 0;
-    int left = 1024;
+    int left = READ_BUF_SZ;
     byte *p = b;
-    byte t[1024];
+    byte t[READ_BUF_SZ*2];  /* Max 2 bytes per latin1 as UTF8 */
     int tpos;
+    ERL_NIF_TERM res;
 
     if (utf8buf_size > 0) {
 	memcpy(b,utf8buf,utf8buf_size);
@@ -863,7 +870,7 @@ static void ttysl_from_tty(ErlDrvData ttysl_data, ErlDrvEvent fd)
 
     DEBUGLOG(("ttysl_from_tty: remainder = %d", left));
     
-    if ((i = read((int)(SWord)fd, (char *) p, left)) >= 0) {
+    if ((i = read(ttysl_fd, (char *) p, left)) >= 0) {
 	if (p != b) {
 	    i += (p - b);
 	}
@@ -878,42 +885,47 @@ static void ttysl_from_tty(ErlDrvData ttysl_data, ErlDrvEvent fd)
 		DEBUGLOG(("ttysl_from_tty: Giving up on UTF8 mode, invalid character"));
 		utf8_mode = 0;
 		goto latin_terminal;
-	    }
-	    driver_output(ttysl_port, (char *) b, pos);
-	} else {
+            }
+            p = enif_make_new_binary(env, pos, &res);
+            memcpy(p, b, pos);
+	}
+        else {
 	latin_terminal:
 	    tpos = 0;
-	    while (pos < i) {
-		while (tpos < 1020 && pos < i) { /* Max 4 bytes for UTF8 */
-		    put_utf8((int) b[pos++], t, 1024, &tpos);
-		}
-		driver_output(ttysl_port, (char *) t, tpos);
-		tpos = 0;
-	    }
+            while (pos < i) {
+                put_utf8((int) b[pos++], t, sizeof(t), &tpos);
+                ASSERT(tpos <= sizeof(t));
+            }
+            p = enif_make_new_binary(env, tpos, &res);
+            memcpy(p, t, tpos);
 	}
-    } else {
-        DEBUGLOG(("ttysl_from_tty: driver failure in read(%d,..) = %d\n", (int)(SWord)fd, i)); 
-	driver_failure(ttysl_port, -1);
     }
+    else if (errno == ERRNO_BLOCK || errno == EINTR) {
+        enif_make_new_binary(env, 0, &res);
+    }
+    else {
+        DEBUGLOG(("ttsl:read(): failure in read(%d,..) = %d\n",
+                  (int)(SWord)ttysl_fd, i));
+	return atom_error;
+    }
+    enif_select(env, (ErlNifEvent)ttysl_fd, ERL_NIF_SELECT_READ, ttsl_resource,
+                atom_undefined);
+
+    DEBUGLOG(("ttsl:read(): returning %T\n", res));
+    return res;
 }
 
-static void ttysl_stop_select(ErlDrvEvent e, void* _)
+static void ttsl_rt_stop(ErlNifEnv* env, void* resource, int fd, int is_direct_call)
 {
-    int fd = (int)(long)e;
-    if (fd != 0) {
-	close(fd);
+    ASSERT(resource == ttsl_resource);
+    if (ttysl_fd != 0) {
+	close(ttysl_fd);
     }
-}
-
-/* Procedures for putting and getting integers to/from strings. */
-static Sint16 get_sint16(char *s)
-{
-    return ((*s << 8) | ((byte*)s)[1]);
 }
 
 static int start_lbuf(void)
 {
-    if (!lbuf && !(lbuf = ( Uint32*) driver_alloc(lbuf_size * sizeof(Uint32))))
+    if (!lbuf && !(lbuf = ( Uint32*) enif_alloc(lbuf_size * sizeof(Uint32))))
       return FALSE;
     llen = 0;
     lpos = 0;
@@ -923,14 +935,14 @@ static int start_lbuf(void)
 static int stop_lbuf(void)
 {
     if (lbuf) {
-	driver_free(lbuf);
+	enif_free(lbuf);
 	lbuf = NULL;
     }
     return TRUE;
 }
 
 /* Put l bytes (in UTF8) from s into the buffer and output them. */
-static int put_chars(const byte *s, int l)
+static int put_chars(byte *s, int l)
 {
     int n;
 
@@ -967,14 +979,14 @@ static int ins_chars(byte *s, int l)
 
     /* Move tail of buffer to make space. */
     if ((tl = llen - lpos) > 0) {
-	if ((tbuf = driver_alloc(tl * sizeof(Uint32))) == NULL)
+	if ((tbuf = enif_alloc(tl * sizeof(Uint32))) == NULL)
 	    return FALSE;
 	memcpy(tbuf, lbuf + lpos, tl * sizeof(Uint32));
     }
     n = insert_buf(s, l);
     if (tl > 0) {
 	memcpy(lbuf + lpos, tbuf, tl * sizeof(Uint32));
-	driver_free(tbuf);
+	enif_free(tbuf);
     }
     llen += n;
     write_buf(lbuf + (lpos - n), llen - (lpos - n));
@@ -1074,7 +1086,7 @@ static int step_over_chars(int n)
  * Know about pad characters and treat \n specially.
  */
 
-static int insert_buf(const byte *s, int n)
+static int insert_buf(byte *s, int n)
 {
     int pos = 0;
     int buffpos = lpos;
@@ -1142,7 +1154,7 @@ static int insert_buf(const byte *s, int n)
  * occur normally.
  */
 
-static int write_buf(const Uint32 *s, int n)
+static int write_buf(Uint32 *s, int n)
 {
     byte ubuf[4];
     int ubytes = 0, i;
@@ -1187,7 +1199,7 @@ static int write_buf(const Uint32 *s, int n)
 	    DEBUGLOG(("write_buf: Escaped: %d", ch));
 	    octbytes = octal_or_hex_positions(ch);
 	    if (octbytes > 256) {
-		octbuff = driver_alloc(octbytes);
+		octbuff = enif_alloc(octbytes);
 	    } else {
 		octbuff = octtmp;
 	    }
@@ -1202,7 +1214,7 @@ static int write_buf(const Uint32 *s, int n)
 	    n -= octbytes+1;
 	    s += octbytes+1;
 	    if (octbuff != octtmp) {
-		driver_free(octbuff);
+		enif_free(octbuff);
 	    }
 #ifdef HAVE_WCWIDTH
 	} else if (*s & WIDE_TAG) {
@@ -1235,13 +1247,10 @@ static int write_buf(const Uint32 *s, int n)
 /* The basic procedure for outputting one character. */
 static int outc(int c)
 {
-    putcbuf->orig_bytes[putcpos++] = c;
-    if (putcpos == putclen) {
-        driver_enq_bin(ttysl_port,putcbuf,0,putclen);
-        driver_free_binary(putcbuf);
-        putcpos = 0;
-        putclen = TTY_BUFFSIZE;
-        putcbuf = driver_alloc_binary(putclen);
+    putcbuf->buf[putcpos++] = c;
+    if (putcpos == putcbuf->nbytes) {
+        enqueue_buf();
+        alloc_buf(TTY_BUFFSIZE);
     }
     return 1;
 }
@@ -1275,25 +1284,25 @@ static int start_termcap(void)
 
     DEBUGLOG(("start_termcap: .."));
 
-    capbuf = driver_alloc(1024);
+    capbuf = enif_alloc(1024);
     if (!capbuf)
 	goto false;
-    eres = erl_drv_getenv("TERM", capbuf, &envsz);
+    eres = enif_getenv("TERM", capbuf, &envsz);
     if (eres == 0)
 	env = capbuf;
     else if (eres < 0) {
         DEBUGLOG(("start_termcap: failure in erl_drv_getenv(\"TERM\", ..) = %d\n", eres));
 	goto false;
     } else /* if (eres > 1) */ {
-      char *envbuf = driver_alloc(envsz);
+      char *envbuf = enif_alloc(envsz);
       if (!envbuf)
 	  goto false;
       while (1) {
 	  char *newenvbuf;
-	  eres = erl_drv_getenv("TERM", envbuf, &envsz);
+	  eres = enif_getenv("TERM", envbuf, &envsz);
 	  if (eres == 0)
 	      break;
-	  newenvbuf = driver_realloc(envbuf, envsz);
+	  newenvbuf = enif_realloc(envbuf, envsz);
           if (eres < 0 || !newenvbuf) {
               DEBUGLOG(("start_termcap: failure in erl_drv_getenv(\"TERM\", ..) = %d or realloc buf == %p\n", eres, newenvbuf));
 	      env = newenvbuf ? newenvbuf : envbuf;
@@ -1309,7 +1318,7 @@ static int start_termcap(void)
     }
     if (env != capbuf) {
 	env = NULL;
-	driver_free(env);
+	enif_free(env);
     }
     c = capbuf;
     cols = tgetnum("co");
@@ -1329,19 +1338,21 @@ static int start_termcap(void)
     DEBUGLOG(("start_termcap: failed start\n"));
  false:
     if (env && env != capbuf)
-	driver_free(env);
+	enif_free(env);
     if (capbuf)
-	driver_free(capbuf);
+	enif_free(capbuf);
     capbuf = NULL;
     return FALSE;
 }
 
+/*
 static int stop_termcap(void)
 {
-    if (capbuf) driver_free(capbuf);
+    if (capbuf) enif_free(capbuf);
     capbuf = NULL;
     return TRUE;
 }
+*/
 
 static int move_left(int n)
 {
@@ -1539,4 +1550,21 @@ static RETSIGTYPE winch(int sig)
 {
     cols_needs_update = TRUE;
 }
+
+ErlNifFunc ttsl_nif_funcs[] = {
+    {"start", 1, start_nif},
+    {"get_window_size", 0, get_window_size_nif},
+    {"get_unicode_state", 0, get_unicode_state_nif},
+    {"set_unicode_state", 1, set_unicode_state_nif},
+    {"putc", 1, putc_nif},
+    {"move_rel", 1, move_rel_nif},
+    {"insc", 1, insc_nif},
+    {"delc", 1, delc_nif},
+    {"beep", 0, beep_nif},
+    {"continue_write", 0, continue_write_nif},
+    {"read", 0, read_nif}
+};
+
+ERL_NIF_INIT(ttsl, ttsl_nif_funcs, ttsl_load, NULL, NULL, NULL)
+
 #endif /* HAVE_TERMCAP */
