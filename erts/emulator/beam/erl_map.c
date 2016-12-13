@@ -562,7 +562,7 @@ static Eterm hashmap_from_unsorted_array(ErtsHeapFactory* factory,
     if (n == 0) {
 	Eterm *hp;
 	hp = erts_produce_heap(factory, 2, 0);
-	hp[0] = MAP_HEADER_HAMT_HEAD_BITMAP(0);
+	hp[0] = MAP_HEADER_HAMT_HEAD(0);
 	hp[1] = 0;
 
 	return make_hashmap(hp);
@@ -630,8 +630,8 @@ static Eterm hashmap_from_unsorted_array(ErtsHeapFactory* factory,
 	 * hash value has been swizzled, need to drag it down to get the
 	 * correct slot. */
 
-	hp    = erts_produce_heap(factory, HAMT_HEAD_BITMAP_SZ(1), 0);
-	hp[0] = MAP_HEADER_HAMT_HEAD_BITMAP(1 << ((hxns[0].hx >> 0x1c) & 0xf));
+	hp    = erts_produce_heap(factory, HAMT_HEAD_SZ(1), 0);
+	hp[0] = MAP_HEADER_HAMT_HEAD(1 << ((hxns[0].hx >> 0x1c) & 0xf));
 	hp[1] = 1;
 	hp[2] = hxns[0].val;
 	res   = make_hashmap(hp);
@@ -709,8 +709,8 @@ static Eterm hashmap_from_chunked_array(ErtsHeapFactory *factory, hxnode_t *hxns
 	v   = hxns[0].hx;
 	for (d = 7; d > 0; d--) {
 	    slot  = maskval(v,d);
-	    hp    = erts_produce_heap(factory, HAMT_NODE_BITMAP_SZ(1), HALLOC_EXTRA);
-	    hp[0] = MAP_HEADER_HAMT_NODE_BITMAP(1 << slot);
+	    hp    = erts_produce_heap(factory, HAMT_NODE_SZ(1), HALLOC_EXTRA);
+	    hp[0] = MAP_HEADER_HAMT_NODE(1 << slot);
 	    hp[1] = res;
 	    res   = make_hashmap(hp);
 	}
@@ -719,11 +719,11 @@ static Eterm hashmap_from_chunked_array(ErtsHeapFactory *factory, hxnode_t *hxns
 	hp    = erts_produce_heap(factory, (is_root ? 3 : 2), 0);
 
 	if (is_root) {
-	    hp[0] = MAP_HEADER_HAMT_HEAD_BITMAP(1 << slot);
+	    hp[0] = MAP_HEADER_HAMT_HEAD(1 << slot);
 	    hp[1] = size;
 	    hp[2] = res;
 	} else {
-	    hp[0] = MAP_HEADER_HAMT_NODE_BITMAP(1 << slot);
+	    hp[0] = MAP_HEADER_HAMT_NODE(1 << slot);
 	    hp[1] = res;
 	}
 	return make_hashmap(hp);
@@ -752,8 +752,8 @@ static Eterm hashmap_from_chunked_array(ErtsHeapFactory *factory, hxnode_t *hxns
 	dc = 7;
 	/* build collision nodes */
 	while (dc > d) {
-	    hp    = erts_produce_heap(factory, HAMT_NODE_BITMAP_SZ(1), HALLOC_EXTRA);
-	    hp[0] = MAP_HEADER_HAMT_NODE_BITMAP(1 << maskval(vp,dc));
+	    hp    = erts_produce_heap(factory, HAMT_NODE_SZ(1), HALLOC_EXTRA);
+	    hp[0] = MAP_HEADER_HAMT_NODE(1 << maskval(vp,dc));
 	    hp[1] = res;
 	    res   = make_hashmap(hp);
 	    dc--;
@@ -782,8 +782,8 @@ static Eterm hashmap_from_chunked_array(ErtsHeapFactory *factory, hxnode_t *hxns
 	    dc = 7;
 	    /* build collision nodes */
 	    while (dc > wat) {
-		hp    = erts_produce_heap(factory, HAMT_NODE_BITMAP_SZ(1), HALLOC_EXTRA);
-		hp[0] = MAP_HEADER_HAMT_NODE_BITMAP(1 << maskval(v,dc));
+		hp    = erts_produce_heap(factory, HAMT_NODE_SZ(1), HALLOC_EXTRA);
+		hp[0] = MAP_HEADER_HAMT_NODE(1 << maskval(v,dc));
 		hp[1] = res;
 		res   = make_hashmap(hp);
 		dc--;
@@ -820,9 +820,9 @@ static Eterm hashmap_from_chunked_array(ErtsHeapFactory *factory, hxnode_t *hxns
 		 * redundant collisions */
 		hdr  |= bp;
 		sz    = hashmap_bitcount(hdr);
-		hp    = erts_produce_heap(factory, HAMT_NODE_BITMAP_SZ(sz), HALLOC_EXTRA);
+		hp    = erts_produce_heap(factory, HAMT_NODE_SZ(sz), HALLOC_EXTRA);
 		nhp   = hp;
-		*hp++ = MAP_HEADER_HAMT_NODE_BITMAP(hdr);
+		*hp++ = MAP_HEADER_HAMT_NODE(hdr);
 		*hp++ = res; sz--;
 		while (sz--) { *hp++ = ESTACK_POP(stack); }
 		ASSERT((hp - nhp) < 18);
@@ -851,8 +851,8 @@ static Eterm hashmap_from_chunked_array(ErtsHeapFactory *factory, hxnode_t *hxns
 	dc = 7;
 	/* build collision nodes */
 	while (dc > dn) {
-	    hp    = erts_produce_heap(factory, HAMT_NODE_BITMAP_SZ(1), HALLOC_EXTRA);
-	    hp[0] = MAP_HEADER_HAMT_NODE_BITMAP(1 << maskval(v,dc));
+	    hp    = erts_produce_heap(factory, HAMT_NODE_SZ(1), HALLOC_EXTRA);
+	    hp[0] = MAP_HEADER_HAMT_NODE(1 << maskval(v,dc));
 	    hp[1] = res;
 	    res   = make_hashmap(hp);
 	    dc--;
@@ -868,9 +868,9 @@ static Eterm hashmap_from_chunked_array(ErtsHeapFactory *factory, hxnode_t *hxns
 	 * redundant collisions */
 	hdr  |= bp;
 	sz    = hashmap_bitcount(hdr);
-	hp    = erts_produce_heap(factory, HAMT_NODE_BITMAP_SZ(sz), HALLOC_EXTRA);
+	hp    = erts_produce_heap(factory, HAMT_NODE_SZ(sz), HALLOC_EXTRA);
 	nhp   = hp;
-	*hp++ = MAP_HEADER_HAMT_NODE_BITMAP(hdr);
+	*hp++ = MAP_HEADER_HAMT_NODE(hdr);
 	*hp++ = res; sz--;
 
 	while (sz--) { *hp++ = ESTACK_POP(stack); }
@@ -889,10 +889,10 @@ static Eterm hashmap_from_chunked_array(ErtsHeapFactory *factory, hxnode_t *hxns
     nhp   = hp;
 
     if (is_root) {
-	*hp++ = MAP_HEADER_HAMT_HEAD_BITMAP(hdr);
+	*hp++ = MAP_HEADER_HAMT_HEAD(hdr);
 	*hp++ = size;
     } else {
-	*hp++ = MAP_HEADER_HAMT_NODE_BITMAP(hdr);
+	*hp++ = MAP_HEADER_HAMT_NODE(hdr);
     }
 
     *hp++ = res; sz--;
@@ -1391,14 +1391,14 @@ resume_from_trap:
         case 3: /* We have a mix => must build new node */
             ASSERT(sp->ix == hashmap_bitcount(sp->abm | sp->bbm));
             if (ctx->lvl == 0) {
-                nhp = HAllocX(p, HAMT_HEAD_BITMAP_SZ(sp->ix), HALLOC_EXTRA);
+                nhp = HAlloc(p, HAMT_HEAD_SZ(sp->ix));
                 hp = nhp;
-                *hp++ = MAP_HEADER_HAMT_HEAD_BITMAP(sp->abm | sp->bbm);
+                *hp++ = MAP_HEADER_HAMT_HEAD(sp->abm | sp->bbm);
                 *hp++ = ctx->size;
             } else {
-                nhp = HAllocX(p, HAMT_NODE_BITMAP_SZ(sp->ix), HALLOC_EXTRA);
+                nhp = HAllocX(p, HAMT_NODE_SZ(sp->ix), HALLOC_EXTRA);
                 hp = nhp;
-                *hp++ = MAP_HEADER_HAMT_NODE_BITMAP(sp->abm | sp->bbm);
+                *hp++ = MAP_HEADER_HAMT_NODE(sp->abm | sp->bbm);
             }
             sys_memcpy(hp, sp->array, sp->ix * sizeof(Eterm));
             res = make_boxed(nhp);
@@ -2116,14 +2116,14 @@ int erts_hashmap_insert_down(Uint32 hx, Eterm key, Eterm node, Uint *sz,
 				UnUseTmpHeapNoproc(2);
                                 return 0;
                             }
-                            size += HAMT_NODE_BITMAP_SZ(n+1);
+                            size += HAMT_NODE_SZ(n+1);
                             goto unroll;
                         }
 
                         hx    = hashmap_shift_hash(th,hx,lvl,key);
                         node  = ptr[slot+1];
-                        ASSERT(HAMT_NODE_BITMAP_SZ(n) <= 17);
-                        size += HAMT_NODE_BITMAP_SZ(n);
+                        ASSERT(HAMT_NODE_SZ(n) <= 17);
+                        size += HAMT_NODE_SZ(n);
                         break;
 
 		    case HAMT_SUBTAG_HEAD_BITMAP:
@@ -2139,8 +2139,8 @@ int erts_hashmap_insert_down(Uint32 hx, Eterm key, Eterm node, Uint *sz,
 			if (bp & hval) {
 			    hx    = hashmap_shift_hash(th,hx,lvl,key);
 			    node  = ptr[slot+2];
-			    ASSERT(HAMT_HEAD_BITMAP_SZ(n) <= 18);
-			    size += HAMT_HEAD_BITMAP_SZ(n);
+			    ASSERT(HAMT_HEAD_SZ(n) <= 18);
+			    size += HAMT_HEAD_SZ(n);
 			    break;
 			}
 			/* not occupied */
@@ -2148,7 +2148,7 @@ int erts_hashmap_insert_down(Uint32 hx, Eterm key, Eterm node, Uint *sz,
                             UnUseTmpHeapNoproc(2);
 			    return 0;
 			}
-			size += HAMT_HEAD_BITMAP_SZ(n+1);
+			size += HAMT_HEAD_SZ(n+1);
 			goto unroll;
 		    default:
 			erts_exit(ERTS_ERROR_EXIT, "bad header tag %ld\r\n", hdr & _HEADER_MAP_SUBTAG_MASK);
@@ -2163,13 +2163,13 @@ int erts_hashmap_insert_down(Uint32 hx, Eterm key, Eterm node, Uint *sz,
 insert_subnodes:
     clvl  = lvl;
     chx   = hashmap_restore_hash(th,clvl,ckey);
-    size += HAMT_NODE_BITMAP_SZ(2);
+    size += HAMT_NODE_SZ(2);
     ix    = hashmap_index(hx);
     cix   = hashmap_index(chx);
 
     while (cix == ix) {
-	ESTACK_PUSH4(*sp, 0, 1 << ix, 0, MAP_HEADER_HAMT_NODE_BITMAP(0));
-	size += HAMT_NODE_BITMAP_SZ(1);
+	ESTACK_PUSH4(*sp, 0, 1 << ix, 0, MAP_HEADER_HAMT_NODE(0));
+	size += HAMT_NODE_SZ(1);
 	hx    = hashmap_shift_hash(th,hx,lvl,key);
 	chx   = hashmap_shift_hash(th,chx,clvl,ckey);
 	ix    = hashmap_index(hx);
@@ -2204,7 +2204,7 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
 		cix = (Uint32) ESTACK_POP(*sp);
 
 		nhp   = hp;
-		*hp++ = MAP_HEADER_HAMT_NODE_BITMAP((1 << ix) | (1 << cix));
+		*hp++ = MAP_HEADER_HAMT_NODE((1 << ix) | (1 << cix));
 		if (ix < cix) {
 		    *hp++ = res;
 		    *hp++ = node;
@@ -2230,7 +2230,7 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
 			n     = (Uint32) ESTACK_POP(*sp);
 			hval  = MAP_HEADER_VAL(hdr);
 			nhp   = hp;
-			*hp++ = MAP_HEADER_HAMT_NODE_BITMAP(hval | bp); ptr++;
+			*hp++ = MAP_HEADER_HAMT_NODE(hval | bp); ptr++;
 
 			n -= slot;
 			while(slot--) { *hp++ = *ptr++; }
@@ -2246,7 +2246,7 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
 			n     = (Uint32) ESTACK_POP(*sp);
 			hval  = MAP_HEADER_VAL(hdr);
 			nhp   = hp;
-			*hp++ = MAP_HEADER_HAMT_HEAD_BITMAP(hval | bp); ptr++;
+			*hp++ = MAP_HEADER_HAMT_HEAD(hval | bp); ptr++;
 			*hp++ = (*ptr++) + *update_size;
 
 			n -= slot;
@@ -2356,8 +2356,8 @@ static Eterm hashmap_delete(Process *p, Uint32 hx, Eterm key,
 
                         hx    = hashmap_shift_hash(th,hx,lvl,key);
                         node  = ptr[slot+1];
-                        ASSERT(HAMT_NODE_BITMAP_SZ(n) <= 17);
-                        size += HAMT_NODE_BITMAP_SZ(n);
+                        ASSERT(HAMT_NODE_SZ(n) <= 17);
+                        size += HAMT_NODE_SZ(n);
                         break;
 
 		    case HAMT_SUBTAG_HEAD_BITMAP:
@@ -2373,8 +2373,8 @@ static Eterm hashmap_delete(Process *p, Uint32 hx, Eterm key,
 			if (bp & hval) {
 			    hx    = hashmap_shift_hash(th,hx,lvl,key);
 			    node  = ptr[slot+2];
-			    ASSERT(HAMT_HEAD_BITMAP_SZ(n) <= 18);
-			    size += HAMT_HEAD_BITMAP_SZ(n);
+			    ASSERT(HAMT_HEAD_SZ(n) <= 18);
+			    size += HAMT_HEAD_SZ(n);
 			    break;
 			}
 			/* not occupied */
@@ -2489,14 +2489,14 @@ unroll:
 			    res = ptr[ix];
 			} else {
 			    hval  = MAP_HEADER_VAL(hdr);
-			    *hp++ = MAP_HEADER_HAMT_NODE_BITMAP(hval ^ bp);
+			    *hp++ = MAP_HEADER_HAMT_NODE(hval ^ bp);
 			    *hp++ = ptr[ix];
 			    res = make_hashmap(nhp);
 			}
 		    } else {
 			/* n > 2 */
 			hval  = MAP_HEADER_VAL(hdr);
-			*hp++ = MAP_HEADER_HAMT_NODE_BITMAP(hval ^ bp); ptr++;
+			*hp++ = MAP_HEADER_HAMT_NODE(hval ^ bp); ptr++;
 			n    -= slot;
 			while(slot--) { *hp++ = *ptr++; }
 			ptr++; n--;
@@ -2532,7 +2532,7 @@ unroll:
 		    while(n--) { *hp++ = *ptr++; }
 		} else {
 		    hval  = MAP_HEADER_VAL(hdr);
-		    *hp++ = MAP_HEADER_HAMT_HEAD_BITMAP(hval ^ bp); ptr++;
+		    *hp++ = MAP_HEADER_HAMT_HEAD(hval ^ bp); ptr++;
 		    *hp++ = (*ptr++) - 1;
 		    n    -= slot;
 		    while(slot--) { *hp++ = *ptr++; }

@@ -149,16 +149,16 @@ typedef struct hashmap_head_s {
 #define MAP_HEADER_FLATMAP \
     MAKE_MAP_HEADER(MAP_HEADER_TAG_FLATMAP_HEAD,0x1,0x0)
 
-#define MAP_HEADER_HAMT_HEAD_BITMAP(Bmp) \
+#define MAP_HEADER_HAMT_HEAD(Bmp) \
     MAKE_MAP_HEADER(MAP_HEADER_TAG_HAMT_HEAD_BITMAP,0x1,Bmp)
 
-#define MAP_HEADER_HAMT_NODE_BITMAP(Bmp) \
+#define MAP_HEADER_HAMT_NODE(Bmp) \
     MAKE_MAP_HEADER(MAP_HEADER_TAG_HAMT_NODE_BITMAP,0x0,Bmp)
 
 #define MAP_HEADER_FLATMAP_SZ  (sizeof(flatmap_t) / sizeof(Eterm))
 
-#define HAMT_NODE_BITMAP_SZ(n)  (1 + n)
-#define HAMT_HEAD_BITMAP_SZ(n)  (2 + n)
+#define HAMT_NODE_SZ(n)  (1 + n)
+#define HAMT_HEAD_SZ(n)  (2 + n)
 
 /* 2 bits maps tag + 4 bits subtag + 2 ignore bits */
 #define _HEADER_MAP_SUBTAG_MASK       (0xfc)
