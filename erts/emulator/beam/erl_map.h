@@ -53,7 +53,7 @@ typedef struct flatmap_s {
  * -----------
  */
 
-/* the head-node is a bitmap or array with an untagged size */
+/* the head-node is a bitmap with an untagged size */
 
 
 #define hashmap_size(x)               (((hashmap_head_t*) hashmap_val(x))->size)
@@ -111,7 +111,7 @@ const Eterm *erts_hashmap_get(Uint32 hx, Eterm key, Eterm map);
 
 /* hamt nodes v2.0
  *
- * node :: leaf | array | bitmap
+ * node :: leaf | bitmap
  * head
  */
 typedef struct hashmap_head_s {
@@ -136,8 +136,7 @@ typedef struct hashmap_head_s {
  * map-tag:
  *     00 - flat map tag (non-hamt) -> val:16 = #items
  *     01 - map-node bitmap tag     -> val:16 = bitmap
- *     10 - map-head (array-node)   -> val:16 = 0xffff
- *     11 - map-head (bitmap-node)  -> val:16 = bitmap
+ *     10 - map-head (bitmap-node)  -> val:16 = bitmap
  */
 
 /* erl_map.h stuff */
@@ -150,9 +149,6 @@ typedef struct hashmap_head_s {
 #define MAP_HEADER_FLATMAP \
     MAKE_MAP_HEADER(MAP_HEADER_TAG_FLATMAP_HEAD,0x1,0x0)
 
-#define MAP_HEADER_HAMT_HEAD_ARRAY \
-    MAKE_MAP_HEADER(MAP_HEADER_TAG_HAMT_HEAD_ARRAY,0x1,0xffff)
-
 #define MAP_HEADER_HAMT_HEAD_BITMAP(Bmp) \
     MAKE_MAP_HEADER(MAP_HEADER_TAG_HAMT_HEAD_BITMAP,0x1,Bmp)
 
@@ -161,18 +157,13 @@ typedef struct hashmap_head_s {
 
 #define MAP_HEADER_FLATMAP_SZ  (sizeof(flatmap_t) / sizeof(Eterm))
 
-#define HAMT_NODE_ARRAY_SZ      (17)
-#define HAMT_HEAD_ARRAY_SZ      (18)
 #define HAMT_NODE_BITMAP_SZ(n)  (1 + n)
 #define HAMT_HEAD_BITMAP_SZ(n)  (2 + n)
 
 /* 2 bits maps tag + 4 bits subtag + 2 ignore bits */
 #define _HEADER_MAP_SUBTAG_MASK       (0xfc)
-/* 1 bit map tag + 1 ignore bit + 4 bits subtag + 2 ignore bits */
-#define _HEADER_MAP_HASHMAP_HEAD_MASK (0xbc)
 
 #define HAMT_SUBTAG_NODE_BITMAP  ((MAP_HEADER_TAG_HAMT_NODE_BITMAP << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
-#define HAMT_SUBTAG_HEAD_ARRAY   ((MAP_HEADER_TAG_HAMT_HEAD_ARRAY  << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
 #define HAMT_SUBTAG_HEAD_BITMAP  ((MAP_HEADER_TAG_HAMT_HEAD_BITMAP << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
 #define HAMT_SUBTAG_HEAD_FLATMAP ((MAP_HEADER_TAG_FLATMAP_HEAD << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
 
