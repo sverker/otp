@@ -36,7 +36,7 @@
   "Tags that can be used anywhere within a module.")
 
 (defvar erlang-edoc-overview-tags
-  '("author" "copyright" "reference" "see" "since" "title" "version")
+  '("author" "copyright" "doc" "reference" "see" "since" "title" "version")
   "Tags that can be used in an overview file.")
 
 (defvar erlang-edoc-module-tags
@@ -45,8 +45,8 @@
   "Tags that can be used before a module declaration.")
 
 (defvar erlang-edoc-function-tags
-  '("deprecated" "doc" "equiv" "hidden" "private" "see" "since" "spec"
-    "throws" "type")
+  '("deprecated" "doc" "equiv" "hidden" "param" "private" "returns"
+    "see" "since" "spec" "throws" "type")
   "Tags that can be used before a function definition.")
 
 (defvar erlang-edoc-predefined-macros
@@ -78,7 +78,7 @@
   '(("^%+\\s-*\\(@\\w+\\)\\_>" 1 'erlang-edoc-tag prepend)
     ("^%+\\s-*" ("{\\(@\\w+\\)\\_>" nil nil (1 'erlang-edoc-macro prepend)))
     ("^%+\\s-*" ("\\(?:@@\\)*\\(@[@{}]\\)" nil nil (1 'escape-glyph prepend)))
-    ("^%+\\s-*@\\(deprecated\\)\\_>" 1 font-lock-warning-face prepend)
+    ("^%+\\s-*\\(@deprecated\\)\\_>" 1 font-lock-warning-face prepend)
     ;; http://www.erlang.org/doc/apps/edoc/chapter.html#Wiki_notation
     ("^%+\\s-*" ("[^`]`\\([^`]?\\|[^`].*?[^']\\)'"
                  (forward-char -1) nil (1 'erlang-edoc-verbatim prepend)))
@@ -169,4 +169,10 @@
   (jit-lock-refontify))
 
 (provide 'erlang-edoc)
+
+;; Local variables:
+;; coding: utf-8
+;; indent-tabs-mode: nil
+;; End:
+
 ;;; erlang-edoc.el ends here

@@ -89,6 +89,9 @@ static erts_lc_lock_order_t erts_lock_order[] = {
     {	"hipe_mfait_lock",			NULL			},
 #endif
     {	"nodes_monitors",			NULL			},
+#ifdef ERTS_SMP
+    {	"resource_monitors",			"address"	        },
+#endif
     {   "driver_list",                          NULL                    },
     {	"proc_link",				"pid"			},
     {	"proc_msgq",				"pid"			},
@@ -127,6 +130,8 @@ static erts_lc_lock_order_t erts_lock_order[] = {
     {	"run_queue",				"address"		},
 #ifdef ERTS_DIRTY_SCHEDULERS
     {   "dirty_run_queue_sleep_list",		"address"		},
+    {	"dirty_gc_info",			NULL			},
+    {	"dirty_break_point_index",		NULL			},
 #endif
     {	"process_table",			NULL			},
     {	"cpu_info",				NULL			},
@@ -154,6 +159,7 @@ static erts_lc_lock_order_t erts_lock_order[] = {
     {	"tracer_mtx", 				NULL			},
     {   "port_table",                           NULL                    },
 #endif
+    {	"magic_ref_table",			"address"		},
     {	"mtrace_op",				NULL			},
     {	"instr_x",				NULL			},
     {	"instr",				NULL			},

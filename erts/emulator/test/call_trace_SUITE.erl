@@ -45,7 +45,7 @@ suite() ->
     [{ct_hooks,[ts_install_cth]},
      {timetrap, {seconds, 30}}].
 
-all() -> 
+all() ->
     Common = [errors, on_load],
     NotHipe = [process_specs, basic, flags, pam, change_pam,
                upgrade,
@@ -233,7 +233,7 @@ basic() ->
     trace_func({'_','_','_'}, false),
     [b,a] = lists:reverse([a,b]),
 
-    %% Read out the remaing trace messages.
+    %% Read out the remaining trace messages.
 
     ?MODULE:expect({trace,Self,call,{lists,seq,[1,10]}}),
     ?MODULE:expect({trace,Self,call,{erlang,list_to_integer,["777"]}}),
@@ -1090,8 +1090,7 @@ exception_nocatch() ->
                        {trace,t2,exception_from,{erlang,throw,1},
                         {error,{nocatch,Q2}}}],
                       exception_from, {error,{nocatch,Q2}}),
-    expect({trace,T2,exit,{{nocatch,Q2},[{erlang,throw,[Q2],[]},
-                                         {?MODULE,deep_4,1,
+    expect({trace,T2,exit,{{nocatch,Q2},[{?MODULE,deep_4,1,
                                           Deep4LocThrow}]}}),
     Q3 = {dump,[dump,{dump}]},
     T3 = 
@@ -1100,8 +1099,7 @@ exception_nocatch() ->
                        {trace,t3,exception_from,{erlang,error,1},
                         {error,Q3}}],
                       exception_from, {error,Q3}),
-    expect({trace,T3,exit,{Q3,[{erlang,error,[Q3],[]},
-                               {?MODULE,deep_4,1,Deep4LocError}]}}),
+    expect({trace,T3,exit,{Q3,[{?MODULE,deep_4,1,Deep4LocError}]}}),
     T4 = 
     exception_nocatch(?LINE, '=', [17,4711], 5, [], 
                       exception_from, {error,{badmatch,4711}}),

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2007-2015. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2016. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -172,8 +172,8 @@ revoke(Root, CA, User, C) ->
     gencrl(Root, CA, C).
 
 gencrl(Root, CA, C) ->
-    %% By default, the CRL is valid for 24 hours from now.
-    gencrl(Root, CA, C, 24).
+    %% By default, the CRL is valid for a week from now.
+    gencrl(Root, CA, C, 24*7).
 
 gencrl(Root, CA, C, CrlHours) ->
     CACnfFile = filename:join([Root, CA, "ca.cnf"]),

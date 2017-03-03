@@ -157,13 +157,15 @@ typedef struct {
 #define STR_CHUNK 2
 #define IMP_CHUNK 3
 #define EXP_CHUNK 4
-#define NUM_MANDATORY 5
+#define MIN_MANDATORY 1
+#define MAX_MANDATORY 5
 
 #define LAMBDA_CHUNK 5
 #define LITERAL_CHUNK 6
 #define ATTR_CHUNK 7
 #define COMPILE_CHUNK 8
 #define LINE_CHUNK 9
+#define UTF8_ATOM_CHUNK 10
 
 #define NUM_CHUNK_TYPES (sizeof(chunk_types)/sizeof(chunk_types[0]))
 
@@ -173,9 +175,13 @@ typedef struct {
 
 static Uint chunk_types[] = {
     /*
-     * Mandatory chunk types -- these MUST be present.
+     * Atom chunk types -- Atom or AtU8 MUST be present.
      */
     MakeIffId('A', 't', 'o', 'm'), /* 0 */
+
+    /*
+     * Mandatory chunk types -- these MUST be present.
+     */
     MakeIffId('C', 'o', 'd', 'e'), /* 1 */
     MakeIffId('S', 't', 'r', 'T'), /* 2 */
     MakeIffId('I', 'm', 'p', 'T'), /* 3 */
@@ -189,6 +195,7 @@ static Uint chunk_types[] = {
     MakeIffId('A', 't', 't', 'r'), /* 7 */
     MakeIffId('C', 'I', 'n', 'f'), /* 8 */
     MakeIffId('L', 'i', 'n', 'e'), /* 9 */
+    MakeIffId('A', 't', 'U', '8'), /* 10 */
 };
 
 /*
@@ -481,7 +488,7 @@ typedef struct LoaderState {
 static void free_loader_state(Binary* magic);
 static ErlHeapFragment* new_literal_fragment(Uint size);
 static void free_literal_fragment(ErlHeapFragment*);
-static void loader_state_dtor(Binary* magic);
+static int loader_state_dtor(Binary* magic);
 #ifdef HIPE
 static Eterm stub_insert_new_code(Process *c_p, ErtsProcLocks c_p_locks,
 				  Eterm group_leader, Eterm module,
@@ -490,9 +497,9 @@ static Eterm stub_insert_new_code(Process *c_p, ErtsProcLocks c_p_locks,
 #endif
 static int init_iff_file(LoaderState* stp, byte* code, Uint size);
 static int scan_iff_file(LoaderState* stp, Uint* chunk_types,
-			 Uint num_types, Uint num_mandatory);
+			 Uint num_types);
 static int verify_chunks(LoaderState* stp);
-static int load_atom_table(LoaderState* stp);
+static int load_atom_table(LoaderState* stp, ErtsAtomEncoding enc);
 static int load_import_table(LoaderState* stp);
 static int read_export_table(LoaderState* stp);
 static int is_bif(Eterm mod, Eterm func, unsigned arity);
@@ -629,7 +636,7 @@ erts_prepare_loading(Binary* magic, Process *c_p, Eterm group_leader,
     CHKALLOC();
     CHKBLK(ERTS_ALC_T_CODE,stp->code);
     if (!init_iff_file(stp, code, unloaded_size) ||
-	!scan_iff_file(stp, chunk_types, NUM_CHUNK_TYPES, NUM_MANDATORY) ||
+	!scan_iff_file(stp, chunk_types, NUM_CHUNK_TYPES) ||
 	!verify_chunks(stp)) {
 	goto load_error;
     }
@@ -674,9 +681,16 @@ erts_prepare_loading(Binary* magic, Process *c_p, Eterm group_leader,
      */
 
     CHKBLK(ERTS_ALC_T_CODE,stp->code);
-    define_file(stp, "atom table", ATOM_CHUNK);
-    if (!load_atom_table(stp)) {
-	goto load_error;
+    if (stp->chunks[UTF8_ATOM_CHUNK].size > 0) {
+        define_file(stp, "utf8 atom table", UTF8_ATOM_CHUNK);
+        if (!load_atom_table(stp, ERTS_ATOM_ENC_UTF8)) {
+            goto load_error;
+        }
+    } else {
+        define_file(stp, "atom table", ATOM_CHUNK);
+        if (!load_atom_table(stp, ERTS_ATOM_ENC_LATIN1)) {
+            goto load_error;
+        }
     }
 
     /*
@@ -800,14 +814,14 @@ erts_finish_loading(Binary* magic, Process* c_p,
     } else {
 	ErtsCodeIndex code_ix = erts_staging_code_ix();
 	Eterm module = stp->module;
-	int i;
+	int i, num_exps;
 
 	/*
 	 * There is an -on_load() function. We will keep the current
 	 * code, but we must turn off any tracing.
 	 */
-
-	for (i = 0; i < export_list_size(code_ix); i++) {
+        num_exps = export_list_size(code_ix);
+	for (i = 0; i < num_exps; i++) {
 	    Export *ep = export_list(i, code_ix);
 	    if (ep == NULL || ep->info.mfa.module != module) {
 		continue;
@@ -1012,7 +1026,7 @@ static void free_literal_fragment(ErlHeapFragment* bp)
 /*
  * This destructor function can safely be called multiple times.
  */
-static void
+static int
 loader_state_dtor(Binary* magic)
 {
     LoaderState* stp = ERTS_MAGIC_BIN_DATA(magic);
@@ -1097,6 +1111,7 @@ loader_state_dtor(Binary* magic)
      */
 
     ASSERT(stp->genop_blocks == 0);
+    return 1;
 }
 
 #ifdef HIPE
@@ -1212,7 +1227,7 @@ init_iff_file(LoaderState* stp, byte* code, Uint size)
  * Scan the IFF file. The header should have been verified by init_iff_file().
  */
 static int
-scan_iff_file(LoaderState* stp, Uint* chunk_types, Uint num_types, Uint num_mandatory)
+scan_iff_file(LoaderState* stp, Uint* chunk_types, Uint num_types)
 {
     Uint count;
     Uint id;
@@ -1291,7 +1306,16 @@ verify_chunks(LoaderState* stp)
     MD5_CTX context;
 
     MD5Init(&context);
-    for (i = 0; i < NUM_MANDATORY; i++) {
+
+    if (stp->chunks[UTF8_ATOM_CHUNK].start != NULL) {
+	MD5Update(&context, stp->chunks[UTF8_ATOM_CHUNK].start, stp->chunks[UTF8_ATOM_CHUNK].size);
+    } else if (stp->chunks[ATOM_CHUNK].start != NULL) {
+	MD5Update(&context, stp->chunks[ATOM_CHUNK].start, stp->chunks[ATOM_CHUNK].size);
+    } else {
+        LoadError0(stp, "mandatory chunk of type 'Atom' or 'AtU8' not found\n");
+    }
+
+    for (i = MIN_MANDATORY; i < MAX_MANDATORY; i++) {
 	if (stp->chunks[i].start != NULL) {
 	    MD5Update(&context, stp->chunks[i].start, stp->chunks[i].size);
 	} else {
@@ -1352,7 +1376,7 @@ verify_chunks(LoaderState* stp)
 }
 
 static int
-load_atom_table(LoaderState* stp)
+load_atom_table(LoaderState* stp, ErtsAtomEncoding enc)
 {
     unsigned int i;
 
@@ -1371,7 +1395,7 @@ load_atom_table(LoaderState* stp)
 
 	GetByte(stp, n);
 	GetString(stp, atom, n);
-	stp->atom[i] = erts_atom_put(atom, n, ERTS_ATOM_ENC_LATIN1, 1);
+	stp->atom[i] = erts_atom_put(atom, n, enc, 1);
     }
 
     /*
@@ -2546,15 +2570,10 @@ load_code(LoaderState* stp)
 
 		if (stp->may_load_nif) {
 		    const int finfo_ix = ci - FUNC_INFO_SZ;
-#ifdef ERTS_DIRTY_SCHEDULERS
-		    enum { MIN_FUNC_SZ = 4 };
-#else
-		    enum { MIN_FUNC_SZ = 3 };
-#endif
-		    if (finfo_ix - last_func_start < MIN_FUNC_SZ && last_func_start) {		   
+		    if (finfo_ix - last_func_start < BEAM_NIF_MIN_FUNC_SZ && last_func_start) {
 			/* Must make room for call_nif op */
-			int pad = MIN_FUNC_SZ - (finfo_ix - last_func_start);
-			ASSERT(pad > 0 && pad < MIN_FUNC_SZ);
+			int pad = BEAM_NIF_MIN_FUNC_SZ - (finfo_ix - last_func_start);
+			ASSERT(pad > 0 && pad < BEAM_NIF_MIN_FUNC_SZ);
 			CodeNeed(pad);
 			sys_memmove(&code[finfo_ix+pad], &code[finfo_ix],
 				    FUNC_INFO_SZ*sizeof(BeamInstr));
@@ -4844,7 +4863,7 @@ final_touch(LoaderState* stp, struct erl_module_instance* inst_p)
 		/*
 		 * We are hiding a pointer into older code.
 		 */
-		erts_refc_dec(&fe->refc, 1);
+		erts_smp_refc_dec(&fe->refc, 1);
 	    }
 	    fe->address = code_ptr;
 #ifdef HIPE
@@ -5729,12 +5748,13 @@ exported_from_module(Process* p, /* Process whose heap to use. */
                      ErtsCodeIndex code_ix,
 		     Eterm mod) /* Tagged atom for module. */
 {
-    int i;
+    int i, num_exps;
     Eterm* hp = NULL;
     Eterm* hend = NULL;
     Eterm result = NIL;
 
-    for (i = 0; i < export_list_size(code_ix); i++) {
+    num_exps = export_list_size(code_ix);
+    for (i = 0; i < num_exps; i++) {
 	Export* ep = export_list(i,code_ix);
 	
 	if (ep->info.mfa.module == mod) {
@@ -5942,7 +5962,7 @@ code_get_chunk_2(BIF_ALIST_2)
 	goto error;
     }
     if (!init_iff_file(stp, start, binary_size(Bin)) ||
-	!scan_iff_file(stp, &chunk, 1, 1) ||
+	!scan_iff_file(stp, &chunk, 1) ||
 	stp->chunks[0].start == NULL) {
 	res = am_undefined;
 	goto done;
@@ -5991,7 +6011,7 @@ code_module_md5_1(BIF_ALIST_1)
     }
     stp->module = THE_NON_VALUE; /* Suppress diagnostiscs */
     if (!init_iff_file(stp, bytes, binary_size(Bin)) ||
-	!scan_iff_file(stp, chunk_types, NUM_CHUNK_TYPES, NUM_MANDATORY) ||
+	!scan_iff_file(stp, chunk_types, NUM_CHUNK_TYPES) ||
 	!verify_chunks(stp)) {
 	res = am_undefined;
 	goto done;
@@ -6255,7 +6275,7 @@ patch_funentries(Eterm Patchlist)
      *
      * Reproduced on a debug emulator with stdlib_test/qlc_SUITE:join_merge
      *
-     * erts_refc_dec(&fe->refc, 1);
+     * erts_smp_refc_dec(&fe->refc, 1);
      */
 
     if (!patch(Addresses, (Uint) fe))
@@ -6303,8 +6323,8 @@ erts_make_stub_module(Process* p, Eterm hipe_magic_bin, Eterm Beam, Eterm Info)
     stp = ERTS_MAGIC_BIN_DATA(magic);
     hipe_code = erts_alloc(ERTS_ALC_T_HIPE, sizeof(*hipe_code));
 
-    if (!ERTS_TERM_IS_MAGIC_BINARY(hipe_magic_bin) ||
-	!(hipe_magic = ((ProcBin*)binary_val(hipe_magic_bin))->val,
+    if (!is_internal_magic_ref(hipe_magic_bin) ||
+	!(hipe_magic = erts_magic_ref2bin(hipe_magic_bin),
 	  hipe_stp = hipe_get_loader_state(hipe_magic)) ||
 	hipe_stp->module == NIL || hipe_stp->text_segment == 0) {
 	goto error;
@@ -6340,7 +6360,7 @@ erts_make_stub_module(Process* p, Eterm hipe_magic_bin, Eterm Beam, Eterm Info)
     if (!init_iff_file(stp, bytes, size)) {
 	goto error;
     }
-    if (!scan_iff_file(stp, chunk_types, NUM_CHUNK_TYPES, NUM_MANDATORY) ||
+    if (!scan_iff_file(stp, chunk_types, NUM_CHUNK_TYPES) ||
 	!verify_chunks(stp)) {
 	goto error;
     }
@@ -6348,9 +6368,16 @@ erts_make_stub_module(Process* p, Eterm hipe_magic_bin, Eterm Beam, Eterm Info)
     if (!read_code_header(stp)) {
 	goto error;
     }
-    define_file(stp, "atom table", ATOM_CHUNK);
-    if (!load_atom_table(stp)) {
-	goto error;
+    if (stp->chunks[UTF8_ATOM_CHUNK].size > 0) {
+        define_file(stp, "utf8 atom table", UTF8_ATOM_CHUNK);
+        if (!load_atom_table(stp, ERTS_ATOM_ENC_UTF8)) {
+            goto error;
+        }
+    } else {
+        define_file(stp, "atom table", ATOM_CHUNK);
+        if (!load_atom_table(stp, ERTS_ATOM_ENC_LATIN1)) {
+            goto error;
+        }
     }
     define_file(stp, "export table", EXP_CHUNK);
     if (!stub_read_export_table(stp)) {
@@ -6542,8 +6569,8 @@ int erts_commit_hipe_patch_load(Eterm hipe_magic_bin)
     HipeModule *hipe_code;
     Module* modp;
 
-    if (!ERTS_TERM_IS_MAGIC_BINARY(hipe_magic_bin) ||
-	!(hipe_magic = ((ProcBin*)binary_val(hipe_magic_bin))->val,
+    if (!is_internal_magic_ref(hipe_magic_bin) ||
+	!(hipe_magic = erts_magic_ref2bin(hipe_magic_bin),
 	  hipe_stp = hipe_get_loader_state(hipe_magic)) ||
 	hipe_stp->module == NIL || hipe_stp->text_segment == 0) {
 	return 0;

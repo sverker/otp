@@ -176,6 +176,14 @@
               <seealso marker="stdlib:beam_lib#debug_info">beam_lib(3)</seealso>.</p>
           </item>
 
+          <tag><c>deterministic</c></tag>
+          <item>
+            <p>Omit the <c>options</c> and <c>source</c> tuples in
+	    the list returned by <c>Module:module_info(compile)</c>.
+	    This option will make it easier to achieve reproducible builds.
+	    </p>
+          </item>
+
           <tag><c>makedep</c></tag>
           <item>
             <p>Produces a Makefile rule to track headers dependencies.
@@ -410,7 +418,7 @@ module.beam: module.erl \
 	  without module prefix to local or imported functions before
 	  trying with auto-imported BIFs. If the BIF is to be
 	  called, use the <c>erlang</c> module prefix in the call, not
-	  <c>{ no_auto_import,[{F,A}, ...]}</c>.</p>
+	  <c>{no_auto_import,[{F,A}, ...]}</c>.</p>
 	  </note>
 	  <p>If this option is written in the source code, as a 
 	  <c>-compile</c> directive, the syntax <c>F/A</c> can be used instead 
@@ -431,6 +439,15 @@ module.beam: module.erl \
 	    </p>
           </item>
 
+          <tag><c>{extra_chunks, [{binary(), binary()}]}</c></tag>
+          <item>
+            <p>Pass extra chunks to be stored in the <c>.beam</c> file.
+              The extra chunks must be a list of tuples with a four byte
+              binary as chunk name followed by a binary with the chunk contents.
+              See <seealso marker="stdlib:beam_lib">beam_lib</seealso> for
+              more information.
+	    </p>
+          </item>
         </taglist>
 
         <p>If warnings are turned on (option <c>report_warnings</c>
@@ -498,9 +515,11 @@ module.beam: module.erl \
 	    </warning>
           </item>
 
-	  <tag><c>warn_export_all</c></tag>
+	  <tag><c>nowarn_export_all</c></tag>
           <item>
-	      <p>Emits a warning if option <c>export_all</c> is also given.</p>
+	      <p>Turns off warnings for uses of the <c>export_all</c>
+	      option. Default is to emit a warning if option
+	      <c>export_all</c> is also given.</p>
           </item>
 
 	  <tag><c>warn_export_vars</c></tag>
@@ -574,7 +593,7 @@ module.beam: module.erl \
 	    such as <c>pid/1</c> and <c>list/1</c>. See the
 	    <seealso marker="doc/reference_manual:expressions#guards">Erlang Reference Manual</seealso>
 	      for a complete list of type testing BIFs and their old
-	      equivalents. Default is to emit no warnings for calls to 
+	      equivalents. Default is to emit warnings for calls to
 	      old type testing BIFs.</p>
           </item>
 

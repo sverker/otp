@@ -381,12 +381,9 @@ BIF_RETTYPE hipe_bifs_ref_set_2(BIF_ALIST_2)
 
 static HipeLoaderState *get_loader_state(Eterm term)
 {
-    ProcBin *pb;
+    if (!is_internal_magic_ref(term)) return NULL;
 
-    if (!ERTS_TERM_IS_MAGIC_BINARY(term)) return NULL;
-
-    pb = (ProcBin*) binary_val(term);
-    return hipe_get_loader_state(pb->val);
+    return hipe_get_loader_state(erts_magic_ref2bin(term));
 }
 
 
@@ -732,7 +729,7 @@ struct nbif {
 };
 
 static struct nbif nbifs[BIF_SIZE] = {
-#define BIF_LIST(MOD,FUN,ARY,CFUN,IX)	\
+#define BIF_LIST(MOD,FUN,ARY,BIF,CFUN,IX)	\
 	{ {0,0}, MOD, FUN, ARY, &nbif_##CFUN },
 #include "erl_bif_list.h"
 #undef BIF_LIST
@@ -905,7 +902,8 @@ BIF_RETTYPE hipe_bifs_term_to_word_1(BIF_ALIST_1)
 }
 
 /* XXX: this is really a primop, not a BIF */
-BIF_RETTYPE hipe_conv_big_to_float(BIF_ALIST_1)
+/* Called via standard_bif_interface_1 */
+BIF_RETTYPE nbif_impl_hipe_conv_big_to_float(NBIF_ALIST_1)
 {
     Eterm res;
     Eterm *hp;
@@ -1007,7 +1005,7 @@ BIF_RETTYPE hipe_bifs_set_native_address_in_fe_2(BIF_ALIST_2)
 	BIF_ERROR(BIF_P, BADARG);
 
     fe->native_address = native_address;
-    if (erts_refc_dectest(&fe->refc, 0) == 0)
+    if (erts_smp_refc_dectest(&fe->refc, 0) == 0)
 	erts_erase_fun_entry(fe);
     BIF_RET(am_true);
 }
@@ -1121,7 +1119,7 @@ static struct hipe_mfa_info* mod2mfa_put(struct hipe_mfa_info* mfa)
 struct hipe_ref {
     struct hipe_ref_head head;    /* list of refs to same calleee */
     void *address;
-#if defined(arm) || defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__)
+#if defined(__arm__) || defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__)
     void *trampoline;
 #endif
     unsigned int flags;
@@ -1432,7 +1430,8 @@ void *hipe_get_remote_na(Eterm m, Eterm f, unsigned int a)
 }
 
 /* primop, but called like a BIF for error handling purposes */
-BIF_RETTYPE hipe_find_na_or_make_stub(BIF_ALIST_3)
+/* Called via standard_bif_interface_3 */
+BIF_RETTYPE nbif_impl_hipe_find_na_or_make_stub(NBIF_ALIST_3)
 {
     Uint arity;
     void *address;
@@ -1457,7 +1456,8 @@ BIF_RETTYPE hipe_bifs_find_na_or_make_stub_1(BIF_ALIST_1)
 }
 
 /* primop, but called like a BIF for error handling purposes */
-BIF_RETTYPE hipe_nonclosure_address(BIF_ALIST_2)
+/* Called via standard_bif_interface_2 */
+BIF_RETTYPE nbif_impl_hipe_nonclosure_address(NBIF_ALIST_2)
 {
     Eterm hdr, m, f;
     void *address;
@@ -1549,7 +1549,7 @@ BIF_RETTYPE hipe_bifs_add_ref_2(BIF_ALIST_2)
 
     ref = erts_alloc(ERTS_ALC_T_HIPE, sizeof(struct hipe_ref));
     ref->address = address;
-#if defined(arm) || defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__)
+#if defined(__arm__) || defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__)
     ref->trampoline = trampoline;
 #endif
     ref->flags = flags;
@@ -1864,7 +1864,7 @@ void hipe_redirect_to_module(Module* modp)
 	    if (ref->flags & REF_FLAG_IS_LOAD_MFA)
 		res = hipe_patch_insn(ref->address, (Uint)p->remote_address, am_load_mfa);
 	    else {
-#if defined(arm) || defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__)
+#if defined(__arm__) || defined(__powerpc__) || defined(__ppc__) || defined(__powerpc64__)
                 void* trampoline = ref->trampoline;
 #else
                 void* trampoline = NULL;
@@ -1979,8 +1979,8 @@ BIF_RETTYPE hipe_bifs_alloc_loader_state_1(BIF_ALIST_1)
     if (!magic)
 	BIF_ERROR(BIF_P, BADARG);
 
-    hp = HAlloc(BIF_P, PROC_BIN_SIZE);
-    res = erts_mk_magic_binary_term(&hp, &MSO(BIF_P), magic);
+    hp = HAlloc(BIF_P, ERTS_MAGIC_REF_THING_SIZE);
+    res = erts_mk_magic_ref(&hp, &MSO(BIF_P), magic);
     erts_refc_dec(&magic->refc, 1);
     BIF_RET(res);
 }

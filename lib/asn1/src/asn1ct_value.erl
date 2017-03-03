@@ -19,7 +19,6 @@
 %%
 %%
 -module(asn1ct_value).
--compile([{nowarn_deprecated_function,{asn1rt,utf8_list_to_binary,1}}]).
 
 %%  Generate Erlang values for ASN.1 types.
 %%  The value is randomized within it's constraints
@@ -65,7 +64,11 @@ from_type(M,Typename,Type) when is_record(Type,type) ->
 	    end;
 	{constructed,bif} when Typename == ['EXTERNAL'] ->
 	    Val=from_type_constructed(M,Typename,InnerType,Type),
-	    asn1ct_eval_ext:transform_to_EXTERNAL1994(Val);
+            T = case M:maps() of
+                    false -> transform_to_EXTERNAL1994;
+                    true -> transform_to_EXTERNAL1994_maps
+                end,
+            asn1ct_eval_ext:T(Val);
 	{constructed,bif} ->
 	    from_type_constructed(M,Typename,InnerType,Type)
     end;
@@ -119,11 +122,13 @@ get_sequence(M,Typename,Type) ->
 	    #'SEQUENCE'{components=Cl} -> {'SEQUENCE',Cl};
 	    #'SET'{components=Cl} -> {'SET',to_textual_order(Cl)}
 	end,
-    case get_components(M,Typename,CompList) of
-        [] ->
-            {list_to_atom(asn1ct_gen:list2rname(Typename))};
-        C ->
-            list_to_tuple([list_to_atom(asn1ct_gen:list2rname(Typename))|C])
+    Cs = get_components(M, Typename, CompList),
+    case M:maps() of
+        false ->
+            RecordTag = list_to_atom(asn1ct_gen:list2rname(Typename)),
+            list_to_tuple([RecordTag|[Val || {_,Val} <- Cs]]);
+        true ->
+            maps:from_list(Cs)
     end.
 
 get_components(M,Typename,{Root,Ext}) ->
@@ -131,9 +136,9 @@ get_components(M,Typename,{Root,Ext}) ->
 
 %% Should enhance this *** HERE *** with proper handling of extensions
 
-get_components(M,Typename,[H|T]) ->
-    [from_type(M,Typename,H)|
-    get_components(M,Typename,T)];
+get_components(M, Typename, [H|T]) ->
+    #'ComponentType'{name=Name} = H,
+    [{Name,from_type(M, Typename, H)}|get_components(M, Typename, T)];
 get_components(_,_,[]) ->
     [].
 
@@ -292,8 +297,10 @@ from_type_prim(M, D) ->
 	'BMPString' ->
 	    adjust_list(size_random(C),c_string(C,"BMPString"));
 	'UTF8String' ->
-	    {ok,Res}=asn1rt:utf8_list_to_binary(adjust_list(random(50),[$U,$T,$F,$8,$S,$t,$r,$i,$n,$g,16#ffff,16#fffffff,16#ffffff,16#fffff,16#fff])),
-	    Res;
+            L = adjust_list(random(50),
+                            [$U,$T,$F,$8,$S,$t,$r,$i,$n,$g,
+                             16#ffff,16#ffee,16#10ffff,16#ffff,16#fff]),
+	    unicode:characters_to_binary(L);
 	'UniversalString' ->
 	    adjust_list(size_random(C),c_string(C,"UniversalString"));
 	XX ->

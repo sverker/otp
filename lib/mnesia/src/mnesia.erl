@@ -316,7 +316,6 @@ ms() ->
      mnesia_loader,
      mnesia_frag,
      mnesia_frag_hash,
-     mnesia_frag_old_hash,
      mnesia_index,
      mnesia_kernel_sup,
      mnesia_late_loader,
@@ -2062,9 +2061,10 @@ any_table_info(Tab, Item) when is_atom(Tab) ->
 		[] ->
 		    abort({no_exists, Tab, Item});
 		Props ->
-		    lists:map(fun({setorbag, Type}) -> {type, Type};
-				 (Prop) -> Prop end,
-			      Props)
+                    Rename = fun ({setorbag, Type}) -> {type, Type};
+                                 (Prop) -> Prop
+                             end,
+                    lists:sort(lists:map(Rename, Props))
 	    end;
 	name ->
 	    Tab;

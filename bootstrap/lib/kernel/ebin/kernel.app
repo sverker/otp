@@ -22,7 +22,7 @@
 {application, kernel,
  [
   {description, "ERTS  CXC 138 10"},
-  {vsn, "5.1"},
+  {vsn, "5.1.1"},
   {modules, [application,
 	     application_controller,
 	     application_master,
@@ -34,6 +34,7 @@
 	     erl_boot_server,
 	     erl_distribution,
 	     erl_reply,
+             erl_signal_handler,
 	     error_handler,
 	     error_logger,
 	     file,

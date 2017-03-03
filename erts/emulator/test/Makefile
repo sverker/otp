@@ -53,6 +53,7 @@ MODULES= \
 	crypto_SUITE \
 	ddll_SUITE \
 	decode_packet_SUITE \
+	dirty_bif_SUITE \
 	dirty_nif_SUITE \
 	distribution_SUITE \
 	driver_SUITE \
@@ -85,6 +86,7 @@ MODULES= \
 	num_bif_SUITE \
 	message_queue_data_SUITE \
 	op_SUITE \
+	os_signal_SUITE \
 	port_SUITE \
 	port_bif_SUITE \
 	process_SUITE \

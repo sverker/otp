@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2014-2015. All Rights Reserved.
+ * Copyright Ericsson AB 2014-2016. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,9 +66,9 @@ static Uint msacc_unmanaged_count = 0;
 #endif
 
 #if ERTS_MSACC_STATE_COUNT < MAP_SMALL_MAP_LIMIT
-#define DEFAULT_MSACC_MSG_SIZE (3 + 1 + ERTS_MSACC_STATE_COUNT * 2 + 3 + REF_THING_SIZE)
+#define DEFAULT_MSACC_MSG_SIZE (3 + 1 + ERTS_MSACC_STATE_COUNT * 2 + 3 + ERTS_REF_THING_SIZE)
 #else
-#define DEFAULT_MSACC_MSG_SIZE (3 + ERTS_MSACC_STATE_COUNT * 3 + 3 + REF_THING_SIZE)
+#define DEFAULT_MSACC_MSG_SIZE (3 + ERTS_MSACC_STATE_COUNT * 3 + 3 + ERTS_REF_THING_SIZE)
 #endif
 
 /* we have to split initiation as atoms are not inited in early init */
@@ -137,8 +137,8 @@ void erts_msacc_init_thread(char *type, int id, int managed) {
 void erts_msacc_set_bif_state(ErtsMsAcc *__erts_msacc_cache, Eterm mod, void *fn) {
 
 #ifdef ERTS_MSACC_EXTENDED_BIFS
-#define BIF_LIST(Mod,Func,Arity,FuncAddr,Num)                           \
-    if (fn == &FuncAddr) {                                             \
+#define BIF_LIST(Mod,Func,Arity,BifFuncAddr,FuncAddr,Num)	       \
+    if (fn == &BifFuncAddr) {                                             \
         ERTS_MSACC_SET_STATE_CACHED_M_X(ERTS_MSACC_STATIC_STATE_COUNT + Num); \
     } else
 #include "erl_bif_list.h"
@@ -212,7 +212,7 @@ typedef struct {
     int action;
     Process *proc;
     Eterm ref;
-    Eterm ref_heap[REF_THING_SIZE];
+    Eterm ref_heap[ERTS_REF_THING_SIZE];
     Uint req_sched;
     erts_smp_atomic32_t refc;
 } ErtsMSAccReq;
@@ -245,7 +245,7 @@ static void send_reply(ErtsMsAcc *msacc, ErtsMSAccReq *msaccrp) {
 
         if (msacc->unmanaged) erts_mtx_lock(&msacc->mtx);
 
-        hp = erts_produce_heap(&factory, REF_THING_SIZE + 3 /* tuple */, 0);
+        hp = erts_produce_heap(&factory, ERTS_REF_THING_SIZE + 3 /* tuple */, 0);
         ref_copy = STORE_NC(&hp, &msgp->hfrag.off_heap, msaccrp->ref);
         msg = erts_msacc_gather_stats(msacc, &factory);
         msg = TUPLE2(hp, ref_copy, msg);
@@ -255,7 +255,7 @@ static void send_reply(ErtsMsAcc *msacc, ErtsMSAccReq *msaccrp) {
         erts_factory_close(&factory);
     } else {
         ErlOffHeap *ohp = NULL;
-        msgp = erts_alloc_message_heap(rp, &rp_locks, REF_THING_SIZE, &hp, &ohp);
+        msgp = erts_alloc_message_heap(rp, &rp_locks, ERTS_REF_THING_SIZE, &hp, &ohp);
         msg = STORE_NC(&hp, &msgp->hfrag.off_heap, msaccrp->ref);
     }
 

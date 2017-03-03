@@ -204,21 +204,21 @@ suites(Minor) when Minor == 1; Minor == 2 ->
       ?TLS_ECDH_RSA_WITH_AES_256_CBC_SHA,
       ?TLS_RSA_WITH_AES_256_CBC_SHA,
 
-      ?TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA,
-      ?TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
-      ?TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA,
-      ?TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA,
-      ?TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA,
-      ?TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA,
-      ?TLS_RSA_WITH_3DES_EDE_CBC_SHA,
-
       ?TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
       ?TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
       ?TLS_DHE_RSA_WITH_AES_128_CBC_SHA,
       ?TLS_DHE_DSS_WITH_AES_128_CBC_SHA,
       ?TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA,
       ?TLS_ECDH_RSA_WITH_AES_128_CBC_SHA,
-      ?TLS_RSA_WITH_AES_128_CBC_SHA
+      ?TLS_RSA_WITH_AES_128_CBC_SHA,
+
+      ?TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA,
+      ?TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
+      ?TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA,
+      ?TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA,
+      ?TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA,
+      ?TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA,
+      ?TLS_RSA_WITH_3DES_EDE_CBC_SHA
     ];
 suites(3) ->
     [
@@ -407,7 +407,7 @@ is_pair(Hash, rsa, Hashs) ->
     AtLeastMd5 = Hashs -- [md2,md4],
     lists:member(Hash, AtLeastMd5).
 
-%% list ECC curves in prefered order
+%% list ECC curves in preferred order
 -spec ecc_curves(1..3 | all) -> [named_curve()].
 ecc_curves(all) ->
     [sect571r1,sect571k1,secp521r1,brainpoolP512r1,

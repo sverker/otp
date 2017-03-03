@@ -92,7 +92,7 @@ init([Pid, ParentFrame, Parent]) ->
 	    observer_wx:return_to_localnode(ParentFrame, node(Pid)),
 	    {stop, badrpc};
 	  process_undefined ->
-	    observer_lib:display_info_dialog("No such alive process"),
+	    observer_lib:display_info_dialog(ParentFrame,"No such alive process"),
 	    {stop, normal}
     end.
 
@@ -434,7 +434,7 @@ get_gc_info(Arg) ->
 filter_monitor_info() ->
     fun(Data) ->
 	    Ms = proplists:get_value(monitors, Data),
-	    [Pid || {process, Pid} <- Ms]
+	    [Id || {_Type, Id} <- Ms] % Type is process or port
     end.
 
 stringify_bins(Data) ->

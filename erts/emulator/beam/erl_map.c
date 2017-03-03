@@ -1188,16 +1188,17 @@ typedef struct HashmapMergeContext_ {
 #endif
 } HashmapMergeContext;
 
-static void hashmap_merge_ctx_destructor(Binary* ctx_bin)
+static int hashmap_merge_ctx_destructor(Binary* ctx_bin)
 {
     HashmapMergeContext* ctx = (HashmapMergeContext*) ERTS_MAGIC_BIN_DATA(ctx_bin);
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(ctx_bin) == hashmap_merge_ctx_destructor);
 
     PSTACK_DESTROY_SAVED(&ctx->pstack);
+    return 1;
 }
 
 BIF_RETTYPE maps_merge_trap_1(BIF_ALIST_1) {
-    Binary* ctx_bin = ((ProcBin *) binary_val(BIF_ARG_1))->val;
+    Binary* ctx_bin = erts_magic_ref2bin(BIF_ARG_1);
 
     ASSERT(ERTS_MAGIC_BIN_DESTRUCTOR(ctx_bin) == hashmap_merge_ctx_destructor);
 
@@ -1453,9 +1454,9 @@ trap:  /* Yield */
                                                  hashmap_merge_ctx_destructor);
         ctx = ERTS_MAGIC_BIN_DATA(ctx_b);
         sys_memcpy(ctx, &local_ctx, sizeof(HashmapMergeContext));
-        hp = HAlloc(p, PROC_BIN_SIZE);
+        hp = HAlloc(p, ERTS_MAGIC_REF_THING_SIZE);
         ASSERT(ctx->trap_bin == THE_NON_VALUE);
-        ctx->trap_bin = erts_mk_magic_binary_term(&hp, &MSO(p), ctx_b);
+        ctx->trap_bin = erts_mk_magic_ref(&hp, &MSO(p), ctx_b);
 
         erts_set_gc_state(p, 0);
     }

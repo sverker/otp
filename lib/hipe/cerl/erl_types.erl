@@ -228,7 +228,8 @@
 -export([t_is_identifier/1]).
 -endif.
 
--export_type([erl_type/0, opaques/0, type_table/0, var_table/0, cache/0]).
+-export_type([erl_type/0, opaques/0, type_table/0, mod_records/0,
+              var_table/0, cache/0]).
 
 %%-define(DEBUG, true).
 
@@ -371,8 +372,9 @@
 -type type_value()   :: {{module(), {file:name(), erl_anno:line()},
                           erl_parse:abstract_type(), ArgNames :: [atom()]},
                          erl_type()}.
--type type_table() :: dict:dict(record_key() | type_key(),
-                                record_value() | type_value()).
+-type type_table() :: #{record_key() | type_key() =>
+                        record_value() | type_value()}.
+-type mod_records() :: dict:dict(module(), type_table()).
 
 -opaque var_table() :: #{atom() => erl_type()}.
 
@@ -741,16 +743,16 @@ decorate_tuples_in_sets([], _L, _Opaques, Acc) ->
 
 -spec t_opaque_from_records(type_table()) -> [erl_type()].
 
-t_opaque_from_records(RecDict) ->
-  OpaqueRecDict =
-    dict:filter(fun(Key, _Value) ->
+t_opaque_from_records(RecMap) ->
+  OpaqueRecMap =
+    maps:filter(fun(Key, _Value) ->
 		    case Key of
 		      {opaque, _Name, _Arity} -> true;
 		      _  -> false
 		    end
-		end, RecDict),
-  OpaqueTypeDict =
-    dict:map(fun({opaque, Name, _Arity},
+		end, RecMap),
+  OpaqueTypeMap =
+    maps:map(fun({opaque, Name, _Arity},
                  {{Module, _FileLine, _Form, ArgNames}, _Type}) ->
                  %% Args = args_to_types(ArgNames),
                  %% List = lists:zip(ArgNames, Args),
@@ -759,8 +761,8 @@ t_opaque_from_records(RecDict) ->
                  Rep = t_any(), % not used for anything right now
                  Args = [t_any() || _ <- ArgNames],
                  t_opaque(Module, Name, Args, Rep)
-	     end, OpaqueRecDict),
-  [OpaqueType || {_Key, OpaqueType} <- dict:to_list(OpaqueTypeDict)].
+	     end, OpaqueRecMap),
+  [OpaqueType || {_Key, OpaqueType} <- maps:to_list(OpaqueTypeMap)].
 
 %% Decompose opaque instances of type arg2 to structured types, in arg1
 %% XXX: Same as t_unopaque
@@ -792,10 +794,6 @@ t_struct_from_opaque(Type, _Opaques) -> Type.
 
 list_struct_from_opaque(Types, Opaques) ->
   [t_struct_from_opaque(Type, Opaques) || Type <- Types].
-
-%%-----------------------------------------------------------------------------
-
--type mod_records() :: dict:dict(module(), type_table()).
 
 %%-----------------------------------------------------------------------------
 %% Unit type. Signals non termination.
@@ -2237,16 +2235,21 @@ t_has_var_list([]) -> false.
 -spec t_collect_vars(erl_type()) -> [erl_type()].
 
 t_collect_vars(T) ->
-  t_collect_vars(T, []).
+  Vs = t_collect_vars(T, maps:new()),
+  [V || {V, _} <- maps:to_list(Vs)].
 
--spec t_collect_vars(erl_type(), [erl_type()]) -> [erl_type()].
+-type ctab() :: #{erl_type() => 'any'}.
+
+-spec t_collect_vars(erl_type(), ctab()) -> ctab().
 
 t_collect_vars(?var(_) = Var, Acc) ->
-  ordsets:add_element(Var, Acc);
+  maps:put(Var, any, Acc);
 t_collect_vars(?function(Domain, Range), Acc) ->
-  ordsets:union(t_collect_vars(Domain, Acc), t_collect_vars(Range, []));
+  Acc1 = t_collect_vars(Domain, Acc),
+  t_collect_vars(Range, Acc1);
 t_collect_vars(?list(Contents, Termination, _), Acc) ->
-  ordsets:union(t_collect_vars(Contents, Acc), t_collect_vars(Termination, []));
+  Acc1 = t_collect_vars(Contents, Acc),
+  t_collect_vars(Termination, Acc1);
 t_collect_vars(?product(Types), Acc) ->
   t_collect_vars_list(Types, Acc);
 t_collect_vars(?tuple(?any, ?any, ?any), Acc) ->
@@ -3059,88 +3062,91 @@ is_compat_args([A1|Args1], [A2|Args2]) ->
 is_compat_args([], []) -> true;
 is_compat_args(_, _) -> false.
 
-is_compat_arg(A1, A2) ->
-  is_specialization(A1, A2) orelse is_specialization(A2, A1).
+-spec is_compat_arg(erl_type(), erl_type()) -> boolean().
 
--spec is_specialization(erl_type(), erl_type()) -> boolean().
+%% The intention is that 'true' is to be returned iff one of the
+%% arguments is a specialization of the other argument in the sense
+%% that every type is a specialization of any(). For example, {_,_} is
+%% a specialization of any(), but not of tuple(). Does not handle
+%% variables, but any() and unions (sort of). However, the
+%% implementation is more relaxed as any() is compatible to anything.
 
-%% Returns true if the first argument is a specialization of the
-%% second argument in the sense that every type is a specialization of
-%% any(). For example, {_,_} is a specialization of any(), but not of
-%% tuple(). Does not handle variables, but any() and unions (sort of).
-
-is_specialization(T, T) -> true;
-is_specialization(_, ?any) -> true;
-is_specialization(?any, _) -> false;
-is_specialization(?function(Domain1, Range1), ?function(Domain2, Range2)) ->
-  (is_specialization(Domain1, Domain2) andalso
-   is_specialization(Range1, Range2));
-is_specialization(?list(Contents1, Termination1, Size1),
-                  ?list(Contents2, Termination2, Size2)) ->
+is_compat_arg(T, T) -> true;
+is_compat_arg(_, ?any) -> true;
+is_compat_arg(?any, _) -> true;
+is_compat_arg(?function(Domain1, Range1), ?function(Domain2, Range2)) ->
+  (is_compat_arg(Domain1, Domain2) andalso
+   is_compat_arg(Range1, Range2));
+is_compat_arg(?list(Contents1, Termination1, Size1),
+              ?list(Contents2, Termination2, Size2)) ->
   (Size1 =:= Size2 andalso
-   is_specialization(Contents1, Contents2) andalso
-   is_specialization(Termination1, Termination2));
-is_specialization(?product(Types1), ?product(Types2)) ->
-  specialization_list(Types1, Types2);
-is_specialization(?tuple(?any, ?any, ?any), ?tuple(_, _, _)) -> false;
-is_specialization(?tuple(_, _, _), ?tuple(?any, ?any, ?any)) -> false;
-is_specialization(?tuple(Elements1, Arity, _), 
-                  ?tuple(Elements2, Arity, _)) when Arity =/= ?any ->
-  specialization_list(Elements1, Elements2);
-is_specialization(?tuple_set([{Arity, List}]), 
-                  ?tuple(Elements2, Arity, _)) when Arity =/= ?any ->
-  specialization_list(sup_tuple_elements(List), Elements2);
-is_specialization(?tuple(Elements1, Arity, _),
-                  ?tuple_set([{Arity, List}])) when Arity =/= ?any ->
-  specialization_list(Elements1, sup_tuple_elements(List));
-is_specialization(?tuple_set(List1), ?tuple_set(List2)) ->
+   is_compat_arg(Contents1, Contents2) andalso
+   is_compat_arg(Termination1, Termination2));
+is_compat_arg(?product(Types1), ?product(Types2)) ->
+  is_compat_list(Types1, Types2);
+is_compat_arg(?map(Pairs1, DefK1, DefV1), ?map(Pairs2, DefK2, DefV2)) ->
+  (is_compat_list(Pairs1, Pairs2) andalso
+   is_compat_arg(DefK1, DefK2) andalso
+   is_compat_arg(DefV1, DefV2));
+is_compat_arg(?tuple(?any, ?any, ?any), ?tuple(_, _, _)) -> false;
+is_compat_arg(?tuple(_, _, _), ?tuple(?any, ?any, ?any)) -> false;
+is_compat_arg(?tuple(Elements1, Arity, _),
+              ?tuple(Elements2, Arity, _)) when Arity =/= ?any ->
+  is_compat_list(Elements1, Elements2);
+is_compat_arg(?tuple_set([{Arity, List}]),
+              ?tuple(Elements2, Arity, _)) when Arity =/= ?any ->
+  is_compat_list(sup_tuple_elements(List), Elements2);
+is_compat_arg(?tuple(Elements1, Arity, _),
+              ?tuple_set([{Arity, List}])) when Arity =/= ?any ->
+  is_compat_list(Elements1, sup_tuple_elements(List));
+is_compat_arg(?tuple_set(List1), ?tuple_set(List2)) ->
   try
-    specialization_list_list([sup_tuple_elements(T) || {_Arity, T} <- List1],
-                             [sup_tuple_elements(T) || {_Arity, T} <- List2])
+    is_compat_list_list([sup_tuple_elements(T) || {_Arity, T} <- List1],
+                        [sup_tuple_elements(T) || {_Arity, T} <- List2])
   catch _:_ -> false
   end;
-is_specialization(?opaque(_) = T1, T2) ->
-  is_specialization(t_opaque_structure(T1), T2);
-is_specialization(T1, ?opaque(_) = T2) ->
-  is_specialization(T1, t_opaque_structure(T2));
-is_specialization(?union(List1)=T1, ?union(List2)=T2) ->
-  case specialization_union2(T1, T2) of
-    {yes, Type1, Type2} -> is_specialization(Type1, Type2);
-    no -> specialization_list(List1, List2)
+is_compat_arg(?opaque(_) = T1, T2) ->
+  is_compat_arg(t_opaque_structure(T1), T2);
+is_compat_arg(T1, ?opaque(_) = T2) ->
+  is_compat_arg(T1, t_opaque_structure(T2));
+is_compat_arg(?union(List1)=T1, ?union(List2)=T2) ->
+  case is_compat_union2(T1, T2) of
+    {yes, Type1, Type2} -> is_compat_arg(Type1, Type2);
+    no -> is_compat_list(List1, List2)
   end;
-is_specialization(?union(List), T2) ->
+is_compat_arg(?union(List), T2) ->
   case unify_union(List) of
-      {yes, Type} -> is_specialization(Type, T2);
+      {yes, Type} -> is_compat_arg(Type, T2);
       no -> false
   end;
-is_specialization(T1, ?union(List)) ->
+is_compat_arg(T1, ?union(List)) ->
   case unify_union(List) of
-      {yes, Type} -> is_specialization(T1, Type);
+      {yes, Type} -> is_compat_arg(T1, Type);
       no -> false
   end;
-is_specialization(?var(_), _) -> exit(error);
-is_specialization(_, ?var(_)) -> exit(error);
-is_specialization(?none, _) -> false;
-is_specialization(_, ?none) -> false;
-is_specialization(?unit, _) -> false;
-is_specialization(_, ?unit) -> false;
-is_specialization(#c{}, #c{}) -> false.
+is_compat_arg(?var(_), _) -> exit(error);
+is_compat_arg(_, ?var(_)) -> exit(error);
+is_compat_arg(?none, _) -> false;
+is_compat_arg(_, ?none) -> false;
+is_compat_arg(?unit, _) -> false;
+is_compat_arg(_, ?unit) -> false;
+is_compat_arg(#c{}, #c{}) -> false.
 
-specialization_list_list(LL1, LL2) ->
-  length(LL1) =:= length(LL2) andalso specialization_list_list1(LL1, LL2).
+is_compat_list_list(LL1, LL2) ->
+  length(LL1) =:= length(LL2) andalso is_compat_list_list1(LL1, LL2).
 
-specialization_list_list1([], []) -> true;
-specialization_list_list1([L1|LL1], [L2|LL2]) ->
-  specialization_list(L1, L2) andalso specialization_list_list1(LL1, LL2).
+is_compat_list_list1([], []) -> true;
+is_compat_list_list1([L1|LL1], [L2|LL2]) ->
+  is_compat_list(L1, L2) andalso is_compat_list_list1(LL1, LL2).
 
-specialization_list(L1, L2) ->
-  length(L1) =:= length(L2) andalso specialization_list1(L1, L2).
+is_compat_list(L1, L2) ->
+  length(L1) =:= length(L2) andalso is_compat_list1(L1, L2).
 
-specialization_list1([], []) -> true;
-specialization_list1([T1|L1], [T2|L2]) ->
-  is_specialization(T1, T2) andalso specialization_list1(L1, L2).
+is_compat_list1([], []) -> true;
+is_compat_list1([T1|L1], [T2|L2]) ->
+  is_compat_arg(T1, T2) andalso is_compat_list1(L1, L2).
 
-specialization_union2(?union(List1)=T1, ?union(List2)=T2) ->
+is_compat_union2(?union(List1)=T1, ?union(List2)=T2) ->
   case {unify_union(List1), unify_union(List2)} of
     {{yes, Type1}, {yes, Type2}} -> {yes, Type1, Type2};
     {{yes, Type1}, no} -> {yes, Type1, T2};
@@ -4173,7 +4179,7 @@ t_map(Fun, T) ->
 -spec t_to_string(erl_type()) -> string().
 
 t_to_string(T) ->
-  t_to_string(T, dict:new()).
+  t_to_string(T, maps:new()).
 
 -spec t_to_string(erl_type(), type_table()) -> string().
 
@@ -4423,9 +4429,17 @@ mod_name(Mod, Name) ->
 -type site()  :: {'type', mta()} | {'spec', mfa()} | {'record', mra()}.
 -type cache_key() :: {module(), atom(), expand_depth(),
                       [erl_type()], type_names()}.
--opaque cache() :: #{cache_key() => {erl_type(), expand_limit()}}.
+-type mod_type_table() :: ets:tid().
+-record(cache,
+        {
+          types = maps:new() :: #{cache_key() => {erl_type(), expand_limit()}},
+          mod_recs = {mrecs, dict:new()} :: 'undefined'
+                                          | {'mrecs', mod_records()}
+        }).
 
--spec t_from_form(parse_form(), sets:set(mfa()), site(), mod_records(),
+-opaque cache() :: #cache{}.
+
+-spec t_from_form(parse_form(), sets:set(mfa()), site(), mod_type_table(),
                   var_table(), cache()) -> {erl_type(), cache()}.
 
 t_from_form(Form, ExpTypes, Site, RecDict, VarTab, Cache) ->
@@ -4437,11 +4451,12 @@ t_from_form(Form, ExpTypes, Site, RecDict, VarTab, Cache) ->
 
 t_from_form_without_remote(Form, Site, TypeTable) ->
   Module = site_module(Site),
-  RecDict = dict:from_list([{Module, TypeTable}]),
+  ModRecs = dict:from_list([{Module, TypeTable}]),
   ExpTypes = replace_by_none,
   VarTab = var_table__new(),
-  Cache = cache__new(),
-  t_from_form1(Form, ExpTypes, Site, RecDict, VarTab, Cache).
+  Cache0 = cache__new(),
+  Cache = Cache0#cache{mod_recs = {mrecs, ModRecs}},
+  t_from_form1(Form, ExpTypes, Site, undefined, VarTab, Cache).
 
 %% REC_TYPE_LIMIT is used for limiting the depth of recursive types.
 %% EXPAND_LIMIT is used for limiting the size of types by
@@ -4456,13 +4471,13 @@ t_from_form_without_remote(Form, Site, TypeTable) ->
 
 -record(from_form, {site   :: site(),
                     xtypes :: sets:set(mfa()) | 'replace_by_none',
-                    mrecs  :: mod_records(),
+                    mrecs  :: 'undefined' | mod_type_table(),
                     vtab   :: var_table(),
                     tnames :: type_names()}).
 
 -spec t_from_form1(parse_form(), sets:set(mfa()) | 'replace_by_none',
-                   site(), mod_records(), var_table(), cache()) ->
-                      {erl_type(), cache()}.
+                   site(), 'undefined' | mod_type_table(), var_table(),
+                   cache()) -> {erl_type(), cache()}.
 
 t_from_form1(Form, ET, Site, MR, V, C) ->
   TypeNames = initial_typenames(Site),
@@ -4534,6 +4549,8 @@ from_form({atom, _L, Atom}, _S, _D, L, C) ->
   {t_atom(Atom), L, C};
 from_form({integer, _L, Int}, _S, _D, L, C) ->
   {t_integer(Int), L, C};
+from_form({char, _L, Char}, _S, _D, L, C) ->
+  {t_integer(Char), L, C};
 from_form({op, _L, _Op, _Arg} = Op, _S, _D, L, C) ->
   case erl_eval:partial_eval(Op) of
     {integer, _, Val} ->
@@ -4706,13 +4723,13 @@ from_form({opaque, _L, Name, {Mod, Args, Rep}}, _S, _D, L, C) ->
 builtin_type(Name, Type, S, D, L, C) ->
   #from_form{site = Site, mrecs = MR} = S,
   M = site_module(Site),
-  case dict:find(M, MR) of
-    {ok, R} ->
+  case lookup_module_types(M, MR, C) of
+    {R, C1} ->
       case lookup_type(Name, 0, R) of
         {_, {{_M, _FL, _F, _A}, _T}} ->
-          type_from_form(Name, [], S, D, L, C);
+          type_from_form(Name, [], S, D, L, C1);
         error ->
-          {Type, L, C}
+          {Type, L, C1}
       end;
     error ->
       {Type, L, C}
@@ -4725,9 +4742,9 @@ type_from_form(Name, Args, S, D, L, C) ->
   TypeName = {type, {Module, Name, ArgsLen}},
   case can_unfold_more(TypeName, TypeNames) of
     true ->
-      {ok, R} = dict:find(Module, MR),
+      {R, C1} = lookup_module_types(Module, MR, C),
       type_from_form1(Name, Args, ArgsLen, R, TypeName, TypeNames,
-                      S, D, L, C);
+                      S, D, L, C1);
     false ->
       {t_any(), L, C}
   end.
@@ -4779,24 +4796,24 @@ remote_from_form(RemMod, Name, Args, S, D, L, C) ->
     true ->
       ArgsLen = length(Args),
       MFA = {RemMod, Name, ArgsLen},
-      case dict:find(RemMod, MR) of
+      case lookup_module_types(RemMod, MR, C) of
         error ->
           self() ! {self(), ext_types, MFA},
           {t_any(), L, C};
-        {ok, RemDict} ->
+        {RemDict, C1} ->
           case sets:is_element(MFA, ET) of
             true ->
               RemType = {type, MFA},
               case can_unfold_more(RemType, TypeNames) of
                 true ->
                   remote_from_form1(RemMod, Name, Args, ArgsLen, RemDict,
-                                    RemType, TypeNames, S, D, L, C);
+                                    RemType, TypeNames, S, D, L, C1);
                 false ->
-                  {t_any(), L, C}
+                  {t_any(), L, C1}
               end;
             false ->
               self() ! {self(), ext_types, {RemMod, Name, ArgsLen}},
-              {t_any(), L, C}
+              {t_any(), L, C1}
           end
       end
   end.
@@ -4871,15 +4888,15 @@ record_from_form({atom, _, Name}, ModFields, S, D0, L0, C) ->
   case can_unfold_more(RecordType, TypeNames) of
     true ->
       M = site_module(Site),
-      {ok, R} = dict:find(M, MR),
+      {R, C1} = lookup_module_types(M, MR, C),
       case lookup_record(Name, R) of
         {ok, DeclFields} ->
           NewTypeNames = [RecordType|TypeNames],
           Site1 = {record, {M, Name, length(DeclFields)}},
           S1 = S#from_form{site = Site1, tnames = NewTypeNames},
           Fun = fun(D, L) ->
-                    {GetModRec, L1, C1} =
-                      get_mod_record(ModFields, DeclFields, S1, D, L, C),
+                    {GetModRec, L1, C2} =
+                      get_mod_record(ModFields, DeclFields, S1, D, L, C1),
                     case GetModRec of
                       {error, FieldName} ->
                         throw({error,
@@ -4887,12 +4904,12 @@ record_from_form({atom, _, Name}, ModFields, S, D0, L0, C) ->
                                              [Name, FieldName])});
                       {ok, NewFields} ->
                         S2 = S1#from_form{vtab = var_table__new()},
-                        {NewFields1, L2, C2} =
-                          fields_from_form(NewFields, S2, D, L1, C1),
+                        {NewFields1, L2, C3} =
+                          fields_from_form(NewFields, S2, D, L1, C2),
                         Rec = t_tuple(
                                 [t_atom(Name)|[Type
                                                || {_FieldName, Type} <- NewFields1]]),
-                        {Rec, L2, C2}
+                        {Rec, L2, C3}
                     end
                 end,
           recur_limit(Fun, D0, L0, RecordType, TypeNames);
@@ -5023,7 +5040,7 @@ recur_limit(Fun, D, L, TypeName, TypeNames) ->
   end.
 
 -spec t_check_record_fields(parse_form(), sets:set(mfa()), site(),
-                            mod_records(), var_table(), cache()) -> cache().
+                            mod_type_table(), var_table(), cache()) -> cache().
 
 t_check_record_fields(Form, ExpTypes, Site, RecDict, VarTable, Cache) ->
   State = #from_form{site   = Site,
@@ -5048,6 +5065,7 @@ check_record_fields({remote_type, _L, [{atom, _, _}, {atom, _, _}, Args]},
   list_check_record_fields(Args, S, C);
 check_record_fields({atom, _L, _}, _S, C) -> C;
 check_record_fields({integer, _L, _}, _S, C) -> C;
+check_record_fields({char, _L, _}, _S, C) -> C;
 check_record_fields({op, _L, _Op, _Arg}, _S, C) -> C;
 check_record_fields({op, _L, _Op, _Arg1, _Arg2}, _S, C) -> C;
 check_record_fields({type, _L, tuple, any}, _S, C) -> C;
@@ -5066,13 +5084,13 @@ check_record_fields({user_type, _L, _Name, Args}, S, C) ->
 check_record({atom, _, Name}, ModFields, S, C) ->
   #from_form{site = Site, mrecs = MR} = S,
   M = site_module(Site),
-  {ok, R} = dict:find(M, MR),
+  {R, C1} = lookup_module_types(M, MR, C),
   {ok, DeclFields} = lookup_record(Name, R),
-  case check_fields(Name, ModFields, DeclFields, S, C) of
+  case check_fields(Name, ModFields, DeclFields, S, C1) of
     {error, FieldName} ->
        throw({error, io_lib:format("Illegal declaration of #~w{~w}\n",
                                    [Name, FieldName])});
-    C1 -> C1
+    C2 -> C2
   end.
 
 check_fields(RecName, [{type, _, field_type, [{atom, _, Name}, Abstr]}|Left],
@@ -5102,7 +5120,7 @@ site_module({_, {Module, _, _}}) ->
 -spec cache__new() -> cache().
 
 cache__new() ->
-  maps:new().
+  #cache{}.
 
 -spec cache_key(module(), atom(), [erl_type()],
                 type_names(), expand_depth()) -> cache_key().
@@ -5119,8 +5137,8 @@ cache_key(Module, Name, ArgTypes, TypeNames, D) ->
 -spec cache_find(cache_key(), cache()) ->
                     {erl_type(), expand_limit()} | 'error'.
 
-cache_find(Key, Cache) ->
-  case maps:find(Key, Cache) of
+cache_find(Key, #cache{types = Types}) ->
+  case maps:find(Key, Types) of
     {ok, Value} ->
       Value;
     error ->
@@ -5132,8 +5150,9 @@ cache_find(Key, Cache) ->
 cache_put(_Key, _Type, DeltaL, Cache) when DeltaL < 0 ->
   %% The type is truncated; do not reuse it.
   Cache;
-cache_put(Key, Type, DeltaL, Cache) ->
-  maps:put(Key, {Type, DeltaL}, Cache).
+cache_put(Key, Type, DeltaL, #cache{types = Types} = Cache) ->
+  NewTypes = maps:put(Key, {Type, DeltaL}, Types),
+  Cache#cache{types = NewTypes}.
 
 -spec t_var_names([erl_type()]) -> [atom()].
 
@@ -5149,6 +5168,7 @@ t_form_to_string({var, _L, Name}) -> atom_to_list(Name);
 t_form_to_string({atom, _L, Atom}) -> 
   io_lib:write_string(atom_to_list(Atom), $'); % To quote or not to quote... '
 t_form_to_string({integer, _L, Int}) -> integer_to_list(Int);
+t_form_to_string({char, _L, Char}) -> integer_to_list(Char);
 t_form_to_string({op, _L, _Op, _Arg} = Op) ->
   case erl_eval:partial_eval(Op) of
     {integer, _, _} = Int -> t_form_to_string(Int);
@@ -5231,14 +5251,12 @@ t_form_to_string({type, _L, union, Args}) ->
 t_form_to_string({type, _L, Name, []} = T) ->
    try
      M = mod,
-     D0 = dict:new(),
-     MR = dict:from_list([{M, D0}]),
      Site = {type, {M,Name,0}},
      V = var_table__new(),
      C = cache__new(),
      State = #from_form{site   = Site,
                         xtypes = sets:new(),
-                        mrecs  = MR,
+                        mrecs  = 'undefined',
                         vtab   = V,
                         tnames = []},
      {T1, _, _} = from_form(T, State, _Deep=1000, _ALot=1000000, C),
@@ -5292,11 +5310,33 @@ is_erl_type(?unit) -> true;
 is_erl_type(#c{}) -> true;
 is_erl_type(_) -> false.
 
+-spec lookup_module_types(module(), mod_type_table(), cache()) ->
+                             'error' | {type_table(), cache()}.
+
+lookup_module_types(Module, CodeTable, Cache) ->
+  #cache{mod_recs = ModRecs} = Cache,
+  case ModRecs of
+    undefined -> error;
+    {mrecs, MRecs} ->
+      case dict:find(Module, MRecs) of
+        {ok, R} ->
+          {R, Cache};
+        error ->
+          try ets:lookup_element(CodeTable, Module, 2) of
+            R ->
+              NewMRecs = dict:store(Module, R, MRecs),
+              {R, Cache#cache{mod_recs = {mrecs, NewMRecs}}}
+          catch
+            _:_ -> error
+          end
+      end
+  end.
+
 -spec lookup_record(atom(), type_table()) ->
         'error' | {'ok', [{atom(), parse_form(), erl_type()}]}.
 
-lookup_record(Tag, RecDict) when is_atom(Tag) ->
-  case dict:find({record, Tag}, RecDict) of
+lookup_record(Tag, Table) when is_atom(Tag) ->
+  case maps:find({record, Tag}, Table) of
     {ok, {_FileLine, [{_Arity, Fields}]}} ->
       {ok, Fields};
     {ok, {_FileLine, List}} when is_list(List) ->
@@ -5310,18 +5350,18 @@ lookup_record(Tag, RecDict) when is_atom(Tag) ->
 -spec lookup_record(atom(), arity(), type_table()) ->
         'error' | {'ok', [{atom(), parse_form(), erl_type()}]}.
 
-lookup_record(Tag, Arity, RecDict) when is_atom(Tag) ->
-  case dict:find({record, Tag}, RecDict) of
+lookup_record(Tag, Arity, Table) when is_atom(Tag) ->
+  case maps:find({record, Tag}, Table) of
     {ok, {_FileLine, [{Arity, Fields}]}} -> {ok, Fields};
     {ok, {_FileLine, OrdDict}} -> orddict:find(Arity, OrdDict);
     error -> error
   end.
 
 -spec lookup_type(_, _, _) -> {'type' | 'opaque', type_value()} | 'error'.
-lookup_type(Name, Arity, RecDict) ->
-  case dict:find({type, Name, Arity}, RecDict) of
+lookup_type(Name, Arity, Table) ->
+  case maps:find({type, Name, Arity}, Table) of
     error ->
-      case dict:find({opaque, Name, Arity}, RecDict) of
+      case maps:find({opaque, Name, Arity}, Table) of
 	error -> error;
 	{ok, Found} -> {opaque, Found}
       end;
@@ -5331,8 +5371,8 @@ lookup_type(Name, Arity, RecDict) ->
 -spec type_is_defined('type' | 'opaque', atom(), arity(), type_table()) ->
         boolean().
 
-type_is_defined(TypeOrOpaque, Name, Arity, RecDict) ->
-  dict:is_key({TypeOrOpaque, Name, Arity}, RecDict).
+type_is_defined(TypeOrOpaque, Name, Arity, Table) ->
+  maps:is_key({TypeOrOpaque, Name, Arity}, Table).
 
 cannot_have_opaque(Type, TypeName, TypeNames) ->
   t_is_none(Type) orelse is_recursive(TypeName, TypeNames).

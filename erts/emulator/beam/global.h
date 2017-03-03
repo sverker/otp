@@ -43,9 +43,15 @@
 #include "erl_port.h"
 #include "erl_gc.h"
 #include "erl_nif.h"
+#define ERTS_BINARY_TYPES_ONLY__
+#include "erl_binary.h"
+#undef ERTS_BINARY_TYPES_ONLY__
 
 struct enif_func_t;
 
+#ifdef  DEBUG
+#  define ERTS_NIF_ASSERT_IN_ENV
+#endif
 struct enif_environment_t /* ErlNifEnv */
 {
     struct erl_module_nif* mod_nif;
@@ -58,6 +64,10 @@ struct enif_environment_t /* ErlNifEnv */
     int exception_thrown; /* boolean */
     Process *tracee;
     int exiting; /* boolean (dirty nifs might return in exiting state) */
+
+#ifdef ERTS_NIF_ASSERT_IN_ENV
+    int dbg_disable_assert_in_env;
+#endif
 };
 struct enif_resource_type_t
 {
@@ -66,36 +76,47 @@ struct enif_resource_type_t
     struct erl_module_nif* owner;  /* that created this type and thus implements the destructor*/
     ErlNifResourceDtor* dtor;      /* user destructor function */
     ErlNifResourceStop* stop;
+    ErlNifResourceDown* down;
     erts_refc_t refc;  /* num of resources of this type (HOTSPOT warning)
                           +1 for active erl_module_nif */
     Eterm module;
     Eterm name;
 };
-typedef struct enif_resource_t
+
+typedef struct
+{
+    erts_smp_mtx_t lock;
+    ErtsMonitor* root;
+    int pending_failed_fire;
+    int is_dying;
+
+    size_t user_data_sz;
+} ErtsResourceMonitors;
+
+typedef struct ErtsResource_
 {
     struct enif_resource_type_t* type;
+    ErtsResourceMonitors* monitors;
 #ifdef DEBUG
     erts_refc_t nif_refc;
+#else
 # ifdef ARCH_32
     byte align__[4];
 # endif
 #endif
-
     char data[1];
-}ErlNifResource;
+}ErtsResource;
 
-#define DATA_TO_RESOURCE(PTR) ((ErlNifResource*)((char*)(PTR) - offsetof(ErlNifResource,data)))
+#define DATA_TO_RESOURCE(PTR) ErtsContainerStruct(PTR, ErtsResource, data)
+#define erts_resource_ref_size(P) ERTS_MAGIC_REF_THING_SIZE
+
+extern Eterm erts_bld_resource_ref(Eterm** hp, ErlOffHeap*, ErtsResource*);
 
 extern void erts_pre_nif(struct enif_environment_t*, Process*,
 			 struct erl_module_nif*, Process* tracee);
 extern void erts_post_nif(struct enif_environment_t* env);
-#ifdef ERTS_DIRTY_SCHEDULERS
-extern void erts_pre_dirty_nif(ErtsSchedulerData *,
-			       struct enif_environment_t*, Process*,
-			       struct erl_module_nif*);
-extern void erts_post_dirty_nif(struct enif_environment_t* env);
-#endif
-extern void erts_resource_stop(ErlNifResource*, ErlNifEvent, int is_direct_call);
+extern void erts_resource_stop(ErtsResource*, ErlNifEvent, int is_direct_call);
+void erts_fire_nif_monitor(ErtsResource*, Eterm pid, Eterm ref);
 extern Eterm erts_nif_taints(Process* p);
 extern void erts_print_nif_taints(fmtfn_t to, void* to_arg);
 void erts_unload_nif(struct erl_module_nif* nif);
@@ -106,6 +127,12 @@ extern Eterm erts_nif_call_function(Process *p, Process *tracee,
                                     struct erl_module_nif*,
                                     struct enif_func_t *,
                                     int argc, Eterm *argv);
+
+#ifdef ERTS_DIRTY_SCHEDULERS
+int erts_call_dirty_nif(ErtsSchedulerData *esdp, Process *c_p,
+			BeamInstr *I, Eterm *reg);
+#endif /* ERTS_DIRTY_SCHEDULERS */
+
 
 /* Driver handle (wrapper for old plain handle) */
 #define ERL_DE_OK      0
@@ -148,7 +175,7 @@ typedef struct de_proc_entry {
 			                PROC_AWAIT_LOAD == Wants to be notified when we
 			                reloaded the driver (old was locked) */
     Uint    flags;                   /* ERL_FL_DE_DEREFERENCED when reload in progress */
-    Eterm   heap[REF_THING_SIZE];    /* "ref heap" */
+    Eterm   heap[ERTS_REF_THING_SIZE];    /* "ref heap" */
     struct  de_proc_entry *next;
 } DE_ProcEntry;
 
@@ -156,7 +183,7 @@ typedef struct {
     void         *handle;             /* Handle for DLL or SO (for dyn. drivers). */
     DE_ProcEntry *procs;              /* List of pids that have loaded this driver,
 				         or that wait for it to change state */
-    erts_refc_t  refc;                /* Number of ports/processes having
+    erts_smp_refc_t  refc;                /* Number of ports/processes having
 					 references to the driver */
     erts_smp_atomic32_t port_count;   /* Number of ports using the driver */
     Uint         flags;               /* ERL_DE_FL_KILL_PORTS */
@@ -236,118 +263,6 @@ extern Eterm erts_ddll_monitor_driver(Process *p,
 				      ErtsProcLocks plocks);
 
 /*
-** Just like the driver binary but with initial flags
-** Note that the two structures Binary and ErlDrvBinary HAVE to
-** be equal except for extra fields in the beginning of the struct.
-** ErlDrvBinary is defined in erl_driver.h.
-** When driver_alloc_binary is called, a Binary is allocated, but 
-** the pointer returned is to the address of the first element that
-** also occurs in the ErlDrvBinary struct (driver.*binary takes care if this).
-** The driver need never know about additions to the internal Binary of the
-** emulator. One should however NEVER be sloppy when mixing ErlDrvBinary
-** and Binary, the macros below can convert one type to the other, as they both
-** in reality are equal.
-*/
-
-#ifdef ARCH_32
- /* *DO NOT USE* only for alignment. */
-#define ERTS_BINARY_STRUCT_ALIGNMENT Uint32 align__;
-#else
-#define ERTS_BINARY_STRUCT_ALIGNMENT
-#endif
-
-/* Add fields in ERTS_INTERNAL_BINARY_FIELDS, otherwise the drivers crash */
-#define ERTS_INTERNAL_BINARY_FIELDS				\
-    UWord flags;							\
-    erts_refc_t refc;						\
-    ERTS_BINARY_STRUCT_ALIGNMENT
-
-typedef struct binary {
-    ERTS_INTERNAL_BINARY_FIELDS
-    SWord orig_size;
-    char orig_bytes[1]; /* to be continued */
-} Binary;
-
-#define ERTS_SIZEOF_Binary(Sz) \
-    (offsetof(Binary,orig_bytes) + (Sz))
-
-typedef struct {
-    ERTS_INTERNAL_BINARY_FIELDS
-    SWord orig_size;
-    void (*destructor)(Binary *);
-    union {
-        struct {
-            ERTS_BINARY_STRUCT_ALIGNMENT
-            char data[1];
-        } aligned;
-        struct {
-            char data[1];
-        } unaligned;
-    } u;
-} ErtsMagicBinary;
-
-#ifdef ARCH_32
-#define ERTS_MAGIC_BIN_BYTES_TO_ALIGN 4
-#else
-#define ERTS_MAGIC_BIN_BYTES_TO_ALIGN 0
-#endif
-
-typedef union {
-    Binary binary;
-    ErtsMagicBinary magic_binary;
-    struct {
-	ERTS_INTERNAL_BINARY_FIELDS
-	ErlDrvBinary binary;
-    } driver;
-} ErtsBinary;
-
-/*
- * 'Binary' alignment:
- *   Address of orig_bytes[0] of a Binary should always be 8-byte aligned.
- * It is assumed that the flags, refc, and orig_size fields are 4 bytes on
- * 32-bits architectures and 8 bytes on 64-bits architectures.
- */
-
-#define ERTS_MAGIC_BIN_DESTRUCTOR(BP) \
-  ((ErtsBinary *) (BP))->magic_binary.destructor
-#define ERTS_MAGIC_BIN_DATA(BP) \
-  ((void *) ((ErtsBinary *) (BP))->magic_binary.u.aligned.data)
-#define ERTS_MAGIC_DATA_OFFSET \
-  (offsetof(ErtsMagicBinary,u.aligned.data) - offsetof(Binary,orig_bytes))
-#define ERTS_MAGIC_BIN_ORIG_SIZE(Sz) \
-  (ERTS_MAGIC_DATA_OFFSET + (Sz))
-#define ERTS_MAGIC_BIN_SIZE(Sz) \
-  (offsetof(ErtsMagicBinary,u.aligned.data) + (Sz))
-
-/* On 32-bit arch these macro variants will save memory
-   by not forcing 8-byte alignment for the magic payload.
-*/
-#define ERTS_MAGIC_BIN_UNALIGNED_DATA(BP) \
-  ((void *) ((ErtsBinary *) (BP))->magic_binary.u.unaligned.data)
-#define ERTS_MAGIC_UNALIGNED_DATA_OFFSET \
-  (offsetof(ErtsMagicBinary,u.unaligned.data) - offsetof(Binary,orig_bytes))
-#define ERTS_MAGIC_BIN_UNALIGNED_DATA_SIZE(BP) \
-  ((BP)->orig_size - ERTS_MAGIC_UNALIGNED_DATA_OFFSET)
-#define ERTS_MAGIC_BIN_UNALIGNED_ORIG_SIZE(Sz) \
-  (ERTS_MAGIC_UNALIGNED_DATA_OFFSET + (Sz))
-#define ERTS_MAGIC_BIN_UNALIGNED_SIZE(Sz) \
-  (offsetof(ErtsMagicBinary,u.unaligned.data) + (Sz))
-#define ERTS_MAGIC_BIN_FROM_UNALIGNED_DATA(DATA) \
-  ((ErtsBinary*)((char*)(DATA) - offsetof(ErtsMagicBinary,u.unaligned.data)))
-
-
-#define Binary2ErlDrvBinary(B) (&((ErtsBinary *) (B))->driver.binary)
-#define ErlDrvBinary2Binary(D) ((Binary *) \
-				(((char *) (D)) \
-				 - offsetof(ErtsBinary, driver.binary)))
-
-/* A "magic" binary flag */
-#define BIN_FLAG_MAGIC      1
-#define BIN_FLAG_USR1       2 /* Reserved for use by different modules too mark */
-#define BIN_FLAG_USR2       4 /*  certain binaries as special (used by ets) */
-#define BIN_FLAG_DRV        8
-
-/*
  * This structure represents one type of a binary in a process.
  */
 
@@ -368,46 +283,12 @@ typedef struct proc_bin {
  */
 #define PROC_BIN_SIZE (sizeof(ProcBin)/sizeof(Eterm))
 
-ERTS_GLB_INLINE Eterm erts_mk_magic_binary_term(Eterm **hpp,
-						ErlOffHeap *ohp,
-						Binary *mbp);
-
-#if ERTS_GLB_INLINE_INCL_FUNC_DEF
-
-ERTS_GLB_INLINE Eterm
-erts_mk_magic_binary_term(Eterm **hpp, ErlOffHeap *ohp, Binary *mbp)
-{
-    ProcBin *pb = (ProcBin *) *hpp;
-    *hpp += PROC_BIN_SIZE;
-
-    ASSERT(mbp->flags & BIN_FLAG_MAGIC);
-
-    pb->thing_word = HEADER_PROC_BIN;
-    pb->size = 0;
-    pb->next = ohp->first;
-    ohp->first = (struct erl_off_heap_header*) pb;
-    pb->val = mbp;
-    pb->bytes = (byte *) mbp->orig_bytes;
-    pb->flags = 0;
-
-    erts_refc_inc(&mbp->refc, 1);
-
-    return make_binary(pb);    
-}
-
-#endif
-
-#define ERTS_TERM_IS_MAGIC_BINARY(T) \
-  (is_binary((T)) \
-   && (thing_subtag(*binary_val((T))) == REFC_BINARY_SUBTAG) \
-   && (((ProcBin *) binary_val((T)))->val->flags & BIN_FLAG_MAGIC))
-
-
 union erl_off_heap_ptr {
     struct erl_off_heap_header* hdr;
     ProcBin *pb;
     struct erl_fun_thing* fun;
     struct external_thing_* ext;
+    ErtsMRefThing *mref;
     Eterm* ep;
     void* voidp;
 };
@@ -1000,21 +881,6 @@ void erts_bif_info_init(void);
 
 /* bif.c */
 
-ERTS_GLB_INLINE Eterm
-erts_proc_store_ref(Process *c_p, Uint32 ref[ERTS_MAX_REF_NUMBERS]);
-
-#if ERTS_GLB_INLINE_INCL_FUNC_DEF
-
-ERTS_GLB_INLINE Eterm
-erts_proc_store_ref(Process *c_p, Uint32 ref[ERTS_MAX_REF_NUMBERS])
-{
-    Eterm *hp = HAlloc(c_p, REF_THING_SIZE);
-    write_ref_thing(hp, ref[0], ref[1], ref[2]);
-    return make_internal_ref(hp);
-}
-
-#endif
-
 void erts_queue_monitor_message(Process *,
 				ErtsProcLocks*,
 				Eterm,
@@ -1022,7 +888,7 @@ void erts_queue_monitor_message(Process *,
 				Eterm,
 				Eterm);
 void erts_init_trap_export(Export* ep, Eterm m, Eterm f, Uint a,
-			   Eterm (*bif)(Process*,Eterm*));
+			   Eterm (*bif)(Process*, Eterm*, BeamInstr*));
 void erts_init_bif(void);
 Eterm erl_send(Process *p, Eterm to, Eterm msg);
 
@@ -1098,6 +964,9 @@ void process_info(fmtfn_t, void *);
 void print_process_info(fmtfn_t, void *, Process*);
 void info(fmtfn_t, void *);
 void loaded(fmtfn_t, void *);
+
+/* sighandler sys.c */
+int erts_set_signal(Eterm signal, Eterm type);
 
 /* erl_arith.c */
 double erts_get_positive_zero_float(void);
@@ -1306,6 +1175,8 @@ void erts_stale_drv_select(Eterm, ErlDrvPort, ErlDrvEvent, int, int);
 
 Port *erts_get_heart_port(void);
 void erts_emergency_close_ports(void);
+void erts_ref_to_driver_monitor(Eterm ref, ErlDrvMonitor *mon);
+Eterm erts_driver_monitor_to_ref(Eterm* hp, const ErlDrvMonitor *mon);
 
 #if defined(ERTS_SMP) && defined(ERTS_ENABLE_LOCK_COUNT)
 void erts_lcnt_enable_io_lock_count(int enable);
@@ -1402,6 +1273,7 @@ int erts_utf8_to_latin1(byte* dest, const byte* source, int slen);
 
 void bin_write(fmtfn_t, void*, byte*, size_t);
 Sint intlist_to_buf(Eterm, char*, Sint); /* most callers pass plain char*'s */
+Sint erts_unicode_list_to_buf(Eterm list, byte *buf, Sint len);
 
 struct Sint_buf {
 #if defined(ARCH_64)

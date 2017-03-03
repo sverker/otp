@@ -31,6 +31,39 @@
   </header>
   <p>This document describes the changes made to the Kernel application.</p>
 
+<section><title>Kernel 5.1.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    <c>code:add_pathsa/1</c> and command line option
+	    <c>-pa</c> both revert the given list of directories when
+	    adding it at the beginning of the code path. This is now
+	    documented.</p>
+          <p>
+	    Own Id: OTP-13920 Aux Id: ERL-267 </p>
+        </item>
+        <item>
+          <p>
+	    Add lost runtime dependency to erts-8.1. This should have
+	    been done in kernel-5.1 (OTP-19.1) as it cannot run
+	    without at least erts-8.1 (OTP-19.1).</p>
+          <p>
+	    Own Id: OTP-14003</p>
+        </item>
+        <item>
+          <p>
+	    Type and doc for gen_{tcp,udp,sctp}:controlling_process/2
+	    has been improved.</p>
+          <p>
+	    Own Id: OTP-14022 Aux Id: PR-1208 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
 <section><title>Kernel 5.1</title>
 
     <section><title>Fixed Bugs and Malfunctions</title>
@@ -75,7 +108,7 @@
         <item>
           <p>
 	    Close stdin of commands run in os:cmd. This is a
-	    backwards compatiblity fix that restores the behaviour of
+	    backwards compatibility fix that restores the behaviour of
 	    pre 19.0 os:cmd.</p>
           <p>
 	    Own Id: OTP-13867 Aux Id: seq13178 </p>
@@ -1412,7 +1445,7 @@
 	    dependent, so applications aiming to be portable should
 	    consider using <c>{ipv6_v6only,true}</c> when creating an
 	    <c>inet6</c> listening/destination socket, and if
-	    neccesary also create an <c>inet</c> socket on the same
+	    necessary also create an <c>inet</c> socket on the same
 	    port for IPv4 traffic. See the documentation.</p>
           <p>
 	    Own Id: OTP-8928 Aux Id: kunagi-193 [104] </p>

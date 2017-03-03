@@ -138,18 +138,17 @@ typedef struct
     void* ref_bin;
 }ErlNifBinary;
 
-//#ifndef ERL_SYS_DRV
-typedef int ErlNifEvent; /* An event to be selected on. */
-//#endif
+#if (defined(__WIN32__) || defined(_WIN32) || defined(_WIN32_))
+typedef void* ErlNifEvent; /* FIXME: Use 'HANDLE' somehow without breaking existing source */
+#else
+typedef int ErlNifEvent;
+#endif
 
-typedef struct enif_resource_type_t ErlNifResourceType;
-typedef void ErlNifResourceDtor(ErlNifEnv*, void*);
-typedef void ErlNifResourceStop(ErlNifEnv*, void*, ErlNifEvent, int is_direct_call);
-
-typedef struct {
-    ErlNifResourceDtor* dtor;
-    ErlNifResourceStop* stop;  /* at ERL_NIF_SELECT_STOP event */
-} ErlNifResourceTypeInit;
+/* Return bits from enif_select: */
+#define ERL_NIF_SELECT_STOP_CALLED    (1 << 0)
+#define ERL_NIF_SELECT_STOP_SCHEDULED (1 << 1)
+#define ERL_NIF_SELECT_INVALID_EVENT  (1 << 2)
+#define ERL_NIF_SELECT_FAILED         (1 << 3)
 
 typedef enum
 {
@@ -171,6 +170,19 @@ typedef struct
 {
     ERL_NIF_TERM port_id;  /* internal, may change */
 }ErlNifPort;
+
+typedef ErlDrvMonitor ErlNifMonitor;
+
+typedef struct enif_resource_type_t ErlNifResourceType;
+typedef void ErlNifResourceDtor(ErlNifEnv*, void*);
+typedef void ErlNifResourceStop(ErlNifEnv*, void*, ErlNifEvent, int is_direct_call);
+typedef void ErlNifResourceDown(ErlNifEnv*, void*, ErlNifPid*, ErlNifMonitor*);
+
+typedef struct {
+    ErlNifResourceDtor* dtor;
+    ErlNifResourceStop* stop;  /* at ERL_NIF_SELECT_STOP event */
+    ErlNifResourceDown* down;  /* enif_monitor_process */
+} ErlNifResourceTypeInit;
 
 typedef ErlDrvSysInfo ErlNifSysInfo;
 

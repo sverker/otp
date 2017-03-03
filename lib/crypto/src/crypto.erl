@@ -159,10 +159,11 @@ cmac(Type, Key, Data, MacSize) ->
                     des3_cbc | des3_cbf | des3_cfb | des_ede3 |
                     blowfish_cbc | blowfish_cfb64 | blowfish_ofb64 |
                     aes_cbc128 | aes_cfb8 | aes_cfb128 | aes_cbc256 | aes_ige256 |
-		    aes_cbc |
+                    aes_cbc |
                     rc2_cbc,
-		    Key::iodata(), Ivec::binary(), Data::iodata()) -> binary();
-		   (aes_gcm | chacha20_poly1305, Key::iodata(), Ivec::binary(), {AAD::binary(), Data::iodata()}) -> {binary(), binary()}.
+                    Key::iodata(), Ivec::binary(), Data::iodata()) -> binary();
+                   (aes_gcm | chacha20_poly1305, Key::iodata(), Ivec::binary(), {AAD::binary(), Data::iodata()}) -> {binary(), binary()};
+                   (aes_gcm, Key::iodata(), Ivec::binary(), {AAD::binary(), Data::iodata(), TagLength::1..16}) -> {binary(), binary()}.
 
 block_encrypt(Type, Key, Ivec, Data) when Type =:= des_cbc;
                                           Type =:= des_cfb;
@@ -425,9 +426,15 @@ exor(Bin1, Bin2) ->
 generate_key(Type, Params) ->
     generate_key(Type, Params, undefined).
 
-generate_key(dh, DHParameters, PrivateKey) ->
+generate_key(dh, DHParameters0, PrivateKey) ->
+    {DHParameters, Len} =
+        case DHParameters0 of
+            [P,G,L] -> {[P,G], L};
+            [P,G] -> {[P,G], 0}
+        end,
     dh_generate_key_nif(ensure_int_as_bin(PrivateKey),
-			map_ensure_int_as_bin(DHParameters), 0);
+			map_ensure_int_as_bin(DHParameters),
+                        0, Len);
 
 generate_key(srp, {host, [Verifier, Generator, Prime, Version]}, PrivArg)
   when is_binary(Verifier), is_binary(Generator), is_binary(Prime), is_atom(Version) ->
@@ -806,7 +813,7 @@ dh_check([_Prime,_Gen]) -> ?nif_stub.
 
 %% DHParameters = [P (Prime)= mpint(), G(Generator) = mpint()]
 %% PrivKey = mpint()
-dh_generate_key_nif(_PrivateKey, _DHParameters, _Mpint) -> ?nif_stub.
+dh_generate_key_nif(_PrivateKey, _DHParameters, _Mpint, _Length) -> ?nif_stub.
 
 %% DHParameters = [P (Prime)= mpint(), G(Generator) = mpint()]
 %% MyPrivKey, OthersPublicKey = mpint()

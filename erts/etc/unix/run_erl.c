@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 1996-2015. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2016. All Rights Reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -553,7 +553,7 @@ static void pass_on(pid_t childpid)
 		FD_ZERO(&readfds);
 		FD_ZERO(&writefds);
 	    } else {
-		/* Some error occured */
+		/* Some error occurred */
 		ERRNO_ERR0(LOG_ERR,"Error in select.");
 		exit(1);
 	    }

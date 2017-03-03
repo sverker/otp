@@ -129,12 +129,11 @@ extract(#analysis{macros = Macros,
   %% Process remote types
   NewCodeServer =
     try
-      NewRecords = dialyzer_codeserver:get_temp_records(CodeServer1),
+      CodeServer2 =
+        dialyzer_utils:merge_types(CodeServer1,
+                                   TrustPLT), % XXX change to the PLT?
       NewExpTypes = dialyzer_codeserver:get_temp_exported_types(CodeServer1),
       case sets:size(NewExpTypes) of 0 -> ok end,
-      OldRecords = dialyzer_plt:get_types(TrustPLT), % XXX change to the PLT?
-      MergedRecords = dialyzer_utils:merge_records(NewRecords, OldRecords),
-      CodeServer2 = dialyzer_codeserver:set_temp_records(MergedRecords, CodeServer1),
       CodeServer3 = dialyzer_codeserver:finalize_exported_types(NewExpTypes, CodeServer2),
       CodeServer4 = dialyzer_utils:process_record_remote_types(CodeServer3),
       dialyzer_contracts:process_contract_remote_types(CodeServer4)
@@ -143,16 +142,9 @@ extract(#analysis{macros = Macros,
 	compile_error(ErrorMsg)
     end,
   %% Create TrustPLT
-  Contracts = dialyzer_codeserver:get_contracts(NewCodeServer),
-  Modules = dict:fetch_keys(Contracts),
-  FoldFun =
-    fun(Module, TmpPlt) ->
-	{ok, ModuleContracts} = dict:find(Module, Contracts),
-	SpecList = [{MFA, Contract} 
-		    || {MFA, {_FileLine, Contract}} <- dict:to_list(ModuleContracts)],
-	dialyzer_plt:insert_contract_list(TmpPlt, SpecList)
-    end,
-  NewTrustPLT = lists:foldl(FoldFun, TrustPLT, Modules),
+  ContractsDict = dialyzer_codeserver:get_contracts(NewCodeServer),
+  Contracts = orddict:from_list(dict:to_list(ContractsDict)),
+  NewTrustPLT = dialyzer_plt:insert_contract_list(TrustPLT, Contracts),
   Analysis#analysis{trust_plt = NewTrustPLT}.
 
 %%--------------------------------------------------------------------
@@ -165,8 +157,10 @@ get_type_info(#analysis{callgraph = CallGraph,
   StrippedCallGraph = remove_external(CallGraph, TrustPLT),
   %% io:format("--- Analyzing callgraph... "),
   try 
-    NewPlt = dialyzer_succ_typings:analyze_callgraph(StrippedCallGraph, 
-						     TrustPLT, CodeServer),
+    NewMiniPlt = dialyzer_succ_typings:analyze_callgraph(StrippedCallGraph,
+                                                         TrustPLT,
+                                                         CodeServer),
+    NewPlt = dialyzer_plt:restore_full_plt(NewMiniPlt),
     Analysis#analysis{callgraph = StrippedCallGraph, trust_plt = NewPlt}
   catch
     error:What ->
@@ -217,7 +211,7 @@ get_external(Exts, Plt) ->
 -type fa()        :: {atom(), arity()}.
 -type func_info() :: {line(), atom(), arity()}.
 
--record(info, {records = map__new() :: map_dict(),
+-record(info, {records = maps:new() :: erl_types:type_table(),
 	       functions = []       :: [func_info()],
 	       types = map__new()   :: map_dict(),
 	       edoc = false	    :: boolean()}).
@@ -260,7 +254,7 @@ write_inc_files(Inc) ->
 	Functions = [Key || {Key, _} <- Val],
 	Val1 = [{{F,A},Type} || {{_Line,F,A},Type} <- Val],
 	Info = #info{types = map__from_list(Val1),
-		     records = map__new(),
+		     records = maps:new(),
 		     %% Note we need to sort functions here!
 		     functions = lists:keysort(1, Functions)},
 	%% io:format("Types ~p\n", [Info#info.types]),
@@ -832,14 +826,10 @@ collect_info(Analysis) ->
   TmpCServer = NewAnalysis#analysis.codeserver,
   NewCServer =
     try
-      NewRecords = dialyzer_codeserver:get_temp_records(TmpCServer),
+      TmpCServer1 = dialyzer_utils:merge_types(TmpCServer, NewPlt),
       NewExpTypes = dialyzer_codeserver:get_temp_exported_types(TmpCServer),
-      OldRecords = dialyzer_plt:get_types(NewPlt),
       OldExpTypes = dialyzer_plt:get_exported_types(NewPlt),
-      MergedRecords = dialyzer_utils:merge_records(NewRecords, OldRecords),
       MergedExpTypes = sets:union(NewExpTypes, OldExpTypes),
-      %% io:format("Merged Records ~p",[MergedRecords]),
-      TmpCServer1 = dialyzer_codeserver:set_temp_records(MergedRecords, TmpCServer),
       TmpCServer2 =
         dialyzer_codeserver:finalize_exported_types(MergedExpTypes, TmpCServer1),
       TmpCServer3 = dialyzer_utils:process_record_remote_types(TmpCServer2),

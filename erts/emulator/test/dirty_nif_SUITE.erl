@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2014. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -54,8 +54,8 @@ all() ->
      dirty_nif_send_traced].
 
 init_per_suite(Config) ->
-    try erlang:system_info(dirty_cpu_schedulers) of
-	N when is_integer(N), N > 0 ->
+    case erlang:system_info(dirty_cpu_schedulers) of
+	N when N > 0 ->
 	    case lib_loaded() of
 		false ->
 		    ok = erlang:load_nif(
@@ -64,8 +64,8 @@ init_per_suite(Config) ->
 		true ->
 		    ok
 	    end,
-	    Config
-    catch _:_ ->
+	    Config;
+        _ ->
 	    {skipped, "No dirty scheduler support"}
     end.
 
@@ -214,7 +214,7 @@ dirty_call_while_terminated(Config) when is_list(Config) ->
     undefined = process_info(Dirty, status),
     false = erlang:is_process_alive(Dirty),
     false = lists:member(Dirty, processes()),
-    %% Binary still refered by Dirty process not yet cleaned up
+    %% Binary still referred by Dirty process not yet cleaned up
     %% since the dirty nif has not yet returned...
     {value, {BinAddr, 4711, 2}} = lists:keysearch(4711, 2,
 						  element(2,

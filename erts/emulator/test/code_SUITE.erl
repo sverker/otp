@@ -65,9 +65,9 @@ versions(Config) when is_list(Config) ->
     2 = versions:version(),
 
     %% Kill processes, unload code.
-    P1 ! P2 ! done,
     _ = monitor(process, P1),
     _ = monitor(process, P2),
+    P1 ! P2 ! done,
     receive
         {'DOWN',_,process,P1,normal} -> ok
     end,
@@ -155,7 +155,7 @@ call_purged_fun_code_there(Config) when is_list(Config) ->
 call_purged_fun_test(Priv, Data, Type) ->
     OptsList = case erlang:system_info(hipe_architecture) of
                    undefined -> [[]];
-                   _ -> [[], [native]]
+                   _ -> [[], [native,{d,hipe}]]
                end,
     [call_purged_fun_test_do(Priv, Data, Type, CO, FO)
      || CO <- OptsList, FO <- OptsList].
@@ -296,16 +296,16 @@ get_chunk(Config) when is_list(Config) ->
     {ok,my_code_test,Code} = compile:file(File, [binary]),
 
     %% Should work.
-    Chunk = get_chunk_ok("Atom", Code),
-    Chunk = get_chunk_ok("Atom", make_sub_binary(Code)),
-    Chunk = get_chunk_ok("Atom", make_unaligned_sub_binary(Code)),
+    Chunk = get_chunk_ok("AtU8", Code),
+    Chunk = get_chunk_ok("AtU8", make_sub_binary(Code)),
+    Chunk = get_chunk_ok("AtU8", make_unaligned_sub_binary(Code)),
 
     %% Should fail.
-    {'EXIT',{badarg,_}} = (catch code:get_chunk(bit_sized_binary(Code), "Atom")),
+    {'EXIT',{badarg,_}} = (catch code:get_chunk(bit_sized_binary(Code), "AtU8")),
     {'EXIT',{badarg,_}} = (catch code:get_chunk(Code, "bad chunk id")),
 
     %% Invalid beam code or missing chunk should return 'undefined'.
-    undefined = code:get_chunk(<<"not a beam module">>, "Atom"),
+    undefined = code:get_chunk(<<"not a beam module">>, "AtU8"),
     undefined = code:get_chunk(Code, "XXXX"),
 
     ok.

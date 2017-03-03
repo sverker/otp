@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2011-2014. All Rights Reserved.
+%% Copyright Ericsson AB 2011-2016. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -52,7 +52,13 @@
 	 slot,
 	 id_str,
 	 links,
-	 monitors}).
+	 monitors,
+	 monitored_by,
+         parallelism,
+         locking,
+         queue_size,
+         memory,
+         inet}).
 
 -record(opt, {sort_key=2,
 	      sort_incr=true
@@ -261,10 +267,19 @@ handle_cast(Event, _State) ->
     error({unhandled_cast, Event}).
 
 handle_info({portinfo_open, PortIdStr},
-	    State = #state{grid=Grid, ports=Ports, open_wins=Opened}) ->
-    Port = lists:keyfind(PortIdStr,#port.id_str,Ports),
-    NewOpened = display_port_info(Grid, Port, Opened),
-    {noreply, State#state{open_wins = NewOpened}};
+	    State = #state{node=Node, grid=Grid, opt=Opt, open_wins=Opened}) ->
+    Ports0 = get_ports(Node),
+    Ports = update_grid(Grid, Opt, Ports0),
+    Port = lists:keyfind(PortIdStr, #port.id_str, Ports),
+    NewOpened =
+        case Port of
+            false ->
+                self() ! {error,"No such port: " ++ PortIdStr},
+                Opened;
+            _ ->
+                display_port_info(Grid, Port, Opened)
+        end,
+    {noreply, State#state{ports=Ports, open_wins=NewOpened}};
 
 handle_info(refresh_interval, State = #state{node=Node, grid=Grid, opt=Opt,
                                              ports=OldPorts}) ->
@@ -290,8 +305,9 @@ handle_info(not_active, State = #state{timer = Timer0}) ->
     Timer = observer_lib:stop_timer(Timer0),
     {noreply, State#state{timer=Timer}};
 
-handle_info({error, Error}, State) ->
-    handle_error(Error),
+handle_info({error, Error}, #state{panel=Panel} = State) ->
+    Str = io_lib:format("ERROR: ~s~n",[Error]),
+    observer_lib:display_info_dialog(Panel, Str),
     {noreply, State};
 
 handle_info(_Event, State) ->
@@ -358,7 +374,13 @@ list_to_portrec(PL) ->
 	  links = proplists:get_value(links, PL, []),
 	  name = proplists:get_value(registered_name, PL, []),
 	  monitors = proplists:get_value(monitors, PL, []),
-	  controls = proplists:get_value(name, PL)}.
+	  monitored_by = proplists:get_value(monitored_by, PL, []),
+	  controls = proplists:get_value(name, PL),
+          parallelism = proplists:get_value(parallelism, PL),
+          locking = proplists:get_value(locking, PL),
+          queue_size = proplists:get_value(queue_size, PL, 0),
+          memory = proplists:get_value(memory, PL, 0),
+          inet = proplists:get_value(inet, PL, [])}.
 
 portrec_to_list(#port{id = Id,
 		      slot = Slot,
@@ -366,14 +388,26 @@ portrec_to_list(#port{id = Id,
 		      links = Links,
 		      name = Name,
 		      monitors = Monitors,
-		      controls = Controls}) ->
+                      monitored_by = MonitoredBy,
+		      controls = Controls,
+                      parallelism = Parallelism,
+                      locking = Locking,
+                      queue_size = QueueSize,
+                      memory = Memory,
+                      inet = Inet}) ->
     [{id,Id},
      {slot,Slot},
      {connected,Connected},
      {links,Links},
      {name,Name},
      {monitors,Monitors},
-     {controls,Controls}].
+     {monitored_by,MonitoredBy},
+     {controls,Controls},
+     {parallelism,Parallelism},
+     {locking,Locking},
+     {queue_size,QueueSize},
+     {memory,Memory} |
+     Inet].
 
 display_port_info(Parent, PortRec, Opened) ->
     PortIdStr = PortRec#port.id_str,
@@ -391,39 +425,91 @@ do_display_port_info(Parent0, PortRec) ->
     Title = "Port Info: " ++ PortRec#port.id_str,
     Frame = wxMiniFrame:new(Parent, ?wxID_ANY, Title,
 			    [{style, ?wxSYSTEM_MENU bor ?wxCAPTION
-				  bor ?wxCLOSE_BOX bor ?wxRESIZE_BORDER}]),
-
+				  bor ?wxCLOSE_BOX bor ?wxRESIZE_BORDER},
+                             {size,{600,400}}]),
+    ScrolledWin = wxScrolledWindow:new(Frame,[{style,?wxHSCROLL bor ?wxVSCROLL}]),
+    wxScrolledWindow:enableScrolling(ScrolledWin,true,true),
+    wxScrolledWindow:setScrollbars(ScrolledWin,20,20,0,0),
+    Sizer = wxBoxSizer:new(?wxVERTICAL),
+    wxWindow:setSizer(ScrolledWin,Sizer),
     Port = portrec_to_list(PortRec),
     Fields0 = port_info_fields(Port),
-    {_FPanel, _Sizer, _UpFields} = observer_lib:display_info(Frame, Fields0),
+    _UpFields = observer_lib:display_info(ScrolledWin, Sizer, Fields0),
     wxFrame:center(Frame),
     wxFrame:connect(Frame, close_window, [{skip, true}]),
     wxFrame:show(Frame),
     Frame.
 
 
-port_info_fields(Port) ->
+
+port_info_fields(Port0) ->
+    {InetStruct,Port} = inet_extra_fields(Port0),
     Struct =
 	[{"Overview",
-	  [{"Name",             name},
+	  [{"Registered Name",  name},
 	   {"Connected",        {click,connected}},
 	   {"Slot",             slot},
-	   {"Controls",         controls}]},
+	   {"Controls",         controls},
+           {"Parallelism",      parallelism},
+           {"Locking",          locking},
+           {"Queue Size",       {bytes,queue_size}},
+           {"Memory",           {bytes,memory}}]},
 	 {scroll_boxes,
 	  [{"Links",1,{click,links}},
-	   {"Monitors",1,{click,filter_monitor_info()}}]}],
+	   {"Monitors",1,{click,filter_monitor_info()}},
+	   {"Monitored by",1,{click,monitored_by}}]} | InetStruct],
     observer_lib:fill_info(Struct, Port).
+
+inet_extra_fields(Port) ->
+    Statistics = proplists:get_value(statistics,Port,[]),
+    Options = proplists:get_value(options,Port,[]),
+    Struct =
+        case proplists:get_value(controls,Port) of
+            Inet when Inet=="tcp_inet"; Inet=="udp_inet"; Inet=="sctp_inet" ->
+                [{"Inet",
+                  [{"Local Address",      {inet,local_address}},
+                   {"Local Port Number",  local_port},
+                   {"Remote Address",     {inet,remote_address}},
+                   {"Remote Port Number", remote_port}]},
+                 {"Statistics",
+                  [stat_name_and_unit(Key) || {Key,_} <- Statistics]},
+                 {"Options",
+                  [{atom_to_list(Key),Key} || {Key,_} <- Options]}];
+            _ ->
+                []
+        end,
+    Port1 = lists:keydelete(statistics,1,Port),
+    Port2 = lists:keydelete(options,1,Port1),
+    {Struct,Port2 ++ Statistics ++ Options}.
+
+stat_name_and_unit(recv_avg) ->
+    {"Average package size received", {bytes,recv_avg}};
+stat_name_and_unit(recv_cnt) ->
+    {"Number of packets received", recv_cnt};
+stat_name_and_unit(recv_dvi) ->
+    {"Average packet size deviation received", {bytes,recv_dvi}};
+stat_name_and_unit(recv_max) ->
+    {"Largest packet received", {bytes,recv_max}};
+stat_name_and_unit(recv_oct) ->
+    {"Total received", {bytes,recv_oct}};
+stat_name_and_unit(send_avg) ->
+    {"Average packet size sent", {bytes, send_avg}};
+stat_name_and_unit(send_cnt) ->
+    {"Number of packets sent", send_cnt};
+stat_name_and_unit(send_max) ->
+    {"Largest packet sent", {bytes, send_max}};
+stat_name_and_unit(send_oct) ->
+    {"Total sent", {bytes, send_oct}};
+stat_name_and_unit(send_pend) ->
+    {"Data waiting to be sent from driver", {bytes,send_pend}};
+stat_name_and_unit(Key) ->
+    {atom_to_list(Key), Key}.
 
 filter_monitor_info() ->
     fun(Data) ->
 	    Ms = proplists:get_value(monitors, Data),
 	    [Pid || {process, Pid} <- Ms]
     end.
-
-
-handle_error(Foo) ->
-    Str = io_lib:format("ERROR: ~s~n",[Foo]),
-    observer_lib:display_info_dialog(Str).
 
 update_grid(Grid, Opt, Ports) ->
     wx:batch(fun() -> update_grid2(Grid, Opt, Ports) end).

@@ -59,6 +59,9 @@ atom nocatch
 atom undefined_function
 atom undefined_lambda
 
+# Secret internal atom that can never be found by string lookup
+# and should never leak out to be seen by the user.
+atom ErtsSecretAtom='3RT$'
 
 # All other atoms.  Try to keep the order alphabetic.
 #
@@ -73,6 +76,7 @@ atom ac
 atom accessor
 atom active
 atom active_tasks
+atom alive
 atom all
 atom all_but_first
 atom all_names
@@ -191,15 +195,21 @@ atom current_stacktrace
 atom data
 atom debug_flags
 atom decimals
+atom default
 atom delay_trap
 atom dexit
 atom depth
 atom dgroup_leader
 atom dictionary
+atom dirty_bif_exception
+atom dirty_bif_result
+atom dirty_bif_trap
 atom dirty_cpu
 atom dirty_cpu_schedulers_online
 atom dirty_execution
 atom dirty_io
+atom dirty_nif_exception
+atom dirty_nif_finalizer
 atom disable_trace
 atom disabled
 atom discard
@@ -236,10 +246,12 @@ atom Eq='=:='
 atom Eqeq='=='
 atom erl_tracer
 atom erlang
+atom erl_signal_server
 atom ERROR='ERROR'
 atom error_handler
 atom error_logger
 atom erts_code_purger
+atom erts_debug
 atom erts_internal
 atom ets
 atom ETS_TRANSFER='ETS-TRANSFER'
@@ -302,6 +314,7 @@ atom global
 atom Gt='>'
 atom grun
 atom group_leader
+atom handle
 atom have_dt_utag
 atom heap_block_size
 atom heap_size
@@ -366,6 +379,7 @@ atom long_schedule
 atom low
 atom Lt='<'
 atom machine
+atom magic_ref
 atom major
 atom match
 atom match_limit
@@ -562,14 +576,17 @@ atom running_procs
 atom runtime
 atom safe
 atom save_calls
-atom scheduler 
+atom scheduler
 atom scheduler_id
+atom scheduler_wall_time
+atom scheduler_wall_time_all
 atom schedulers_online
 atom scheme
 atom scientific
 atom scope
 atom second
 atom seconds
+atom send
 atom send_to_non_existing_process
 atom sensitive
 atom sequential_tracer
@@ -587,6 +604,19 @@ atom set_tcw
 atom set_tcw_fake
 atom separate
 atom shared
+atom sighup
+atom sigterm
+atom sigusr1
+atom sigusr2
+atom sigill
+atom sigchld
+atom sigabrt
+atom sigalrm
+atom sigstop
+atom sigint
+atom sigsegv
+atom sigtstp
+atom sigquit
 atom silent
 atom size
 atom sl_alloc
@@ -662,11 +692,11 @@ atom value
 atom values
 atom version
 atom visible
+atom wait
 atom waiting
 atom wall_clock
 atom warning
 atom warning_msg
-atom scheduler_wall_time
 atom wordsize
 atom write_concurrency
 atom xor

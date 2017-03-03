@@ -36,6 +36,7 @@
 #include "erl_nif.h"
 #include "erl_bits.h"
 #include "erl_thr_progress.h"
+#include "erl_nfunc_sched.h"
 #ifdef HIPE
 #  include "hipe_bif0.h"
 #  define IF_HIPE(X) (X)
@@ -155,11 +156,13 @@ BIF_RETTYPE code_make_stub_module_3(BIF_ALIST_3)
     Module* modp;
     Eterm res, mod;
 
-    if (!ERTS_TERM_IS_MAGIC_BINARY(BIF_ARG_1) ||
-	is_not_atom(mod = erts_module_for_prepared_code
-		    (((ProcBin*)binary_val(BIF_ARG_1))->val))) {
+    if (!is_internal_magic_ref(BIF_ARG_1))
 	BIF_ERROR(BIF_P, BADARG);
-    }
+
+    mod = erts_module_for_prepared_code(erts_magic_ref2bin(BIF_ARG_1));
+
+    if (is_not_atom(mod))
+	BIF_ERROR(BIF_P, BADARG);
 
     if (!erts_try_seize_code_write_permission(BIF_P)) {
 	ERTS_BIF_YIELD3(bif_export[BIF_code_make_stub_module_3],
@@ -228,8 +231,8 @@ prepare_loading_2(BIF_ALIST_2)
 	res = TUPLE2(hp, am_error, reason);
 	BIF_RET(res);
     }
-    hp = HAlloc(BIF_P, PROC_BIN_SIZE);
-    res = erts_mk_magic_binary_term(&hp, &MSO(BIF_P), magic);
+    hp = HAlloc(BIF_P, ERTS_MAGIC_REF_THING_SIZE);
+    res = erts_mk_magic_ref(&hp, &MSO(BIF_P), magic);
     erts_refc_dec(&magic->refc, 1);
     BIF_RET(res);
 }
@@ -238,15 +241,13 @@ BIF_RETTYPE
 has_prepared_code_on_load_1(BIF_ALIST_1)
 {
     Eterm res;
-    ProcBin* pb;
 
-    if (!ERTS_TERM_IS_MAGIC_BINARY(BIF_ARG_1)) {
+    if (!is_internal_magic_ref(BIF_ARG_1)) {
     error:
 	BIF_ERROR(BIF_P, BADARG);
     }
 
-    pb = (ProcBin*) binary_val(BIF_ARG_1);
-    res = erts_has_code_on_load(pb->val);
+    res = erts_has_code_on_load(erts_magic_ref2bin(BIF_ARG_1));
     if (res == NIL) {
 	goto error;
     }
@@ -332,13 +333,11 @@ finish_loading_1(BIF_ALIST_1)
     for (i = 0; i < n; i++) {
 	Eterm* cons = list_val(BIF_ARG_1);
 	Eterm term = CAR(cons);
-	ProcBin* pb;
 
-	if (!ERTS_TERM_IS_MAGIC_BINARY(term)) {
+	if (!is_internal_magic_ref(term)) {
 	    goto badarg;
 	}
-	pb = (ProcBin*) binary_val(term);
-	p[i].code = pb->val;
+	p[i].code = erts_magic_ref2bin(term);
 	p[i].module = erts_module_for_prepared_code(p[i].code);
 	if (p[i].module == NIL) {
 	    goto badarg;
@@ -670,7 +669,7 @@ BIF_RETTYPE delete_module_1(BIF_ALIST_1)
 	}
 	else if (modp->old.code_hdr) {
 	    erts_dsprintf_buf_t *dsbufp = erts_create_logger_dsbuf();
-	    erts_dsprintf(dsbufp, "Module %T must be purged before loading\n",
+	    erts_dsprintf(dsbufp, "Module %T must be purged before deleting\n",
 			  BIF_ARG_1);
 	    erts_send_error_to_logger(BIF_P->group_leader, dsbufp);
 	    ERTS_BIF_PREP_ERROR(res, BIF_P, BADARG);
@@ -806,7 +805,7 @@ BIF_RETTYPE finish_after_on_load_2(BIF_ALIST_2)
     }
 
     if (BIF_ARG_2 == am_true) {
-	int i;
+	int i, num_exps;
 
 	/*
 	 * Make the code with the on_load function current.
@@ -822,7 +821,8 @@ BIF_RETTYPE finish_after_on_load_2(BIF_ALIST_2)
 	/*
 	 * The on_load function succeded. Fix up export entries.
 	 */
-	for (i = 0; i < export_list_size(code_ix); i++) {
+	num_exps = export_list_size(code_ix);
+	for (i = 0; i < num_exps; i++) {
 	    Export *ep = export_list(i,code_ix);
 	    if (ep == NULL || ep->info.mfa.module != BIF_ARG_1) {
 		continue;
@@ -845,14 +845,15 @@ BIF_RETTYPE finish_after_on_load_2(BIF_ALIST_2)
         hipe_redirect_to_module(modp);
       #endif
     } else if (BIF_ARG_2 == am_false) {
-	int i;
+	int i, num_exps;
 
 	/*
 	 * The on_load function failed. Remove references to the
 	 * code that is about to be purged from the export entries.
 	 */
 
-	for (i = 0; i < export_list_size(code_ix); i++) {
+	num_exps = export_list_size(code_ix);
+	for (i = 0; i < num_exps; i++) {
 	    Export *ep = export_list(i,code_ix);
 	    if (ep == NULL || ep->info.mfa.module != BIF_ARG_1) {
 		continue;
@@ -912,7 +913,7 @@ erts_proc_copy_literal_area(Process *c_p, int *redsp, int fcalls, int gc_allowed
 
     la = ERTS_COPY_LITERAL_AREA();
     if (!la)
-	return am_ok;
+        goto return_ok;
 
     oh = la->off_heap;
     literals = (char *) &la->start[0];
@@ -976,6 +977,11 @@ erts_proc_copy_literal_area(Process *c_p, int *redsp, int fcalls, int gc_allowed
 	 * this is not completely certain). We go for
 	 * the GC directly instead of scanning everything
 	 * one more time...
+	 *
+	 * Also note that calling functions expect a
+	 * major GC to be performed if gc_allowed is set
+	 * to true. If you change this, you need to fix
+	 * callers...
 	 */
 	goto literal_gc;
     }
@@ -998,6 +1004,12 @@ erts_proc_copy_literal_area(Process *c_p, int *redsp, int fcalls, int gc_allowed
     if (any_heap_refs(c_p->heap, c_p->htop, literals, lit_bsize))
 	goto literal_gc;
     *redsp += 1;
+    if (c_p->abandoned_heap) {
+	if (any_heap_refs(c_p->abandoned_heap, c_p->abandoned_heap + c_p->heap_sz,
+			  literals, lit_bsize))
+	    goto literal_gc;
+	*redsp += 1;
+    }
     if (any_heap_refs(c_p->old_heap, c_p->old_htop, literals, lit_bsize))
 	goto literal_gc;
 
@@ -1044,6 +1056,13 @@ erts_proc_copy_literal_area(Process *c_p, int *redsp, int fcalls, int gc_allowed
 	}
     }
 
+return_ok:
+
+#ifdef ERTS_DIRTY_SCHEDULERS
+    if (ERTS_SCHEDULER_IS_DIRTY(erts_proc_sched_data(c_p)))
+	c_p->flags &= ~F_DIRTY_CLA;
+#endif
+
     return am_ok;
 
 literal_gc:
@@ -1054,13 +1073,13 @@ literal_gc:
     if (c_p->flags & F_DISABLE_GC)
 	return THE_NON_VALUE;
 
-    FLAGS(c_p) |= F_NEED_FULLSWEEP;
+    *redsp += erts_garbage_collect_literals(c_p, (Eterm *) literals, lit_bsize,
+					    oh, fcalls);
 
-    *redsp += erts_garbage_collect_nobump(c_p, 0, c_p->arg_reg, c_p->arity, fcalls);
-
-    erts_garbage_collect_literals(c_p, (Eterm *) literals, lit_bsize, oh);
-
-    *redsp += lit_bsize / 64; /* Need, better value... */
+#ifdef ERTS_DIRTY_SCHEDULERS
+    if (c_p->flags & F_DIRTY_CLA)
+	return THE_NON_VALUE;
+#endif
 
     return am_ok;
 }
@@ -1777,9 +1796,9 @@ delete_code(Module* modp)
 {
     ErtsCodeIndex code_ix = erts_staging_code_ix();
     Eterm module = make_atom(modp->module);
-    int i;
+    int i, num_exps = export_list_size(code_ix);
 
-    for (i = 0; i < export_list_size(code_ix); i++) {
+    for (i = 0; i < num_exps; i++) {
 	Export *ep = export_list(i, code_ix);
         if (ep != NULL && (ep->info.mfa.module == module)) {
 	    if (ep->addressv[code_ix] == ep->beam) {

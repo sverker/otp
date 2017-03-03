@@ -5186,7 +5186,7 @@ erts_alcu_sz_info(Allctr_t *allctr,
 
     ERTS_ALCU_DBG_CHK_THR_ACCESS(allctr);
 
-    /* Update sbc values not continously updated */
+    /* Update sbc values not continuously updated */
     allctr->sbcs.blocks.curr.no
 	= allctr->sbcs.curr.norm.mseg.no + allctr->sbcs.curr.norm.sys_alloc.no;
     allctr->sbcs.blocks.max.no = allctr->sbcs.max.no;
@@ -5272,7 +5272,7 @@ erts_alcu_info(Allctr_t *allctr,
 
     ERTS_ALCU_DBG_CHK_THR_ACCESS(allctr);
 
-    /* Update sbc values not continously updated */
+    /* Update sbc values not continuously updated */
     allctr->sbcs.blocks.curr.no
 	= allctr->sbcs.curr.norm.mseg.no + allctr->sbcs.curr.norm.sys_alloc.no;
     allctr->sbcs.blocks.max.no = allctr->sbcs.max.no;
@@ -6134,18 +6134,18 @@ erts_alcu_start(Allctr_t *allctr, AllctrInit_t *init)
 #ifdef USE_THREADS
     if (init->ts) {
 	allctr->thread_safe = 1;
-	
+
 #ifdef ERTS_ENABLE_LOCK_COUNT
 	erts_mtx_init_x_opt(&allctr->mutex,
 			    "alcu_allocator",
 			    make_small(allctr->alloc_no),
-			    ERTS_LCNT_LT_ALLOC,1);
+			    ERTS_LCNT_LT_ALLOC);
 #else
 	erts_mtx_init_x(&allctr->mutex,
 			"alcu_allocator",
-			make_small(allctr->alloc_no),1);
+			make_small(allctr->alloc_no));
 #endif /*ERTS_ENABLE_LOCK_COUNT*/
-	
+
 #ifdef DEBUG
 	allctr->debug.saved_tid = 0;
 #endif
