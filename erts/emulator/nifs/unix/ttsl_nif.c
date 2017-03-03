@@ -350,8 +350,8 @@ static ERL_NIF_TERM start_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
     sys_signal(SIGWINCH, winch);
 
     ttsl_resource = enif_alloc_resource(ttsl_resource_type, sizeof(struct ttsl_resource_t));
-    enif_select(env, (ErlNifEvent)(UWord)ttysl_fd, ERL_NIF_SELECT_READ,
-                ttsl_resource, atom_undefined);
+    enif_select(env, ttysl_fd, ERL_NIF_SELECT_READ,
+                ttsl_resource, NULL, atom_undefined);
     ttsl_is_started = 1;
 
     /* we need to know this when we enter the break handler */
@@ -805,8 +805,8 @@ static ERL_NIF_TERM do_write(ErlNifEnv* env)
                             ttsl_q_head->nbytes - ttsl_q_head_written);
         if (written < 0) {
             if (errno == ERRNO_BLOCK) {
-                enif_select(env, (ErlNifEvent)(long)ttysl_fd,
-                            ERL_NIF_SELECT_WRITE, ttsl_resource, atom_undefined);
+                enif_select(env, ttysl_fd, ERL_NIF_SELECT_WRITE, ttsl_resource,
+                            NULL, atom_undefined);
                 waiting_to_write = 1;
                 break;
             }
@@ -908,7 +908,7 @@ static ERL_NIF_TERM read_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
                   (int)(SWord)ttysl_fd, i));
 	return atom_error;
     }
-    enif_select(env, (ErlNifEvent)ttysl_fd, ERL_NIF_SELECT_READ, ttsl_resource,
+    enif_select(env, ttysl_fd, ERL_NIF_SELECT_READ, ttsl_resource, NULL,
                 atom_undefined);
 
     DEBUGLOG(("ttsl:read(): returning %T\n", res));

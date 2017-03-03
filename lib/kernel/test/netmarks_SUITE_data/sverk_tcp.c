@@ -180,7 +180,7 @@ static ERL_NIF_TERM send_try_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
     ErlNifBinary data;
     int written;
     ERL_NIF_TERM res;
-    enum ErlNifSelectReturn rv;
+    int rv;
 
     if (!enif_get_resource(env,argv[0],conn_rt,(void**)&conn) ||
         !enif_inspect_iolist_as_binary(env,argv[1],&data))
@@ -203,8 +203,8 @@ static ERL_NIF_TERM send_try_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
             written = 0;
         }
         conn->write_waits++;
-        rv = enif_select(env, conn->sock, ERL_NIF_SELECT_WRITE, conn, argv[2]);
-	ASSERT(!(rv & ERL_NIF_SELECT_ERROR));
+        rv = enif_select(env, conn->sock, ERL_NIF_SELECT_WRITE, conn, NULL, argv[2]);
+	ASSERT(rv >= 0);
         res = enif_make_int(env,written);
     }
     else
@@ -224,7 +224,7 @@ static ERL_NIF_TERM recv_try_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
     int length;
     int got;
     ERL_NIF_TERM res;
-    enum ErlNifSelectReturn rv;
+    int rv;
 
     if (!enif_get_resource(env,argv[0],conn_rt,(void**)&conn) ||
         !enif_get_int(env,argv[1],&length) || length < 0)
@@ -272,8 +272,8 @@ static ERL_NIF_TERM recv_try_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
         goto done;
     }
     conn->read_waits++;
-    rv = enif_select(env, conn->sock, ERL_NIF_SELECT_READ, conn, argv[2]);
-    ASSERT(!(rv & ERL_NIF_SELECT_ERROR));
+    rv = enif_select(env, conn->sock, ERL_NIF_SELECT_READ, conn, NULL, argv[2]);
+    ASSERT(rv >= 0);
     res = atom_eagain;
 
 done:
@@ -308,11 +308,11 @@ static ERL_NIF_TERM close_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[
     enif_mutex_unlock(conn->read_mtx);
 
     if (do_close) {
-	enum ErlNifSelectReturn rv;
+        int rv;
         enif_fprintf(stderr, "Schedule ERL_NIF_SELECT_STOP\n");
         rv = enif_select(env, conn->sock, ERL_NIF_SELECT_STOP, conn,
-			 atom_undefined);
-	ASSERT(!(rv & ERL_NIF_SELECT_ERROR));
+			 NULL, atom_undefined);
+	ASSERT(rv >= 0);
     }
 
     return atom_ok;
