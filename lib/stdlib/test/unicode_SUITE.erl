@@ -571,8 +571,10 @@ ex_random_lists(Config) when is_list(Config) ->
 
     Encodings = [utf8,{utf16,big},
 		 {utf16,little},{utf32,big},{utf32,little}],
-    lists:foreach(fun(OutEnc1) ->
-			  lists:foreach(fun(InEnc1) -> 
+    lists:foreach(fun(_OutEnc1) ->
+			  lists:foreach(fun(_InEnc1) ->
+                                                InEnc1 =utf8,
+                                                OutEnc1 = {utf32,big},
 						Uni16BigFlatten1 = fun(L) ->
 									   unicode:characters_to_binary(flat(L),InEnc1,OutEnc1)
 								   end,
