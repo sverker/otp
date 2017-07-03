@@ -9,11 +9,9 @@ MODULES= \
 	array_SUITE \
 	base64_SUITE \
 	beam_lib_SUITE \
-	binary_module_SUITE \
 	binref \
 	c_SUITE \
 	calendar_SUITE \
-	dets_SUITE \
 	dict_SUITE \
 	dict_test_lib \
 	digraph_SUITE \
@@ -31,8 +29,6 @@ MODULES= \
 	erl_pp_SUITE \
 	erl_scan_SUITE \
 	error_logger_h_SUITE \
-	escript_SUITE \
-	ets_SUITE \
 	ets_tough_SUITE \
 	expand_test \
 	expand_test1 \
@@ -44,53 +40,13 @@ MODULES= \
 	fixtable_SUITE \
 	format_SUITE \
 	gen_event_SUITE \
-	gen_fsm_SUITE \
-	gen_server_SUITE \
-	gen_statem_SUITE \
 	id_transform_SUITE \
 	io_SUITE \
 	io_proto_SUITE \
-	lists_SUITE \
-	log_mf_h_SUITE \
-	ms_transform_SUITE \
-	proc_lib_SUITE \
-	qlc_SUITE \
-	queue_SUITE \
-	rand_SUITE \
-	random_SUITE \
-	re_SUITE \
-	run_pcre_tests \
-	re_testoutput1_replacement_test \
-	re_testoutput1_split_test \
-	slave_SUITE \
-	sets_SUITE \
-	sets_test_lib \
-	sofs_SUITE \
-	stdlib_SUITE \
-	string_SUITE \
-	supervisor_1 \
-	supervisor_2 \
-	supervisor_3 \
-	supervisor_deadlock \
-	naughty_child \
-	shell_SUITE \
-	supervisor_SUITE \
-	supervisor_bridge_SUITE \
-	sys_SUITE \
-	sys_sp1 \
-	sys_sp2 \
-	tar_SUITE \
-	timer_SUITE \
-	timer_simple_SUITE \
 	unicode_SUITE \
-	win32reg_SUITE \
-	y2k_SUITE \
-	select_SUITE \
-	zip_SUITE \
 	random_unicode_list \
 	random_iolist \
-	error_logger_forwarder \
-	maps_SUITE
+	error_logger_forwarder
 
 ERL_FILES= $(MODULES:%=%.erl)
 
