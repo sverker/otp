@@ -18,7 +18,7 @@
 %% %CopyrightEnd%
 %%
 -module(io_proto_SUITE).
--compile(r12).
+%-compile(r12).
 
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2]).
@@ -78,17 +78,20 @@ suite() ->
      {timetrap,{minutes,5}}].
 
 all() -> 
-    [setopts_getopts, unicode_options, unicode_options_gen,
-     binary_options, bc_with_r12, bc_with_r12_gl,
-     bc_with_r12_ogl, read_modes_gl, read_modes_ogl,
-     broken_unicode, eof_on_pipe, unicode_prompt].
+    [
+     %setopts_getopts,
+     %unicode_options, 
+     unicode_options_gen
+%     ,binary_options, bc_with_r12, bc_with_r12_gl,
+%     bc_with_r12_ogl, read_modes_gl, read_modes_ogl,
+%     broken_unicode, eof_on_pipe, unicode_prompt
+    ].
 
 groups() -> 
     [].
 
 init_per_suite(Config) ->
-    DefShell = get_default_shell(),
-    [{default_shell,DefShell}|Config].
+    Config.
 
 end_per_suite(_Config) ->
     ok.
@@ -462,131 +465,35 @@ unicode_options(Config) when is_list(Config) ->
 
 %% Tests various unicode options on random generated files.
 unicode_options_gen(Config) when is_list(Config) ->
-    ct:timetrap({minutes,30}), %% valgrind needs a alot of time
+    ct:timetrap({minutes,60*24*7}), %% valgrind needs a alot of time
     random:seed(1240, 900586, 553728),
-    PrivDir = proplists:get_value(priv_dir, Config),
     AllModes = [utf8,utf16,{utf16,big},{utf16,little},
 		utf32,{utf32,big},{utf32,little}],
     FSize = 9*1024,
-    NumItersRead = 2,
     NumItersWrite = 2,
-    Dir = filename:join(PrivDir, "GENDATA1"),
-    file:make_dir(Dir),
-
-    DoOneFile1 =
-	fun(Encoding, N, M) ->
-		?dbg({Encoding,M,N}),
-		io:format("Read test: Encoding ~p, Chunk size ~p, Iteration ~p~n",[Encoding,M,N]),
-		io:format(standard_error,
-			  "Read test: Encoding ~p, Chunk size ~p, Iteration ~p\r\n",[Encoding,M,N]),
-		Fname = filename:join(Dir,
-				      "genfile_"++enc2str(Encoding)++
-					  "_"++integer_to_list(N)),
-		Ulist = random_unicode(FSize),
-		Bin = unicode:characters_to_binary(Ulist, utf8, Encoding),
-		ok = file:write_file(Fname, Bin),
-
-		Read1 = fun(FD) -> io:get_line(FD, '') end,
-		Res1 = read_whole_file(Fname,
-				       [read,read_ahead,{encoding,Encoding}],
-				       Read1),
-
-		Read2 = fun(FD) -> io:get_chars(FD, '', M) end,
-		Res2 = read_whole_file(Fname,
-				       [read,binary,
-					read_ahead,{encoding,Encoding}],
-				       Read2),
-
-		Read3 = fun(FD) ->
-				case io:fread(FD, '', "~ts") of
-				    {ok,D} -> D;
-				    Other -> Other end
-			end,
-		Res3 = read_whole_file(Fname,
-				       [read,binary,
-					read_ahead,{encoding,Encoding}],
-				       Read3),
-
-		Read4 = fun(FD) ->
-				case io:fread(FD, '', "~ts") of
-				    {ok,D} -> D;
-				    Other -> Other end
-			end,
-		Res4 = read_whole_file(Fname,
-				       [read,read_ahead,{encoding,Encoding}],
-				       Read4),
-
-		Ulist2 = [X || X <- Ulist, X =/= $\n, X =/= $\s],
-		Ulist3 = [X || X <- Ulist, X =/= $\n],
-		Ulist = done(Res1),
-		Ulist = done(Res2),
-		Ulist2 = done(Res3),
-		Ulist3 = done(Res4),
-
-		file:delete(Fname)
-	end,
-    [ [ [ DoOneFile1(E, N, M) || E <- AllModes ] ||
-	  M <- [10,1000,128,1024,8192,8193] ] ||
-	N <- lists:seq(1, NumItersRead) ],
 
     DoOneFile2 =
-	fun(Encoding,N,M) ->
+	fun(_Encoding,N,M) ->
+                Encoding = utf32,
 		?dbg({Encoding,M,N}),
 		io:format("Write test: Encoding ~p, Chunk size ~p, Iteration ~p~n",[Encoding,M,N]),
 		io:format(standard_error,
 			  "Write test: Encoding ~p, Chunk size ~p, Iteration ~p\r\n",[Encoding,M,N]),
-		Fname = filename:join(Dir,
-				      "genfile_"++enc2str(Encoding)++
-					  "_"++integer_to_list(N)),
 		Ulist = random_unicode(FSize),
 
-		Res1 = write_read_file(Fname, 1,
-				       [write],
-				       Encoding,
-				       fun(FD) -> io:put_chars(FD, Ulist) end),
-
-		Res2 = write_read_file(Fname, 2,
-				       [write,binary],
-				       Encoding,
-				       fun(FD) -> io:put_chars(FD, Ulist) end),
-
-		Fun3 = fun(FD) ->
-			       _ = [io:format(FD, "~tc", [C]) || C <- Ulist],
-			       ok
-		       end,
-		Res3 = write_read_file(Fname, 3,
-				       [write],
-				       Encoding,
-				       Fun3),
-
-		Fun4 = fun(FD) ->
-			       io:put_chars(FD,
-					    unicode:characters_to_binary(Ulist))
-		       end,
-		Res4 = write_read_file(Fname, 4,
-				       [write],
-				       Encoding,
-				       Fun4),
-
-		LL = string:tokens(Ulist, "\n"),
-		Fun5 = fun(FD) ->
-			       _ = [io:format(FD, "~ts", [L]) || L <- LL],
-			       ok
-		       end,
-		Res5 = write_read_file(Fname, 5,
-				       [write],
-				       Encoding,
-				       Fun5),
-
-		Ulist2 = lists:flatten(LL),
-		ResBin = done(Res1),
-		ResBin = done(Res2),
-		ResBin = done(Res3),
-		ResBin = done(Res4),
-		Ulist = unicode:characters_to_list(ResBin, Encoding),
-
-		ResBin2 = done(Res5),
-		Ulist2 = unicode:characters_to_list(ResBin2, Encoding),
+                [begin
+                     Arg = [[C]],
+                     Expected = <<C:32>>,
+                     case unicode:characters_to_binary(Arg, unicode, utf32) of
+                         Expected -> ok;
+                         Buggy ->
+                             io:format("Argument: ~p\n", [Arg]),
+                             io:format("Expected: ~p\n", [Expected]),
+                             io:format("Returned: ~p\n", [Buggy]),
+                             Expected = Buggy
+                     end
+                 end
+                 || C <-Ulist],
 
 		ok
 	end,
