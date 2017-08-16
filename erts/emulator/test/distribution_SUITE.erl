@@ -1156,8 +1156,6 @@ contended_atom_cache_entry_test(Config, Type) ->
     spawn_link(
       SNode,
       fun () ->
-              erts_debug:set_internal_state(available_internal_state,
-                                            true),
               Master = self(),
               CIX = get_cix(),
               TestAtoms = case Type of
@@ -1242,7 +1240,7 @@ get_cix(CIX) when is_integer(CIX), CIX < 0 ->
 get_cix(CIX) when is_integer(CIX) ->
     get_cix(CIX,
             unwanted_cixs(),
-            erts_debug:get_internal_state(max_atom_out_cache_index)).
+            get_internal_state(max_atom_out_cache_index)).
 
 get_cix(CIX, Unwanted, MaxCIX) when CIX > MaxCIX ->
     get_cix(0, Unwanted, MaxCIX);
@@ -1254,8 +1252,8 @@ get_cix(CIX, Unwanted, MaxCIX) ->
 
 unwanted_cixs() ->
     lists:map(fun (Node) ->
-                      erts_debug:get_internal_state({atom_out_cache_index,
-                                                     Node})
+                      get_internal_state({atom_out_cache_index,
+                                          Node})
               end,
               nodes()).
 
@@ -1264,7 +1262,7 @@ get_conflicting_atoms(_CIX, 0) ->
     [];
 get_conflicting_atoms(CIX, N) ->
     Atom = list_to_atom("atom" ++ integer_to_list(erlang:unique_integer([positive]))),
-    case erts_debug:get_internal_state({atom_out_cache_index, Atom}) of
+    case get_internal_state({atom_out_cache_index, Atom}) of
         CIX ->
             [Atom|get_conflicting_atoms(CIX, N-1)];
         _ ->
@@ -1275,7 +1273,7 @@ get_conflicting_unicode_atoms(_CIX, 0) ->
     [];
 get_conflicting_unicode_atoms(CIX, N) ->
     Atom = string_to_atom([16#1f608] ++ "atom" ++ integer_to_list(erlang:unique_integer([positive]))),
-    case erts_debug:get_internal_state({atom_out_cache_index, Atom}) of
+    case get_internal_state({atom_out_cache_index, Atom}) of
         CIX ->
             [Atom|get_conflicting_unicode_atoms(CIX, N-1)];
         _ ->
@@ -1837,11 +1835,26 @@ send_bad_dhdr(BadNode, ToNode) when is_atom(BadNode), is_atom(ToNode) ->
     receive Done -> ok end.
 
 dctrl(Node) when is_atom(Node) ->
-    case catch erts_debug:get_internal_state(available_internal_state) of
-        true -> true;
-        _ -> erts_debug:set_internal_state(available_internal_state, true)
-    end,
-    erts_debug:get_internal_state({dist_ctrl, Node}).
+    get_internal_state({dist_ctrl, Node}).
+
+get_internal_state(Op) ->
+    try erts_debug:get_internal_state(Op) of
+        R -> R
+    catch
+        error:undef ->
+            erts_debug:set_internal_state(available_internal_state, true),
+            erts_debug:get_internal_state(Op)
+    end.
+
+set_internal_state(Op, Val) ->
+    try erts_debug:set_internal_state(Op, Val) of
+        R -> R
+    catch
+        error:undef ->
+            erts_debug:set_internal_state(available_internal_state, true),
+            erts_debug:set_internal_state(Op, Val)
+    end.
+
 
 dmsg_hdr() ->
     [131, % Version Magic
@@ -1981,11 +1994,9 @@ freeze_node(Node, MS) ->
     Freezer = self(),
     spawn_link(Node,
                fun () ->
-                       erts_debug:set_internal_state(available_internal_state,
-                                                     true),
                        dctrl_dop_send(Freezer, DoingIt),
                        receive after Own -> ok end,
-                       erts_debug:set_internal_state(block, MS+Own)
+                       set_internal_state(block, MS+Own)
                end),
     receive DoingIt -> ok end,
     receive after Own -> ok end.
@@ -2189,8 +2200,7 @@ forever(Fun) ->
     forever(Fun).
 
 abort(Why) ->
-    erts_debug:set_internal_state(available_internal_state, true),
-    erts_debug:set_internal_state(abort, Why).
+    set_internal_state(abort, Why).
 
 
 start_busy_dist_port_tracer() ->
