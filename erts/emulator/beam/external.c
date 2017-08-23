@@ -1570,6 +1570,12 @@ static BIF_RETTYPE binary_to_term_int(Process* p, Uint32 flags, Eterm bin, Binar
         case B2TDone:
             b2t_destroy_context(ctx);
 
+            if (flags & ERTS_DIST_EXT_BTT_USED) {
+                Uint used = make_small(ctx->u.dc.ep - ctx->b2ts.extp
+                                       +1); /* VERSION_MAGIC */
+                Eterm *hp = erts_produce_heap(&ctx->u.dc.factory, 3, 0);
+                ctx->u.dc.res = TUPLE2(hp, ctx->u.dc.res, used);
+            }
             if (ctx->u.dc.factory.hp > ctx->u.dc.factory.hp_end) {
                 erts_exit(ERTS_ERROR_EXIT, ":%s, line %d: heap overrun by %d words(s)\n",
                          __FILE__, __LINE__, ctx->u.dc.factory.hp - ctx->u.dc.factory.hp_end);
@@ -1626,6 +1632,9 @@ BIF_RETTYPE binary_to_term_2(BIF_ALIST_2)
         opt = CAR(list_val(opts));
         if (opt == am_safe) {
             flags |= ERTS_DIST_EXT_BTT_SAFE;
+        }
+        else if (opt == am_used) {
+            flags |= ERTS_DIST_EXT_BTT_USED;
         }
 	else {
             goto error;
@@ -3944,6 +3953,7 @@ dec_term_atom_common:
     if (ctx) {
         ctx->state = B2TDone;
 	ctx->reds = reds;
+        ctx->u.dc.ep = ep;
     }
 
     return ep;
