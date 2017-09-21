@@ -101,7 +101,9 @@ void
 erts_ref_dist_entry(DistEntry *dep)
 {
     ASSERT(dep);
-    de_refc_inc(dep, 1);
+    if (de_refc_inc_read(dep, 1) == 1) {
+        de_refc_inc(dep, 2);  /* Pending delete */
+    }
 }
 
 void
@@ -396,29 +398,64 @@ erts_make_dhandle(Process *c_p, DistEntry *dep)
     return erts_mk_magic_ref(&hp, &c_p->off_heap, bin);
 }
 
-static void try_delete_dist_entry(void *vbin);
+static void start_timer_delete_dist_entry(void *vdep);
+static void prepare_try_delete_dist_entry(void *vdep);
+static void try_delete_dist_entry(DistEntry*);
 
-static void
-prepare_try_delete_dist_entry(void *vbin)
+static void reschedule_delete_dist_entry(DistEntry* dep)
 {
-    Binary *bin = (Binary *) vbin;
-    DistEntry *dep = ErtsBin2DistEntry(bin);
-    Uint size;
-    erts_aint_t refc;
-
-    refc = de_refc_read(dep, 0);
-    if (refc > 0)
-        return;
-
-    size = ERTS_MAGIC_BIN_SIZE(sizeof(DistEntry));
-    erts_schedule_thr_prgr_later_cleanup_op(try_delete_dist_entry,
-                                            vbin, &dep->later_op, size);
+    /*
+     * Here we need thread progress to wait for other threads, that may have
+     * done lookup without refc++, to do either refc++ or drop their refs.
+     *
+     * Note that timeouts does not guarantee thread progress.
+     */
+    if (node_tab_delete_delay == 0) {
+        erts_schedule_thr_prgr_later_op(prepare_try_delete_dist_entry,
+                                        dep, &dep->later_op);
+    }
+    else {
+        ASSERT(node_tab_delete_delay > 0);
+        erts_schedule_thr_prgr_later_op(start_timer_delete_dist_entry,
+                                        dep, &dep->later_op);
+    }
 }
 
-static void try_delete_dist_entry(void *vbin)
+static void
+start_timer_delete_dist_entry(void *vdep)
 {
-    Binary *bin = (Binary *) vbin;
-    DistEntry *dep = ErtsBin2DistEntry(bin);
+    ASSERT(node_tab_delete_delay > 0);
+    erts_start_timer_callback(node_tab_delete_delay,
+                              prepare_try_delete_dist_entry,
+                              vdep);
+}
+
+static void
+prepare_try_delete_dist_entry(void *vdep)
+{
+    DistEntry *dep = vdep;
+    erts_aint_t refc;
+
+    /*
+     * Time has passed since we decremented refc to zero and DistEntry may
+     * have been revived. Do a fast check without table lock first.
+     */
+    refc = de_refc_read(dep, 0);
+    if (refc == 0) {
+        try_delete_dist_entry(dep);
+    }
+    else {
+        /*
+         * Someone has done lookup and done refc++ for us.
+         */
+        refc = de_refc_dec_read(dep, 0);
+        if (refc == 0)
+            reschedule_delete_dist_entry(dep);
+    }
+}
+
+static void try_delete_dist_entry(DistEntry* dep)
+{
     erts_aint_t refc;
 
     erts_rwmtx_rwlock(&erts_dist_table_rwmtx);
@@ -443,12 +480,7 @@ static void try_delete_dist_entry(void *vbin)
     erts_rwmtx_rwunlock(&erts_dist_table_rwmtx);
 
     if (refc == 0) {
-        if (node_tab_delete_delay == 0)
-            prepare_try_delete_dist_entry(vbin);
-        else if (node_tab_delete_delay > 0)
-            erts_start_timer_callback(node_tab_delete_delay,
-                                      prepare_try_delete_dist_entry,
-                                      vbin);
+        reschedule_delete_dist_entry(dep);
     }
 }
 
@@ -463,11 +495,9 @@ int erts_dist_entry_destructor(Binary *bin)
         return 1; /* Allow deallocation of structure... */
 
     if (node_tab_delete_delay == 0)
-        prepare_try_delete_dist_entry((void *) bin);
+        try_delete_dist_entry(dep);
     else if (node_tab_delete_delay > 0)
-        erts_start_timer_callback(node_tab_delete_delay,
-                                  prepare_try_delete_dist_entry,
-                                  (void *) bin);
+        start_timer_delete_dist_entry(dep);
 
     return 0;
 }
@@ -1476,9 +1506,9 @@ insert_thr_prgr_delete_dist_entry(void *arg, ErtsThrPrgrVal thr_prgr, void *vbin
 static void
 insert_delayed_delete_dist_entry(void *state,
 				 ErtsMonotonicTime timeout_pos,
-				 void *vbin)
+				 void *vdep)
 {
-    DistEntry *dep = ErtsBin2DistEntry(vbin);
+    DistEntry *dep = vdep;
     Eterm heap[3];
     insert_dist_entry(dep,
 		      SYSTEM_REF,
@@ -1520,7 +1550,7 @@ setup_reference_table(void)
     erts_debug_callback_timer_foreach(prepare_try_delete_dist_entry,
 				      insert_delayed_delete_dist_entry,
 				      NULL);
-    erts_debug_later_op_foreach(try_delete_dist_entry,
+    erts_debug_later_op_foreach(prepare_try_delete_dist_entry,
                                 insert_thr_prgr_delete_dist_entry,
                                 NULL);
 
