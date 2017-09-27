@@ -3302,6 +3302,9 @@ BIF_RETTYPE setnode_3(BIF_ALIST_3)
             goto badarg;
         }
 
+        if (dep->status != ERTS_DE_SFLG_PENDING)
+            goto badarg;
+
         if (is_not_nil(dep->cid))
             goto badarg;
 
@@ -3334,16 +3337,8 @@ BIF_RETTYPE setnode_3(BIF_ALIST_3)
             goto done; /* Already set */
         }
 
-        if (dep->status & ERTS_DE_SFLG_EXITING) {
-            /* Suspend on dist entry waiting for the exit to finish */
-            ErtsProcList *plp = erts_proclist_create(BIF_P);
-            plp->next = NULL;
-            erts_suspend(BIF_P, ERTS_PROC_LOCK_MAIN, NULL);
-            erts_mtx_lock(&dep->qlock);
-            erts_proclist_store_last(&dep->suspended, plp);
-            erts_mtx_unlock(&dep->qlock);
-            goto yield;
-        }
+        if (dep->status != ERTS_DE_SFLG_PENDING)
+            goto badarg;
 
         ASSERT(!(dep->status & ERTS_DE_SFLG_EXITING));
 
