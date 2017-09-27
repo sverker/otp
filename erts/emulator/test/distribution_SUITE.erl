@@ -1017,7 +1017,10 @@ dist_auto_connect_relay(Parent) ->
 
 dist_parallel_send(Config) when is_list(Config) ->
     {ok, RNode} = start_node(dist_parallel_receiver),
-    {ok, SNode} = start_node(dist_parallel_sender),
+
+    Prog = "Prog=/home/uabseri/src/otp_new/bin/cerl -rr -debug",
+    %%Prog = [],
+    {ok, SNode} = start_node(dist_parallel_sender, [], Prog),
     WatchDog = spawn_link(
                  fun () ->
                          TRef = erlang:start_timer((2*60*1000), self(), oops),
@@ -2048,6 +2051,7 @@ start_node(Name, Args, Rel) when is_atom(Name), is_list(Rel) ->
     Cookie = atom_to_list(erlang:get_cookie()),
     RelArg = case Rel of
                  [] -> [];
+                 "Prog="++Prog -> [{erl,[{prog,Prog}]}];
                  _ -> [{erl,[{release,Rel}]}]
              end,
     test_server:start_node(Name, slave,

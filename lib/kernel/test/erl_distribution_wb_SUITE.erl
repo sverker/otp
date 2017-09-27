@@ -128,7 +128,9 @@ switch_options(Config) when is_list(Config) ->
 
 %% Whitebox testing of distribution handshakes.
 whitebox(Config) when is_list(Config) ->
-    {ok, Node} = start_node(?MODULE,""),
+    Prog = "Prog=/home/uabseri/src/otp_new/bin/cerl -rr -debug",
+    %%Prog = [],
+    {ok, Node} = start_node(?MODULE,"",Prog),
     Cookie = erlang:get_cookie(),
     {_,Host} = split(node()),
     ok = pending_up_md5(Node, join(ccc,Host), Cookie),
@@ -699,7 +701,14 @@ join(Name,Host) ->
 
 %% start/stop slave.
 start_node(Name, Param) ->
-    test_server:start_node(Name, slave, [{args, Param}]).
+    start_node(Name, Param, []).
+start_node(Name, Param, Rel) when is_list(Rel) ->
+    RelArg = case Rel of
+                 [] -> [];
+                 "Prog="++Prog -> [{erl,[{prog,Prog}]}];
+                 _ -> [{erl,[{release,Rel}]}]
+             end,
+    test_server:start_node(Name, slave, [{args, Param} | RelArg]).
 
 stop_node(Node) ->
     test_server:stop_node(Node).
