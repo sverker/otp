@@ -3337,8 +3337,8 @@ BIF_RETTYPE setnode_3(BIF_ALIST_3)
             goto done; /* Already set */
         }
 
-        if (dep->status != ERTS_DE_SFLG_PENDING)
-            goto badarg;
+///     if (dep->status != ERTS_DE_SFLG_PENDING)
+///         goto badarg;
 
         ASSERT(!(dep->status & ERTS_DE_SFLG_EXITING));
 
@@ -3479,7 +3479,9 @@ static Sint abort_pending_connection(DistEntry* dep, Uint32 conn_id)
 
     erts_de_rwlock(dep);
 
-    if (dep->status != ERTS_DE_SFLG_PENDING || dep->connection_id != conn_id) {
+    if ((dep->status != ERTS_DE_SFLG_PENDING
+         && dep->status != ERTS_DE_SFLG_CONNECTED)
+        || dep->connection_id != conn_id) {
         erts_de_rwunlock(dep);
     }
     else {
