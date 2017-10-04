@@ -630,6 +630,8 @@ erts_set_dist_entry_pending(DistEntry *dep)
     if(dep->next)
 	dep->next->prev = dep->prev;
 
+    erts_no_of_not_connected_dist_entries--;
+
     dep->status = ERTS_DE_SFLG_PENDING;
     dep->flags = (DFLAG_DIST_MANDATORY | DFLAG_DIST_HOPEFULLY);
     dep->connection_id = (dep->connection_id + 1) & ERTS_DIST_CON_ID_MASK;
