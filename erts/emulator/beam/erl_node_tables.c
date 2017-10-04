@@ -403,7 +403,7 @@ static void start_timer_delete_dist_entry(void *vdep);
 static void prepare_try_delete_dist_entry(void *vdep);
 static void try_delete_dist_entry(DistEntry*);
 
-static void reschedule_delete_dist_entry(DistEntry* dep)
+static void schedule_delete_dist_entry(DistEntry* dep)
 {
     /*
      * Here we need thread progress to wait for other threads, that may have
@@ -451,7 +451,7 @@ prepare_try_delete_dist_entry(void *vdep)
          */
         refc = de_refc_dec_read(dep, 0);
         if (refc == 0)
-            reschedule_delete_dist_entry(dep);
+            schedule_delete_dist_entry(dep);
     }
 }
 
@@ -463,8 +463,7 @@ static void try_delete_dist_entry(DistEntry* dep)
     /*
      * Another thread might have looked up this dist entry after
      * we decided to delete it (refc became zero). If so, the other
-     * thread incremented refc twice. Once for the new reference
-     * and once for this thread.
+     * thread incremented refc one extra step for this thread.
      *
      * If refc reach -1, no one has used the entry since we
      * set up the timer. Delete the entry.
@@ -481,7 +480,7 @@ static void try_delete_dist_entry(DistEntry* dep)
     erts_rwmtx_rwunlock(&erts_dist_table_rwmtx);
 
     if (refc == 0) {
-        reschedule_delete_dist_entry(dep);
+        schedule_delete_dist_entry(dep);
     }
 }
 
@@ -495,10 +494,7 @@ int erts_dist_entry_destructor(Binary *bin)
     if (refc == -1)
         return 1; /* Allow deallocation of structure... */
 
-    if (node_tab_delete_delay == 0)
-        try_delete_dist_entry(dep);
-    else if (node_tab_delete_delay > 0)
-        start_timer_delete_dist_entry(dep);
+    schedule_delete_dist_entry(dep);
 
     return 0;
 }
