@@ -144,20 +144,21 @@ and inserts the carrier into the pool.
 
 Since the carrier has been unlinked from the data structure of
 available free blocks, no more allocations will be made in the
-carrier. The allocator instance putting the carrier into the pool,
-however, still has the responsibility of performing deallocations in
-it while it remains in the pool. The allocator instance with this
-deallocation responsibility is here called the **employer**.
+carrier. Deallocations in the carrier, while it remains in the pool, will be
+performed by the allocator instance that created it; the **owner**.
 
-Each carrier has a flag field containing information about the
-employing allocator instance, a flag indicating if the carrier is in
-the pool or not, and a flag indicating if it is busy or not. When the
-carrier is in the pool, the employing allocator instance needs to mark it
-as busy while operating on it. If another thread inspects it in order
+Each carrier has an atomic word containing a pointer to the employing allocator
+instance and three bit flags; IN_POOL, BUSY and HOMECOMING.
+
+When the carrier is in the pool, the owning allocator instance needs to mark it
+as BUSY while operating on it. If another thread inspects it in order
 to try to fetch it from the pool, it will skip it if it is busy. When
 fetching the carrier from the pool, employment will change and further
 deallocations in the carrier will be redirected to the new
 employer using the delayed dealloc functionality.
+
+When a foreign allocator instance abandons a carrier back into the pool, it will
+also passed it back to its **owner** using the delayed dealloc queue.
 
 If a carrier in the pool becomes empty, it will be withdrawn from the
 pool. All carriers that become empty are also always passed to its
@@ -177,7 +178,7 @@ In short:
 * The allocator instance that uses a carrier **employs** it.
 * An **employer** can abandon a carrier into the pool.
 * Pooled carriers are not allocated from.
-* Deallocation in a pooled carrier is still performed by its **employer**.
+* Deallocation in a pooled carrier is performed by its **owner**.
 * **Employment** can only change when a carrier is fetched from the pool.
 
 ### Searching the pool ###
