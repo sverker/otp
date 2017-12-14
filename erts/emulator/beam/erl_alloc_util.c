@@ -2882,7 +2882,7 @@ mbc_realloc(Allctr_t *allctr, void *p, Uint size, Uint32 alcu_flgs,
 #ifdef ERTS_SMP
 
 #define ERTS_ALC_MAX_DEALLOC_CARRIER		10
-#define ERTS_ALC_CPOOL_MAX_FETCH_INSPECT	100
+#define ERTS_ALC_CPOOL_MAX_FETCH_INSPECT	100*1000*1000
 #define ERTS_ALC_CPOOL_CHECK_LIMIT_COUNT	100
 #define ERTS_ALC_CPOOL_MAX_FAILED_STAT_READS	3
 
@@ -3230,7 +3230,8 @@ cpool_delete(Allctr_t *allctr, Allctr_t *prev_allctr, Carrier_t *crr)
 static Carrier_t *
 cpool_fetch(Allctr_t *allctr, UWord size)
 {
-    int i, has_passed_sentinel;
+    enum { IGNORANT, HAS_SEEN_SENTINEL, THE_LAST_ONE } loop_state;
+    int i;
     Carrier_t *crr;
     Carrier_t *reinsert_crr = NULL;
     ErtsAlcCPoolData_t *cpdp;
@@ -3270,6 +3271,7 @@ cpool_fetch(Allctr_t *allctr, UWord size)
                 ASSERT(exp & ERTS_CRR_ALCTR_FLG_HOMECOMING);
                 crr->cpool.pooled.hdr.bhdr = erts_atomic_read_nob(&crr->cpool.max_size);
                 aoff_add_pooled_mbc(allctr, crr);
+                INC_CC(allctr->cpool.stat.skip_size);
                 continue;
             }
             else if (exp & ERTS_CRR_ALCTR_FLG_BUSY) {
@@ -3280,6 +3282,7 @@ cpool_fetch(Allctr_t *allctr, UWord size)
                  */
                 ASSERT(!reinsert_crr);
                 reinsert_crr = crr;
+                INC_CC(allctr->cpool.stat.skip_busy);
                 continue;
             }
 
@@ -3296,7 +3299,10 @@ cpool_fetch(Allctr_t *allctr, UWord size)
                 return crr;
             }
             exp = act;
+            INC_CC(allctr->cpool.stat.skip_race);
         }
+        else
+            INC_CC(allctr->cpool.stat.skip_not_pooled);
 
         /* Not in pool anymore */
         ASSERT(!(exp & ERTS_CRR_ALCTR_FLG_BUSY));
@@ -3324,8 +3330,10 @@ cpool_fetch(Allctr_t *allctr, UWord size)
         aoff_remove_pooled_mbc(allctr, crr);
         crr->cpool.state = MBC_TRAITOR;
 
-        if (--i <= 0)
+        if (--i <= 0) {
+            INC_CC(allctr->cpool.stat.fail_pooled);
             return NULL;
+        }
     }
 
 
@@ -3351,8 +3359,8 @@ cpool_fetch(Allctr_t *allctr, UWord size)
 	    goto check_dc_list;
     }
 
-    has_passed_sentinel = 0;
-    while (1) {
+    loop_state = IGNORANT;
+    do {
 	erts_aint_t exp;
 	cpdp = cpool_aint2cpd(cpool_read(&cpdp->prev));
 	if (cpdp == cpool_entrance) {
@@ -3361,22 +3369,26 @@ cpool_fetch(Allctr_t *allctr, UWord size)
 		if (cpdp == sentinel)
 		    break;
 	    }
-	    i = 0; /* Last one to inspect */
+            loop_state = THE_LAST_ONE;
 	}
 	else if (cpdp == sentinel) {
-	    if (has_passed_sentinel) {
+	    if (loop_state == HAS_SEEN_SENTINEL) {
 		/* We been here before. cpool_entrance must have been removed */
+                INC_CC(allctr->cpool.stat.entrance_removed);
 		break;
 	    }
 	    cpdp = cpool_aint2cpd(cpool_read(&cpdp->prev));
 	    if (cpdp == sentinel)
                 break;
-	    has_passed_sentinel = 1;
+            loop_state = HAS_SEEN_SENTINEL;
 	}
 	crr = ErtsContainerStruct(cpdp, Carrier_t, cpool);
 	exp = erts_smp_atomic_read_rb(&crr->allctr);
-	if (((exp & (ERTS_CRR_ALCTR_FLG_MASK)) == ERTS_CRR_ALCTR_FLG_IN_POOL)
-	    && (erts_atomic_read_nob(&cpdp->max_size) >= size)) {
+
+        if (erts_atomic_read_nob(&cpdp->max_size) < size) {
+            INC_CC(allctr->cpool.stat.skip_size);
+        }
+        else if ((exp & (ERTS_CRR_ALCTR_FLG_MASK)) == ERTS_CRR_ALCTR_FLG_IN_POOL) {
 	    erts_aint_t act;
 	    /* Try to fetch it... */
 	    act = erts_smp_atomic_cmpxchg_mb(&crr->allctr,
@@ -3389,16 +3401,28 @@ cpool_fetch(Allctr_t *allctr, UWord size)
 		return crr;
 	    }
 	}
-        /*else
-         *  We skip HOMECOMING carriers to avoid cases when we need to send it
-         *  home yet again, before owner has removed it from dd-queue.
-         *
-         *  ToDo: We could accept our own homecoming maybe.
-         */
 
-	if (--i <= 0)
+        if (exp & ERTS_CRR_ALCTR_FLG_BUSY) {
+            INC_CC(allctr->cpool.stat.skip_busy);
+        }
+        else if (exp & ERTS_CRR_ALCTR_FLG_HOMECOMING) {
+            /*
+             *  We skip HOMECOMING to avoid cases when we need to send it
+             *  home yet again, before owner has removed it from dd-queue.
+             *
+             *  ToDo: We could accept our own homecoming.
+             */
+            INC_CC(allctr->cpool.stat.skip_homecoming);
+        }
+        else { 
+            INC_CC(allctr->cpool.stat.skip_race);
+        }
+
+	if (--i <= 0) {
+            INC_CC(allctr->cpool.stat.fail_shared);
 	    return NULL;
-    }
+        }
+    }while (loop_state != THE_LAST_ONE);
 
 check_dc_list:
     /* Last; check our own pending dealloc carrier list... */
@@ -3420,9 +3444,14 @@ check_dc_list:
 	    return crr;
 	}
 	crr = crr->prev;
-	if (--i <= 0)
+	if (--i <= 0) {
+            INC_CC(allctr->cpool.stat.fail_pend_dealloc);
 	    return NULL;
+        }
     }
+
+    if (i != ERTS_ALC_CPOOL_MAX_FETCH_INSPECT)
+        INC_CC(allctr->cpool.stat.fail);
 
     return NULL;
 }
@@ -3808,6 +3837,7 @@ create_carrier(Allctr_t *allctr, Uint umem_sz, UWord flags)
 	crr = cpool_fetch(allctr, blk_sz);
 	if (crr) {
 	    STAT_MBC_CPOOL_FETCH(allctr, crr);
+            INC_CC(allctr->cpool.stat.fetch);
 	    link_carrier(&allctr->mbc_list, crr);
 	    (*allctr->add_mbc)(allctr, crr);
 	    blk = (*allctr->get_free_block)(allctr, blk_sz, NULL, 0);
@@ -4273,6 +4303,17 @@ static struct {
     Eterm mbcs;
 #ifdef ERTS_SMP
     Eterm mbcs_pool;
+    Eterm fetch;
+    Eterm fail_pooled;
+    Eterm fail_shared;
+    Eterm fail_pend_dealloc;
+    Eterm fail;
+    Eterm skip_size;
+    Eterm skip_busy;
+    Eterm skip_not_pooled;
+    Eterm skip_homecoming;
+    Eterm skip_race;
+    Eterm entrance_removed;
 #endif
     Eterm sbcs;
 
@@ -4363,6 +4404,17 @@ init_atoms(Allctr_t *allctr)
 	AM_INIT(mbcs);
 #ifdef ERTS_SMP
 	AM_INIT(mbcs_pool);
+	AM_INIT(fetch);
+        AM_INIT(fail_pooled);
+        AM_INIT(fail_shared);
+        AM_INIT(fail_pend_dealloc);
+        AM_INIT(fail);
+        AM_INIT(skip_size);
+        AM_INIT(skip_busy);
+        AM_INIT(skip_not_pooled);
+        AM_INIT(skip_homecoming);
+        AM_INIT(skip_race);
+        AM_INIT(entrance_removed);
 #endif
 	AM_INIT(sbcs);
 
@@ -4648,9 +4700,56 @@ info_cpool(Allctr_t *allctr,
 
     if (hpp || szp) {
 	res = NIL;
+
+      if (!sz_only) {
+        add_3tup(hpp, szp, &res, am.fail_pooled,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.fail_pooled)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.fail_pooled)));
+
+        add_3tup(hpp, szp, &res, am.fail_shared,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.fail_shared)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.fail_shared)));
+
+        add_3tup(hpp, szp, &res, am.fail_pend_dealloc,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.fail_pend_dealloc)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.fail_pend_dealloc)));
+
+        add_3tup(hpp, szp, &res, am.fail,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.fail)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.fail)));
+
+        add_3tup(hpp, szp, &res, am.fetch,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.fetch)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.fetch)));
+
+        add_3tup(hpp, szp, &res, am.skip_size,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.skip_size)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.skip_size)));
+
+        add_3tup(hpp, szp, &res, am.skip_busy,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.skip_busy)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.skip_busy)));
+
+        add_3tup(hpp, szp, &res, am.skip_not_pooled,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.skip_not_pooled)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.skip_not_pooled)));
+
+        add_3tup(hpp, szp, &res, am.skip_homecoming,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.skip_homecoming)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.skip_homecoming)));
+
+        add_3tup(hpp, szp, &res, am.skip_race,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.skip_race)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.skip_race)));
+
+        add_3tup(hpp, szp, &res, am.entrance_removed,
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_GIGA_VAL(allctr->cpool.stat.entrance_removed)),
+                 bld_unstable_uint(hpp, szp, ERTS_ALC_CC_VAL(allctr->cpool.stat.entrance_removed)));
+
 	add_2tup(hpp, szp, &res,
 		 am.carriers_size,
 		 bld_unstable_uint(hpp, szp, csz));
+      }
 	if (!sz_only)
 	    add_2tup(hpp, szp, &res,
 		     am.carriers,
