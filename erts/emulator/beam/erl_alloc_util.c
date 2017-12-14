@@ -2882,8 +2882,7 @@ mbc_realloc(Allctr_t *allctr, void *p, Uint size, Uint32 alcu_flgs,
 #ifdef ERTS_SMP
 
 #define ERTS_ALC_MAX_DEALLOC_CARRIER		10
-#define ERTS_ALC_CPOOL_MAX_FETCH_INSPECT	20
-#define ERTS_ALC_CPOOL_MAX_TRAITOR_INSPECT	10
+#define ERTS_ALC_CPOOL_MAX_FETCH_INSPECT	100
 #define ERTS_ALC_CPOOL_CHECK_LIMIT_COUNT	100
 #define ERTS_ALC_CPOOL_MAX_FAILED_STAT_READS	3
 
@@ -3248,7 +3247,7 @@ cpool_fetch(Allctr_t *allctr, UWord size)
      * Search my own pooled_tree,
      * i.e my abandoned carriers that were in the pool last time I checked.
      */
-    while(1) {
+    do {
         erts_aint_t exp, act;
 
         crr = aoff_lookup_pooled_mbc(allctr, size);
@@ -3303,9 +3302,7 @@ cpool_fetch(Allctr_t *allctr, UWord size)
         ASSERT(!(exp & ERTS_CRR_ALCTR_FLG_BUSY));
         crr->cpool.state = MBC_TRAITOR;
 
-        if (--i <= 0)
-            break;
-    }
+    }while (--i > 0);
 
     if (reinsert_crr)
         aoff_add_pooled_mbc(allctr, reinsert_crr);
@@ -3326,6 +3323,9 @@ cpool_fetch(Allctr_t *allctr, UWord size)
         ASSERT(!(iallctr & ERTS_CRR_ALCTR_FLG_BUSY));
         aoff_remove_pooled_mbc(allctr, crr);
         crr->cpool.state = MBC_TRAITOR;
+
+        if (--i <= 0)
+            return NULL;
     }
 
 
@@ -3391,7 +3391,7 @@ cpool_fetch(Allctr_t *allctr, UWord size)
 	}
         /*else
          *  We skip HOMECOMING carriers to avoid cases when we need to send it
-         *  home yet again, before owner has been removed it from dd-queue.
+         *  home yet again, before owner has removed it from dd-queue.
          *
          *  ToDo: We could accept our own homecoming maybe.
          */
