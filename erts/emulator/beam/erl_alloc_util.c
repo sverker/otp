@@ -1603,6 +1603,7 @@ dealloc_mbc(Allctr_t *allctr, Carrier_t *crr)
 static void set_new_allctr_abandon_limit(Allctr_t*);
 static void abandon_carrier(Allctr_t*, Carrier_t*);
 static void poolify_my_carrier(Allctr_t*, Carrier_t*);
+static void enqueue_homecoming(Allctr_t*, Carrier_t*);
 
 static ERTS_INLINE Allctr_t*
 get_pref_allctr(void *extra)
@@ -3521,8 +3522,6 @@ schedule_dealloc_carrier(Allctr_t *allctr, Carrier_t *crr)
         dealloc_my_carrier(allctr, crr);
     }
     else {
-	int cinit = orig_allctr->dd.ix - allctr->dd.ix;
-        Block_t* dd_blk;
 	/*
 	 * We send the carrier to its origin for deallocation.
 	 * This in order:
@@ -3547,12 +3546,9 @@ schedule_dealloc_carrier(Allctr_t *allctr, Carrier_t *crr)
 			      == erts_smp_atomic_read_nob(&crr->allctr));
 #endif
 
-        dd_blk = &crr->cpool.homecoming_dd_block;
-        ASSERT(dd_blk->bhdr == HOMECOMING_MBC_BLK_HDR);
         erts_smp_atomic_set_nob(&crr->allctr, ((erts_aint_t)orig_allctr |
                                                ERTS_CRR_ALCTR_FLG_HOMECOMING));
-	if (ddq_enqueue(&orig_allctr->dd.q, BLK2UMEM(dd_blk), cinit))
-	    erts_alloc_notify_delayed_dealloc(orig_allctr->ix);
+        enqueue_homecoming(allctr, crr);
     }
 }
 
@@ -3641,7 +3637,7 @@ set_new_allctr_abandon_limit(Allctr_t *allctr)
 static void
 abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
 {
-    Allctr_t *orig_allctr = crr->cpool.orig_allctr;
+    erts_aint_t max_size;
 
     STAT_MBC_ABANDON(allctr, crr);
 
@@ -3649,26 +3645,26 @@ abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
     allctr->remove_mbc(allctr, crr);
     set_new_allctr_abandon_limit(allctr);
 
-    {
-        erts_aint_t max_size;
+    max_size = (erts_aint_t) allctr->largest_fblk_in_mbc(allctr, crr);
+    erts_atomic_set_nob(&crr->cpool.max_size, max_size);
+    cpool_insert(allctr, crr);
 
-        max_size = (erts_aint_t) allctr->largest_fblk_in_mbc(allctr, crr);
-        erts_atomic_set_nob(&crr->cpool.max_size, max_size);
-        cpool_insert(allctr, crr);
-    }
-
-    if (orig_allctr == allctr) {
+    if (crr->cpool.orig_allctr == allctr)
         poolify_my_carrier(allctr, crr);
-    }
-    else {
-        const int cinit = orig_allctr->dd.ix - allctr->dd.ix;
-        Block_t* dd_blk = &crr->cpool.homecoming_dd_block;
+    else
+        enqueue_homecoming(allctr, crr);
+}
 
-        ASSERT(dd_blk->bhdr == HOMECOMING_MBC_BLK_HDR);
-        if (ddq_enqueue(&orig_allctr->dd.q, BLK2UMEM(dd_blk), cinit))
-            erts_alloc_notify_delayed_dealloc(orig_allctr->ix);
-    }
+static void
+enqueue_homecoming(Allctr_t* allctr, Carrier_t* crr)
+{
+    Allctr_t* orig_allctr = crr->cpool.orig_allctr;
+    const int cinit = orig_allctr->dd.ix - allctr->dd.ix;
+    Block_t* dd_blk = &crr->cpool.homecoming_dd_block;
 
+    ASSERT(dd_blk->bhdr == HOMECOMING_MBC_BLK_HDR);
+    if (ddq_enqueue(&orig_allctr->dd.q, BLK2UMEM(dd_blk), cinit))
+        erts_alloc_notify_delayed_dealloc(orig_allctr->ix);
 }
 
 static void
