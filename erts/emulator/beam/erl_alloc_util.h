@@ -339,10 +339,6 @@ union ErtsAllctrDDBlock_t_ {
  * distinguishing MBC's from allocated blocks in handle_delayed_dealloc().
  */
 #define HOMECOMING_MBC_BLK_HDR (THIS_FREE_BLK_HDR_FLG | LAST_BLK_HDR_FLG)
-/*
- * UNUSED_MBC_BLK_HDR != HOMECOMING_MBC_BLK_HDR (that's it)
- */
-#define UNUSED_MBC_BLK_HDR     (0)
 
 #define IS_FREE_LAST_MBC_BLK(B) \
     (((B)->bhdr & FLG_MASK) == (THIS_FREE_BLK_HDR_FLG | LAST_BLK_HDR_FLG))
