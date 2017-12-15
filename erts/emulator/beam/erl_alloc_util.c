@@ -2042,14 +2042,11 @@ handle_delayed_dealloc(Allctr_t *allctr,
 	    Carrier_t *crr = ErtsContainerStruct(blk, Carrier_t,
                                                  cpool.homecoming_dd_block);
             Block_t* first_blk = MBC_TO_FIRST_BLK(allctr, crr);
-            erts_aint_t iallctr;
 
             ERTS_ALC_CPOOL_ASSERT(BLK_TO_MBC(first_blk) == crr);
 	    ERTS_ALC_CPOOL_ASSERT(ERTS_ALC_IS_CPOOL_ENABLED(allctr));
 	    ERTS_ALC_CPOOL_ASSERT(allctr == crr->cpool.orig_allctr);
 
-            iallctr = erts_smp_atomic_read_band_nob(&crr->allctr,
-                                                    ~ERTS_CRR_ALCTR_FLG_HOMECOMING);
 
             if (IS_FREE_LAST_MBC_BLK(first_blk)) {
                 ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr) ==
@@ -2065,13 +2062,14 @@ handle_delayed_dealloc(Allctr_t *allctr,
                 erts_smp_atomic_set_nob(&crr->allctr, (erts_aint_t)allctr);
             }
             else {
-                ERTS_ALC_CPOOL_ASSERT(iallctr & ERTS_CRR_ALCTR_FLG_HOMECOMING);
+                ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr) ==
+                                      ((erts_aint_t)allctr |
+                                       ERTS_CRR_ALCTR_FLG_IN_POOL |
+                                       ERTS_CRR_ALCTR_FLG_HOMECOMING));
+                erts_smp_atomic_set_nob(&crr->allctr, ((erts_aint_t)allctr |
+                                                       ERTS_CRR_ALCTR_FLG_IN_POOL));
                 unlink_abandoned_carrier(crr);
-                if ((iallctr & ~ERTS_CRR_ALCTR_FLG_MASK) == (erts_aint_t)allctr) {
-                    ERTS_ALC_CPOOL_ASSERT(iallctr & ERTS_CRR_ALCTR_FLG_IN_POOL);
-                    ERTS_ALC_CPOOL_ASSERT(!(iallctr & ERTS_CRR_ALCTR_FLG_BUSY));
-                    poolify_my_carrier(allctr, crr);
-                }
+                poolify_my_carrier(allctr, crr);
             }
 	}
 	else {
@@ -3046,7 +3044,7 @@ static void
 cpool_insert(Allctr_t *allctr, Carrier_t *crr)
 {
     ErtsAlcCPoolData_t *cpd1p, *cpd2p;
-    erts_aint_t val;
+    erts_aint_t val, iallctr;
     ErtsAlcCPoolData_t *sentinel = &carrier_pool[allctr->alloc_no].sentinel;
     Allctr_t *orig_allctr = crr->cpool.orig_allctr;
 
@@ -3119,6 +3117,17 @@ cpool_insert(Allctr_t *allctr, Carrier_t *crr)
     cpool_set_mod_marked(&cpd2p->prev,
 			 (erts_aint_t) &crr->cpool,
 			 (erts_aint_t) cpd1p);
+
+    if (allctr == orig_allctr) {
+        /* preserve HOMECOMING flag */
+        iallctr = erts_smp_atomic_read_nob(&crr->allctr);
+        ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING) == (erts_aint_t)allctr);
+    }
+    else {
+        ASSERT(erts_smp_atomic_read_nob(&crr->allctr) == (erts_aint_t)allctr);
+        iallctr = (erts_aint_t)orig_allctr | ERTS_CRR_ALCTR_FLG_HOMECOMING;
+    }
+    erts_smp_atomic_set_wb(&crr->allctr, iallctr | ERTS_CRR_ALCTR_FLG_IN_POOL);
 
     LTTNG3(carrier_pool_put, ERTS_ALC_A2AD(allctr->alloc_no), allctr->ix, CARRIER_SZ(crr));
 }
@@ -3352,7 +3361,7 @@ cpool_fetch(Allctr_t *allctr, UWord size)
 
     loop_state = IGNORANT;
     do {
-	erts_aint_t act;
+	erts_aint_t exp;
 	cpdp = cpool_aint2cpd(cpool_read(&cpdp->prev));
 	if (cpdp == cpool_entrance) {
 	    if (cpool_entrance == sentinel) {
@@ -3374,32 +3383,29 @@ cpool_fetch(Allctr_t *allctr, UWord size)
             loop_state = HAS_SEEN_SENTINEL;
 	}
 	crr = ErtsContainerStruct(cpdp, Carrier_t, cpool);
-	act = erts_smp_atomic_read_rb(&crr->allctr);
+	exp = erts_smp_atomic_read_rb(&crr->allctr);
 
         if (erts_atomic_read_nob(&cpdp->max_size) < size) {
             INC_CC(allctr->cpool.stat.skip_size);
         }
-        else if ((act & (ERTS_CRR_ALCTR_FLG_IN_POOL | ERTS_CRR_ALCTR_FLG_BUSY))
-                 == ERTS_CRR_ALCTR_FLG_IN_POOL) {
+        else if ((exp & (ERTS_CRR_ALCTR_FLG_MASK)) == ERTS_CRR_ALCTR_FLG_IN_POOL) {
+	    erts_aint_t act;
 	    /* Try to fetch it... */
-            do {
-                erts_aint_t exp = act;
-                erts_aint_t want = (((erts_aint_t) allctr)
-                                    | (exp & ERTS_CRR_ALCTR_FLG_HOMECOMING));
-                act = erts_smp_atomic_cmpxchg_mb(&crr->allctr, want, exp);
-                if (act == exp) {
-                    cpool_delete(allctr, ((Allctr_t *) (act & ~ERTS_CRR_ALCTR_FLG_MASK)), crr);
-                    if (crr->cpool.orig_allctr == allctr)
-                        unlink_abandoned_carrier(crr);
-                    return crr;
-                }
-            } while ((act | ERTS_CRR_ALCTR_FLG_HOMECOMING) == exp);
+	    act = erts_smp_atomic_cmpxchg_mb(&crr->allctr,
+					     (erts_aint_t) allctr,
+					     exp);
+	    if (act == exp) {
+		cpool_delete(allctr, ((Allctr_t *) (act & ~ERTS_CRR_ALCTR_FLG_MASK)), crr);
+		if (crr->cpool.orig_allctr == allctr)
+		    unlink_abandoned_carrier(crr);
+		return crr;
+	    }
 	}
 
-        if (act & ERTS_CRR_ALCTR_FLG_BUSY) {
+        if (exp & ERTS_CRR_ALCTR_FLG_BUSY) {
             INC_CC(allctr->cpool.stat.skip_busy);
         }
-        else if (act & ERTS_CRR_ALCTR_FLG_HOMECOMING) {
+        else if (exp & ERTS_CRR_ALCTR_FLG_HOMECOMING) {
             /*
              *  We skip HOMECOMING to avoid cases when we need to send it
              *  home yet again, before owner has removed it from dd-queue.
@@ -3541,7 +3547,12 @@ schedule_dealloc_carrier(Allctr_t *allctr, Carrier_t *crr)
 			      == erts_smp_atomic_read_nob(&crr->allctr));
 #endif
 
-        enqueue_homecoming(crr);
+        dd_blk = &crr->cpool.homecoming_dd_block;
+        ASSERT(dd_blk->bhdr == HOMECOMING_MBC_BLK_HDR);
+        erts_smp_atomic_set_nob(&crr->allctr, ((erts_aint_t)orig_allctr |
+                                               ERTS_CRR_ALCTR_FLG_HOMECOMING));
+	if (ddq_enqueue(&orig_allctr->dd.q, BLK2UMEM(dd_blk), cinit))
+	    erts_alloc_notify_delayed_dealloc(orig_allctr->ix);
     }
 }
 
@@ -3631,7 +3642,6 @@ static void
 abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
 {
     Allctr_t *orig_allctr = crr->cpool.orig_allctr;
-    erts_aint_t max_size;
 
     STAT_MBC_ABANDON(allctr, crr);
 
@@ -3639,32 +3649,18 @@ abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
     allctr->remove_mbc(allctr, crr);
     set_new_allctr_abandon_limit(allctr);
 
-    max_size = (erts_aint_t) allctr->largest_fblk_in_mbc(allctr, crr);
-    erts_atomic_set_nob(&crr->cpool.max_size, max_size);
-    cpool_insert(allctr, crr);
+    {
+        erts_aint_t max_size;
 
-    if (allctr == orig_allctr) {
-        /* preserve HOMECOMING flag */
-        erts_aint_t iallctr = erts_smp_atomic_read_nob(&crr->allctr);
-        ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING) == (erts_aint_t)allctr);
-        erts_smp_atomic_set_wb(&crr->allctr, iallctr | ERTS_CRR_ALCTR_FLG_IN_POOL);
+        max_size = (erts_aint_t) allctr->largest_fblk_in_mbc(allctr, crr);
+        erts_atomic_set_nob(&crr->cpool.max_size, max_size);
+        cpool_insert(allctr, crr);
+    }
 
+    if (orig_allctr == allctr) {
         poolify_my_carrier(allctr, crr);
     }
     else {
-        enqueue_homecoming(crr);
-    }
-
-}
-
-static void enqueue_homecoming(Carrier_t* crr)
-{
-    erts_aint_t want = ((erts_aint_t)orig_allctr
-                        | ERTS_CRR_ALCTR_FLG_IN_POOL
-                        | ERTS_CRR_ALCTR_FLG_HOMECOMING);
-    erts_aint_t was = erts_smp_atomic_xchg_nob(&crr->allctr, want);
-
-    if (!(was & ERTS_CRR_ALCTR_FLG_HOMECOMING)) {
         const int cinit = orig_allctr->dd.ix - allctr->dd.ix;
         Block_t* dd_blk = &crr->cpool.homecoming_dd_block;
 
@@ -3672,6 +3668,7 @@ static void enqueue_homecoming(Carrier_t* crr)
         if (ddq_enqueue(&orig_allctr->dd.q, BLK2UMEM(dd_blk), cinit))
             erts_alloc_notify_delayed_dealloc(orig_allctr->ix);
     }
+
 }
 
 static void
