@@ -1172,19 +1172,20 @@ clear_busy_pool_carrier(Allctr_t *allctr, Carrier_t *crr)
 {
     if (crr) {
 	erts_aint_t max_size;
+	erts_aint_t iallctr;
 
 	max_size = (erts_aint_t) allctr->largest_fblk_in_mbc(allctr, crr);
 	erts_atomic_set_nob(&crr->cpool.max_size, max_size);
 
-        ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr)
+        iallctr = erts_smp_atomic_read_nob(&crr->allctr);
+        ERTS_ALC_CPOOL_ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING)
                               == ((erts_aint_t)allctr |
                                   ERTS_CRR_ALCTR_FLG_IN_POOL |
                                   ERTS_CRR_ALCTR_FLG_BUSY));
 
-	erts_smp_atomic_set_relb(&crr->allctr, ((erts_aint_t)allctr |
-                                                ERTS_CRR_ALCTR_FLG_IN_POOL));
+	iallctr &= ~ERTS_CRR_ALCTR_FLG_BUSY;
+	erts_smp_atomic_set_relb(&crr->allctr, iallctr);
     }
-
 }
 
 #endif /* ERTS_SMP */
@@ -1668,12 +1669,12 @@ get_used_allctr(Allctr_t *pref_allctr, int pref_lock, void *p, UWord *sizep,
 	    while ((iallctr & ((~ERTS_CRR_ALCTR_FLG_MASK)|ERTS_CRR_ALCTR_FLG_IN_POOL))
 		   == (((erts_aint_t) pref_allctr)|ERTS_CRR_ALCTR_FLG_IN_POOL)) {
 		erts_aint_t act;
-                erts_aint_t exp = iallctr;
 
 		ERTS_ALC_CPOOL_ASSERT(!(iallctr & ERTS_CRR_ALCTR_FLG_BUSY));
-                iallctr |= ERTS_CRR_ALCTR_FLG_BUSY;
-		act = erts_smp_atomic_cmpxchg_ddrb(&crr->allctr, iallctr, exp);
-		if (act == exp) {
+		act = erts_smp_atomic_cmpxchg_ddrb(&crr->allctr,
+						   iallctr|ERTS_CRR_ALCTR_FLG_BUSY,
+						   iallctr);
+		if (act == iallctr) {
 		    *busy_pcrr_pp = crr;
 		    break;
 		}
@@ -1689,6 +1690,9 @@ get_used_allctr(Allctr_t *pref_allctr, int pref_lock, void *p, UWord *sizep,
 		}
 	    }
 
+	    ERTS_ALC_CPOOL_ASSERT((used_allctr == pref_allctr)
+                                  ? !(iallctr & ERTS_CRR_ALCTR_FLG_BUSY)
+                                  : 1);
 
             if (used_allctr == pref_allctr
                 && (iallctr & ERTS_CRR_ALCTR_FLG_HOMECOMING)) {
@@ -1699,8 +1703,7 @@ get_used_allctr(Allctr_t *pref_allctr, int pref_lock, void *p, UWord *sizep,
                  * We need a mathing read barrier to guarantee a correct view
                  * of the carrier for deallocation work.
                  */
-                iallctr &= ~ERTS_CRR_ALCTR_FLG_HOMECOMING;
-                erts_smp_atomic_set_rb(&crr->allctr, iallctr);
+                ERTS_SMP_READ_MEMORY_BARRIER;
             }
 
 	    return used_allctr;
@@ -2040,55 +2043,41 @@ handle_delayed_dealloc(Allctr_t *allctr,
 	    Carrier_t *crr = ErtsContainerStruct(blk, Carrier_t,
                                                  cpool.homecoming_dd_block);
             Block_t* first_blk = MBC_TO_FIRST_BLK(allctr, crr);
-            erts_aint_t iallctr;
 
             ERTS_ALC_CPOOL_ASSERT(BLK_TO_MBC(first_blk) == crr);
 	    ERTS_ALC_CPOOL_ASSERT(ERTS_ALC_IS_CPOOL_ENABLED(allctr));
 	    ERTS_ALC_CPOOL_ASSERT(allctr == crr->cpool.orig_allctr);
-            ASSERT(erts_smp_atomic_read_nob(&crr->cpool.is_homecoming));
 
-            erts_smp_atomic_set_acqb(&crr->cpool.is_homecoming, 0);
 
-            iallctr = erts_smp_atomic_read_nob(&crr->allctr);
-            if ((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING) == (erts_aint_t)allctr) {
-                /* Carrier is home */
-                if (IS_FREE_LAST_MBC_BLK(first_blk)) {
-                    /* because it's empty */
-                    erts_smp_atomic_set_nob(&crr->allctr, (erts_aint_t)allctr);
-                    dealloc_my_carrier(allctr, crr);
-                }
-                else {
-                    /* because I already fetched it from pool */
-                    ASSERT(crr->cpool.state == MBC_HOME);
-                    ERTS_ALC_CPOOL_ASSERT(iallctr == (erts_aint_t)allctr);
-                }
+            if (IS_FREE_LAST_MBC_BLK(first_blk)) {
+                ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr) ==
+                                      ((erts_aint_t)allctr |
+                                       ERTS_CRR_ALCTR_FLG_HOMECOMING));
+                erts_smp_atomic_set_nob(&crr->allctr, (erts_aint_t)allctr);
+                dealloc_my_carrier(allctr, crr);
+            }
+            else if (crr->cpool.state == MBC_HOME) {
+                ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr) ==
+                                      ((erts_aint_t)allctr |
+                                       ERTS_CRR_ALCTR_FLG_HOMECOMING));
+                erts_smp_atomic_set_nob(&crr->allctr, (erts_aint_t)allctr);
             }
             else {
-                /* Someone else abandoned this carrier... */
-
-                if (iallctr & ERTS_CRR_ALCTR_FLG_HOMECOMING) {
-                    iallctr = erts_smp_atomic_read_band_nob(&crr->allctr,
-                                                            ~ERTS_CRR_ALCTR_FLG_HOMECOMING);
-                    ASSERT(iallctr & ERTS_CRR_ALCTR_FLG_HOMECOMING);
-                    iallctr &= ~ERTS_CRR_ALCTR_FLG_HOMECOMING;
-                }
-                if (iallctr == ((erts_aint_t)allctr |
-                                ERTS_CRR_ALCTR_FLG_IN_POOL)) {
-                    /* ...and it's still in the pool */
-                    unlink_abandoned_carrier(crr);
-                    poolify_my_carrier(allctr, crr);
-                }
-                else {
-                    /* ...but has been fetched again from the pool */
-                    ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_MASK)
-                           != (erts_aint_t)allctr);
-                }
+                ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr) ==
+                                      ((erts_aint_t)allctr |
+                                       ERTS_CRR_ALCTR_FLG_IN_POOL |
+                                       ERTS_CRR_ALCTR_FLG_HOMECOMING));
+                erts_smp_atomic_set_nob(&crr->allctr, ((erts_aint_t)allctr |
+                                                       ERTS_CRR_ALCTR_FLG_IN_POOL));
+                unlink_abandoned_carrier(crr);
+                poolify_my_carrier(allctr, crr);
             }
 	}
 	else {
             ASSERT(IS_SBC_BLK(blk) || (ABLK_TO_MBC(blk) !=
                                        ErtsContainerStruct(blk, Carrier_t,
                                                            cpool.homecoming_dd_block)));
+
 	    INC_CC(allctr->calls.this_free);
 
 	    if (fix)
@@ -3131,16 +3120,15 @@ cpool_insert(Allctr_t *allctr, Carrier_t *crr)
 			 (erts_aint_t) cpd1p);
 
     if (allctr == orig_allctr) {
-        ASSERT(erts_smp_atomic_read_nob(&crr->allctr) == (erts_aint_t)allctr);
-        iallctr = (erts_aint_t)orig_allctr | ERTS_CRR_ALCTR_FLG_IN_POOL;
+        /* preserve HOMECOMING flag */
+        iallctr = erts_smp_atomic_read_nob(&crr->allctr);
+        ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING) == (erts_aint_t)allctr);
     }
     else {
-        ASSERT((erts_smp_atomic_read_nob(&crr->allctr)
-                & ~ERTS_CRR_ALCTR_FLG_HOMECOMING) == (erts_aint_t)allctr);
-        iallctr = (erts_aint_t)orig_allctr | (ERTS_CRR_ALCTR_FLG_IN_POOL |
-                                              ERTS_CRR_ALCTR_FLG_HOMECOMING);
+        ASSERT(erts_smp_atomic_read_nob(&crr->allctr) == (erts_aint_t)allctr);
+        iallctr = (erts_aint_t)orig_allctr | ERTS_CRR_ALCTR_FLG_HOMECOMING;
     }
-    erts_smp_atomic_set_wb(&crr->allctr, iallctr);
+    erts_smp_atomic_set_wb(&crr->allctr, iallctr | ERTS_CRR_ALCTR_FLG_IN_POOL);
 
     LTTNG3(carrier_pool_put, ERTS_ALC_A2AD(allctr->alloc_no), allctr->ix, CARRIER_SZ(crr));
 }
@@ -3281,6 +3269,7 @@ cpool_fetch(Allctr_t *allctr, UWord size)
                  * This carrier has been fetched and inserted back again
                  * by a foreign allocator. That's why it has a stale search size.
                  */
+                ASSERT(exp & ERTS_CRR_ALCTR_FLG_HOMECOMING);
                 crr->cpool.pooled.hdr.bhdr = erts_atomic_read_nob(&crr->cpool.max_size);
                 aoff_add_pooled_mbc(allctr, crr);
                 INC_CC(allctr->cpool.stat.skip_size);
@@ -3400,9 +3389,7 @@ cpool_fetch(Allctr_t *allctr, UWord size)
         if (erts_atomic_read_nob(&cpdp->max_size) < size) {
             INC_CC(allctr->cpool.stat.skip_size);
         }
-        else if ((exp & (ERTS_CRR_ALCTR_FLG_IN_POOL |
-                         ERTS_CRR_ALCTR_FLG_BUSY))
-                 == ERTS_CRR_ALCTR_FLG_IN_POOL) {
+        else if ((exp & (ERTS_CRR_ALCTR_FLG_MASK)) == ERTS_CRR_ALCTR_FLG_IN_POOL) {
 	    erts_aint_t act;
 	    /* Try to fetch it... */
 	    act = erts_smp_atomic_cmpxchg_mb(&crr->allctr,
@@ -3418,6 +3405,15 @@ cpool_fetch(Allctr_t *allctr, UWord size)
 
         if (exp & ERTS_CRR_ALCTR_FLG_BUSY) {
             INC_CC(allctr->cpool.stat.skip_busy);
+        }
+        else if (exp & ERTS_CRR_ALCTR_FLG_HOMECOMING) {
+            /*
+             *  We skip HOMECOMING to avoid cases when we need to send it
+             *  home yet again, before owner has removed it from dd-queue.
+             *
+             *  ToDo: We could accept our own homecoming.
+             */
+            INC_CC(allctr->cpool.stat.skip_homecoming);
         }
         else { 
             INC_CC(allctr->cpool.stat.skip_race);
@@ -3597,7 +3593,6 @@ static ERTS_INLINE void
 cpool_init_carrier_data(Allctr_t *allctr, Carrier_t *crr)
 {
     crr->cpool.homecoming_dd_block.bhdr = HOMECOMING_MBC_BLK_HDR;
-    erts_atomic_init_nob(&crr->cpool.is_homecoming, 0);
     erts_atomic_init_nob(&crr->cpool.next, ERTS_AINT_NULL);
     erts_atomic_init_nob(&crr->cpool.prev, ERTS_AINT_NULL);
     crr->cpool.orig_allctr = allctr;
@@ -3663,15 +3658,13 @@ abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
 static void
 enqueue_homecoming(Allctr_t* allctr, Carrier_t* crr)
 {
-    if (!erts_atomic_xchg_relb(&crr->cpool.is_homecoming, 1)) {
-        Allctr_t* orig_allctr = crr->cpool.orig_allctr;
-        const int cinit = orig_allctr->dd.ix - allctr->dd.ix;
-        Block_t* dd_blk = &crr->cpool.homecoming_dd_block;
+    Allctr_t* orig_allctr = crr->cpool.orig_allctr;
+    const int cinit = orig_allctr->dd.ix - allctr->dd.ix;
+    Block_t* dd_blk = &crr->cpool.homecoming_dd_block;
 
-        ASSERT(dd_blk->bhdr == HOMECOMING_MBC_BLK_HDR);
-        if (ddq_enqueue(&orig_allctr->dd.q, BLK2UMEM(dd_blk), cinit))
-            erts_alloc_notify_delayed_dealloc(orig_allctr->ix);
-    }
+    ASSERT(dd_blk->bhdr == HOMECOMING_MBC_BLK_HDR);
+    if (ddq_enqueue(&orig_allctr->dd.q, BLK2UMEM(dd_blk), cinit))
+        erts_alloc_notify_delayed_dealloc(orig_allctr->ix);
 }
 
 static void
@@ -4204,17 +4197,19 @@ destroy_carrier(Allctr_t *allctr, Block_t *blk, Carrier_t **busy_pcrr_pp)
 	if (busy_pcrr_pp && *busy_pcrr_pp) {
             erts_aint_t iallctr = erts_smp_atomic_read_nob(&crr->allctr);
 	    ERTS_ALC_CPOOL_ASSERT(*busy_pcrr_pp == crr);
-            ERTS_ALC_CPOOL_ASSERT(iallctr == (((erts_aint_t) allctr)
-                                              | ERTS_CRR_ALCTR_FLG_IN_POOL
-                                              | ERTS_CRR_ALCTR_FLG_BUSY));
+            ERTS_ALC_CPOOL_ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING)
+                                  == (((erts_aint_t) allctr)
+                                      | ERTS_CRR_ALCTR_FLG_IN_POOL
+                                      | ERTS_CRR_ALCTR_FLG_BUSY));
             ERTS_ALC_CPOOL_ASSERT(allctr == crr->cpool.orig_allctr);
 
             *busy_pcrr_pp = NULL;
 	    erts_smp_atomic_set_nob(&crr->allctr,
-                                    (iallctr & ~ERTS_CRR_ALCTR_FLG_MASK));
+                                    (iallctr & ~(ERTS_CRR_ALCTR_FLG_IN_POOL |
+                                                 ERTS_CRR_ALCTR_FLG_BUSY)));
 	    cpool_delete(allctr, allctr, crr);
 
-            if (erts_atomic_read_nob(&crr->cpool.is_homecoming)) {
+            if (iallctr & ERTS_CRR_ALCTR_FLG_HOMECOMING) {
                 /*
                  * Carrier was abandoned earlier by other thread and
                  * is still waiting for us in dd-queue.

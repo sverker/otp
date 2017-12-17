@@ -389,7 +389,6 @@ typedef struct {
 #if !MBC_ABLK_OFFSET_BITS
     ErtsAllctrDDBlock_t dd;
 #endif
-    erts_atomic_t is_homecoming;
     erts_atomic_t next;
     erts_atomic_t prev;
     Allctr_t *orig_allctr;      /* read-only while carrier is alive */
