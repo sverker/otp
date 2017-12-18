@@ -2043,34 +2043,48 @@ handle_delayed_dealloc(Allctr_t *allctr,
 	    Carrier_t *crr = ErtsContainerStruct(blk, Carrier_t,
                                                  cpool.homecoming_dd_block);
             Block_t* first_blk = MBC_TO_FIRST_BLK(allctr, crr);
+            erts_aint_t iallctr;
 
             ERTS_ALC_CPOOL_ASSERT(BLK_TO_MBC(first_blk) == crr);
 	    ERTS_ALC_CPOOL_ASSERT(ERTS_ALC_IS_CPOOL_ENABLED(allctr));
 	    ERTS_ALC_CPOOL_ASSERT(allctr == crr->cpool.orig_allctr);
 
+            iallctr = erts_smp_atomic_read_nob(&crr->allctr);
+            ASSERT(iallctr & ERTS_CRR_ALCTR_FLG_HOMECOMING);
+        retry:
+            if ((iallctr & ~ERTS_CRR_ALCTR_FLG_MASK) == (erts_aint_t)allctr) {
+                if (iallctr & ERTS_CRR_ALCTR_FLG_IN_POOL) {
+                    erts_aint_t exp = iallctr;
+                    erts_aint_t want = iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING;
 
-            if (IS_FREE_LAST_MBC_BLK(first_blk)) {
-                ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr) ==
-                                      ((erts_aint_t)allctr |
-                                       ERTS_CRR_ALCTR_FLG_HOMECOMING));
-                erts_smp_atomic_set_nob(&crr->allctr, (erts_aint_t)allctr);
-                dealloc_my_carrier(allctr, crr);
-            }
-            else if (crr->cpool.state == MBC_HOME) {
-                ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr) ==
-                                      ((erts_aint_t)allctr |
-                                       ERTS_CRR_ALCTR_FLG_HOMECOMING));
-                erts_smp_atomic_set_nob(&crr->allctr, (erts_aint_t)allctr);
+                    iallctr = erts_smp_atomic_cmpxchg_nob(&crr->allctr,
+                                                          want,
+                                                          exp);
+                    if (iallctr != exp)
+                        goto retry;
+
+                    unlink_abandoned_carrier(crr);
+                    poolify_my_carrier(allctr, crr);
+                }
+                else {
+                    erts_smp_atomic_set_nob(&crr->allctr, (erts_aint_t)allctr);
+                    if (IS_FREE_LAST_MBC_BLK(first_blk)) {
+                        dealloc_my_carrier(allctr, crr);
+                    }
+                    else {
+                        ASSERT(crr->cpool.state == MBC_HOME);
+                    }
+                }
             }
             else {
-                ERTS_ALC_CPOOL_ASSERT(erts_smp_atomic_read_nob(&crr->allctr) ==
-                                      ((erts_aint_t)allctr |
-                                       ERTS_CRR_ALCTR_FLG_IN_POOL |
-                                       ERTS_CRR_ALCTR_FLG_HOMECOMING));
-                erts_smp_atomic_set_nob(&crr->allctr, ((erts_aint_t)allctr |
-                                                       ERTS_CRR_ALCTR_FLG_IN_POOL));
-                unlink_abandoned_carrier(crr);
-                poolify_my_carrier(allctr, crr);
+                erts_aint_t exp = iallctr;
+                erts_aint_t want = iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING;
+
+                iallctr = erts_smp_atomic_cmpxchg_nob(&crr->allctr,
+                                                      want,
+                                                      exp);
+                if (iallctr != exp)
+                    goto retry;
             }
 	}
 	else {
@@ -3045,7 +3059,7 @@ static void
 cpool_insert(Allctr_t *allctr, Carrier_t *crr)
 {
     ErtsAlcCPoolData_t *cpd1p, *cpd2p;
-    erts_aint_t val, iallctr;
+    erts_aint_t val;
     ErtsAlcCPoolData_t *sentinel = &carrier_pool[allctr->alloc_no].sentinel;
     Allctr_t *orig_allctr = crr->cpool.orig_allctr;
 
@@ -3118,17 +3132,6 @@ cpool_insert(Allctr_t *allctr, Carrier_t *crr)
     cpool_set_mod_marked(&cpd2p->prev,
 			 (erts_aint_t) &crr->cpool,
 			 (erts_aint_t) cpd1p);
-
-    if (allctr == orig_allctr) {
-        /* preserve HOMECOMING flag */
-        iallctr = erts_smp_atomic_read_nob(&crr->allctr);
-        ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING) == (erts_aint_t)allctr);
-    }
-    else {
-        ASSERT(erts_smp_atomic_read_nob(&crr->allctr) == (erts_aint_t)allctr);
-        iallctr = (erts_aint_t)orig_allctr | ERTS_CRR_ALCTR_FLG_HOMECOMING;
-    }
-    erts_smp_atomic_set_wb(&crr->allctr, iallctr | ERTS_CRR_ALCTR_FLG_IN_POOL);
 
     LTTNG3(carrier_pool_put, ERTS_ALC_A2AD(allctr->alloc_no), allctr->ix, CARRIER_SZ(crr));
 }
@@ -3638,6 +3641,7 @@ static void
 abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
 {
     erts_aint_t max_size;
+    erts_aint_t iallctr;
 
     STAT_MBC_ABANDON(allctr, crr);
 
@@ -3649,10 +3653,25 @@ abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
     erts_atomic_set_nob(&crr->cpool.max_size, max_size);
     cpool_insert(allctr, crr);
 
-    if (crr->cpool.orig_allctr == allctr)
+
+    iallctr = erts_smp_atomic_read_nob(&crr->allctr);
+    if (allctr == crr->cpool.orig_allctr) {
+        /* preserve HOMECOMING flag */
+        ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING) == (erts_aint_t)allctr);
+        erts_smp_atomic_set_wb(&crr->allctr, iallctr | ERTS_CRR_ALCTR_FLG_IN_POOL);
         poolify_my_carrier(allctr, crr);
-    else
-        enqueue_homecoming(allctr, crr);
+    }
+    else {
+        ASSERT((iallctr & ~ERTS_CRR_ALCTR_FLG_HOMECOMING) == (erts_aint_t)allctr);
+        iallctr = ((erts_aint_t)crr->cpool.orig_allctr |
+                   ERTS_CRR_ALCTR_FLG_HOMECOMING |
+                   ERTS_CRR_ALCTR_FLG_IN_POOL);
+        if (!(erts_smp_atomic_xchg_wb(&crr->allctr, iallctr)
+              & ERTS_CRR_ALCTR_FLG_HOMECOMING)) {
+
+            enqueue_homecoming(allctr, crr);
+        }
+    }
 }
 
 static void
