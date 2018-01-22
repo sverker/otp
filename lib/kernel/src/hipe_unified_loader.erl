@@ -503,7 +503,7 @@ patch_call([], _, _, _, _) ->
 patch_bif_call_list([Offset|Offsets], BaseAddress, BifAddress, Trampoline) ->
   CallAddress = BaseAddress+Offset,
   ?ASSERT(assert_local_patch(CallAddress)),
-  patch_call_insn(CallAddress, BifAddress, Trampoline),
+  patch_call_insn(CallAddress, BifAddress, Trampoline, bif),
   patch_bif_call_list(Offsets, BaseAddress, BifAddress, Trampoline);
 patch_bif_call_list([], _, _, _) -> ok.
 
@@ -511,13 +511,13 @@ patch_mfa_call_list([Offset|Offsets], BaseAddress, DestMFA, DestAddress, FunDefs
   CallAddress = BaseAddress+Offset,
   add_ref(DestMFA, CallAddress, FunDefs, 'call', Trampoline, RemoteOrLocal),
   ?ASSERT(assert_local_patch(CallAddress)),
-  patch_call_insn(CallAddress, DestAddress, Trampoline),
+  patch_call_insn(CallAddress, DestAddress, Trampoline, RemoteOrLocal),
   patch_mfa_call_list(Offsets, BaseAddress, DestMFA, DestAddress, FunDefs, RemoteOrLocal, Trampoline);
 patch_mfa_call_list([], _, _, _, _, _, _) -> ok.
 
-patch_call_insn(CallAddress, DestAddress, Trampoline) ->
+patch_call_insn(CallAddress, DestAddress, Trampoline, DestType) ->
   ?ASSERT(assert_local_patch(CallAddress)),
-  hipe_bifs:patch_call(CallAddress, DestAddress, Trampoline).
+  hipe_bifs:patch_call(CallAddress, DestAddress, Trampoline, DestType).
 
 %% ____________________________________________________________________
 %% 

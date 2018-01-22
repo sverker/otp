@@ -79,7 +79,7 @@ bif hipe_bifs:get_rts_param/1
 #bif hipe_bifs:tuple_to_float/1
 
 bif hipe_bifs:patch_insn/3
-bif hipe_bifs:patch_call/3
+bif hipe_bifs:patch_call/4
 
 bif hipe_bifs:add_ref/2
 

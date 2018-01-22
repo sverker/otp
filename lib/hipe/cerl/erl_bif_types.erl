@@ -1067,8 +1067,8 @@ type(hipe_bifs, merge_term, 1, Xs, Opaques) ->
   strict(hipe_bifs, merge_term, 1, Xs, fun ([X]) -> X end, Opaques);
 type(hipe_bifs, nstack_used_size, 0, _, _Opaques) ->
   t_non_neg_fixnum();
-type(hipe_bifs, patch_call, 3, Xs, Opaques) ->
-  strict(hipe_bifs, patch_call, 3, Xs, fun (_) -> t_nil() end, Opaques);
+type(hipe_bifs, patch_call, 4, Xs, Opaques) ->
+  strict(hipe_bifs, patch_call, 4, Xs, fun (_) -> t_nil() end, Opaques);
 type(hipe_bifs, patch_insn, 3, Xs, Opaques) ->
   strict(hipe_bifs, patch_insn, 3, Xs, fun (_) -> t_nil() end, Opaques);
 type(hipe_bifs, primop_address, 1, Xs, Opaques) ->
@@ -2485,8 +2485,8 @@ arg_types(hipe_bifs, merge_term, 1) ->
   [t_any()];
 arg_types(hipe_bifs, nstack_used_size, 0) ->
   [];
-arg_types(hipe_bifs, patch_call, 3) ->
-  [t_integer(), t_integer(), t_trampoline()];
+arg_types(hipe_bifs, patch_call, 4) ->
+  [t_integer(), t_integer(), t_trampoline(), t_atom()];
 arg_types(hipe_bifs, patch_insn, 3) ->
   [t_integer(), t_integer(), t_insn_type()];
 arg_types(hipe_bifs, primop_address, 1) ->

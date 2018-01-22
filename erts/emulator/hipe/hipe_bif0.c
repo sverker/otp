@@ -1823,7 +1823,8 @@ void hipe_redirect_to_module(Module* modp)
 #else
                 void* trampoline = NULL;
 #endif
-		res = hipe_patch_call(ref->address, p->remote_address, trampoline);
+		res = hipe_patch_call(ref->address, p->remote_address, trampoline,
+                                      am_remote);
             }
 	    if (res)
 		fprintf(stderr, "%s: patch failed", __FUNCTION__);
@@ -1897,7 +1898,7 @@ BIF_RETTYPE hipe_bifs_patch_insn_3(BIF_ALIST_3)
     BIF_RET(NIL);
 }
 
-BIF_RETTYPE hipe_bifs_patch_call_3(BIF_ALIST_3)
+BIF_RETTYPE hipe_bifs_patch_call_4(BIF_ALIST_4)
 {
     Uint *callAddress, *destAddress, *trampAddress;
 
@@ -1914,7 +1915,7 @@ BIF_RETTYPE hipe_bifs_patch_call_3(BIF_ALIST_3)
 	if (!trampAddress)
 	    BIF_ERROR(BIF_P, BADARG);
     }
-    if (hipe_patch_call(callAddress, destAddress, trampAddress))
+    if (hipe_patch_call(callAddress, destAddress, trampAddress, BIF_ARG_4))
 	BIF_ERROR(BIF_P, BADARG);
     BIF_RET(NIL);
 }

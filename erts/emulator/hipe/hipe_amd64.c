@@ -70,7 +70,8 @@ int hipe_patch_insn(void *address, Uint64 value, Eterm type)
     return 0;
 }
 
-int hipe_patch_call(void *callAddress, void *destAddress, void *trampoline)
+int hipe_patch_call(void *callAddress, void *destAddress, void *trampoline,
+                    Eterm destType)
 {
     Sint64 destOffset = (Sint64)destAddress - (Sint64)callAddress - 4;
 
