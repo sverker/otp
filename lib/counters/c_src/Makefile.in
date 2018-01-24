@@ -1,0 +1,163 @@
+#
+# %CopyrightBegin%
+#
+# Copyright Ericsson AB 2018. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# %CopyrightEnd%
+#
+include $(ERL_TOP)/make/target.mk
+include $(ERL_TOP)/make/$(TARGET)/otp.mk
+include $(ERL_TOP)/make/$(TARGET)/otp_ded.mk
+
+# ----------------------------------------------------
+# Application version
+# ----------------------------------------------------
+include ../vsn.mk
+VSN=$(COUNTERS_VSN)
+
+# ----------------------------------------------------
+# The following variables differ between systems.
+# Set by configure.
+# ----------------------------------------------------
+CC = $(DED_CC)
+LD = $(DED_LD)
+SHELL = /bin/sh
+LIBS = $(DED_LIBS)
+LDFLAGS += $(DED_LDFLAGS)
+CFLAGS = $(DED_CFLAGS)
+
+
+INCLUDES = $(DED_INCLUDES)
+
+ifeq ($(TYPE),debug)
+TYPEMARKER = .debug
+TYPE_FLAGS = $(subst -O3,,$(subst -O2,,$(CFLAGS))) -DDEBUG
+else
+ifeq ($(TYPE),valgrind)
+TYPEMARKER = .valgrind
+TYPE_FLAGS = $(subst -O3,,$(subst -O2,,$(CFLAGS))) -DVALGRIND
+else
+TYPEMARKER =
+TYPE_FLAGS = $(CFLAGS)
+endif
+endif
+
+# ----------------------------------------------------
+# Release directory specification
+# ----------------------------------------------------
+RELSYSDIR = $(RELEASE_PATH)/lib/counters-$(VSN)
+
+# ----------------------------------------------------
+# Misc Macros
+# ----------------------------------------------------
+COUNTERS_OBJS = $(OBJDIR)/counters$(TYPEMARKER).o
+NIF_MAKEFILE = $(PRIVDIR)/Makefile
+COUNTERS_STATIC_OBJS = $(OBJDIR)/counters_static$(TYPEMARKER).o
+NIF_ARCHIVE = $(LIBDIR)/counters$(TYPEMARKER).a
+
+TEST_ENGINE_OBJS = $(OBJDIR)/otp_test_engine$(TYPEMARKER).o
+
+ifeq ($(findstring win32,$(TARGET)), win32)
+NIF_LIB = $(LIBDIR)/counters$(TYPEMARKER).dll
+else
+NIF_LIB = $(LIBDIR)/counters$(TYPEMARKER).so
+endif
+
+ifeq ($(HOST_OS),)
+HOST_OS := $(shell $(ERL_TOP)/erts/autoconf/config.guess)
+endif
+
+ifeq ($(USING_VC),yes)
+AR_OUT=-out:
+AR_FLAGS=
+else
+AR_OUT=
+ifeq ($(V),0)
+AR_FLAGS=rc
+else
+AR_FLAGS=rcv
+endif
+endif
+
+ifndef RANLIB
+RANLIB=true
+endif
+
+ALL_CFLAGS = $(TYPE_FLAGS) $(EXTRA_FLAGS) $(INCLUDES)
+ALL_STATIC_CFLAGS = $(DED_STATIC_CFLAGS) $(INCLUDES)
+
+# ----------------------------------------------------
+# Targets
+# ----------------------------------------------------
+
+_create_dirs := $(shell mkdir -p $(OBJDIR) $(LIBDIR))
+
+debug opt valgrind: $(NIF_LIB) $(CALLBACK_LIB) $(TEST_ENGINE_LIB)
+
+static_lib: $(NIF_ARCHIVE)
+
+$(OBJDIR)/%$(TYPEMARKER).o: %.c
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -c -o $@ $(ALL_CFLAGS) $<
+
+$(LIBDIR)/counters$(TYPEMARKER).so: $(COUNTERS_OBJS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(OBJDIR)/%_static$(TYPEMARKER).o: %.c
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -c -o $@ $(ALL_STATIC_CFLAGS) $<
+
+$(LIBDIR)/counters$(TYPEMARKER).a: $(COUNTERS_STATIC_OBJS)
+	$(V_AR) $(AR_FLAGS) $(AR_OUT)$@ $(COUNTERS_STATIC_OBJS)
+	$(V_RANLIB) $@
+
+$(LIBDIR)/counters$(TYPEMARKER).dll: $(COUNTERS_OBJS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@ $(COUNTERS_OBJS)
+
+
+clean:
+ifeq ($(findstring win32,$(TARGET)), win32)
+	rm -f $(LIBDIR)/counters.dll
+	rm -f $(LIBDIR)/counters.debug.dll
+else
+	rm -f $(LIBDIR)/counters.so
+	rm -f $(LIBDIR)/counters.debug.so
+	rm -f $(LIBDIR)/counters.valgrind.so
+endif
+	rm -f $(OBJDIR)/counters.o
+	rm -f $(OBJDIR)/counters_static.o
+	rm -f $(OBJDIR)/counters.debug.o
+	rm -f $(OBJDIR)/counters_static.debug.o
+	rm -f $(OBJDIR)/counters.valgrind.o
+	rm -f $(OBJDIR)/counters_static.valgrind.o
+	rm -f core *~
+
+docs:
+
+# ----------------------------------------------------
+# Release Target
+# ----------------------------------------------------
+include $(ERL_TOP)/make/otp_release_targets.mk
+
+release_spec: opt
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv/obj"
+	$(INSTALL_DIR) "$(RELSYSDIR)/priv/lib"
+	$(INSTALL_DATA) $(NIF_MAKEFILE) "$(RELSYSDIR)/priv/obj"
+	$(INSTALL_PROGRAM) $(COUNTERS_OBJS) "$(RELSYSDIR)/priv/obj"
+	$(INSTALL_PROGRAM) $(NIF_LIB) "$(RELSYSDIR)/priv/lib"
+
+release_docs_spec:

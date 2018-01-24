@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE appref SYSTEM "appref.dtd">
+
+<appref>
+  <header>
+    <copyright>
+      <year>2018</year>
+      <holder>Ericsson AB, All Rights Reserved</holder>
+    </copyright>
+    <legalnotice>
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+ 
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+  The Initial Developer of the Original Code is Ericsson AB.
+    </legalnotice>
+
+    <title>counters</title>
+    <file>counters_app.xml</file>
+  </header>
+  <app>counters</app>
+  <appsummary>The Counters Application</appsummary>
+  <description>
+    <p>The purpose of the Counters application is to provide an Erlang API
+    to mutable high performance counters.</p>
+  </description>
+
+  <section>
+    <title>DEPENDENCIES</title>
+
+    <p>The current <c>counters</c> implementation uses NIFs to interface
+    atomic operations provided by an internal ERTS interface <c>ethread.h</c>.</p>
+
+  </section>
+
+  <section>
+    <title>SEE ALSO</title>
+    <p>application(3)</p>
+  </section>
+</appref>
+
