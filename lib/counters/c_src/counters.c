@@ -28,6 +28,7 @@
 
 #include <erl_nif.h>
 
+#define ETHR_TRY_INLINE_FUNCS
 #include <ethread.h>
 
 #if SIZEOF_VOID_P != 8
