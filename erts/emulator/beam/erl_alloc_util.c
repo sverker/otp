@@ -2214,6 +2214,7 @@ static ERTS_INLINE void
 check_abandon_carrier(Allctr_t *allctr, Block_t *fblk, Carrier_t **busy_pcrr_pp)
 {
     Carrier_t *crr;
+    UWord ncrr_in_pool, largest_fblk;
 
     if (busy_pcrr_pp && *busy_pcrr_pp)
 	return;
@@ -2225,8 +2226,7 @@ check_abandon_carrier(Allctr_t *allctr, Block_t *fblk, Carrier_t **busy_pcrr_pp)
     if (--allctr->cpool.check_limit_count <= 0)
 	set_new_allctr_abandon_limit(allctr);
 
-    if (!erts_thr_progress_is_managed_thread())
-	return;
+    ASSERT(erts_thr_progress_is_managed_thread());
 
     if (allctr->cpool.disable_abandon)
 	return;
@@ -2234,6 +2234,9 @@ check_abandon_carrier(Allctr_t *allctr, Block_t *fblk, Carrier_t **busy_pcrr_pp)
     if (allctr->mbcs.blocks.curr.size > allctr->cpool.abandon_limit)
 	return;
 
+    ncrr_in_pool = erts_atomic_read_nob(&allctr->cpool.stat.no_carriers);
+    if (ncrr_in_pool >= allctr->cpool.in_pool_limit)
+        return;
 
     crr = FBLK_TO_MBC(fblk);
 
@@ -2244,9 +2247,14 @@ check_abandon_carrier(Allctr_t *allctr, Block_t *fblk, Carrier_t **busy_pcrr_pp)
 	return;
 
     if (crr->cpool.thr_prgr != ERTS_THR_PRGR_INVALID
-	&& !erts_thr_progress_has_reached(crr->cpool.thr_prgr))
-	return;
+        && !erts_thr_progress_has_reached(crr->cpool.thr_prgr))
+        return;
 
+    largest_fblk = allctr->largest_fblk_in_mbc(allctr, crr);
+    if (largest_fblk < allctr->cpool.fblk_min_limit)
+        return;
+
+    erts_atomic_set_nob(&crr->cpool.max_size, largest_fblk);
     abandon_carrier(allctr, crr);
 }
 
@@ -3670,8 +3678,6 @@ set_new_allctr_abandon_limit(Allctr_t *allctr)
 static void
 abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
 {
-    erts_aint_t max_size;
-
     STAT_MBC_CPOOL_INSERT(allctr, crr);
 
     unlink_carrier(&allctr->mbc_list, crr);
@@ -3680,9 +3686,6 @@ abandon_carrier(Allctr_t *allctr, Carrier_t *crr)
     }
 
     allctr->remove_mbc(allctr, crr);
-
-    max_size = (erts_aint_t) allctr->largest_fblk_in_mbc(allctr, crr);
-    erts_atomic_set_nob(&crr->cpool.max_size, max_size);
 
     cpool_insert(allctr, crr);
 
@@ -4267,7 +4270,6 @@ static struct {
     Eterm e;
     Eterm t;
     Eterm ramv;
-    Eterm sbct;
 #if HAVE_ERTS_MSEG
     Eterm asbcst;
     Eterm rsbcst;
@@ -4284,6 +4286,8 @@ static struct {
     Eterm smbcs;
     Eterm mbcgs;
     Eterm acul;
+    Eterm acnl;
+    Eterm acfml;
 
 #if HAVE_ERTS_MSEG
     Eterm mmc;
@@ -4357,7 +4361,6 @@ init_atoms(Allctr_t *allctr)
 	AM_INIT(e);
 	AM_INIT(t);
 	AM_INIT(ramv);
-	AM_INIT(sbct);
 #if HAVE_ERTS_MSEG
 	AM_INIT(asbcst);
 	AM_INIT(rsbcst);
@@ -4374,6 +4377,8 @@ init_atoms(Allctr_t *allctr)
 	AM_INIT(smbcs);
 	AM_INIT(mbcgs);
 	AM_INIT(acul);
+        AM_INIT(acnl);
+        AM_INIT(acfml);
 
 #if HAVE_ERTS_MSEG
 	AM_INIT(mmc);
@@ -4933,7 +4938,7 @@ info_options(Allctr_t *allctr,
 	     Uint *szp)
 {
     Eterm res = THE_NON_VALUE;
-    int acul;
+    UWord acul, acnl, acfml;
 
     if (!allctr) {
 	if (print_to_p)
@@ -4947,8 +4952,10 @@ info_options(Allctr_t *allctr,
 
 #ifdef ERTS_SMP
     acul = allctr->cpool.util_limit;
+    acnl = allctr->cpool.in_pool_limit;
+    acfml = allctr->cpool.fblk_min_limit;
 #else
-    acul = 0;
+    acul = 0; acnl = 0; acfml = 0;
 #endif
 
     if (print_to_p) {
@@ -4977,7 +4984,7 @@ info_options(Allctr_t *allctr,
 		   "option lmbcs: %beu\n"
 		   "option smbcs: %beu\n"
 		   "option mbcgs: %beu\n"
-		   "option acul: %d\n",
+		   "option acul: %bpu\n",
 		   topt,
 		   allctr->ramv ? "true" : "false",
 		   allctr->sbc_threshold,
@@ -5002,9 +5009,15 @@ info_options(Allctr_t *allctr,
 				  hpp, szp);
 
     if (hpp || szp) {
+        add_2tup(hpp, szp, &res,
+                 am.acfml,
+                 bld_uint(hpp, szp, acfml));
+        add_2tup(hpp, szp, &res,
+                 am.acnl,
+                 bld_uint(hpp, szp, acnl));
 	add_2tup(hpp, szp, &res,
 		 am.acul,
-		 bld_uint(hpp, szp, (UWord) acul));
+		 bld_uint(hpp, szp, acul));
 	add_2tup(hpp, szp, &res,
 		 am.mbcgs,
 		 bld_uint(hpp, szp, allctr->mbc_growth_stages));
@@ -5040,7 +5053,7 @@ info_options(Allctr_t *allctr,
 		 bld_uint(hpp, szp, allctr->mseg_opt.abs_shrink_th));
 #endif
 	add_2tup(hpp, szp, &res,
-		 am.sbct,
+		 am_sbct,
 		 bld_uint(hpp, szp, allctr->sbc_threshold));
 	add_2tup(hpp, szp, &res, am.ramv, allctr->ramv ? am_true : am_false);
 	add_2tup(hpp, szp, &res, am.t, (allctr->t ? am_true : am_false));
@@ -6003,6 +6016,37 @@ erts_alcu_realloc_mv_thr_pref(ErtsAlcType_t type, void *extra,
 
 #endif
 
+static Uint adjust_sbct(Allctr_t* allctr, Uint sbct)
+{
+#ifndef ARCH_64
+    if (sbct > 0) {
+	Uint max_mbc_block_sz = UNIT_CEILING(sbct - 1 + ABLK_HDR_SZ);
+	if (max_mbc_block_sz + UNIT_FLOOR(allctr->min_block_size - 1) > MBC_ABLK_SZ_MASK
+	    || max_mbc_block_sz < sbct) { /* wrap around */
+	    /*
+	     * By limiting sbc_threshold to (hard limit - min_block_size)
+	     * we avoid having to split off free "residue blocks"
+	     * smaller than min_block_size.
+	     */
+	    max_mbc_block_sz = MBC_ABLK_SZ_MASK - UNIT_FLOOR(allctr->min_block_size - 1);
+	    sbct = max_mbc_block_sz - ABLK_HDR_SZ + 1;
+	}
+    }
+#endif
+    return sbct;
+}
+
+int erts_alcu_try_set_dyn_param(Allctr_t* allctr, Eterm param, Uint value)
+{
+    const Uint MIN_DYN_SBCT = 4000;  /* a lame catastrophe prevention */
+
+    if (param == am_sbct && value >= MIN_DYN_SBCT) {
+        allctr->sbc_threshold = adjust_sbct(allctr, value);
+        return 1;
+    }
+    return 0;
+}
+
 /* ------------------------------------------------------------------------- */
 
 int
@@ -6106,25 +6150,19 @@ erts_alcu_start(Allctr_t *allctr, AllctrInit_t *init)
     erts_atomic_init_nob(&allctr->cpool.stat.carriers_size, 0);
     erts_atomic_init_nob(&allctr->cpool.stat.no_carriers, 0);
     allctr->cpool.check_limit_count = ERTS_ALC_CPOOL_CHECK_LIMIT_COUNT;
-    allctr->cpool.util_limit = init->ts ? 0 : init->acul;
-#endif
-
-    allctr->sbc_threshold		= init->sbct;
-#ifndef ARCH_64
-    if (allctr->sbc_threshold > 0) {
-	Uint max_mbc_block_sz = UNIT_CEILING(allctr->sbc_threshold - 1 + ABLK_HDR_SZ); 
-	if (max_mbc_block_sz + UNIT_FLOOR(allctr->min_block_size - 1) > MBC_ABLK_SZ_MASK
-	    || max_mbc_block_sz < allctr->sbc_threshold) { /* wrap around */
-	    /* 
-	     * By limiting sbc_threshold to (hard limit - min_block_size)
-	     * we avoid having to split off free "residue blocks"
-	     * smaller than min_block_size.
-	     */
-	    max_mbc_block_sz = MBC_ABLK_SZ_MASK - UNIT_FLOOR(allctr->min_block_size - 1);
-	    allctr->sbc_threshold = max_mbc_block_sz - ABLK_HDR_SZ + 1;
-	}
+    if (!init->ts && init->acul && init->acnl) {
+        allctr->cpool.util_limit = init->acul;
+        allctr->cpool.in_pool_limit = init->acnl;
+        allctr->cpool.fblk_min_limit = init->acfml;
+    }
+    else {
+        allctr->cpool.util_limit = 0;
+        allctr->cpool.in_pool_limit = 0;
+        allctr->cpool.fblk_min_limit = 0;
     }
 #endif
+
+    allctr->sbc_threshold = adjust_sbct(allctr, init->sbct);
 
 #if HAVE_ERTS_MSEG
     if (allctr->mseg_opt.abs_shrink_th > ~((UWord) 0) / 100)
@@ -6193,6 +6231,9 @@ erts_alcu_start(Allctr_t *allctr, AllctrInit_t *init)
         allctr->mseg_realloc = &erts_alcu_mseg_realloc;
         allctr->mseg_dealloc = &erts_alcu_mseg_dealloc;
     }
+
+    allctr->try_set_dyn_param = &erts_alcu_try_set_dyn_param;
+
     /* If a custom carrier alloc function is specified, make sure it's used */
     if (init->mseg_alloc && !init->sys_alloc) {
         allctr->crr_set_flgs = CFLG_FORCE_MSEG;

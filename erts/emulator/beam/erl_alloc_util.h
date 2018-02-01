@@ -63,7 +63,9 @@ typedef struct {
     UWord lmbcs;
     UWord smbcs;
     UWord mbcgs;
-    int acul;
+    UWord acul;
+    UWord acnl;
+    UWord acfml;
 
     void *fix;
     size_t *fix_type_size;
@@ -118,6 +120,8 @@ typedef struct {
     1024*1024,		/* (bytes)  smbcs:  smallest mbc size            */\
     10,			/* (amount) mbcgs:  mbc growth stages            */\
     0,			/* (%)      acul:  abandon carrier utilization limit */\
+    1000,		/* (amount) acnl:  abandoned carriers number limit */\
+    0,			/* (bytes)  acfml: abandoned carrier fblk min limit */\
     /* --- Data not options -------------------------------------------- */\
     NULL,		/* (ptr)    fix                                  */\
     NULL		/* (ptr)    fix_type_size                        */\
@@ -151,6 +155,8 @@ typedef struct {
     128*1024,		/* (bytes)  smbcs:  smallest mbc size            */\
     10,			/* (amount) mbcgs:  mbc growth stages            */\
     0,			/* (%)      acul:  abandon carrier utilization limit */\
+    1000,		/* (amount) acnl:  abandoned carriers number limit */\
+    0,			/* (bytes)  acfml: abandoned carrier fblk min limit */\
     /* --- Data not options -------------------------------------------- */\
     NULL,		/* (ptr)    fix                                  */\
     NULL		/* (ptr)    fix_type_size                        */\
@@ -223,6 +229,8 @@ void  erts_alcu_literal_32_sys_dealloc(Allctr_t*, void *ptr, Uint size, int supe
 #ifdef ERTS_ENABLE_LOCK_COUNT
 void erts_lcnt_update_allocator_locks(int enable);
 #endif
+
+int erts_alcu_try_set_dyn_param(Allctr_t*, Eterm param, Uint value);
 
 #endif /* !ERL_ALLOC_UTIL__ */
 
@@ -567,7 +575,9 @@ struct Allctr_t_ {
 	UWord		abandon_limit;
 	int		disable_abandon;
 	int		check_limit_count;
-	int		util_limit;
+	UWord		util_limit;       /* acul */
+        UWord           in_pool_limit;    /* acnl */
+        UWord           fblk_min_limit;   /* acmfl */
 	struct {
 	    erts_atomic_t	blocks_size;
 	    erts_atomic_t	no_blocks;
@@ -606,6 +616,8 @@ struct Allctr_t_ {
     void*               (*sys_alloc)(Allctr_t *allctr, Uint *size_p, int superalign);
     void*               (*sys_realloc)(Allctr_t *allctr, void *ptr, Uint *size_p, Uint old_size, int superalign);
     void                (*sys_dealloc)(Allctr_t *allctr, void *ptr, Uint size, int superalign);
+
+    int                 (*try_set_dyn_param)(Allctr_t*, Eterm param, Uint value);
 
     void		(*init_atoms)		(void);
 
