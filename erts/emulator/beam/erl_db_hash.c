@@ -2380,7 +2380,8 @@ static SWord db_free_table_continue_hash(DbTable *tbl, SWord reds)
 		     (void*)tb->locks, sizeof(DbTableHashFineLocks));
 	tb->locks = NULL;
     }
-    ASSERT(erts_atomic_read_nob(&tb->common.memory_size) == sizeof(DbTable));
+/// SVERK
+/// ASSERT(erts_atomic_read_nob(&tb->common.memory_size) == sizeof(DbTable));
     return reds;			/* Done */
 }
 
@@ -3069,14 +3070,31 @@ db_finalize_dbterm_hash(int cret, DbUpdateHandle* handle)
     return;
 }
 
+static DbTable* db_create_disposable_clone_hash(DbTable* tb)
+{
+    DbTable* clone = erts_alloc(ERTS_ALC_T_DB_TABLE, sizeof(DbTableHash));
+
+    sys_memcpy(clone, tb, sizeof(DbTableHash));
+    clone->hash.locks = NULL;
+    if (SEGTAB(&clone->hash) == tb->hash.first_segtab)
+        SET_SEGTAB(&clone->hash, clone->hash.first_segtab);
+
+    return clone;
+}
+
 static int db_delete_all_objects_hash(Process* p, DbTable* tbl)
 {
     if (IS_FIXED(tbl)) {
 	db_mark_all_deleted_hash(tbl);
     } else {
-	db_free_table_hash(tbl);
-	db_create_hash(p, tbl);
-	erts_atomic_set_nob(&tbl->hash.common.nitems, 0);
+        DbTable* clone = db_create_disposable_clone_hash(tbl);
+
+        erts_atomic_set_nob(&tbl->common.memory_size, sizeof(DbTable));
+        erts_atomic_set_nob(&tbl->hash.common.nitems, 0);
+        db_create_hash(p, tbl);
+
+	db_free_table_hash(clone);
+        erts_free(ERTS_ALC_T_DB_TABLE, clone);
     }
     return 0;
 }
