@@ -3073,12 +3073,18 @@ db_finalize_dbterm_hash(int cret, DbUpdateHandle* handle)
 static DbTable* db_create_disposable_clone_hash(DbTable* tb)
 {
     DbTable* clone = erts_alloc(ERTS_ALC_T_DB_TABLE, sizeof(DbTableHash));
+    struct segment** segtab;
 
     sys_memcpy(clone, tb, sizeof(DbTableHash));
     clone->hash.locks = NULL;
-    if (SEGTAB(&clone->hash) == tb->hash.first_segtab)
+    segtab = SEGTAB(&clone->hash);
+    if (segtab == tb->hash.first_segtab)
         SET_SEGTAB(&clone->hash, clone->hash.first_segtab);
-
+    else {
+        struct ext_segtab* est = ErtsContainerStruct_(segtab,struct ext_segtab,segtab);
+        ASSERT(est->prev_segtab == tb->hash.first_segtab);
+        est->prev_segtab = clone->hash.first_segtab;
+    }
     return clone;
 }
 
