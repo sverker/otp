@@ -91,10 +91,20 @@ int ei_decode_atom_as(const char *buf, int *index, char* p, int destlen,
     return 0;
 }	
 
+#define ASSUME_PURE_ASCII
 
 int utf8_to_latin1(char* dst, const char* src, int slen, int destlen,
 		   erlang_char_encoding* res_encp)
 {
+#ifdef ASSUME_PURE_ASCII
+    if (destlen < slen)
+        return -1;
+    if (dst)
+        memcpy(dst, src, slen);
+    if (res_encp)
+        *res_encp = ERLANG_ASCII;
+    return slen;
+#else
     const char* const dst_start = dst;
     const char* const dst_end = dst + destlen;
     int found_non_ascii = 0;
@@ -126,11 +136,21 @@ int utf8_to_latin1(char* dst, const char* src, int slen, int destlen,
 	*res_encp = found_non_ascii ? ERLANG_LATIN1 : ERLANG_ASCII;
     }
     return dst - dst_start;
+#endif
 }
 
 int latin1_to_utf8(char* dst, const char* src, int slen, int destlen,
 		   erlang_char_encoding* res_encp)
 {
+#ifdef ASSUME_PURE_ASCII
+    if (destlen < slen)
+        return -1;
+    if (dst)
+        memcpy(dst, src, slen);
+    if (res_encp)
+        *res_encp = ERLANG_ASCII;
+    return slen;
+#else
     const char* const src_end = src + slen;
     const char* const dst_start = dst;
     const char* const dst_end = dst + destlen;
@@ -159,6 +179,7 @@ int latin1_to_utf8(char* dst, const char* src, int slen, int destlen,
 	*res_encp = found_non_ascii ? ERLANG_UTF8 : ERLANG_ASCII;
     }
     return dst - dst_start;
+#endif
 }
 
 
