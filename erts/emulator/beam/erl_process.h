@@ -658,6 +658,10 @@ struct ErtsSchedulerData_ {
 	Uint64 out;
 	Uint64 in;
     } io;
+    struct {
+        ErtsSignal* sig;
+        Eterm to;
+    } pending_signal;
 
     Uint64 reductions;
     ErtsSchedWallTime sched_wall_time;

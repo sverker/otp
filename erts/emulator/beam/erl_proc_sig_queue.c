@@ -323,9 +323,8 @@ destroy_sig_group_leader(ErtsSigGroupLeader *sgl)
 }
 
 static ERTS_INLINE void
-sig_enqueue_trace(Process *c_p, ErtsMessage *sig, int op,
-                  Process *rp, ErtsMessage **first,
-                  ErtsMessage **last, ErtsMessage ***last_next)
+sig_enqueue_trace(Process *c_p, ErtsMessage **sigp, int op,
+                  Process *rp, ErtsMessage ***last_next)
 {
     switch (op) {
     case ERTS_SIG_Q_OP_LINK:
@@ -341,12 +340,11 @@ sig_enqueue_trace(Process *c_p, ErtsMessage *sig, int op,
              * Prepend a trace-change-state signal before the
              * link signal...
              */
-
             tag = ERTS_PROC_SIG_MAKE_TAG(ERTS_SIG_Q_OP_TRACE_CHANGE_STATE,
                                          ERTS_SIG_Q_TYPE_ADJUST_TRACE_INFO,
                                          0);
             ti = erts_alloc(ERTS_ALC_T_SIG_DATA, sizeof(ErtsSigTraceInfo));
-            ti->common.next = *last;
+            ti->common.next = *sigp;
             ti->common.specific.next = &ti->common.next;
             ti->common.tag = tag;
             ti->flags_on = ERTS_TRACE_FLAGS(c_p) & TRACEE_FLAGS;
@@ -359,8 +357,9 @@ sig_enqueue_trace(Process *c_p, ErtsMessage *sig, int op,
                 erts_proc_unlock(c_p, ERTS_PROC_LOCKS_ALL_MINOR);
             }
             erts_tracer_update(&ti->tracer, ERTS_TRACER(c_p));
-            *first = (ErtsMessage *) ti;
-            *last_next = &ti->common.next;
+            *sigp = (ErtsMessage *) ti;
+            if (!*last_next || *last_next == sigp)
+                *last_next = &ti->common.next;
         }
         break;
 
@@ -369,6 +368,7 @@ sig_enqueue_trace(Process *c_p, ErtsMessage *sig, int op,
     case ERTS_SIG_Q_OP_EXIT_LINKED:
 
         if (DTRACE_ENABLED(process_exit_signal)) {
+            ErtsMessage* sig = *sigp;
             Uint16 type = ERTS_PROC_SIG_TYPE(((ErtsSignal *) sig)->common.tag);
             Eterm reason, from;
 
@@ -528,26 +528,59 @@ proc_queue_signal(Process *c_p, Eterm pid, ErtsSignal *sig, int op)
 {
     int res;
     Process *rp;
-    ErtsMessage *first, *last, **last_next;
+    ErtsMessage *first, *last, **last_next, **sigp;
     ErtsSchedulerData *esdp = erts_get_scheduler_data();
     int is_normal_sched = !!esdp && esdp->type == ERTS_SCHED_NORMAL;
     erts_aint32_t state;
 
-    if (is_normal_sched)
+    if (is_normal_sched) {
+        ErtsMessage *pend_sig;
+        Eterm pend_to;
+
         rp = erts_proc_lookup_raw(pid);
+        if (!rp)
+            return 0;
+
+        pend_sig = esdp->pending_signal.sig;
+        if (op == ERTS_SIG_Q_OP_MONITOR
+            && ((ErtsMonitor*)sig)->type == ERTS_MON_TYPE_PROC) {
+
+            if (!pend_sig) {
+                esdp->pending_signal.sig = sig;
+                esdp->pending_signal.to = pid;
+                return 1;
+            }
+            pend_to = esdp->pending_signal.to;
+            esdp->pending_signal.sig = sig;
+            esdp->pending_signal.to = pid;
+            sig = pend_sig;
+            pid = pend_to;
+        }
+        else if (pend_sig && pid == esdp->pending_signal.to) {
+            esdp->pending_signal.sig = NULL;
+            pend_sig->common.next = (ErtsMessage*) sig;
+            pend_sig->common.specific.next = &pend_sig->common.next;
+            first = pend_sig;
+            last = sig;
+            sigp = last_next = &pend_sig->common.next;
+            goto first_last_done; 
+        }
+    }
     else
         rp = erts_proc_lookup_raw_inc_refc(pid);
 
     if (!rp)
         return 0;
 
-    sig->common.specific.next = NULL;
     first = last = (ErtsMessage *) sig;
     last_next = NULL;
+    sigp = &first;
+
+first_last_done:
+    sig->common.specific.next = NULL;
 
     /* may add signals before and/or after sig */
-    sig_enqueue_trace(c_p, first, op, rp,
-                      &first, &last, &last_next);
+    sig_enqueue_trace(c_p, sigp, op, rp, &last_next);
 
     last->next = NULL;
 

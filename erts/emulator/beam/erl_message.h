@@ -208,7 +208,7 @@ typedef union {
 typedef struct {
     /* pointers to next pointers pointing to... */
     ErtsMessage **next; /* ... next (non-message) signal */
-    ErtsMessage **last; /* ... next (non-message) signal */
+    ErtsMessage **last; /* ... last (non-message) signal */
 } ErtsMsgQNMSigs;
 
 /* Size of default message buffer (erl_message.c) */
