@@ -605,6 +605,17 @@ erts_proc_sig_receive_helper(Process *c_p, int fcalls,
  */
 void erts_proc_sig_fetch(Process *p);
 
+/* SVERK: Doc me up! */
+erts_aint32_t
+erts_enqueue_signals(Process *rp, ErtsMessage *first,
+                     ErtsMessage **last, ErtsMessage **last_next,
+                     erts_aint32_t in_state);
+
+/* SVERK: Doc me up! */
+void
+erts_proc_sig_send_pending(ErtsSchedulerData* esdp);
+
+
 typedef struct {
     Uint size;
     ErtsMessage *msgp;

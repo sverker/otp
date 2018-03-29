@@ -338,7 +338,7 @@ erts_queue_dist_message(Process *rcvr,
 }
 
 /* Add messages last in message queue */
-static Sint
+static void
 queue_messages(Process* receiver,
                erts_aint32_t *receiver_state,
                ErtsProcLocks receiver_locks,
@@ -346,7 +346,6 @@ queue_messages(Process* receiver,
                ErtsMessage** last,
                Uint len)
 {
-    Sint res;
     int locked_msgq = 0;
     erts_aint32_t state;
 
@@ -391,10 +390,8 @@ queue_messages(Process* receiver,
 	if (locked_msgq)
 	    erts_proc_unlock(receiver, ERTS_PROC_LOCK_MSGQ);
 	erts_cleanup_messages(first);
-	return 0;
     }
 
-    res = receiver->sig_qs.len;
     if (receiver_locks & ERTS_PROC_LOCK_MAIN) {
 	/*
 	 * We move 'in queue' to 'private queue' and place
@@ -404,13 +401,14 @@ queue_messages(Process* receiver,
 	 * we don't need to include the 'in queue' in
 	 * the root set when garbage collecting.
 	 */
-	res += receiver->sig_inq.len;
         erts_proc_sig_fetch(receiver);
         LINK_MESSAGE_PRIVQ(receiver, first, last, len);
     }
     else
     {
-	LINK_MESSAGE(receiver, first, last, len);
+        //LINK_MESSAGE(receiver, first, last, len);
+        erts_enqueue_signals(receiver, first, last, NULL, state);
+        receiver->sig_inq.len += len;
     }
 
     if (locked_msgq) {
@@ -418,10 +416,9 @@ queue_messages(Process* receiver,
     }
 
     erts_proc_notify_new_message(receiver, receiver_locks);
-    return res;
 }
 
-static Sint
+static void
 queue_message(Process* receiver,
               erts_aint32_t *receiver_state,
               ErtsProcLocks receiver_locks,
@@ -429,24 +426,24 @@ queue_message(Process* receiver,
 {
     ERL_MESSAGE_TERM(mp) = msg;
     ERL_MESSAGE_FROM(mp) = from;
-    return queue_messages(receiver, receiver_state, receiver_locks,
-                          mp, &mp->next, 1);
+    queue_messages(receiver, receiver_state, receiver_locks,
+                   mp, &mp->next, 1);
 }
 
-Sint
+void
 erts_queue_message(Process* receiver, ErtsProcLocks receiver_locks,
                    ErtsMessage* mp, Eterm msg, Eterm from)
 {
-    return queue_message(receiver, NULL, receiver_locks, mp, msg, from);
+    queue_message(receiver, NULL, receiver_locks, mp, msg, from);
 }
 
 
-Sint
+void
 erts_queue_messages(Process* receiver, ErtsProcLocks receiver_locks,
                     ErtsMessage* first, ErtsMessage** last, Uint len)
 {
-    return queue_messages(receiver, NULL, receiver_locks,
-                          first, last, len);
+    queue_messages(receiver, NULL, receiver_locks,
+                   first, last, len);
 }
 
 void
@@ -583,7 +580,7 @@ erts_try_alloc_message_on_heap(Process *pp,
  * Send a local message when sender & receiver processes are known.
  */
 
-Sint
+void
 erts_send_message(Process* sender,
 		  Process* receiver,
 		  ErtsProcLocks *receiver_locks,
@@ -594,7 +591,6 @@ erts_send_message(Process* sender,
     ErtsMessage* mp;
     ErlOffHeap *ohp;
     Eterm token = NIL;
-    Sint res = 0;
 #ifdef USE_VM_PROBES
     DTRACE_CHARBUF(sender_name, 64);
     DTRACE_CHARBUF(receiver_name, 64);
@@ -737,13 +733,26 @@ erts_send_message(Process* sender,
 #ifdef USE_VM_PROBES
     ERL_MESSAGE_DT_UTAG(mp) = utag;
 #endif
-    res = queue_message(receiver,
-			&receiver_state,
-			*receiver_locks,
-			mp, message,
-                        sender->common.id);
 
-    return res;
+    {
+        ErtsSchedulerData *esdp = sender->scheduler_data;
+        ErtsMessage* first;
+        if (esdp->pending_signal.to == receiver->common.id) {
+            ErtsSignal* pend_sig = esdp->pending_signal.sig;
+            esdp->pending_signal.sig = NULL;
+            esdp->pending_signal.to = THE_NON_VALUE;
+            pend_sig->common.next = mp;
+            pend_sig->common.specific.next = NULL;
+            first = (ErtsMessage*) pend_sig;
+        }
+        else
+            first = mp;
+
+        ERL_MESSAGE_TERM(mp) = message;
+        ERL_MESSAGE_FROM(mp) = sender->common.id;
+        queue_messages(receiver, &receiver_state, *receiver_locks,
+                       first, &mp->next, 1);
+    }
 }
 
 

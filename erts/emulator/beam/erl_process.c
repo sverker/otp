@@ -5713,6 +5713,9 @@ init_scheduler_data(ErtsSchedulerData* esdp, int num,
     esdp->io.out = (Uint64) 0;
     esdp->io.in = (Uint64) 0;
 
+    esdp->pending_signal.sig = NULL;
+    esdp->pending_signal.to = THE_NON_VALUE;
+
     if (daww_ptr) {
 	init_aux_work_data(&esdp->aux_work_data, esdp, *daww_ptr);
 	*daww_ptr += daww_sz;
@@ -9671,8 +9674,11 @@ Process *erts_schedule(ErtsSchedulerData *esdp, Process *p, int calls)
     } else {
 	is_normal_sched = !esdp;
 	if (is_normal_sched) {
-	    esdp = p->scheduler_data;
+            esdp = p->scheduler_data;
 	    ASSERT(!ERTS_SCHEDULER_IS_DIRTY(esdp));
+
+            if (esdp->pending_signal.sig)
+                erts_proc_sig_send_pending(esdp);
 	}
 	else {
 	    ASSERT(ERTS_SCHEDULER_IS_DIRTY(esdp));

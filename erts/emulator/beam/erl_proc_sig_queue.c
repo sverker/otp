@@ -445,9 +445,23 @@ sig_enqueue_trace_cleanup(ErtsMessage *first, ErtsSignal *sig, ErtsMessage *last
     }
 }
 
+#ifdef DEBUG
+static int dbg_count_nmsigs(ErtsMessage *first)
+{
+    ErtsMessage *sig;
+    int cnt = 0;
+
+    for (sig = first; sig; sig = sig->next) {
+        if (ERTS_SIG_IS_NON_MSG(sig))
+            ++cnt;
+    }
+    return cnt;
+}
+#endif
+
 static ERTS_INLINE erts_aint32_t
 enqueue_signals(Process *rp, ErtsMessage *first,
-                ErtsMessage *last, ErtsMessage **last_next,
+                ErtsMessage **last, ErtsMessage **last_next,
                 erts_aint32_t in_state)
 {
     erts_aint32_t state = in_state;
@@ -457,7 +471,7 @@ enqueue_signals(Process *rp, ErtsMessage *first,
 
     ASSERT(!*this);
     *this = first;
-    rp->sig_inq.last = &last->next;
+    rp->sig_inq.last = last;
 
     if (!rp->sig_inq.nmsigs.next) {
         ASSERT(!rp->sig_inq.nmsigs.last);
@@ -478,17 +492,24 @@ enqueue_signals(Process *rp, ErtsMessage *first,
     }
 
     if (last_next) {
-        ASSERT(first != last);
+        ASSERT(dbg_count_nmsigs(first) >= 2);
         rp->sig_inq.nmsigs.last = last_next;
     }
     else {
-        ASSERT(first == last);
+        ASSERT(dbg_count_nmsigs(first) <= 1);
         rp->sig_inq.nmsigs.last = this;
     }
 
     ERTS_HDBG_CHECK_SIGNAL_IN_QUEUE(rp);
 
     return state;
+}
+
+erts_aint32_t erts_enqueue_signals(Process *rp, ErtsMessage *first,
+                                   ErtsMessage **last, ErtsMessage **last_next,
+                                   erts_aint32_t in_state)
+{
+    return enqueue_signals(rp, first, last, last_next, in_state);
 }
 
 static ERTS_INLINE void
@@ -534,7 +555,7 @@ proc_queue_signal(Process *c_p, Eterm pid, ErtsSignal *sig, int op)
     erts_aint32_t state;
 
     if (is_normal_sched) {
-        ErtsMessage *pend_sig;
+        ErtsSignal *pend_sig;
         Eterm pend_to;
 
         rp = erts_proc_lookup_raw(pid);
@@ -558,10 +579,11 @@ proc_queue_signal(Process *c_p, Eterm pid, ErtsSignal *sig, int op)
         }
         else if (pend_sig && pid == esdp->pending_signal.to) {
             esdp->pending_signal.sig = NULL;
+            esdp->pending_signal.to = THE_NON_VALUE;
             pend_sig->common.next = (ErtsMessage*) sig;
             pend_sig->common.specific.next = &pend_sig->common.next;
-            first = pend_sig;
-            last = sig;
+            first = (ErtsMessage*) pend_sig;
+            last = (ErtsMessage*) sig;
             sigp = last_next = &pend_sig->common.next;
             goto first_last_done; 
         }
@@ -591,7 +613,7 @@ first_last_done:
     if (ERTS_PSFLG_FREE & state)
         res = 0;
     else {
-        state = enqueue_signals(rp, first, last, last_next, state);
+        state = enqueue_signals(rp, first, &last->next, last_next, state);
         res = !0;
     }
 
@@ -613,6 +635,28 @@ first_last_done:
         erts_proc_dec_refc(rp);
 
     return res;
+}
+
+void erts_proc_sig_send_pending(ErtsSchedulerData* esdp)
+{
+    ErtsSignal* sig;
+    Eterm to;
+    int op;
+
+    ASSERT(esdp && esdp->type == ERTS_SCHED_NORMAL);
+    sig = esdp->pending_signal.sig;
+    to = esdp->pending_signal.to;
+    ASSERT(sig && is_internal_pid(to));
+    esdp->pending_signal.sig = NULL;
+    esdp->pending_signal.to = THE_NON_VALUE;
+
+    op = ERTS_SIG_Q_OP_MONITOR;
+    ASSERT(op == ERTS_PROC_SIG_OP(sig->common.tag));
+
+    if (!proc_queue_signal(NULL, to, sig, op)) {
+        ErtsMonitor* mon = (ErtsMonitor*)sig;
+        erts_proc_sig_send_monitor_down(mon, am_noproc);
+    }
 }
 
 static int
