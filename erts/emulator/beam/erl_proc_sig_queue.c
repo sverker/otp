@@ -2892,9 +2892,9 @@ erts_proc_sig_handle_exit(Process *c_p, int *redsp)
         }
 
         case ERTS_SIG_Q_OP_IS_ALIVE:
-            ERTS_PROC_SIG_HDBG_PRIV_CHKQ(c_p, &tracing, next_nm_sig);
+            ERTS_PROC_SIG_HDBG_PRIV_CHKQ(c_p, NULL, next_nm_sig);
             is_alive_response(c_p, sig, 0);
-            ERTS_PROC_SIG_HDBG_PRIV_CHKQ(c_p, &tracing, next_nm_sig);
+            ERTS_PROC_SIG_HDBG_PRIV_CHKQ(c_p, NULL, next_nm_sig);
             break;
 
         case ERTS_SIG_Q_OP_TRACE_CHANGE_STATE:
@@ -3998,7 +3998,7 @@ erts_proc_sig_hdbg_check_in_queue(Process *p, char *what, char *file, int line)
                                     NULL,
                                     NULL,
                                     ERTS_PSFLG_SIG_IN_Q);
-    ASSERT(p->sig_inq.len == len);
+    ASSERT(p->sig_inq.len == len); (void)len;
 }
 
 #endif

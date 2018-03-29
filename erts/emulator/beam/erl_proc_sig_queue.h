@@ -75,7 +75,7 @@
 #ifndef ERTS_PROC_SIG_QUEUE_H_TYPE__
 #define ERTS_PROC_SIG_QUEUE_H_TYPE__
 
-#if 0
+#if 1
 #  define ERTS_PROC_SIG_HARD_DEBUG
 #endif
 
