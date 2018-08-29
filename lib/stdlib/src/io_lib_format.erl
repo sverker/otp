@@ -146,8 +146,11 @@ print_strings(true) -> "".
 collect([$~|Fmt0], Args0) ->
     {C,Fmt1,Args1} = collect_cseq(Fmt0, Args0),
     [C|collect(Fmt1, Args1)];
-collect([C|Fmt], Args) ->
+collect([C|Fmt], Args) when is_integer(C), C >= 0 ->
     [C|collect(Fmt, Args)];
+collect([C|_Fmt], _Args) ->
+    erlang:display({c,C}),
+    erlang:error(foo);
 collect([], []) -> [].
 
 collect_cseq(Fmt0, Args0) ->
