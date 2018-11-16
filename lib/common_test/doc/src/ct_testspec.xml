@@ -46,7 +46,7 @@
 
   <funcs>
     <func>
-    <name>get_tests(SpecsIn) -&gt; {ok, [{Specs,Tests}]} | {error, Reason}</name>
+    <name since="OTP-19.3">get_tests(SpecsIn) -&gt; {ok, [{Specs,Tests}]} | {error, Reason}</name>
     <fsummary>Parse the given test specification files and return the tests to run and skip.</fsummary>
       <type>
         <v>SpecsIn = [string()] | [[string()]]</v>

@@ -321,7 +321,7 @@ fe80::204:acff:fe17:bf38
     </func>
 
     <func>
-      <name name="getifaddrs" arity="0"/>
+      <name name="getifaddrs" arity="0" since="OTP_R14B01"/>
       <fsummary>Return a list of interfaces and their addresses.</fsummary>
       <desc>
         <p>Returns a list of 2-tuples containing interface names and the
@@ -487,9 +487,9 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="i" arity="0" />
-      <name name="i" arity="1" />
-      <name name="i" arity="2" />
+      <name name="i" arity="0"  since="OTP-21.0"/>
+      <name name="i" arity="1"  since="OTP-21.0"/>
+      <name name="i" arity="2"  since="OTP-21.0"/>
       <fsummary>Displays information and statistics about sockets on the terminal</fsummary>
       <desc>
         <p>
@@ -542,7 +542,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="ntoa" arity="1" />
+      <name name="ntoa" arity="1"  since="OTP_R16B02"/>
       <fsummary>Convert IPv6/IPV4 address to ASCII.</fsummary>
       <desc>
 	<p>Parses an
@@ -552,7 +552,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="parse_address" arity="1" />
+      <name name="parse_address" arity="1"  since="OTP_R16B"/>
       <fsummary>Parse an IPv4 or IPv6 address.</fsummary>
       <desc>
 	<p>Parses an IPv4 or IPv6 address string and returns an
@@ -563,7 +563,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="parse_ipv4_address" arity="1" />
+      <name name="parse_ipv4_address" arity="1"  since="OTP_R16B"/>
       <fsummary>Parse an IPv4 address.</fsummary>
       <desc>
 	<p>Parses an IPv4 address string and returns an
@@ -573,7 +573,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="parse_ipv4strict_address" arity="1" />
+      <name name="parse_ipv4strict_address" arity="1"  since="OTP_R16B"/>
       <fsummary>Parse an IPv4 address strict.</fsummary>
       <desc>
 	<p>Parses an IPv4 address string containing four fields, that is,
@@ -584,7 +584,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="parse_ipv6_address" arity="1" />
+      <name name="parse_ipv6_address" arity="1"  since="OTP_R16B"/>
       <fsummary>Parse an IPv6 address.</fsummary>
       <desc>
 	<p>Parses an IPv6 address string and returns an
@@ -595,7 +595,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="parse_ipv6strict_address" arity="1" />
+      <name name="parse_ipv6strict_address" arity="1"  since="OTP_R16B"/>
       <fsummary>Parse an IPv6 address strict.</fsummary>
       <desc>
 	<p>Parses an IPv6 address string and returns an
@@ -605,7 +605,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="ipv4_mapped_ipv6_address" arity="1" />
+      <name name="ipv4_mapped_ipv6_address" arity="1"  since="OTP-21.0"/>
       <fsummary>Convert to and from IPv4-mapped IPv6 address.</fsummary>
       <desc>
 	<p>
@@ -618,7 +618,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="parse_strict_address" arity="1" />
+      <name name="parse_strict_address" arity="1"  since="OTP_R16B"/>
       <fsummary>Parse an IPv4 or IPv6 address strict.</fsummary>
       <desc>
 	<p>Parses an IPv4 or IPv6 address string and returns an
@@ -642,7 +642,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="peernames" arity="1"/>
+      <name name="peernames" arity="1" since="OTP_R16B03"/>
       <fsummary>Return all address/port numbers for the other end of a
         connection.</fsummary>
       <desc>
@@ -656,7 +656,7 @@ get_tcpi_sacked(Sock) ->
     </func>
 
     <func>
-      <name name="peernames" arity="2"/>
+      <name name="peernames" arity="2" since="OTP_R16B03"/>
       <fsummary>Return all address/port numbers for the other end of a
         connection.</fsummary>
       <desc>
@@ -1379,7 +1379,7 @@ inet:setopts(Sock,[{raw,6,8,<<30:32/native>>}]),]]></code>
     </func>
 
     <func>
-      <name name="socknames" arity="1"/>
+      <name name="socknames" arity="1" since="OTP_R16B03"/>
       <fsummary>Return all local address/port numbers for a socket.</fsummary>
       <desc>
 	<p>Equivalent to
@@ -1389,7 +1389,7 @@ inet:setopts(Sock,[{raw,6,8,<<30:32/native>>}]),]]></code>
     </func>
 
     <func>
-      <name name="socknames" arity="2"/>
+      <name name="socknames" arity="2" since="OTP_R16B03"/>
       <fsummary>Return all local address/port numbers for a socket.</fsummary>
       <desc>
 	<p>Returns a list of all local address/port number pairs for a socket

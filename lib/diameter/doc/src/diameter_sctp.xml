@@ -67,7 +67,7 @@ and implements the behaviour documented in
 <funcs>
 
 <func>
-<name>start({Type, Ref}, Svc, [Opt])
+<name since="OTP_R14B03">start({Type, Ref}, Svc, [Opt])
          -> {ok, Pid, [LAddr]} | {error, Reason}</name>
 <fsummary>Start a transport process.</fsummary>
 <type>

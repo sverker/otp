@@ -94,7 +94,7 @@ and has the binary() to send in its <c>bin</c> field.</p>
 <funcs>
 
 <func>
-<name>Mod:start({Type, Ref}, Svc, Config)
+<name since="OTP_R14B03">Mod:start({Type, Ref}, Svc, Config)
          -> {ok, Pid}
           | {ok, Pid, LAddrs}
           | {error, Reason}</name>

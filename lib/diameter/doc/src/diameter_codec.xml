@@ -346,7 +346,7 @@ question, as documented in &man_transport;.</p>
 <funcs>
 
 <func>
-<name>decode(Mod, Bin) -> Pkt</name>
+<name since="OTP_R15B03">decode(Mod, Bin) -> Pkt</name>
 <fsummary>Decode a Diameter message.</fsummary>
 <type>
 <v>Mod = &dictionary;</v>
@@ -362,7 +362,7 @@ Decode a Diameter message.</p>
 </func>
 
 <func>
-<name>encode(Mod, Msg) -> Pkt</name>
+<name since="OTP_R15B03">encode(Mod, Msg) -> Pkt</name>
 <fsummary>Encode a Diameter message.</fsummary>
 <type>
 <v>Mod = &dictionary;</v>

@@ -83,7 +83,7 @@ before configuring TLS capability on diameter transports.</p>
 <funcs>
 
 <func>
-<name>start({Type, Ref}, Svc, [Opt])
+<name since="OTP_R14B03">start({Type, Ref}, Svc, [Opt])
          -> {ok, Pid}
           | {ok, Pid, [LAddr]}
           | {error, Reason}</name>

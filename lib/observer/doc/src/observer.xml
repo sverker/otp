@@ -48,7 +48,7 @@
   </description>
   <funcs>
     <func>
-      <name>start() -> ok</name>
+      <name since="OTP_R15B">start() -> ok</name>
       <fsummary>Start the Observer GUI.</fsummary>
       <desc>
         <p>Starts the Observer GUI.
