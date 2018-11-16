@@ -191,6 +191,7 @@
     <xsl:variable name="name" select="@name"/>
     <xsl:variable name="arity" select="@arity"/>
     <xsl:variable name="anchor" select="@anchor"/>
+    <xsl:variable name="since" select="@since"/>
     <xsl:variable name="spec0">
       <xsl:call-template name="find_spec"/>
     </xsl:variable>
@@ -225,11 +226,15 @@
         <xsl:variable name="global_types" select="ancestor::erlref/datatypes"/>
 	<xsl:variable name="local_types"
 		      select="../type[string-length(@name) > 0]"/>
-	<xsl:apply-templates select="$spec/contract/clause/head">
+	  <xsl:apply-templates select="$spec/contract/clause/head">
           <xsl:with-param name="ghlink" select="ancestor-or-self::*[@ghlink]/@ghlink"/>
 	  <xsl:with-param name="local_types" select="$local_types"/>
 	  <xsl:with-param name="global_types" select="$global_types"/>
-	</xsl:apply-templates>
+	  </xsl:apply-templates>
+	  <xsl:if test="string-length($since) > 0">
+	    <div class="since">since:<xsl:value-of select="$since"/>
+	    </div>
+	  </xsl:if>
       </xsl:when>
     </xsl:choose>
   </xsl:template>
@@ -1870,6 +1875,11 @@
         <xsl:with-param name="partnum" select="$partnum"/>
       </xsl:apply-templates>
     </div>
+    <xsl:if test="string-length(@since) > 0">
+      <div class="since">
+	since:<xsl:value-of select="@since"/>
+      </div>
+    </xsl:if>
   </xsl:template>
 
 
@@ -2144,6 +2154,9 @@
                 </xsl:with-param>
               </xsl:call-template>
             </div>
+	    <xsl:if test="string-length(@since) > 0">
+	      <div class="since"><xsl:value-of select="@since"/></div>
+	    </xsl:if>
           </xsl:otherwise>
 	</xsl:choose>
       </xsl:when>
