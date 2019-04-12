@@ -33,7 +33,7 @@ CALL_GUARD_BIF(BF, TmpReg, Dst) {
     Eterm result;
 
     ERTS_DBG_CHK_REDS(c_p, FCALLS);
-    c_p->fcalls = FCALLS;
+    SET_FCALLS(c_p, FCALLS);
     PROCESS_MAIN_CHK_LOCKS(c_p);
     ASSERT(!ERTS_PROC_IS_EXITING(c_p));
     ERTS_CHK_MBUF_SZ(c_p);
@@ -131,7 +131,7 @@ i_gc_bif1(Fail, Bif, Src, Live, Dst) {
     x(live) = $Src;
     bf = (GcBifFunction) $Bif;
     ERTS_DBG_CHK_REDS(c_p, FCALLS);
-    c_p->fcalls = FCALLS;
+    SET_FCALLS(c_p, FCALLS);
     SWAPOUT;
     PROCESS_MAIN_CHK_LOCKS(c_p);
     ERTS_UNREQ_PROC_MAIN_LOCK(c_p);
@@ -181,7 +181,7 @@ i_gc_bif2(Fail, Bif, Live, Src1, Src2, Dst) {
 
     bf = (GcBifFunction) $Bif;
     ERTS_DBG_CHK_REDS(c_p, FCALLS);
-    c_p->fcalls = FCALLS;
+    SET_FCALLS(c_p, FCALLS);
     SWAPOUT;
     PROCESS_MAIN_CHK_LOCKS(c_p);
     ERTS_UNREQ_PROC_MAIN_LOCK(c_p);
@@ -235,7 +235,7 @@ i_gc_bif3(Fail, Bif, Live, Src2, Src3, Dst) {
 
     bf = (GcBifFunction) $Bif;
     ERTS_DBG_CHK_REDS(c_p, FCALLS);
-    c_p->fcalls = FCALLS;
+    SET_FCALLS(c_p, FCALLS);
     SWAPOUT;
     PROCESS_MAIN_CHK_LOCKS(c_p);
     ERTS_UNREQ_PROC_MAIN_LOCK(c_p);
@@ -294,7 +294,7 @@ call_bif(Exp) {
 
     PRE_BIF_SWAPOUT(c_p);
     ERTS_DBG_CHK_REDS(c_p, FCALLS);
-    c_p->fcalls = FCALLS - 1;
+    SET_FCALLS(c_p, FCALLS-1);
     if (FCALLS <= 0) {
         save_calls(c_p, export);
     }
@@ -363,7 +363,7 @@ send() {
     }
 
     PRE_BIF_SWAPOUT(c_p);
-    c_p->fcalls = FCALLS - 1;
+    SET_FCALLS(c_p, FCALLS-1);
     result = erl_send(c_p, r(0), x(1));
     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
     ERTS_REQ_PROC_MAIN_LOCK(c_p);
@@ -489,7 +489,7 @@ nif_bif.apply_bif() {
 
     SWAPOUT;
     ERTS_DBG_CHK_REDS(c_p, FCALLS - 1);
-    c_p->fcalls = FCALLS - 1;
+    SET_FCALLS(c_p, FCALLS-1);
     vbf = (BifFunction) Arg(0);
     PROCESS_MAIN_CHK_LOCKS(c_p);
     bif_nif_arity = codemfa->arity;

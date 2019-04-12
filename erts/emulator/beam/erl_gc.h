@@ -138,14 +138,14 @@ ERTS_GLB_INLINE Eterm follow_moved(Eterm term, Eterm xptr_tag)
 #define ERTS_IS_GC_DESIRED(Proc)					\
     ERTS_IS_GC_DESIRED_INTERNAL((Proc), (Proc)->htop, (Proc)->stop)
 
-#define ERTS_FORCE_GC_INTERNAL(Proc, FCalls)				\
+#define ERTS_FORCE_GC_INTERNAL(Proc)				\
     do {								\
 	(Proc)->flags |= F_FORCE_GC;					\
-	ERTS_VBUMP_ALL_REDS_INTERNAL((Proc), (FCalls));			\
+	ERTS_VBUMP_ALL_REDS_INTERNAL((Proc));			\
     } while (0)
 
 #define ERTS_FORCE_GC(Proc)						\
-    ERTS_FORCE_GC_INTERNAL((Proc), (Proc)->fcalls)
+    ERTS_FORCE_GC_INTERNAL((Proc))
 
 extern Uint erts_test_long_gc_sleep;
 

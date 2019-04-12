@@ -197,7 +197,7 @@ void** beam_ops;
 
 #define HEAVY_SWAPOUT      \
     SWAPOUT;		   \
-    c_p->fcalls = FCALLS
+    SET_FCALLS(c_p, FCALLS)
 
 /*
  * Use LIGHT_SWAPOUT when the called function
@@ -547,7 +547,7 @@ init_emulator(void)
 #define DTRACE_NIF_RETURN(p, mfa)        do {} while (0)
 #endif /* USE_VM_PROBES */
 
-#ifdef DEBUG
+#if defined(DEBUG) || defined(DEBUG_REDS)
 #define ERTS_DBG_CHK_REDS(P, FC)					\
     do {								\
 	if (ERTS_PROC_GET_SAVED_CALLS_BUF((P))) {			\
@@ -556,9 +556,10 @@ init_emulator(void)
 		   <= 0 - (FC));					\
 	}								\
 	else {								\
-	    ASSERT(FC <= CONTEXT_REDS);					\
-	    ASSERT(erts_proc_sched_data(c_p)->virtual_reds		\
+            ERTS_ASSERT(FC <= CONTEXT_REDS);				\
+	    ERTS_ASSERT(erts_proc_sched_data(c_p)->virtual_reds		\
 		   <= CONTEXT_REDS - (FC));				\
+            ERTS_ASSERT(FC <= (Sint)(P)->debug_reds_in);                \
 	}								\
 } while (0)
 #else
@@ -667,7 +668,7 @@ void process_main(Eterm * x_reg_array, FloatDef* f_reg_array)
 
  do_schedule:
     ASSERT(c_p->arity < 6);
-    ASSERT(c_p->debug_reds_in == REDS_IN(c_p));
+    ASSERT_REDS(c_p->debug_reds_in == REDS_IN(c_p));
     if (!ERTS_PROC_GET_SAVED_CALLS_BUF(c_p))
 	reds_used = REDS_IN(c_p) - FCALLS;
     else
@@ -726,7 +727,7 @@ void process_main(Eterm * x_reg_array, FloatDef* f_reg_array)
 	SET_I(c_p->i);
 
 	REDS_IN(c_p) = reds = c_p->fcalls;
-#ifdef DEBUG
+#if defined(DEBUG) || defined(DEBUG_REDS)
 	c_p->debug_reds_in = reds;
 #endif
 
@@ -858,7 +859,7 @@ void process_main(Eterm * x_reg_array, FloatDef* f_reg_array)
       * (beacuse the code for the Dispatch() macro becomes shorter that way).
       */
 
-     ASSERT(c_p->debug_reds_in == REDS_IN(c_p));
+     ASSERT_REDS(c_p->debug_reds_in == REDS_IN(c_p));
     if (!ERTS_PROC_GET_SAVED_CALLS_BUF(c_p))
 	reds_used = REDS_IN(c_p) - FCALLS;
     else

@@ -924,6 +924,26 @@ typedef struct ErtsProcSysTaskQs_ ErtsProcSysTaskQs;
 #  define MAX_HEAP_SIZE_KILL 1
 #  define MAX_HEAP_SIZE_LOG  2
 
+#define DEBUG_REDS 1
+
+#if defined(DEBUG) || defined(DEBUG_REDS)
+#  define ASSERT_REDS(X) ERTS_ASSERT(X)
+#else
+#  define ASSERT_REDS(X) ((void)1)
+#endif
+
+#define SET_FCALLS(P, FC) \
+  do { \
+      (P)->fcalls = (FC); \
+      ASSERT_REDS((P)->fcalls <= (Sint)((P)->def_arg_reg[5])); \
+  } while (0)
+
+#define DEC_FCALLS(P, REDS) \
+  do { \
+      (P)->fcalls -= (REDS); \
+      ASSERT_REDS((P)->fcalls <= (Sint)((P)->def_arg_reg[5])); \
+  } while (0)
+
 struct process {
     ErtsPTabElementCommon common; /* *Need* to be first in struct */
 
@@ -1066,7 +1086,7 @@ struct process {
     Eterm* space_verified_from; /* we rely on available heap space (TestHeap) */
 #endif
 
-#ifdef DEBUG
+#if defined(DEBUG) || defined(DEBUG_REDS)
     Uint debug_reds_in;
 #endif
 };

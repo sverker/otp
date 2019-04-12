@@ -67,39 +67,39 @@ typedef BIF_RETTYPE (*ErtsBifFunc)(BIF_ALIST);
 
 #define BUMP_ALL_REDS(p) do {			\
     if (!ERTS_PROC_GET_SAVED_CALLS_BUF((p))) 	\
-	(p)->fcalls = 0; 			\
+	SET_FCALLS(p, 0); 			\
     else 					\
-	(p)->fcalls = -CONTEXT_REDS;		\
+	SET_FCALLS(p, -CONTEXT_REDS);		\
     ASSERT(ERTS_BIF_REDS_LEFT((p)) == 0);	\
 } while(0)
 
-#define ERTS_VBUMP_ALL_REDS_INTERNAL(p, fcalls)				\
+#define ERTS_VBUMP_ALL_REDS_INTERNAL(p)				\
 do {									\
     if (!ERTS_PROC_GET_SAVED_CALLS_BUF((p))) {				\
-	if ((fcalls) > 0)						\
-	    erts_proc_sched_data((p))->virtual_reds += (fcalls);	\
-	(fcalls) = 0;							\
+	if ((p)->fcalls > 0)						\
+	    erts_proc_sched_data(p)->virtual_reds += (p)->fcalls;	\
+	SET_FCALLS(p, 0);							\
     }									\
     else {								\
-	if ((fcalls) > -CONTEXT_REDS)					\
-	    erts_proc_sched_data((p))->virtual_reds			\
-		+= ((fcalls) - (-CONTEXT_REDS));			\
-	(fcalls) = -CONTEXT_REDS;					\
+	if ((p)->fcalls > -CONTEXT_REDS)					\
+	    erts_proc_sched_data(p)->virtual_reds			\
+		+= ((p)->fcalls - (-CONTEXT_REDS));			\
+	SET_FCALLS(p, -CONTEXT_REDS);					\
     }									\
 } while(0)
 
 #define ERTS_VBUMP_ALL_REDS(p) \
-    ERTS_VBUMP_ALL_REDS_INTERNAL((p), (p)->fcalls)
+    ERTS_VBUMP_ALL_REDS_INTERNAL((p))
 
 #define BUMP_REDS(p, gc) do {			   \
      ASSERT(p);		 			   \
      ERTS_LC_ASSERT(ERTS_PROC_LOCK_MAIN & erts_proc_lc_my_proc_locks(p));\
-     (p)->fcalls -= (gc); 			   \
+     DEC_FCALLS(p, gc); 			   \
      if ((p)->fcalls < 0) { 			   \
 	if (!ERTS_PROC_GET_SAVED_CALLS_BUF((p)))   \
-           (p)->fcalls = 0; 			   \
+           SET_FCALLS(p, 0); 			   \
 	else if ((p)->fcalls < -CONTEXT_REDS)      \
-           (p)->fcalls = -CONTEXT_REDS; 	   \
+           SET_FCALLS(p, -CONTEXT_REDS); 	   \
      } 						   \
 } while(0)
 
@@ -108,25 +108,25 @@ do {									\
 do {									\
     if (!ERTS_PROC_GET_SAVED_CALLS_BUF((p))) {				\
 	if ((p)->fcalls >= reds) {					\
-	    (p)->fcalls -= reds;					\
+	    DEC_FCALLS(p, reds);					\
 	    erts_proc_sched_data((p))->virtual_reds += reds;		\
 	}								\
 	else {								\
 	    if ((p)->fcalls > 0)					\
 		erts_proc_sched_data((p))->virtual_reds += (p)->fcalls;	\
-	    (p)->fcalls = 0;						\
+	    SET_FCALLS(p, 0);						\
 	}								\
     }									\
     else {								\
 	if ((p)->fcalls >= reds - CONTEXT_REDS) {			\
-	    (p)->fcalls -= reds;					\
+	    DEC_FCALLS(p, reds);					\
 	    erts_proc_sched_data((p))->virtual_reds += reds;		\
 	}								\
 	else {								\
 	    if ((p)->fcalls > -CONTEXT_REDS)				\
 		erts_proc_sched_data((p))->virtual_reds			\
 		    += (p)->fcalls - (-CONTEXT_REDS);			\
-	    (p)->fcalls = -CONTEXT_REDS;				\
+	    SET_FCALLS(p, -CONTEXT_REDS);				\
 	}								\
     }									\
 } while(0)
@@ -145,7 +145,8 @@ do {									\
 	    if ((FCalls) > (Reds)) {					\
 		erts_proc_sched_data((P))->virtual_reds			\
 		    += (FCalls) - (Reds);				\
-		(FCalls) = (Reds);					\
+                ASSERT_REDS((Sint)(Reds) <= (Sint)((P)->def_arg_reg[5])); \
+                (FCalls) = (Reds);                                      \
 	    }								\
 	}								\
     } while (0)

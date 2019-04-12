@@ -3968,6 +3968,8 @@ erts_proc_sig_receive_helper(Process *c_p,
     while (!0) {
         erts_aint32_t state;
 
+        ERTS_ASSERT((Sint)erts_current_reductions(c_p, c_p) >= 0);
+
         if (!c_p->sig_qs.cont) {
 
             consumed_reds += 4;

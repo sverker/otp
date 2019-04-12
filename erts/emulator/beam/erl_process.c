@@ -9304,7 +9304,7 @@ Process *erts_schedule(ErtsSchedulerData *esdp, Process *p, int calls)
 	ERTS_CHK_HAVE_ONLY_MAIN_PROC_LOCK(p);
         ASSERT(p->scheduler_data || ERTS_SCHEDULER_IS_DIRTY(esdp));
 
-	ASSERT(actual_reds >= 0);
+	ASSERT_REDS(actual_reds >= 0);
 	if (reds < ERTS_PROC_MIN_CONTEXT_SWITCH_REDS_COST)
 	    reds = ERTS_PROC_MIN_CONTEXT_SWITCH_REDS_COST;
 	esdp->virtual_reds = 0;
@@ -9802,6 +9802,7 @@ Process *erts_schedule(ErtsSchedulerData *esdp, Process *p, int calls)
                 if (state & (ERTS_PSFLG_SIG_Q|ERTS_PSFLG_SIG_IN_Q)) {
                     int local_only = (!!(p->flags & F_LOCAL_SIGS_ONLY)
                                       & !(state & (ERTS_PSFLG_SUSPENDED|ERTS_PSFLGS_DIRTY_WORK)));
+                    ERTS_ASSERT((Sint)erts_current_reductions(p, p) >= 0);
                     if (!local_only | !!(state & ERTS_PSFLG_SIG_Q)) {
                         int sig_reds;
                         /*
@@ -9890,7 +9891,7 @@ Process *erts_schedule(ErtsSchedulerData *esdp, Process *p, int calls)
 	p->fcalls = reds;
         if (reds != context_reds) {
             actual_reds = context_reds - reds - esdp->virtual_reds;
-            ASSERT(actual_reds >= 0);
+            ASSERT_REDS(actual_reds >= 0);
             esdp->virtual_reds = 0;
             p->reds += actual_reds;
             ERTS_PROC_REDUCTIONS_EXECUTED(esdp, rq,
@@ -10352,6 +10353,9 @@ execute_sys_tasks(Process *c_p, erts_aint32_t *statep, int in_reds)
                 local_only = 0;
 
             sig_reds = reds;
+
+            ERTS_ASSERT((Sint)erts_current_reductions(c_p, c_p) >= 0);
+
             sig_res = erts_proc_sig_handle_incoming(c_p, &state, &sig_reds,
                                                     reds, local_only);
             reds -= sig_reds;

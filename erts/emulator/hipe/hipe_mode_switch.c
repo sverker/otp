@@ -518,9 +518,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
                  if so we return out from native code to the interpreter */
               if (erts_atomic32_read_nob(&p->state) & ERTS_PSFLG_EXITING)
                   p->i = beam_exit;
-#ifdef DEBUG
-	      ASSERT(p->debug_reds_in == reds_in);
-#endif
+	      ASSERT_REDS(p->debug_reds_in == reds_in);
 	      p->flags &= ~F_HIPE_MODE;
 
 	      ERTS_UNREQ_PROC_MAIN_LOCK(p);
@@ -543,7 +541,7 @@ Process *hipe_mode_switch(Process *p, unsigned cmd, Eterm reg[])
 
 	      reds_in = p->fcalls;
 	      p->def_arg_reg[5] = reds_in;
-#ifdef DEBUG
+#if defined(DEBUG) || defined(DEBUG_REDS)
 	      p->debug_reds_in = reds_in;
 #endif
 	      if (p->i == hipe_beam_pc_resume) {

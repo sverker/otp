@@ -4430,6 +4430,8 @@ BIF_RETTYPE erts_debug_set_internal_state_2(BIF_ALIST_2)
 			BIF_P->fcalls = reds;
 		    else
 			BIF_P->fcalls = reds - CONTEXT_REDS;
+                    if (BIF_P->def_arg_reg[5] < reds)
+                        BIF_P->def_arg_reg[5] = reds;
 		}
 		BIF_RET(am_true);
 	    }

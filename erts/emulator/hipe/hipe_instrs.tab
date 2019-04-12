@@ -23,7 +23,7 @@
 HIPE_MODE_SWITCH(Cmd) {
     SWAPOUT;
     ERTS_DBG_CHK_REDS(c_p, FCALLS);
-    c_p->fcalls = FCALLS;
+    SET_FCALLS(c_p, FCALLS);
     c_p->def_arg_reg[4] = -neg_o_reds;
     c_p = hipe_mode_switch(c_p, $Cmd, reg);
 }

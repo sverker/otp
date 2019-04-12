@@ -3315,7 +3315,7 @@ BIF_RETTYPE erts_internal_map_next_3(BIF_ALIST_3) {
                 HRelease(BIF_P, hp + (2+3) * elems, hp);
             }
         }
-        BIF_P->fcalls -= 4 * (orig_elems - elems);
+        DEC_FCALLS(BIF_P, 4 * (orig_elems - elems));
         DESTROY_WSTACK(stack);
         BIF_RET(res);
 
@@ -3325,7 +3325,7 @@ BIF_RETTYPE erts_internal_map_next_3(BIF_ALIST_3) {
         } else {
             HRelease(BIF_P, hp + (2+3) * elems, hp);
         }
-        BIF_P->fcalls -= 4 * (orig_elems - elems);
+        DEC_FCALLS(BIF_P, 4 * (orig_elems - elems));
         DESTROY_WSTACK(stack);
         BIF_ERROR(BIF_P, BADARG);
     }
