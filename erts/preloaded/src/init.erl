@@ -200,6 +200,10 @@ boot(BootArgs) ->
     register(init, self()),
     process_flag(trap_exit, true),
 
+    %% If we are pid 1 (looking at you Docker) we ignore any
+    %% chld signals we get so that zombies go away
+    [os:set_signal(sigchld,ignore) || os:getpid() =:= 1],
+
     {Start0,Flags,Args} = parse_boot_args(BootArgs),
     %% We don't get to profile parsing of BootArgs
     case b2a(get_flag(profile_boot, Flags, false)) of
