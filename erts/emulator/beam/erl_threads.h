@@ -1634,7 +1634,7 @@ erts_mtx_init_locked(erts_mtx_t *mtx, char *name, Eterm extra, erts_lock_flags_t
 {
     erts_mtx_init(mtx, name, extra, flags);
 
-    erts_dlc_lock(&mtx->dlc);
+    erts_dlc_trylock(&mtx->dlc, 1);
     ethr_mutex_lock(&mtx->mtx);
     #ifdef ERTS_ENABLE_LOCK_CHECK
         erts_lc_trylock(1, &mtx->lc);
