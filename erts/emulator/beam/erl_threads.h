@@ -249,6 +249,7 @@
 
 #include "erl_lock_check.h"
 #include "erl_lock_count.h"
+#include "erl_dyn_lock_check.h"
 
 #if defined(__GLIBC__) && (__GLIBC__ << 16) + __GLIBC_MINOR__ < (2 << 16) + 5
 /*
@@ -290,10 +291,13 @@ typedef struct {
     erts_lc_lock_t lc;
 #endif
 #ifdef ERTS_ENABLE_LOCK_COUNT
-    erts_lcnt_ref_t lcnt;
+    serts_lcnt_ref_t lcnt;
 #endif
 #ifdef DEBUG
     erts_lock_flags_t flags;
+#endif
+#ifdef ERTS_DYN_LOCK_CHECK
+    erts_dlc_t dlc;
 #endif
 } erts_mtx_t;
 typedef ethr_cond erts_cnd_t;
@@ -309,6 +313,9 @@ typedef struct {
 #endif
 #ifdef DEBUG
     erts_lock_flags_t flags;
+#endif
+#ifdef ERTS_DYN_LOCK_CHECK
+    erts_dlc_t dlc;
 #endif
 } erts_rwmtx_t;
 
@@ -1619,6 +1626,7 @@ erts_mtx_init(erts_mtx_t *mtx, char *name, Eterm extra, erts_lock_flags_t flags)
 #ifdef ERTS_ENABLE_LOCK_COUNT
     erts_lcnt_init_ref_x(&mtx->lcnt, name, extra, flags);
 #endif
+    erts_dlc_create_lock(&mtx->dlc, name);
 }
 
 ERTS_GLB_INLINE void
@@ -1626,6 +1634,7 @@ erts_mtx_init_locked(erts_mtx_t *mtx, char *name, Eterm extra, erts_lock_flags_t
 {
     erts_mtx_init(mtx, name, extra, flags);
 
+    erts_dlc_lock(&mtx->dlc);
     ethr_mutex_lock(&mtx->mtx);
     #ifdef ERTS_ENABLE_LOCK_CHECK
         erts_lc_trylock(1, &mtx->lc);
@@ -1678,6 +1687,7 @@ erts_mtx_trylock(erts_mtx_t *mtx)
 #endif
 
     res = ethr_mutex_trylock(&mtx->mtx);
+    erts_dlc_trylock(&mtx->dlc, res == 0);
 
 #ifdef ERTS_ENABLE_LOCK_CHECK
 #ifdef ERTS_ENABLE_LOCK_POSITION
@@ -1690,7 +1700,6 @@ erts_mtx_trylock(erts_mtx_t *mtx)
     erts_lcnt_trylock(&mtx->lcnt, res);
 #endif    
     return res;
-
 }
 
 ERTS_GLB_INLINE void
@@ -1700,6 +1709,7 @@ erts_mtx_lock_x(erts_mtx_t *mtx, char *file, unsigned int line)
 erts_mtx_lock(erts_mtx_t *mtx)
 #endif
 {
+    erts_dlc_lock(&mtx->dlc);
 #ifdef ERTS_ENABLE_LOCK_CHECK
 #ifdef ERTS_ENABLE_LOCK_POSITION
     erts_lc_lock_x(&mtx->lc, file, line);
@@ -1725,6 +1735,7 @@ erts_mtx_unlock(erts_mtx_t *mtx)
 #ifdef ERTS_ENABLE_LOCK_COUNT
     erts_lcnt_unlock(&mtx->lcnt);
 #endif
+    erts_dlc_unlock(&mtx->dlc);
     ethr_mutex_unlock(&mtx->mtx);
 }
 
@@ -1850,6 +1861,7 @@ erts_rwmtx_init_opt(erts_rwmtx_t *rwmtx, erts_rwmtx_opt_t *opt,
 #ifdef ERTS_ENABLE_LOCK_COUNT
     erts_lcnt_init_ref_x(&rwmtx->lcnt, name, extra, flags);
 #endif
+    erts_dlc_create_lock(&rwmtx->dlc, name);
 }
 
 ERTS_GLB_INLINE void
@@ -1901,6 +1913,7 @@ erts_rwmtx_tryrlock(erts_rwmtx_t *rwmtx)
 #endif
 
     res = ethr_rwmutex_tryrlock(&rwmtx->rwmtx);
+    erts_dlc_trylock(&rwmtx->dlc, res == 0);
 
 #ifdef ERTS_ENABLE_LOCK_CHECK
 #ifdef ERTS_ENABLE_LOCK_POSITION
@@ -1923,6 +1936,7 @@ erts_rwmtx_rlock_x(erts_rwmtx_t *rwmtx, char *file, unsigned int line)
 erts_rwmtx_rlock(erts_rwmtx_t *rwmtx)
 #endif
 {
+    erts_dlc_lock(&rwmtx->dlc);
 #ifdef ERTS_ENABLE_LOCK_CHECK
 #ifdef ERTS_ENABLE_LOCK_POSITION
     erts_lc_lock_flg_x(&rwmtx->lc, ERTS_LOCK_OPTIONS_READ,file,line);
@@ -1942,6 +1956,8 @@ erts_rwmtx_rlock(erts_rwmtx_t *rwmtx)
 ERTS_GLB_INLINE void
 erts_rwmtx_runlock(erts_rwmtx_t *rwmtx)
 {
+    erts_dlc_unlock(&rwmtx->dlc);
+
 #ifdef ERTS_ENABLE_LOCK_CHECK
     erts_lc_unlock_flg(&rwmtx->lc, ERTS_LOCK_OPTIONS_READ);
 #endif
@@ -1968,6 +1984,7 @@ erts_rwmtx_tryrwlock(erts_rwmtx_t *rwmtx)
 #endif
 
     res = ethr_rwmutex_tryrwlock(&rwmtx->rwmtx);
+    erts_dlc_trylock(&rwmtx->dlc, res == 0);
 
 #ifdef ERTS_ENABLE_LOCK_CHECK
 #ifdef ERTS_ENABLE_LOCK_POSITION
@@ -1990,6 +2007,8 @@ erts_rwmtx_rwlock_x(erts_rwmtx_t *rwmtx, char *file, unsigned int line)
 erts_rwmtx_rwlock(erts_rwmtx_t *rwmtx)
 #endif
 {
+    erts_dlc_lock(&rwmtx->dlc);
+
 #ifdef ERTS_ENABLE_LOCK_CHECK
 #ifdef ERTS_ENABLE_LOCK_POSITION
     erts_lc_lock_flg_x(&rwmtx->lc, ERTS_LOCK_OPTIONS_RDWR,file,line);
@@ -2009,6 +2028,8 @@ erts_rwmtx_rwlock(erts_rwmtx_t *rwmtx)
 ERTS_GLB_INLINE void
 erts_rwmtx_rwunlock(erts_rwmtx_t *rwmtx)
 {
+    erts_dlc_unlock(&rwmtx->dlc);
+
 #ifdef ERTS_ENABLE_LOCK_CHECK
     erts_lc_unlock_flg(&rwmtx->lc, ERTS_LOCK_OPTIONS_RDWR);
 #endif
