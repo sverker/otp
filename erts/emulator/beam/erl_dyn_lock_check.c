@@ -9,13 +9,14 @@
 #define DLC_ASSERT(X) ERTS_ASSERT(X)
 
 #define MAX_LOCK_TYPES 64
+#define MAX_LOCK_NAME_SZ 64
 
 static erts_atomic_t n_lock_types; 
 static erts_mtx_t lock_types_mtx;
 
 struct lock_type
 {
-    const char *name;
+    char name[MAX_LOCK_NAME_SZ];
 };
 
 static struct lock_type lock_types[MAX_LOCK_TYPES];
@@ -58,6 +59,7 @@ void erts_dlc_init(void)
 void erts_dlc_create_lock(erts_dlc_t* dlc, const char* name)
 {
     erts_aint_t i, n = erts_atomic_read_nob(&n_lock_types);
+    int len;
 
     for (i=0; i < n; i++) {
         if (strcmp(name, lock_types[i].name) == 0) {
@@ -81,7 +83,9 @@ void erts_dlc_create_lock(erts_dlc_t* dlc, const char* name)
     }
 
     ERTS_ASSERT(n < MAX_LOCK_TYPES);
-    lock_types[n].name = name;
+    len = strlen(name);
+    ERTS_ASSERT(len < MAX_LOCK_NAME_SZ);
+    strcpy(lock_types[n].name, name);
     erts_atomic_set_nob(&n_lock_types, n+1);
     dlc->ix = n;
 
