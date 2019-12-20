@@ -30,6 +30,7 @@ typedef struct
     struct {
         unsigned ix;
         unsigned cnt;
+        unsigned trylock;
     } lock_order[MAX_LOCK_TYPES];
 }  dlc_thread_t;
 
@@ -159,6 +160,7 @@ int erts_dlc_lock(erts_dlc_t* dlc)
     thr->locked_before |= lock_bit;
     thr->lock_order[thr->n_locked].ix = dlc->ix;
     thr->lock_order[thr->n_locked].cnt = 1;
+    thr->lock_order[thr->n_locked].trylock = 0;
     thr->n_locked++;
     return 1;
 }
@@ -168,28 +170,45 @@ void erts_dlc_trylock(erts_dlc_t* dlc, int locked)
     const UWord lock_bit = IX_TO_BIT(dlc->ix);
     dlc_thread_t *thr = get_thr();
 
+    if (!locked) {
+        /* We have no way to detect trylock of self-locked instance (yet)
+           so nothing to do here. */
+        return;
+    }
+
     if (lock_bit & thr->locked_now) {
         int i;
         DLC_ASSERT(lock_bit & thr->locked_before);
         i = 0;
         while (1) {
             DLC_ASSERT(i < thr->n_locked);
-            if (dlc->ix == thr->lock_order[i].ix) {
-                DLC_ASSERT(thr->lock_order[i].cnt > 0);
-                thr->lock_order[i].cnt++;
-                return;
-            }
+            if (dlc->ix == thr->lock_order[i].ix)
+                break;
             i++;
         }
+        DLC_ASSERT(thr->lock_order[i].cnt > 0);
+        thr->lock_order[i].cnt++;
+        /* keep .trylock as is */
     }
-    if (locked) {
+    else {
         thr->locked_now |= lock_bit;
 
         if (!(thr->locked_before & lock_bit)) {
             thr->locked_before |= lock_bit;
             thr->lock_order[thr->n_locked].ix = dlc->ix;
             thr->lock_order[thr->n_locked].cnt = 1;
+            thr->lock_order[thr->n_locked].trylock = 1;
             thr->n_locked++;
+        }
+        else {
+            int i = 0;
+            while (1) {
+                DLC_ASSERT(i < thr->n_locked);
+                if (dlc->ix == thr->lock_order[i].ix)
+                    break;
+                i++;
+            }
+            thr->lock_order[i].cnt++;
         }
     }
 }
@@ -206,17 +225,16 @@ void erts_dlc_unlock(erts_dlc_t* dlc)
 
     i = 0;
     while (1) {
-        if (thr->lock_order[i].ix == dlc->ix) {
-            DLC_ASSERT(thr->lock_order[i].cnt > 0);
-            thr->lock_order[i].cnt--;
-            if (thr->lock_order[i].cnt == 0)
-                break;
-            else
-                return; /* still locked by other instance */
-        }
-        i++;
         DLC_ASSERT(i < thr->n_locked);
+        if (thr->lock_order[i].ix == dlc->ix)
+            break;
+        i++;
     }
+
+    DLC_ASSERT(thr->lock_order[i].cnt > 0);
+    thr->lock_order[i].cnt--;
+    if (thr->lock_order[i].cnt > 0)
+        return; /* still locked by other instance */
 
     thr->locked_now ^= lock_bit;
 
