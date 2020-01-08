@@ -132,7 +132,10 @@ int erts_dlc_lock(erts_dlc_t* dlc)
 
         DLC_ASSERT(thr->n_locked);
         if (is_bit_set(dlc->ix, thr->locked_now)) {
-            /* Must be other instance of last locked lock */
+            /*
+             * Lock of this type already held.
+             * Must be other instance of last locked lock
+             */
             DLC_ASSERT(is_bit_set(dlc->ix, thr->locked_before));
             if (dlc->ix != thr->lock_order[thr->n_locked-1].ix)
                 return lock_order_error(thr, dlc);
@@ -151,15 +154,18 @@ int erts_dlc_lock(erts_dlc_t* dlc)
 
         ERTS_ASSERT(!is_bit_set(dlc->ix, thr->locked_before));
 
-        if ((thr->locked_before[0] | before[0]) != before[0] ||
-            (thr->locked_before[1] | before[1]) != before[1]) {
+        /*
+         * Check if we introduce new lock dependencies
+         */
+        if ((thr->locked_before[0] & ~before[0]) ||
+            (thr->locked_before[1] & ~before[1])) {
             UWord new_before[2];
             before[0] = erts_atomic_read_bor_nob(&locked_before[dlc->ix][0],
                                                  thr->locked_before[0]);
             before[1] = erts_atomic_read_bor_nob(&locked_before[dlc->ix][1],
                                                  thr->locked_before[1]);
-            new_before[0] = (before[0] ^ thr->locked_before[0]) & thr->locked_before[0];
-            new_before[1] = (before[1] ^ thr->locked_before[1]) & thr->locked_before[1];
+            new_before[0] = thr->locked_before[0] & ~before[0];
+            new_before[1] = thr->locked_before[1] & ~before[1];
             if (new_before[0] | new_before[1]) {
                 int i;
                 for (i = 0; i < thr->n_locked; i++) {
