@@ -174,7 +174,7 @@ int erts_dlc_lock(erts_dlc_t* dlc)
                     if (is_bit_set(ix, new_before)) {
                         erts_atomic_read_bor_nob(&locked_after[ix][lock_word],
                                                  lock_bit);
-                        new_before[ix / 64] ^= IX_TO_BIT(ix % 64);
+                        new_before[ix / 64] &= ~IX_TO_BIT(ix % 64);
                     }
                 }
                 DLC_ASSERT(!(new_before[0]|new_before[1]));
@@ -267,17 +267,17 @@ void erts_dlc_unlock(erts_dlc_t* dlc)
     if (thr->lock_order[i].cnt > 0)
         return; /* still locked by other instance */
 
-    thr->locked_now[lock_word] ^= lock_bit;
+    thr->locked_now[lock_word] &= ~lock_bit;
 
     if (thr->lock_order[thr->n_locked-1].ix == dlc->ix) {
-        thr->locked_before[lock_word] ^= lock_bit;
+        thr->locked_before[lock_word] &= ~lock_bit;
         while (--thr->n_locked) {
             UWord bit = IX_TO_BIT(thr->lock_order[thr->n_locked-1].ix % 64);
             UWord word = thr->lock_order[thr->n_locked-1].ix / 64;
             if (bit & thr->locked_now[word])
                 break;
             DLC_ASSERT(thr->locked_before[word] & bit);
-            thr->locked_before[word] ^= bit;
+            thr->locked_before[word] &= ~bit;
         }
     }
 }
