@@ -205,6 +205,9 @@ erl_drv_mutex_trylock(ErlDrvMutex *dmtx)
     if (!dmtx)
 	fatal_error(EINVAL, "erl_drv_mutex_trylock()");
     res = ethr_mutex_trylock(&dmtx->mtx);
+#ifdef ERTS_DYN_LOCK_CHECK
+    erts_dlc_trylock(&dmtx->dlc, res != EBUSY);
+#endif
 #ifdef ERTS_ENABLE_LOCK_COUNT
     erts_lcnt_trylock(&dmtx->lcnt, res);
 #endif
