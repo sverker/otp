@@ -293,13 +293,13 @@ static int lock_order_error(dlc_thread_t *thr, erts_dlc_t* dlc)
     after[1] = erts_atomic_read_nob(&locked_after[dlc->ix][1]);
 
     erts_fprintf(stderr, "###### DYNAMIC LOCK ORDER VIOLATION ######\n");
-    erts_fprintf(stderr, "# Trying to lock '%s'\n", lock_types[dlc->ix]);
+    erts_fprintf(stderr, "# Trying to lock '%s'\n", lock_types[dlc->ix].name);
     for (i = 0; i < thr->n_locked; i++) {
         UWord bit = IX_TO_BIT(thr->lock_order[i].ix % 64);
         UWord word = thr->lock_order[i].ix / 64;
         if (bit & after[word]) {
             erts_fprintf(stderr, "# while '%s' is held\n",
-                         lock_types[thr->lock_order[i].ix]);
+                         lock_types[thr->lock_order[i].ix].name);
             ok = 1;
         }
     }
