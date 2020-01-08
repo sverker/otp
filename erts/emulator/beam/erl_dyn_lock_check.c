@@ -140,6 +140,7 @@ int erts_dlc_lock(erts_dlc_t* dlc)
             if (dlc->ix != thr->lock_order[thr->n_locked-1].ix)
                 return lock_order_error(thr, dlc);
             thr->lock_order[thr->n_locked-1].cnt++;
+            thr->lock_order[thr->n_locked-1].trylock = 0;
             return 1;
         }
 
