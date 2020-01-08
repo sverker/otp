@@ -271,31 +271,30 @@ void erts_dlc_unlock(erts_dlc_t* dlc)
 
     thr->locked_now[lock_word] &= ~lock_bit;
 
-    i = thr->n_locked - 1;
-    if (thr->lock_order[i].ix == dlc->ix) {
-        thr->locked_before[lock_word] &= ~lock_bit;
-        thr->n_locked--;
-
-        while (--i >= 0) {
-            UWord bit, word;
-            bit = IX_TO_BIT(thr->lock_order[i].ix % 64);
-            word = thr->lock_order[i].ix / 64;
-            if (bit & thr->locked_now[word]) {
-                if (!thr->lock_order[i].trylock)
-                    break;
+    /*
+     * Now clear and forget all our unlocked locks (including this one)
+     * THAT was not locked *before* any of our still locked locks.
+     */
+    for (i = thr->n_locked-1; i >= 0; i--) {
+        UWord bit = IX_TO_BIT(thr->lock_order[i].ix % 64);
+        UWord word = thr->lock_order[i].ix / 64;
+        if (bit & thr->locked_now[word]) {
+            if (!thr->lock_order[i].trylock) {
+                /* A locked lock, must remember it and all locked before it. */
+                break;
             }
-            else { /* forget this already unlocked lock */
-                int j;
+        }
+        else { /* forget this unlocked lock */
+            int j;
 
-                DLC_ASSERT(thr->locked_before[word] & bit);
-                thr->locked_before[word] &= ~bit;
-                thr->n_locked--;
+            DLC_ASSERT(thr->locked_before[word] & bit);
+            thr->locked_before[word] &= ~bit;
+            thr->n_locked--;
 
-                /* and move up all trylocks that we may have skipped over */
-                for (j = i; j < thr->n_locked; j++) {
-                    DLC_ASSERT(thr->lock_order[j+1].trylock);
-                    thr->lock_order[j] = thr->lock_order[j+1];
-                }
+            /* and move up all trylocks that we may have skipped over */
+            for (j = i; j < thr->n_locked; j++) {
+                DLC_ASSERT(thr->lock_order[j+1].trylock);
+                thr->lock_order[j] = thr->lock_order[j+1];
             }
         }
     }
