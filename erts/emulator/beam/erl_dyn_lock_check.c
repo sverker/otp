@@ -304,24 +304,22 @@ static int dlc_test = 0;
 
 static int lock_order_error(dlc_thread_t *thr, erts_dlc_t* dlc)
 {
+    const UWord lock_bit = IX_TO_BIT(dlc->ix % 64);
+    const unsigned lock_word = dlc->ix / 64;
     int i, ok = 0;
-    UWord after[2];
-    after[0] = erts_atomic_read_nob(&locked_after[dlc->ix][0]);
-    after[1] = erts_atomic_read_nob(&locked_after[dlc->ix][1]);
 
     erts_fprintf(stderr, "###### DYNAMIC LOCK ORDER VIOLATION ######\n");
     erts_fprintf(stderr, "# Trying to lock '%s'\n", lock_types[dlc->ix].name);
     for (i = 0; i < thr->n_locked; i++) {
-        UWord bit = IX_TO_BIT(thr->lock_order[i].ix % 64);
-        UWord word = thr->lock_order[i].ix / 64;
-        if (bit & after[word]) {
+        const unsigned ix = thr->lock_order[i].ix;
+
+        if (lock_bit & erts_atomic_read_nob(&locked_before[ix][lock_word])) {
             erts_fprintf(stderr, "# while '%s' is held\n",
                          lock_types[thr->lock_order[i].ix].name);
             ok = 1;
         }
     }
-    if (!ok)
-        erts_fprintf(stderr, "Huh? Did not find any lock out of order\n");
+    DLC_ASSERT(ok);
     if (dlc_test)
         return 0;
     abort();
