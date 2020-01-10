@@ -36,6 +36,8 @@
 #define DLC_ASSERT(X) ERTS_ASSERT(X)
 
 #define MAX_LOCK_TYPES (64*2)
+#define BITS_PER_WORD (sizeof(UWord)*8)
+#define LOCK_TYPE_WORDS ((MAX_LOCK_TYPES-1)/BITS_PER_WORD + 1)
 #define MAX_LOCK_NAME_SZ 64
 
 static erts_atomic_t n_lock_types; 
@@ -50,19 +52,49 @@ static struct lock_type lock_types[MAX_LOCK_TYPES];
 
 static erts_tsd_key_t dlc_thread_key;
 
+/* Thread specific data */
 typedef struct
 {
-    UWord locked_now[2];
-    UWord locked_before[2];
-    unsigned n_locked;
+    UWord locked_now[LOCK_TYPE_WORDS];
+    /* Bitvector with all locktypes currently locked by this thread */
+
+    UWord locked_before[LOCK_TYPE_WORDS];
+    /* Bitvector same as 'locked_now' PLUS all unlocked locks that were locked
+     * ~before~ the locks in 'locked_now'.
+     * A lock in 'locked_before' is only cleared when all locked after it
+     * have been unlocked.
+     * Example 1:
+     *   1. Lock A:    locked_now = A    locked_before = A
+     *   2. Lock B:    locked_now = A|B  locked_before = A|B
+     *   3. Unlock A:  locked_now = B    locked_before = A|B
+     *   4. Lock C:    locked_now = B|C  locked_before = A|B|C
+     *   5. Unlock B:  locked_now = C    locked_before = A|B|C
+     *   6. Unlock C:  locked_now =      locked_before =
+     *
+     * Example 2:
+     *   Lock A:    locked_now = A    locked_before = A
+     *   Trylock B: locked_now = A|B  locked_before = A|B
+     *   Unlock A:  locked_now = B    locked_before = B
+     *   Lock C:    locked_now = B|C  locked_before = B|C
+     *   Unlock B:  locked_now = B    locked_before = B|C
+     *   Unlock C:  locked_now =      locked_before =
+     *
+     *   The trylock of B has no ordering dependency to A.
+     */
+
     struct {
-        unsigned ix;
-        unsigned cnt;
-        unsigned trylock;
+        unsigned ix;      /* lock type id (bit index) */
+        unsigned cnt;     /* nr of locked instances of this type */
+        unsigned trylock; /* true of only trylocked instances */
     } lock_order[MAX_LOCK_TYPES];
+    /* The locks in 'locked_before' ordered in an array.*/
+
+    unsigned n_locked;
+    /* Number or lock types in 'locked_before' and 'lock_order' */
+
 }  dlc_thread_t;
 
-static erts_atomic_t locked_before[MAX_LOCK_TYPES][2];
+static erts_atomic_t locked_before[MAX_LOCK_TYPES][LOCK_TYPE_WORDS];
 
 static int check_lock_order(dlc_thread_t*, erts_dlc_t*);
 static int lock_order_error(dlc_thread_t*, erts_dlc_t*);
@@ -130,19 +162,20 @@ done:
         erts_mtx_unlock(&lock_types_mtx);
 }
 
-#define IX_TO_BIT(IX) ((UWord)1 << (IX))
-
+#define IX_TO_BIT(IX) ((UWord)1 << ((IX) % BITS_PER_WORD))
+#define IX_TO_WORD(IX) ((IX) / BITS_PER_WORD)
 
 static dlc_thread_t *get_thr(void)
 {
     dlc_thread_t *thr = (dlc_thread_t*) erts_tsd_get(dlc_thread_key);
+    int i;
     
     if (!thr) {
         thr = malloc(sizeof(dlc_thread_t));
-        thr->locked_now[0] = 0;
-        thr->locked_now[1] = 0;
-        thr->locked_before[0] = 0;
-        thr->locked_before[1] = 0;
+        for (i = 0; i < LOCK_TYPE_WORDS; i++) {
+            thr->locked_now[i] = 0;
+            thr->locked_before[i] = 0;
+        }
         thr->n_locked = 0;
         erts_tsd_set(dlc_thread_key, thr);
     }
@@ -153,23 +186,40 @@ static dlc_thread_t *get_thr(void)
 static int is_bit_set(unsigned ix, const UWord* words)
 {
     DLC_ASSERT(ix < MAX_LOCK_TYPES);
-    return (words[ix / 64] & IX_TO_BIT(ix % 64)) != (UWord)0;
+    return (words[IX_TO_WORD(ix)] & IX_TO_BIT(ix)) != (UWord)0;
 }
+
+static int is_any_bit_set(const UWord* words)
+{
+    UWord bor = 0;
+    int i=0;
+    for (i = 0; i < LOCK_TYPE_WORDS; i++)
+        bor |= words[i];
+    return bor != (UWord)0;
+}
+
+static void set_bit(unsigned ix, UWord* words)
+{
+    DLC_ASSERT(ix < MAX_LOCK_TYPES);
+    words[IX_TO_WORD(ix)] |= IX_TO_BIT(ix);
+}
+
+static void clr_bit(unsigned ix, UWord* words)
+{
+    DLC_ASSERT(ix < MAX_LOCK_TYPES);
+    words[IX_TO_WORD(ix)] &= ~IX_TO_BIT(ix);
+}
+
 
 int erts_dlc_lock(erts_dlc_t* dlc)
 {
     dlc_thread_t *thr = get_thr();
-    const UWord lock_bit = IX_TO_BIT(dlc->ix % 64);
-    const unsigned lock_word = dlc->ix / 64;
-
         
-    if (thr->locked_now[0] | thr->locked_now[1]) {
-        UWord before[2];
-        UWord new_before[2];
+    if (thr->n_locked) {
+        int i;
 
-        DLC_ASSERT(thr->n_locked);
+        DLC_ASSERT(is_any_bit_set(thr->locked_now));
         if (is_bit_set(dlc->ix, thr->locked_now)) {
-            int i;
             /*
              * Lock of this type already held.
              * Must be other instance of last locked lock
@@ -189,37 +239,35 @@ int erts_dlc_lock(erts_dlc_t* dlc)
             return 1;
         }
 
-        before[0] = erts_atomic_read_nob(&locked_before[dlc->ix][0]);
-        before[1] = erts_atomic_read_nob(&locked_before[dlc->ix][1]);
-
         /*
          * Check if we introduce new lock dependencies
          */
-        new_before[0] = thr->locked_before[0] & ~before[0];
-        new_before[1] = thr->locked_before[1] & ~before[1];
-        if (new_before[0] | new_before[1]) {
-            if (!check_lock_order(thr, dlc)) {
-                DLC_ASSERT(dlc_unit_test);
-                return 0;
-            }
-            erts_atomic_read_bor_mb(&locked_before[dlc->ix][0],
-                                    thr->locked_before[0]);
-            erts_atomic_read_bor_mb(&locked_before[dlc->ix][1],
-                                    thr->locked_before[1]);
-            /* check again to detect race */
-            if (!check_lock_order(thr, dlc)) {
-                DLC_ASSERT(dlc_unit_test);
-                /* can't continue test as 'locked_before' is inconsistent */
-                abort();
+        for (i=0; i < LOCK_TYPE_WORDS; i++) {
+            UWord before = erts_atomic_read_nob(&locked_before[dlc->ix][i]);
+            UWord new_before = (thr->locked_before[i] & ~before);
+
+            if (new_before) {
+                if (!check_lock_order(thr, dlc)) {
+                    DLC_ASSERT(dlc_unit_test);
+                    return 0;
+                }
+                erts_atomic_read_bor_mb(&locked_before[dlc->ix][i],
+                                        new_before);
+                /* check again to detect racing deadlock */
+                if (!check_lock_order(thr, dlc)) {
+                    DLC_ASSERT(dlc_unit_test);
+                    /* can't continue test as 'locked_before' is inconsistent */
+                    abort();
+                }
             }
         }
     }
     else {
-        DLC_ASSERT(!(thr->locked_before[0]|thr->locked_before[1]));
-        DLC_ASSERT(!thr->n_locked);
+        DLC_ASSERT(!is_any_bit_set(thr->locked_now));
+        DLC_ASSERT(!is_any_bit_set(thr->locked_before));
     }
-    thr->locked_now[lock_word] |= lock_bit;
-    thr->locked_before[lock_word] |= lock_bit;
+    set_bit(dlc->ix, thr->locked_now);
+    set_bit(dlc->ix, thr->locked_before);
     thr->lock_order[thr->n_locked].ix = dlc->ix;
     thr->lock_order[thr->n_locked].cnt = 1;
     thr->lock_order[thr->n_locked].trylock = 0;
@@ -229,8 +277,6 @@ int erts_dlc_lock(erts_dlc_t* dlc)
 
 void erts_dlc_trylock(erts_dlc_t* dlc, int locked)
 {
-    const UWord lock_bit = IX_TO_BIT(dlc->ix % 64);
-    const unsigned lock_word = dlc->ix / 64;
     dlc_thread_t *thr = get_thr();
 
     if (!locked) {
@@ -254,10 +300,10 @@ void erts_dlc_trylock(erts_dlc_t* dlc, int locked)
         /* keep .trylock as is */
     }
     else {
-        thr->locked_now[lock_word] |= lock_bit;
+        set_bit(dlc->ix, thr->locked_now);
 
         if (!is_bit_set(dlc->ix, thr->locked_before)) {
-            thr->locked_before[lock_word] |= lock_bit;
+            set_bit(dlc->ix, thr->locked_before);
             thr->lock_order[thr->n_locked].ix = dlc->ix;
             thr->lock_order[thr->n_locked].cnt = 1;
             thr->lock_order[thr->n_locked].trylock = 1;
@@ -278,8 +324,6 @@ void erts_dlc_trylock(erts_dlc_t* dlc, int locked)
 
 void erts_dlc_unlock(erts_dlc_t* dlc)
 {
-    const UWord lock_bit = IX_TO_BIT(dlc->ix % 64);
-    const unsigned lock_word = dlc->ix / 64;
     dlc_thread_t *thr = (dlc_thread_t*) erts_tsd_get(dlc_thread_key);
     int i;
     
@@ -301,16 +345,15 @@ void erts_dlc_unlock(erts_dlc_t* dlc)
     if (thr->lock_order[i].cnt > 0)
         return; /* still locked by other instance */
 
-    thr->locked_now[lock_word] &= ~lock_bit;
+    clr_bit(dlc->ix, thr->locked_now);
 
     /*
      * Now clear and forget all our unlocked locks (including this one)
      * THAT was not locked *before* any of our still locked locks.
      */
     for (i = thr->n_locked-1; i >= 0; i--) {
-        UWord bit = IX_TO_BIT(thr->lock_order[i].ix % 64);
-        UWord word = thr->lock_order[i].ix / 64;
-        if (bit & thr->locked_now[word]) {
+        if (is_bit_set(thr->lock_order[i].ix, thr->locked_now)) {
+            DLC_ASSERT(thr->lock_order[i].cnt);
             if (!thr->lock_order[i].trylock) {
                 /* A locked lock, must remember it and all locked before it. */
                 break;
@@ -319,8 +362,9 @@ void erts_dlc_unlock(erts_dlc_t* dlc)
         else { /* forget this unlocked lock */
             int j;
 
-            DLC_ASSERT(thr->locked_before[word] & bit);
-            thr->locked_before[word] &= ~bit;
+            DLC_ASSERT(!thr->lock_order[i].cnt);
+            DLC_ASSERT(is_bit_set(thr->lock_order[i].ix, thr->locked_before));
+            clr_bit(thr->lock_order[i].ix, thr->locked_before);
             thr->n_locked--;
 
             /* and move up all trylocks that we may have skipped over */
@@ -335,7 +379,7 @@ void erts_dlc_unlock(erts_dlc_t* dlc)
 static int check_lock_order(dlc_thread_t *thr, erts_dlc_t* dlc)
 {
     const UWord lock_bit = IX_TO_BIT(dlc->ix % 64);
-    const unsigned lock_word = dlc->ix / 64;
+    const unsigned lock_word = IX_TO_WORD(dlc->ix);
     int i, error = 0;
 
     for (i = 0; i < thr->n_locked; i++) {
@@ -370,11 +414,11 @@ static int lock_order_error(dlc_thread_t *thr, erts_dlc_t* dlc)
 #ifdef DLC_UNIT_TEST
 static void erts_dlc_clear_order(void)
 {
-    int i, n = erts_atomic_read_nob(&n_lock_types);
+    int i, j, n = erts_atomic_read_nob(&n_lock_types);
 
     for (i = 0; i < n; i++) {
-        erts_atomic_set_nob(&locked_before[i][0], 0);
-        erts_atomic_set_nob(&locked_before[i][1], 0);
+        for (j = 0; j < LOCK_TYPE_WORDS; j++)
+            erts_atomic_set_nob(&locked_before[i][j], 0);
     }
 }
 
