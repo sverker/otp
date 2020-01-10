@@ -1,3 +1,30 @@
+/*
+ * %CopyrightBegin%
+ *
+ * Copyright Ericsson AB 2001-2017. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * %CopyrightEnd%
+ */
+
+/* Description: A dynamic lock order checker.
+ *              A global locking order is recorded during runtime
+ *              and continuously checked against itself.
+ *
+ * Author: Sverker Eriksson
+ */
+
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -62,10 +89,16 @@ void erts_dlc_init(void)
 void erts_dlc_create_lock(erts_dlc_t* dlc, const char* name)
 {
     erts_aint_t i, n = erts_atomic_read_nob(&n_lock_types);
-    int len;
+    int name_len;
+
+    for (i = 0; name[i]; i++) {
+        if (name[i] == '[')
+            break;
+    }
+    name_len = i;
 
     for (i=0; i < n; i++) {
-        if (strcmp(name, lock_types[i].name) == 0) {
+        if (sys_strncmp(name, lock_types[i].name, name_len) == 0) {
             dlc->ix = i;
             return; /* already exists */
         }
@@ -79,16 +112,16 @@ void erts_dlc_create_lock(erts_dlc_t* dlc, const char* name)
     n = erts_atomic_read_nob(&n_lock_types);
 
     for ( ; i < n; i++) {
-        if (strcmp(name, lock_types[i].name) == 0) {
+        if (sys_strncmp(name, lock_types[i].name, name_len) == 0) {
             dlc->ix = i;
             goto done; /* already exists (race) */
         }
     }
 
     ERTS_ASSERT(n < MAX_LOCK_TYPES);
-    len = strlen(name);
-    ERTS_ASSERT(len < MAX_LOCK_NAME_SZ);
-    strcpy(lock_types[n].name, name);
+    ERTS_ASSERT(name_len < MAX_LOCK_NAME_SZ);
+    sys_strncpy(lock_types[n].name, name, name_len);
+    lock_types[n].name[name_len] = 0;
     erts_atomic_set_nob(&n_lock_types, n+1);
     dlc->ix = n;
 
