@@ -109,16 +109,22 @@ const Eterm *erts_maps_get(Eterm key, Eterm map);
 
 const Eterm *erts_hashmap_get(Uint32 hx, Eterm key, Eterm map);
 
-/* hamt nodes v2.0
- *
- * node :: leaf | bitmap
- * head
+/*
+ * hamt root node
  */
 typedef struct hashmap_head_s {
     Eterm thing_word;
     Uint size;
     Eterm items[1];
 } hashmap_head_t;
+
+/*
+ * hamt inner node
+ */
+typedef struct hashmap_node_s {
+    Eterm thing_word;
+    Eterm items[1];
+} hashmap_node_t;
 
 /* thing_word tagscheme
  * Need two bits for map subtags
@@ -131,12 +137,10 @@ typedef struct hashmap_head_s {
  *
  *     vvvvvvvvvvvvvvvv aaaaaaaamm111100       val:16, arity:8, mtype:2
  *
- * unsure about trailing zeros
- *
- * map-tag:
- *     00 - flat map tag (non-hamt) -> val:16 = #items
- *     01 - map-node bitmap tag     -> val:16 = bitmap
- *     10 - map-head (bitmap-node)  -> val:16 = bitmap
+ * mtype:
+ *     00 - flat map tag,  arity:8 = 1, val:16 = 0
+ *     01 - hamt-node tag, arity:8 = 0, val:16 = bitmap
+ *     10 - hamt-head tag, arity:8 = 1, val:16 = bitmap
  */
 
 /* erl_map.h stuff */
@@ -163,9 +167,9 @@ typedef struct hashmap_head_s {
 /* 2 bits maps tag + 4 bits subtag + 2 ignore bits */
 #define _HEADER_MAP_SUBTAG_MASK       (0xfc)
 
-#define HAMT_SUBTAG_NODE_BITMAP  ((MAP_HEADER_TAG_HAMT_NODE << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
-#define HAMT_SUBTAG_HEAD_BITMAP  ((MAP_HEADER_TAG_HAMT_HEAD << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
-#define HAMT_SUBTAG_HEAD_FLATMAP ((MAP_HEADER_TAG_FLATMAP_HEAD << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
+#define MAP_SUBTAG_HAMT_NODE  ((MAP_HEADER_TAG_HAMT_NODE << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
+#define MAP_SUBTAG_HAMT_HEAD  ((MAP_HEADER_TAG_HAMT_HEAD << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
+#define MAP_SUBTAG_FLATMAP ((MAP_HEADER_TAG_FLATMAP_HEAD << _HEADER_ARITY_OFFS) | MAP_SUBTAG)
 
 #define hashmap_index(hash)      (((Uint32)hash) & 0xf)
 

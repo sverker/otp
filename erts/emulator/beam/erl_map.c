@@ -1287,8 +1287,8 @@ recurse:
             hdrA = *sp->srcA++;
             ASSERT(is_header(hdrA));
             switch (hdrA & _HEADER_MAP_SUBTAG_MASK) {
-            case HAMT_SUBTAG_HEAD_BITMAP: sp->srcA++;
-            case HAMT_SUBTAG_NODE_BITMAP: {
+            case MAP_SUBTAG_HAMT_HEAD: sp->srcA++;
+            case MAP_SUBTAG_HAMT_NODE: {
                 sp->abm = MAP_HEADER_VAL(hdrA);
                 break;
             }
@@ -1309,8 +1309,8 @@ recurse:
             hdrB = *sp->srcB++;
             ASSERT(is_header(hdrB));
             switch (hdrB & _HEADER_MAP_SUBTAG_MASK) {
-            case HAMT_SUBTAG_HEAD_BITMAP: sp->srcB++;
-            case HAMT_SUBTAG_NODE_BITMAP: {
+            case MAP_SUBTAG_HAMT_HEAD: sp->srcB++;
+            case MAP_SUBTAG_HAMT_NODE: {
                 sp->bbm = MAP_HEADER_VAL(hdrB);
                 break;
             }
@@ -1900,9 +1900,9 @@ Uint hashmap_node_size(Eterm hdr, Eterm **nodep)
     Uint sz;
 
     switch(hdr & _HEADER_MAP_SUBTAG_MASK) {
-    case HAMT_SUBTAG_HEAD_BITMAP:
+    case MAP_SUBTAG_HAMT_HEAD:
         if (nodep) ++*nodep;
-    case HAMT_SUBTAG_NODE_BITMAP:
+    case MAP_SUBTAG_HAMT_NODE:
         sz = hashmap_bitcount(MAP_HEADER_VAL(hdr));
         ASSERT(sz < 17);
 	break;
@@ -2097,7 +2097,7 @@ int erts_hashmap_insert_down(Uint32 hx, Eterm key, Eterm node, Uint *sz,
 		ASSERT(is_header(hdr));
 
 		switch(hdr & _HEADER_MAP_SUBTAG_MASK) {
-		    case HAMT_SUBTAG_NODE_BITMAP:
+		    case MAP_SUBTAG_HAMT_NODE:
 			hval = MAP_HEADER_VAL(hdr);
 			ix   = hashmap_index(hx);
                         bp   = 1 << ix;
@@ -2126,7 +2126,7 @@ int erts_hashmap_insert_down(Uint32 hx, Eterm key, Eterm node, Uint *sz,
                         size += HAMT_NODE_SZ(n);
                         break;
 
-		    case HAMT_SUBTAG_HEAD_BITMAP:
+		    case MAP_SUBTAG_HAMT_HEAD:
 			hval = MAP_HEADER_VAL(hdr);
 			ix   = hashmap_index(hx);
 			bp   = 1 << ix;
@@ -2224,7 +2224,7 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
 		ASSERT(is_header(hdr));
 
 		switch(hdr & _HEADER_MAP_SUBTAG_MASK) {
-		    case HAMT_SUBTAG_NODE_BITMAP:
+		    case MAP_SUBTAG_HAMT_NODE:
 			slot  = (Uint)   ESTACK_POP(*sp);
 			bp    = (Uint32) ESTACK_POP(*sp);
 			n     = (Uint32) ESTACK_POP(*sp);
@@ -2240,7 +2240,7 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
 
 			res = make_hashmap(nhp);
 			break;
-		    case HAMT_SUBTAG_HEAD_BITMAP:
+		    case MAP_SUBTAG_HAMT_HEAD:
 			slot  = (Uint)   ESTACK_POP(*sp);
 			bp    = (Uint32) ESTACK_POP(*sp);
 			n     = (Uint32) ESTACK_POP(*sp);
@@ -2336,7 +2336,7 @@ static Eterm hashmap_delete(Process *p, Uint32 hx, Eterm key,
 		ASSERT(is_header(hdr));
 
 		switch(hdr & _HEADER_MAP_SUBTAG_MASK) {
-		    case HAMT_SUBTAG_NODE_BITMAP:
+		    case MAP_SUBTAG_HAMT_NODE:
 			hval = MAP_HEADER_VAL(hdr);
 			ix   = hashmap_index(hx);
 			bp   = 1 << ix;
@@ -2360,7 +2360,7 @@ static Eterm hashmap_delete(Process *p, Uint32 hx, Eterm key,
                         size += HAMT_NODE_SZ(n);
                         break;
 
-		    case HAMT_SUBTAG_HEAD_BITMAP:
+		    case MAP_SUBTAG_HAMT_HEAD:
 			hval = MAP_HEADER_VAL(hdr);
 			ix   = hashmap_index(hx);
 			bp   = 1 << ix;
@@ -2448,7 +2448,7 @@ unroll:
 	ASSERT(is_header(hdr));
 
 	switch(hdr & _HEADER_MAP_SUBTAG_MASK) {
-	    case HAMT_SUBTAG_NODE_BITMAP:
+	    case MAP_SUBTAG_HAMT_NODE:
 		slot = (Uint)   ESTACK_POP(stack);
 		bp   = (Uint32) ESTACK_POP(stack);
 		n    = (Uint32) ESTACK_POP(stack);
@@ -2516,7 +2516,7 @@ unroll:
 		    res = make_hashmap(nhp);
 		}
 		break;
-	    case HAMT_SUBTAG_HEAD_BITMAP:
+	    case MAP_SUBTAG_HAMT_HEAD:
 		slot = (Uint)   ESTACK_POP(stack);
 		bp   = (Uint32) ESTACK_POP(stack);
 		n    = (Uint32) ESTACK_POP(stack);
@@ -2761,11 +2761,11 @@ BIF_RETTYPE erts_internal_map_hashmap_children_1(BIF_ALIST_1) {
         ASSERT(is_header(hdr));
 
         switch(hdr & _HEADER_MAP_SUBTAG_MASK) {
-            case HAMT_SUBTAG_HEAD_FLATMAP:
+            case MAP_SUBTAG_FLATMAP:
                 BIF_ERROR(BIF_P, BADARG);
-            case HAMT_SUBTAG_HEAD_BITMAP:
+            case MAP_SUBTAG_HAMT_HEAD:
                 ptr++;
-            case HAMT_SUBTAG_NODE_BITMAP:
+            case MAP_SUBTAG_HAMT_NODE:
                 ptr++;
                 sz = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                 break;
@@ -2820,7 +2820,7 @@ static Eterm hashmap_info(Process *p, Eterm node) {
 		hdr = *ptr;
 		ASSERT(is_header(hdr));
 		switch(hdr & _HEADER_MAP_SUBTAG_MASK) {
-		    case HAMT_SUBTAG_NODE_BITMAP:
+		    case MAP_SUBTAG_HAMT_NODE:
 			nbitmap++;
 			sz = hashmap_bitcount(MAP_HEADER_VAL(hdr));
 			ASSERT(sz < 17);
@@ -2830,7 +2830,7 @@ static Eterm hashmap_info(Process *p, Eterm node) {
 			    ESTACK_PUSH(stack, ptr[sz+1]);
 			}
 			break;
-		    case HAMT_SUBTAG_HEAD_BITMAP:
+		    case MAP_SUBTAG_HAMT_HEAD:
 			nbitmap++;
 			sz = hashmap_bitcount(MAP_HEADER_VAL(hdr));
 			bitmap_usage[sz-1] += 1;

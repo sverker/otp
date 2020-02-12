@@ -1541,7 +1541,7 @@ make_hash2_helper(Eterm term_param, const int can_trap, Eterm* state_mref_write_
                     .ptr = boxed_val(term) + 1,
                     .i = 0};
                 switch (hdr & _HEADER_MAP_SUBTAG_MASK) {
-                case HAMT_SUBTAG_HEAD_FLATMAP:
+                case MAP_SUBTAG_FLATMAP:
                 {
                     flatmap_t *mp = (flatmap_t *)flatmap_val(term);
                     ErtsMakeHash2Context_HAMT_SUBTAG_HEAD_FLATMAP ctx = {
@@ -1572,7 +1572,7 @@ make_hash2_helper(Eterm term_param, const int can_trap, Eterm* state_mref_write_
                     goto hash2_common;
                 }
 
-                case HAMT_SUBTAG_HEAD_BITMAP:
+                case MAP_SUBTAG_HAMT_HEAD:
                     size = *ctx.ptr++;
                     UINT32_HASH(size, HCONST_16);
                     if (size == 0)
@@ -1584,8 +1584,8 @@ make_hash2_helper(Eterm term_param, const int can_trap, Eterm* state_mref_write_
                     hash_xor_pairs = 0;
                 }
                 switch (hdr & _HEADER_MAP_SUBTAG_MASK) {
-                case HAMT_SUBTAG_HEAD_BITMAP:
-                case HAMT_SUBTAG_NODE_BITMAP:
+                case MAP_SUBTAG_HAMT_HEAD:
+                case MAP_SUBTAG_HAMT_NODE:
                     ctx.i = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                     break;
                 default:
@@ -2094,7 +2094,7 @@ make_internal_hash(Eterm term, Uint32 salt)
                  * for identical maps (in this VM instance).
                  */
                 switch (hdr & _HEADER_MAP_SUBTAG_MASK) {
-                case HAMT_SUBTAG_HEAD_FLATMAP:
+                case MAP_SUBTAG_FLATMAP:
                 {
                     flatmap_t *mp = (flatmap_t *)flatmap_val(term);
                     Eterm *ks = flatmap_get_keys(mp);
@@ -2110,15 +2110,15 @@ make_internal_hash(Eterm term, Uint32 salt)
                     }
                     goto pop_next;
                 }
-                case HAMT_SUBTAG_HEAD_BITMAP:
+                case MAP_SUBTAG_HAMT_HEAD:
                     size = *ptr++;
                     UINT32_HASH(size, HCONST_16);
                     if (size == 0)
                         goto pop_next;
                 }
                 switch (hdr & _HEADER_MAP_SUBTAG_MASK) {
-                case HAMT_SUBTAG_HEAD_BITMAP:
-                case HAMT_SUBTAG_NODE_BITMAP:
+                case MAP_SUBTAG_HAMT_HEAD:
+                case MAP_SUBTAG_HAMT_NODE:
                     i = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                     break;
                 default:
@@ -2964,11 +2964,11 @@ tailrecur_ne:
 		    aa = hashmap_val(a) + 1;
 		    bb = hashmap_val(b) + 1;
 		    switch (hdr & _HEADER_MAP_SUBTAG_MASK) {
-		    case HAMT_SUBTAG_HEAD_BITMAP:
+		    case MAP_SUBTAG_HAMT_HEAD:
                         if (aa[0] != bb[0])
                             goto not_equal;
 			aa++; bb++;
-		    case HAMT_SUBTAG_NODE_BITMAP:
+		    case MAP_SUBTAG_HAMT_NODE:
 			sz = hashmap_bitcount(MAP_HEADER_VAL(hdr));
 			ASSERT(sz > 0 && sz < 17);
 			break;
