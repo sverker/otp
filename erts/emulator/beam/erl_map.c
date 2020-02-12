@@ -2686,9 +2686,9 @@ BIF_RETTYPE erts_internal_term_type_1(BIF_ALIST_1) {
                     switch (MAP_HEADER_TYPE(hdr)) {
                         case MAP_HEADER_TAG_FLATMAP_HEAD :
                             BIF_RET(ERTS_MAKE_AM("flatmap"));
-                        case MAP_HEADER_TAG_HAMT_HEAD_BITMAP :
+                        case MAP_HEADER_TAG_HAMT_HEAD :
                             BIF_RET(ERTS_MAKE_AM("hashmap"));
-                        case MAP_HEADER_TAG_HAMT_NODE_BITMAP :
+                        case MAP_HEADER_TAG_HAMT_NODE :
                             BIF_RET(ERTS_MAKE_AM("hashmap_node"));
                         default:
                             erts_exit(ERTS_ABORT_EXIT, "term_type: bad map header type %d\n", MAP_HEADER_TYPE(hdr));

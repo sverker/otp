@@ -164,8 +164,8 @@ Uint size_object_x(Eterm obj, erts_literal_area_t *litopt)
                                 }
                                 goto pop_next;
                             }
-			case MAP_HEADER_TAG_HAMT_HEAD_BITMAP :
-			case MAP_HEADER_TAG_HAMT_NODE_BITMAP :
+			case MAP_HEADER_TAG_HAMT_HEAD :
+			case MAP_HEADER_TAG_HAMT_NODE :
 			    {
 				Eterm *head;
 				Uint sz;
@@ -427,8 +427,8 @@ Uint size_shared(Eterm obj)
                         }
                         goto pop_next;
                     }
-                    case MAP_HEADER_TAG_HAMT_HEAD_BITMAP :
-                    case MAP_HEADER_TAG_HAMT_NODE_BITMAP : {
+                    case MAP_HEADER_TAG_HAMT_HEAD :
+                    case MAP_HEADER_TAG_HAMT_NODE : {
                         Uint n = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                         sum += 1 + n + header_arity(hdr);
                         ptr += 1 + header_arity(hdr);
@@ -557,8 +557,8 @@ cleanup:
                         }
                         goto cleanup_next;
                     }
-                    case MAP_HEADER_TAG_HAMT_HEAD_BITMAP :
-                    case MAP_HEADER_TAG_HAMT_NODE_BITMAP : {
+                    case MAP_HEADER_TAG_HAMT_HEAD :
+                    case MAP_HEADER_TAG_HAMT_NODE : {
                         Uint n = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                         sum += 1 + n + header_arity(hdr);
                         ptr += 1 + header_arity(hdr);
@@ -889,9 +889,9 @@ Eterm copy_struct_x(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap,
                             *htop++ = *objp++;
                         }
 			break;
-		    case MAP_HEADER_TAG_HAMT_HEAD_BITMAP :
+		    case MAP_HEADER_TAG_HAMT_HEAD :
 			*htop++ = *objp++;
-		    case MAP_HEADER_TAG_HAMT_NODE_BITMAP :
+		    case MAP_HEADER_TAG_HAMT_NODE :
 			i = 1 + hashmap_bitcount(MAP_HEADER_VAL(hdr));
 			while (i--)  { *htop++ = *objp++; }
 			*argp = make_hashmap(tp);
@@ -1285,8 +1285,8 @@ Uint copy_shared_calculate(Eterm obj, erts_shcopy_t *info)
                         }
                         goto pop_next;
                     }
-                    case MAP_HEADER_TAG_HAMT_HEAD_BITMAP :
-                    case MAP_HEADER_TAG_HAMT_NODE_BITMAP : {
+                    case MAP_HEADER_TAG_HAMT_HEAD :
+                    case MAP_HEADER_TAG_HAMT_NODE : {
                         Uint n = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                         sum += 1 + n + header_arity(hdr);
                         ptr += 1 + header_arity(hdr);
@@ -1586,9 +1586,9 @@ Uint copy_shared_perform_x(Eterm obj, Uint size, erts_shcopy_t *info,
                         }
                         goto cleanup_next;
                     }
-                    case MAP_HEADER_TAG_HAMT_HEAD_BITMAP :
+                    case MAP_HEADER_TAG_HAMT_HEAD :
 			*hp++ = *++ptr; /* total map size */
-                    case MAP_HEADER_TAG_HAMT_NODE_BITMAP : {
+                    case MAP_HEADER_TAG_HAMT_NODE : {
                          Uint n = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                          while (n--)  {
                              obj = *++ptr;
@@ -1779,8 +1779,8 @@ Uint copy_shared_perform_x(Eterm obj, Uint size, erts_shcopy_t *info,
                                     hscan += 2;
                                     break;
                                 }
-                                case MAP_HEADER_TAG_HAMT_HEAD_BITMAP :
-                                case MAP_HEADER_TAG_HAMT_NODE_BITMAP :
+                                case MAP_HEADER_TAG_HAMT_HEAD :
+                                case MAP_HEADER_TAG_HAMT_NODE :
                                     remaining = hashmap_bitcount(MAP_HEADER_VAL(*hscan));
                                     hscan += MAP_HEADER_ARITY(*hscan) + 1;
                                     break;

@@ -627,13 +627,13 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
                         Eterm* nodes = ptr + 1;
 
                         switch (MAP_HEADER_TYPE(hdr)) {
-                        case MAP_HEADER_TAG_HAMT_HEAD_BITMAP:
+                        case MAP_HEADER_TAG_HAMT_HEAD:
                             nodes++;
                             sz = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                             erts_print(to, to_arg, "Mh" ETERM_FMT ":" ETERM_FMT ":",
                                        hashmap_size(x), sz);
                             break;
-                        case MAP_HEADER_TAG_HAMT_NODE_BITMAP:
+                        case MAP_HEADER_TAG_HAMT_NODE:
                             sz = hashmap_bitcount(MAP_HEADER_VAL(hdr));
                             erts_print(to, to_arg, "Mn" ETERM_FMT ":", sz);
                             break;
@@ -976,13 +976,13 @@ dump_module_literals(fmtfn_t to, void *to_arg, ErtsLiteralArea* lit_area)
                     Eterm* nodes = htop + 1;
 
                     switch (MAP_HEADER_TYPE(w)) {
-                    case MAP_HEADER_TAG_HAMT_HEAD_BITMAP:
+                    case MAP_HEADER_TAG_HAMT_HEAD:
                         nodes++;
                         sz = hashmap_bitcount(MAP_HEADER_VAL(w));
                         erts_print(to, to_arg, "Mh" ETERM_FMT ":" ETERM_FMT ":",
                                    hashmap_size(term), sz);
                         break;
-                    case MAP_HEADER_TAG_HAMT_NODE_BITMAP:
+                    case MAP_HEADER_TAG_HAMT_NODE:
                         sz = hashmap_bitcount(MAP_HEADER_VAL(w));
                         erts_print(to, to_arg, "Mn" ETERM_FMT ":", sz);
                         break;

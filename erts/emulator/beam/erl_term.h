@@ -1160,8 +1160,8 @@ _ET_DECLARE_CHECKED(struct erl_node_*,external_ref_node,Eterm)
 #define MAP_HEADER_VAL_SZ                 (16)
 
 #define MAP_HEADER_TAG_FLATMAP_HEAD       (0x0)
-#define MAP_HEADER_TAG_HAMT_NODE_BITMAP   (0x1)
-#define MAP_HEADER_TAG_HAMT_HEAD_BITMAP   (0x2)
+#define MAP_HEADER_TAG_HAMT_NODE          (0x1)
+#define MAP_HEADER_TAG_HAMT_HEAD          (0x2)
 
 #define MAP_HEADER_TYPE(Hdr)  (((Hdr) >> (_HEADER_ARITY_OFFS)) & (0x3))
 #define MAP_HEADER_ARITY(Hdr) (((Hdr) >> (_HEADER_ARITY_OFFS + MAP_HEADER_TAG_SZ)) & (0xff))

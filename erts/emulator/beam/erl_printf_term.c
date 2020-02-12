@@ -608,7 +608,7 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount) {
                 head = hashmap_val(wobj);
                 mapval = MAP_HEADER_VAL(*head);
                 switch (MAP_HEADER_TYPE(*head)) {
-                case MAP_HEADER_TAG_HAMT_HEAD_BITMAP:
+                case MAP_HEADER_TAG_HAMT_HEAD:
                     PRINT_STRING(res, fn, arg, "#<");
                     PRINT_UWORD(res, fn, arg, 'x', 0, 1, mapval);
                     PRINT_STRING(res, fn, arg, ">{");
@@ -627,7 +627,7 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount) {
                         }
                     }
                     break;
-                case MAP_HEADER_TAG_HAMT_NODE_BITMAP:
+                case MAP_HEADER_TAG_HAMT_NODE:
                     n = hashmap_bitcount(mapval);
                     head++;
                     PRINT_CHAR(res, fn, arg, '<');
