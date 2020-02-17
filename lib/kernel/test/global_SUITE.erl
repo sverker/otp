@@ -365,6 +365,7 @@ loop_until_true(Fun, Config) ->
                     Left = EndAt - msec(),
                     case Left < 6000 of
                         true -> 
+                            os:cmd("kill -USR1 " ++ os:getpid()), % temporary
                             write_high_level_trace(Config),
                             Ref = make_ref(),
                             receive Ref -> ok end;
@@ -2771,6 +2772,14 @@ many_nodes(Config) when is_list(Config) ->
     Cps = [begin {ok, Cp} = start_node_rel(Name, Rel, Config), Cp end ||
 	      {Name,Rel} <- Rels],
     Nodes = lists:sort(?NODES),
+
+    %% temporary
+    Mul = try 
+              test_server:timetrap_scale_factor()
+	  catch _:_ -> 1
+          end,
+    put(?end_tag, msec() + Timeout * Mul * 1000),
+
     wait_for_ready_net(Nodes, Config),
 
     Dir = proplists:get_value(priv_dir, Config),
@@ -4069,7 +4078,7 @@ init_condition(Config) ->
     io:format("globally registered names: ~p~n", [global:registered_names()]),
     io:format("nodes: ~p~n", [nodes()]),
     io:format("known: ~p~n", [get_known(node()) -- [node()]]),
-    io:format("Info ~p~n", [setelement(11, global:info(), trace)]),
+    io:format("Info ~p~n", [setelement(10, global:info(), trace)]),
     _ = [io:format("~s: ~p~n", [TN, ets:tab2list(T)]) ||
             {TN, T} <- [{"Global Names     (ETS)", global_names},
                         {"Global Names Ext (ETS)", global_names_ext},
