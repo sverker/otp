@@ -2609,7 +2609,7 @@ do_check_gg_info(OtherAlive,OtherDead,Synced,GGI,GI) ->
     %% true = lists:sort(NoContact) =:= lists:sort(OtherDead),
 
     %% Therefore we use global:info instead for this part
-    {state,_,_,SyncedNodes,_,_,_,_,_,_,_} = GI,
+    {state,_,_,SyncedNodes,_,_,_,_,_,_,_,_} = GI,
     true = lists:sort(SyncedNodes) =:= lists:sort(Synced),
 
     %% .. and we only check that all OtherDead are listed as
