@@ -222,7 +222,7 @@ static const char *epmd_ntop(struct sockaddr_storage *sa, char *buff, size_t len
 #else
     struct sockaddr_in *addr = (struct sockaddr_in *)sa;
     res = inet_ntoa(addr->sin_addr);
-    snprintf(buff,len,"%s", res);
+    erts_snprintf(buff,len,"%s", res);
     res = buff;
 #endif
     errno = myerrno;
