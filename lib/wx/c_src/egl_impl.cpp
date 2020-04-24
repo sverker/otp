@@ -127,7 +127,7 @@ int load_gl_functions() {
     // dlclose(LIBhandle);
     // fprintf(stderr, "OPENGL library is loaded\r\n");
   } else {
-    fprintf(stderr, "Could NOT load OpenGL library: "DL_STR_FMT"\r\n", DLName);
+    fprintf(stderr, "Could NOT load OpenGL library: " DL_STR_FMT "\r\n", DLName);
   };
 
   DLName = (DL_CHAR *) OPENGLU_LIB;
@@ -156,7 +156,7 @@ int load_gl_functions() {
     // dlclose(LIBhandle);
     // fprintf(stderr, "GLU library is loaded\r\n");
   } else {
-    fprintf(stderr, "Could NOT load OpenGL GLU library: "DL_STR_FMT"\r\n", DLName);
+    fprintf(stderr, "Could NOT load OpenGL GLU library: " DL_STR_FMT "\r\n", DLName);
   };
 
   return 1;
