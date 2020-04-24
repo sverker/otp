@@ -1070,9 +1070,9 @@ erts_tar(Config) ->
                 {["beam.debug.smp.dll","beam.smp.pdb","erl.exe",
                   "erl.pdb","erl_log.exe","erlexec.dll","erlsrv.exe","","heart.exe",
                   "start_erl.exe","werl.exe","beam.smp.dll",
-                  "epmd.exe","erl.ini","erl_call.exe","erlc.exe",
+                  "epmd.exe","erl.ini","erl_call.exe",
                   "erlexec.pdb","escript.exe","inet_gethost.exe","werl.pdb"],
-                 ["dialyzer.exe","yielding_c_fun.exe","ct_run.exe","typer.exe"]}
+                 ["dialyzer.exe","erlc.exe","yielding_c_fun.exe","ct_run.exe","typer.exe"]}
         end,
 
     ErtsTarContent =
