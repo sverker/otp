@@ -1008,6 +1008,8 @@ static int ei_connect_helper(ei_cnode* ec,
         goto error;
     }
 
+    ec->self.num = sockd;
+
     err = cbs->handshake_packet_header_size(ctx, &pkt_sz);
     if (err) {
         EI_CONN_SAVE_ERRNO__(err);
@@ -1211,6 +1213,8 @@ int ei_xlisten(ei_cnode *ec, struct in_addr *ip_addr, int *port, int backlog)
         goto error;
     }
 
+    ec->self.num = fd;
+
     if (put_ei_socket_info(fd, 0, null_cookie, ec, cbs, ctx) != 0) {
         EI_TRACE_ERR0("ei_xlisten","-> save socket info failed");
         erl_errno = EIO;
@@ -1331,6 +1335,8 @@ int ei_accept_tmo(ei_cnode* ec, int lfd, ErlConnect *conp, unsigned ms)
                       estr(err), err);
         EI_CONN_SAVE_ERRNO__(err);
     }
+
+    ec->self.num = fd;
 
     if (addr_len != sizeof(struct sockaddr_in)) {
         if (addr_len < (offsetof(struct sockaddr_in, sin_addr)
@@ -1475,11 +1481,8 @@ int ei_receive(int fd, unsigned char *bufp, int bufsize)
 int ei_reg_send_tmo(ei_cnode* ec, int fd, char *server_name,
 		    char* buf, int len, unsigned ms)
 {
-    erlang_pid *self = ei_self(ec);
-    self->num = fd;
-
     /* erl_errno and return code is set by ei_reg_send_encoded_tmo() */
-    return ei_send_reg_encoded_tmo(fd, self, server_name, buf, len, ms);
+    return ei_send_reg_encoded_tmo(fd, ei_self(ec), server_name, buf, len, ms);
 }
 
 
@@ -1589,7 +1592,6 @@ int ei_rpc_to(ei_cnode *ec, int fd, char *mod, char *fun,
     ei_x_buff x;
     erlang_pid *self = ei_self(ec);
     int err = ERL_ERROR;
-    self->num = fd;
 
     /* encode header */
     if (ei_x_new_with_version(&x) < 0)
