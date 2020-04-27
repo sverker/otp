@@ -501,7 +501,11 @@ cpu_create_file_slow(Config) when is_list(Config) ->
             %%
             {ok, [T, P]} = parse(AnalysisFile),
             io:format("~p~n~n~p~n", [P, ets:tab2list(T)]),
-            ok = verify(T, P),
+            try
+                ok = verify(T, P)
+            catch throw:{negative,_Weird} ->
+                    io:format("Aborted as counter is negative because of bad cpu_time")
+            end,
             Proc = pid_to_list(self()),
             case P of
                 [{analysis_options, _},
@@ -510,11 +514,7 @@ cpu_create_file_slow(Config) when is_list(Config) ->
                     ok
             end,
             %%
-            try
-                check_own_and_acc(TraceFile,AnalysisFile)
-            catch throw:{negative,Weird} ->
-                    io:format("Aborted as counter is negative because of bad cpu_time")
-            end,
+            check_own_and_acc(TraceFile,AnalysisFile),
             %%
             ets:delete(T),
             file:delete(DataFile),
