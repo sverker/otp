@@ -1947,8 +1947,8 @@ bad_fd_in_pollset(ErtsDrvEventState *state, Eterm inport, Eterm outport)
 	    }
 	}
 	erts_dsprintf(dsbufp,
-		      "Bad %s fd in erts_poll()! fd=%d, ",
-		      io_str, (int) state->fd);
+		      "Bad %s fd in erts_poll()! fd=%bpd, ",
+		      io_str, (SWord) state->fd);
         if (state->type == ERTS_EV_TYPE_DRV_SEL) {
             if (is_nil(port)) {
                 ErtsPortNames *ipnp = erts_get_port_names(inport, ERTS_INVALID_ERL_DRV_PORT);
@@ -1981,7 +1981,8 @@ bad_fd_in_pollset(ErtsDrvEventState *state, Eterm inport, Eterm outport)
         }
     }
     else {
-	erts_dsprintf(dsbufp, "Bad fd in erts_poll()! fd=%d\n", (int) state->fd);
+	erts_dsprintf(dsbufp, "Bad fd in erts_poll()! fd=%bpd\n",
+		      (SWord) state->fd);
     }
     erts_send_error_to_logger_nogl(dsbufp);
 
@@ -2000,7 +2001,7 @@ stale_drv_select(Eterm id, ErtsDrvEventState *state, int mode)
 
 static SafeHashValue drv_ev_state_hash(void *des)
 {
-    SafeHashValue val = (SafeHashValue) ((ErtsDrvEventState *) des)->fd;
+    SafeHashValue val = (SafeHashValue)(SWord) ((ErtsDrvEventState *) des)->fd;
     return val ^ (val >> 8);  /* Good enough for aligned pointer values? */
 }
 
@@ -2551,8 +2552,9 @@ static int erts_debug_print_checkio_state(erts_dsprintf_buf_t *dsbufp,
 #ifdef ERTS_SYS_CONTINOUS_FD_NUMBERS
     ErtsPollEvents aio_events = state->active_events;
 #endif
-    erts_dsprintf(dsbufp, "pollset=%d fd=%d ",
-                state->flags & ERTS_EV_FLAG_FALLBACK ? -1 : get_pollset_id(fd), (int) fd);
+    erts_dsprintf(dsbufp, "pollset=%d fd=%bpd ",
+		  state->flags & ERTS_EV_FLAG_FALLBACK ? -1 : get_pollset_id(fd),
+		  (SWord) fd);
 
 #if defined(HAVE_FSTAT) && !defined(NO_FSTAT_ON_SYS_FD_TYPE)
     if (fstat((int) fd, &stat_buf) < 0)

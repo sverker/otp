@@ -4629,10 +4629,10 @@ static void desc_close(inet_descriptor* desc)
 	 * be selecting on it.
 	 */
 	if (!INET_IGNORED(desc))
-	    driver_select(desc->port,(ErlDrvEvent)(long)desc->event, 
+	    driver_select(desc->port,(ErlDrvEvent)(SWord)desc->event,
 			  ERL_DRV_USE, 0);
 	else
-	  inet_stop_select((ErlDrvEvent)(long)desc->event,NULL);
+	  inet_stop_select((ErlDrvEvent)(SWord)desc->event,NULL);
 	desc->event = INVALID_EVENT; /* closed by stop_select callback */
 	desc->s = INVALID_SOCKET;
 	desc->event_mask = 0;
