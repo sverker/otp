@@ -117,6 +117,7 @@
 		syncers = []       :: [pid()],
 		node_name = node() :: node(),
 		the_locker, the_registrar, trace,
+                updown_trace = [],
                 global_lock_down = false :: boolean()
                }).
 -type state() :: #state{}.
@@ -845,19 +846,22 @@ handle_info({'EXIT', Pid, _Reason}, S) when is_pid(Pid) ->
     {noreply, S#state{syncers = Syncers}};
 
 handle_info({nodedown, Node}, S) when Node =:= S#state.node_name ->
+    S1 = S#state{updown_trace = [{stopped, erlang:timestamp(), Node}|S#state.updown_trace]},
     %% Somebody stopped the distribution dynamically - change
     %% references to old node name (Node) to new node name ('nonode@nohost')
-    {noreply, change_our_node_name(node(), S)};
+    {noreply, change_our_node_name(node(), S1)};
 
 handle_info({nodedown, Node}, S0) ->
     ?trace({'####', nodedown, {node,Node}}),
-    S1 = trace_message(S0, {nodedown, Node}, []),
+    S10 = S0#state{updown_trace = [{nodedown, erlang:timestamp(), Node}|S0#state.updown_trace]},
+    S1 = trace_message(S10, {nodedown, Node}, []),
     S = handle_nodedown(Node, S1),
     {noreply, S};
 
 handle_info({extra_nodedown, Node}, S0) ->
     ?trace({'####', extra_nodedown, {node,Node}}),
-    S1 = trace_message(S0, {extra_nodedown, Node}, []),
+    S10 = S0#state{updown_trace = [{extra_nodedown, erlang:timestamp(), Node}|S0#state.updown_trace]},
+    S1 = trace_message(S10, {extra_nodedown, Node}, []),
     S = handle_nodedown(Node, S1),
     {noreply, S};
 
@@ -865,17 +869,20 @@ handle_info({nodeup, Node}, S) when Node =:= node() ->
     ?trace({'####', local_nodeup, {node, Node}}),
     %% Somebody started the distribution dynamically - change
     %% references to old node name ('nonode@nohost') to Node.
-    {noreply, change_our_node_name(Node, S)};
+    S1 = S#state{updown_trace = [{change_name, erlang:timestamp(), Node}|S#state.updown_trace]},
+    {noreply, change_our_node_name(Node, S1)};
 
 handle_info({nodeup, _Node}, S) when not S#state.connect_all ->
-    {noreply, S};
+    S1 = S#state{updown_trace = [{no_connect_all, erlang:timestamp(), _Node}|S#state.updown_trace]},
+    {noreply, S1};
 
 handle_info({nodeup, Node}, S0) when S0#state.connect_all ->
     IsKnown = lists:member(Node, S0#state.known) or
               %% This one is only for double nodeups (shouldn't occur!)
               lists:keymember(Node, 1, S0#state.resolvers),
     ?trace({'####', nodeup, {node,Node}, {isknown,IsKnown}}),
-    S1 = trace_message(S0, {nodeup, Node}, []),
+    S10 = S0#state{updown_trace = [{nodeup, erlang:timestamp(), Node}|S0#state.updown_trace]},
+    S1 = trace_message(S10, {nodeup, Node}, []),
     case IsKnown of
 	true ->
 	    {noreply, S1};
