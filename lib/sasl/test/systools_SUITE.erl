@@ -1067,8 +1067,8 @@ erts_tar(Config) ->
                   "start","start_erl.src","start.src","to_erl"],
                  ["ct_run","dialyzer","erlc","typer","yielding_c_fun"]};
             {win32, _} ->
-                {["beam.debug.smp.dll","beam.smp.pdb","erl.exe",
-                  "erl.pdb","erl_log.exe","erlexec.dll","erlsrv.exe","","heart.exe",
+                {["beam.smp.pdb","erl.exe",
+                  "erl.pdb","erl_log.exe","erlexec.dll","erlsrv.exe","heart.exe",
                   "start_erl.exe","werl.exe","beam.smp.dll",
                   "epmd.exe","erl.ini","erl_call.exe",
                   "erlexec.pdb","escript.exe","inet_gethost.exe","werl.pdb"],
@@ -1080,7 +1080,12 @@ erts_tar(Config) ->
                 lists:sort(
                   [filename:basename(File)
                    || File <- tar_contents(TarName),
-                      string:equal(filename:dirname(File),ERTS_DIR)])
+                      string:equal(filename:dirname(File),ERTS_DIR),
+                      %% Filter out beam.*.smp.*
+                      re:run(filename:basename(File), "beam\\.[^\\.]+\\.smp(\\.dll)?") == nomatch,
+                      %% Filter out any erl_child_setup.*
+                      re:run(filename:basename(File), "erl_child_setup\\..*") == nomatch
+                  ])
         end,
 
     DataDir = filename:absname(?copydir),
