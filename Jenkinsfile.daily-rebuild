@@ -1,0 +1,37 @@
+pipeline {
+    agent none
+    stages {
+        /* Split into release and patch build in order to not overload the system
+           with too many builds at the same time */
+        stage('Build Release') {
+            parallel {
+                stage('opu') { steps { catchError {
+                    build job: '/otp/opu', propagate: false, parameters: []
+                } } }
+                stage('master-opu') { steps { catchError {
+                    build job: '/otp/master-opu', propagate: false, parameters: []
+			} } }
+		stage('win-wsl-master') { steps { catchError {
+			    build job: '/WindowsWSL/master-opu', propagate: false, parameters: []
+		} } }
+            }
+        }
+        stage('Build Patch') {
+            parallel {
+                stage('maint-21-opu') { steps { catchError {
+                    build job: '/otp/maint-21-opu', parameters: []
+                } } }
+                stage('maint-22-opu') { steps { catchError {
+                    build job: '/otp/maint-22-opu', parameters: []
+                } } }
+            }
+        }
+	stage('Build Patch 2') {
+	    parallel {
+                stage('maint-20-opu') { steps { catchError {
+                    build job: '/otp/maint-20-opu', parameters: []
+                } } }
+	    }
+	}
+    }
+}

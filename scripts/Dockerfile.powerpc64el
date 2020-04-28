@@ -1,0 +1,61 @@
+FROM debian
+
+ARG HOST_ARCH=ppc64el
+ARG HOST=powerpc64le-linux-gnu
+
+## See https://wiki.debian.org/Multiarch/HOWTO for details on how to install things
+RUN BUILD_ARCH=`dpkg --print-architecture` && \
+        dpkg --add-architecture $HOST_ARCH && \
+        sed -i "s:deb http:deb [arch=$BUILD_ARCH,$HOST_ARCH] http:g" /etc/apt/sources.list && \
+        apt-get update && \
+        apt-get -y upgrade && \
+        apt-get install -y build-essential m4 autoconf
+
+RUN apt-get install -y \
+        crossbuild-essential-$HOST_ARCH \
+        libncurses5-dev:$HOST_ARCH \
+        zlib1g-dev:$HOST_ARCH \
+        libssl-dev:$HOST_ARCH && \
+        mkdir -p /daily_build
+
+COPY otp_src.tar.gz /daily_build
+
+WORKDIR /daily_build
+
+RUN tar zxf otp_src.tar.gz
+
+ARG MAKEFLAGS=-j6
+ENV MAKEFLAGS=$MAKEFLAGS ERLC_USE_SERVER=yes
+
+WORKDIR /daily_build/otp_src
+
+## Build the bootstrap system
+RUN ./otp_build autoconf
+
+RUN ./configure --enable-bootstrap-only && make
+
+WORKDIR /daily_build/otp_src
+
+## Setup a sysroot as our cross compile system does not
+## work perfectly with multiarch yet... crypto for instance
+RUN for dir in `find / -type d -name powerpc64le-linux-gnu`; do \
+        echo -n "$dir: /daily_build/sysroot"; \
+        echo `dirname $dir`; \
+        mkdir -p /daily_build/sysroot$dir; \
+        cp -r `dirname $dir`/* `dirname /daily_build/sysroot$dir`; \
+        cp -r $dir/* `dirname /daily_build/sysroot$dir`; \
+        done
+
+ENV HOST=$HOST \
+        CC=$HOST-gcc \
+        CPP=$HOST-cpp \
+        CXX=$HOST-g++ \
+        LD=$CC \
+        DED_LDFLAGS="-shared -Wl,-Bsymbolic" \
+        RANLIB=$HOST-ranlib \
+        AR=$HOST-ar \
+        erl_xcomp_sysroot=/daily_build/sysroot
+
+## Build the cross system
+RUN ./configure --host=$HOST --build=`erts/autoconf/config.guess` && \
+        make && make release
