@@ -366,6 +366,7 @@ loop_until_true(Fun, Config) ->
                     case Left < 6000 of
                         true -> 
                             write_high_level_trace(Config),
+                            os:cmd("kill -USR1 " ++ os:getpid()), % temporary
                             Ref = make_ref(),
                             receive Ref -> ok end;
                         false ->
@@ -2771,6 +2772,14 @@ many_nodes(Config) when is_list(Config) ->
     Cps = [begin {ok, Cp} = start_node_rel(Name, Rel, Config), Cp end ||
 	      {Name,Rel} <- Rels],
     Nodes = lists:sort(?NODES),
+
+    %% temporary
+    Mul = try 
+              test_server:timetrap_scale_factor()
+	  catch _:_ -> 1
+          end,
+    put(?end_tag, msec() + Timeout * Mul * 1000),
+
     wait_for_ready_net(Nodes, Config),
 
     Dir = proplists:get_value(priv_dir, Config),
@@ -4069,7 +4078,9 @@ init_condition(Config) ->
     io:format("globally registered names: ~p~n", [global:registered_names()]),
     io:format("nodes: ~p~n", [nodes()]),
     io:format("known: ~p~n", [get_known(node()) -- [node()]]),
-    io:format("Info ~p~n", [setelement(11, global:info(), trace)]),
+    io:format("Info ~p~n", [setelement(10, global:info(), trace)]),
+    LockerInfo = gen_server:call(global_name_server, locker_info, infinity),
+    io:format("LockerInfo ~p~n", [LockerInfo]),
     _ = [io:format("~s: ~p~n", [TN, ets:tab2list(T)]) ||
             {TN, T} <- [{"Global Names     (ETS)", global_names},
                         {"Global Names Ext (ETS)", global_names_ext},

@@ -117,6 +117,7 @@
 		syncers = []       :: [pid()],
 		node_name = node() :: node(),
 		the_locker, the_registrar, trace,
+                updown_trace = [],
                 global_lock_down = false :: boolean()
                }).
 -type state() :: #state{}.
@@ -634,6 +635,9 @@ handle_call(get_names_ext, _From, S) ->
 
 handle_call(info, _From, S) ->
     {reply, S, S};
+handle_call(locker_info, _From, S) ->
+    S#state.the_locker ! {info},
+    {reply, receive {the_locker, Info} -> Info end, S};
 
 %% "High level trace". For troubleshooting only.
 handle_call(high_level_trace_start, _From, S) ->
@@ -845,19 +849,22 @@ handle_info({'EXIT', Pid, _Reason}, S) when is_pid(Pid) ->
     {noreply, S#state{syncers = Syncers}};
 
 handle_info({nodedown, Node}, S) when Node =:= S#state.node_name ->
+    S1 = S#state{updown_trace = [{stopped, erlang:timestamp(), Node}|S#state.updown_trace]},
     %% Somebody stopped the distribution dynamically - change
     %% references to old node name (Node) to new node name ('nonode@nohost')
-    {noreply, change_our_node_name(node(), S)};
+    {noreply, change_our_node_name(node(), S1)};
 
 handle_info({nodedown, Node}, S0) ->
     ?trace({'####', nodedown, {node,Node}}),
-    S1 = trace_message(S0, {nodedown, Node}, []),
+    S10 = S0#state{updown_trace = [{nodedown, erlang:timestamp(), Node}|S0#state.updown_trace]},
+    S1 = trace_message(S10, {nodedown, Node}, []),
     S = handle_nodedown(Node, S1),
     {noreply, S};
 
 handle_info({extra_nodedown, Node}, S0) ->
     ?trace({'####', extra_nodedown, {node,Node}}),
-    S1 = trace_message(S0, {extra_nodedown, Node}, []),
+    S10 = S0#state{updown_trace = [{extra_nodedown, erlang:timestamp(), Node}|S0#state.updown_trace]},
+    S1 = trace_message(S10, {extra_nodedown, Node}, []),
     S = handle_nodedown(Node, S1),
     {noreply, S};
 
@@ -865,17 +872,20 @@ handle_info({nodeup, Node}, S) when Node =:= node() ->
     ?trace({'####', local_nodeup, {node, Node}}),
     %% Somebody started the distribution dynamically - change
     %% references to old node name ('nonode@nohost') to Node.
-    {noreply, change_our_node_name(Node, S)};
+    S1 = S#state{updown_trace = [{change_name, erlang:timestamp(), Node}|S#state.updown_trace]},
+    {noreply, change_our_node_name(Node, S1)};
 
 handle_info({nodeup, _Node}, S) when not S#state.connect_all ->
-    {noreply, S};
+    S1 = S#state{updown_trace = [{no_connect_all, erlang:timestamp(), _Node}|S#state.updown_trace]},
+    {noreply, S1};
 
 handle_info({nodeup, Node}, S0) when S0#state.connect_all ->
     IsKnown = lists:member(Node, S0#state.known) or
               %% This one is only for double nodeups (shouldn't occur!)
               lists:keymember(Node, 1, S0#state.resolvers),
     ?trace({'####', nodeup, {node,Node}, {isknown,IsKnown}}),
-    S1 = trace_message(S0, {nodeup, Node}, []),
+    S10 = S0#state{updown_trace = [{nodeup, erlang:timestamp(), Node}|S0#state.updown_trace]},
+    S1 = trace_message(S10, {nodeup, Node}, []),
     case IsKnown of
 	true ->
 	    {noreply, S1};
@@ -1502,6 +1512,7 @@ delete_global_name(_Name, _Pid) ->
          just_synced = false, % true if node() synced just a moment ago
                               %% Statistics:
          do_trace             % bool()
+         , debug_trace = []
         }).
 
 -record(him, {node, locker, vsn, my_tag}).
@@ -1570,7 +1581,7 @@ the_locker_message({his_the_locker, HisTheLocker, HisKnown0, _MyKnown}, S) ->
                        locker = HisTheLocker, vsn = HisVsn},
             loop_the_locker(add_node(Him, S));
         {cancel, Node, _Tag, no_fun} when node(HisTheLocker) =:= Node ->
-            loop_the_locker(S)
+            loop_the_locker(S#multi{debug_trace = [{cancel_early, erlang:timestamp(), node(HisTheLocker)} | S#multi.debug_trace]})
     after 60000 ->
             ?trace({nodeupnevercame, node(HisTheLocker)}),
             error_logger:error_msg("global: nodeup never came ~w ~w\n",
@@ -1582,7 +1593,7 @@ the_locker_message({cancel, _Node, undefined, no_fun}, S) ->
     %% If we actually cancel something when a cancel message with the
     %% tag 'undefined' arrives, we may be acting on an old nodedown,
     %% to cancel a new nodeup, so we can't do that.
-    loop_the_locker(S);
+    loop_the_locker(S#multi{debug_trace = [{cancel_undefined, erlang:timestamp(), _Node}|S#multi.debug_trace]});
 the_locker_message({cancel, Node, Tag, no_fun}, S) ->
     ?trace({the_locker, cancel, {multi,S}, {tag,Tag},{node,Node}}),
     receive
@@ -1641,6 +1652,9 @@ the_locker_message({remove_from_known, Node}, S) ->
     loop_the_locker(S1);
 the_locker_message({do_trace, DoTrace}, S) ->
     loop_the_locker(S#multi{do_trace = DoTrace});
+the_locker_message({info}, S) ->
+    global_name_server ! {the_locker, S},
+    loop_the_locker(S);
 the_locker_message(Other, S) ->
     unexpected_message(Other, locker),
     ?trace({the_locker, {other_msg, Other}}),
@@ -1792,23 +1806,35 @@ lock_is_set(S, Him, MyTag, Known1, LockId) ->
 	    end,
             S#multi{just_synced = true,
                     local = lists:delete(Him, S#multi.local),
-                    remote = lists:delete(Him, S#multi.remote)};
+                    remote = lists:delete(Him, S#multi.remote),
+                    debug_trace = [{lock_is_set_true, erlang:timestamp(), Him}|S#multi.debug_trace]};
 	{lock_set, P, false, _} when node(P) =:= Node ->
             ?trace({not_both_set, {node,Node},{p, P},{known1,Known1}}),
             _ = locker_trace(S, rejected, Known1),
 	    delete_global_lock(LockId, Known1),
-	    S;
+	    S#multi{debug_trace = [{lock_is_set_false, erlang:timestamp(), Him}|S#multi.debug_trace]};
 	{cancel, Node, _, Fun} ->
 	    ?trace({the_locker, cancel2, {node,Node}}),
             call_fun(Fun),
             _ = locker_trace(S, rejected, Known1),
 	    delete_global_lock(LockId, Known1),
             remove_node(Node, S);
+        {info} ->
+            global_name_server ! {the_locker, S},
+            lock_is_set(S, Him, MyTag, Known1, LockId);
 	{'EXIT', _, _} ->
 	    ?trace({the_locker, exit, {node,Node}}),
             _ = locker_trace(S, rejected, Known1),
 	    delete_global_lock(LockId, Known1),
-	    S
+	    S#multi{debug_trace = [{lock_is_set_EXIT, erlang:timestamp(), Him}|S#multi.debug_trace]}
+      after 10000 ->
+              Ref = erlang:monitor(process, Him#him.locker),
+              receive
+                  {'DOWN', Ref, process, _, _} ->
+                      S#multi{debug_trace = [{lock_is_set_DOWN, erlang:timestamp(), Him}|S#multi.debug_trace]}
+              after 0 ->
+                      S#multi{debug_trace = [{lock_is_set_no_DOWN, erlang:timestamp(), Him}|S#multi.debug_trace]}
+              end
         %% There used to be an 'after' clause (OTP-4902), but it is 
         %% no longer needed:
         %% OTP-5770. Version 5 of the protocol. Deadlock can no longer
@@ -1853,7 +1879,8 @@ find_node_tag2(Node, [_E | Rest]) ->
 
 remove_node(Node, S) ->
     S#multi{local = remove_node2(Node, S#multi.local),
-            remote = remove_node2(Node, S#multi.remote)}.
+            remote = remove_node2(Node, S#multi.remote),
+            debug_trace = [{remove_node, erlang:timestamp(), Node}|S#multi.debug_trace]}.
 
 remove_node2(_Node, []) ->
     [];
@@ -1865,9 +1892,11 @@ remove_node2(Node, [E | Rest]) ->
 add_node(Him, S) ->
     case is_node_local(Him#him.node) of
         true ->
-            S#multi{local = [Him | S#multi.local]};
+            S#multi{local = [Him | S#multi.local],
+                    debug_trace = [{add_local_node, erlang:timestamp(), Him} | S#multi.debug_trace]};
         false ->
-            S#multi{remote = [Him | S#multi.remote]}
+            S#multi{remote = [Him | S#multi.remote],
+                    debug_trace = [{add_remote_node, erlang:timestamp(), Him} | S#multi.debug_trace]}
     end.
 
 is_node_local(Node) ->
