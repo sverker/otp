@@ -365,8 +365,8 @@ loop_until_true(Fun, Config) ->
                     Left = EndAt - msec(),
                     case Left < 6000 of
                         true -> 
-                            os:cmd("kill -USR1 " ++ os:getpid()), % temporary
                             write_high_level_trace(Config),
+                            os:cmd("kill -USR1 " ++ os:getpid()), % temporary
                             Ref = make_ref(),
                             receive Ref -> ok end;
                         false ->
@@ -4079,6 +4079,8 @@ init_condition(Config) ->
     io:format("nodes: ~p~n", [nodes()]),
     io:format("known: ~p~n", [get_known(node()) -- [node()]]),
     io:format("Info ~p~n", [setelement(10, global:info(), trace)]),
+    LockerInfo = gen_server:call(global_name_server, locker_info, infinity),
+    io:format("LockerInfo ~p~n", [LockerInfo]),
     _ = [io:format("~s: ~p~n", [TN, ets:tab2list(T)]) ||
             {TN, T} <- [{"Global Names     (ETS)", global_names},
                         {"Global Names Ext (ETS)", global_names_ext},

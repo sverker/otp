@@ -635,6 +635,9 @@ handle_call(get_names_ext, _From, S) ->
 
 handle_call(info, _From, S) ->
     {reply, S, S};
+handle_call(locker_info, _From, S) ->
+    S#state.the_locker ! {info},
+    {reply, receive {the_locker, Info} -> Info end, S};
 
 %% "High level trace". For troubleshooting only.
 handle_call(high_level_trace_start, _From, S) ->
@@ -1509,6 +1512,7 @@ delete_global_name(_Name, _Pid) ->
          just_synced = false, % true if node() synced just a moment ago
                               %% Statistics:
          do_trace             % bool()
+         , debug_trace = []
         }).
 
 -record(him, {node, locker, vsn, my_tag}).
@@ -1577,7 +1581,7 @@ the_locker_message({his_the_locker, HisTheLocker, HisKnown0, _MyKnown}, S) ->
                        locker = HisTheLocker, vsn = HisVsn},
             loop_the_locker(add_node(Him, S));
         {cancel, Node, _Tag, no_fun} when node(HisTheLocker) =:= Node ->
-            loop_the_locker(S)
+            loop_the_locker(S#multi{debug_trace = [{cancel_early, erlang:timestamp(), node(HisTheLocker)} | S#multi.debug_trace]})
     after 60000 ->
             ?trace({nodeupnevercame, node(HisTheLocker)}),
             error_logger:error_msg("global: nodeup never came ~w ~w\n",
@@ -1589,7 +1593,7 @@ the_locker_message({cancel, _Node, undefined, no_fun}, S) ->
     %% If we actually cancel something when a cancel message with the
     %% tag 'undefined' arrives, we may be acting on an old nodedown,
     %% to cancel a new nodeup, so we can't do that.
-    loop_the_locker(S);
+    loop_the_locker(S#multi{debug_trace = [{cancel_undefined, erlang:timestamp(), _Node}|S#multi.debug_trace]});
 the_locker_message({cancel, Node, Tag, no_fun}, S) ->
     ?trace({the_locker, cancel, {multi,S}, {tag,Tag},{node,Node}}),
     receive
@@ -1648,6 +1652,9 @@ the_locker_message({remove_from_known, Node}, S) ->
     loop_the_locker(S1);
 the_locker_message({do_trace, DoTrace}, S) ->
     loop_the_locker(S#multi{do_trace = DoTrace});
+the_locker_message({info}, S) ->
+    global_name_server ! {the_locker, S},
+    loop_the_locker(S);
 the_locker_message(Other, S) ->
     unexpected_message(Other, locker),
     ?trace({the_locker, {other_msg, Other}}),
@@ -1799,23 +1806,35 @@ lock_is_set(S, Him, MyTag, Known1, LockId) ->
 	    end,
             S#multi{just_synced = true,
                     local = lists:delete(Him, S#multi.local),
-                    remote = lists:delete(Him, S#multi.remote)};
+                    remote = lists:delete(Him, S#multi.remote),
+                    debug_trace = [{lock_is_set_true, erlang:timestamp(), Him}|S#multi.debug_trace]};
 	{lock_set, P, false, _} when node(P) =:= Node ->
             ?trace({not_both_set, {node,Node},{p, P},{known1,Known1}}),
             _ = locker_trace(S, rejected, Known1),
 	    delete_global_lock(LockId, Known1),
-	    S;
+	    S#multi{debug_trace = [{lock_is_set_false, erlang:timestamp(), Him}|S#multi.debug_trace]};
 	{cancel, Node, _, Fun} ->
 	    ?trace({the_locker, cancel2, {node,Node}}),
             call_fun(Fun),
             _ = locker_trace(S, rejected, Known1),
 	    delete_global_lock(LockId, Known1),
             remove_node(Node, S);
+        {info} ->
+            global_name_server ! {the_locker, S},
+            lock_is_set(S, Him, MyTag, Known1, LockId);
 	{'EXIT', _, _} ->
 	    ?trace({the_locker, exit, {node,Node}}),
             _ = locker_trace(S, rejected, Known1),
 	    delete_global_lock(LockId, Known1),
-	    S
+	    S#multi{debug_trace = [{lock_is_set_EXIT, erlang:timestamp(), Him}|S#multi.debug_trace]}
+      after 10000 ->
+              Ref = erlang:monitor(process, Him#him.locker),
+              receive
+                  {'DOWN', Ref, process, _, _} ->
+                      S#multi{debug_trace = [{lock_is_set_DOWN, erlang:timestamp(), Him}|S#multi.debug_trace]}
+              after 0 ->
+                      S#multi{debug_trace = [{lock_is_set_no_DOWN, erlang:timestamp(), Him}|S#multi.debug_trace]}
+              end
         %% There used to be an 'after' clause (OTP-4902), but it is 
         %% no longer needed:
         %% OTP-5770. Version 5 of the protocol. Deadlock can no longer
@@ -1860,7 +1879,8 @@ find_node_tag2(Node, [_E | Rest]) ->
 
 remove_node(Node, S) ->
     S#multi{local = remove_node2(Node, S#multi.local),
-            remote = remove_node2(Node, S#multi.remote)}.
+            remote = remove_node2(Node, S#multi.remote),
+            debug_trace = [{remove_node, erlang:timestamp(), Node}|S#multi.debug_trace]}.
 
 remove_node2(_Node, []) ->
     [];
@@ -1872,9 +1892,11 @@ remove_node2(Node, [E | Rest]) ->
 add_node(Him, S) ->
     case is_node_local(Him#him.node) of
         true ->
-            S#multi{local = [Him | S#multi.local]};
+            S#multi{local = [Him | S#multi.local],
+                    debug_trace = [{add_local_node, erlang:timestamp(), Him} | S#multi.debug_trace]};
         false ->
-            S#multi{remote = [Him | S#multi.remote]}
+            S#multi{remote = [Him | S#multi.remote],
+                    debug_trace = [{add_remote_node, erlang:timestamp(), Him} | S#multi.debug_trace]}
     end.
 
 is_node_local(Node) ->
