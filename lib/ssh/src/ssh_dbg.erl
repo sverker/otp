@@ -72,6 +72,9 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
+%% Internal apply_after:
+-export([ets_delete/2]).
+
 -include("ssh.hrl").
 -include("ssh_transport.hrl").
 -include("ssh_connect.hrl").
@@ -216,6 +219,9 @@ put_proc_stack(Pid, Data) when is_pid(Pid),
 new_proc(Pid) when is_pid(Pid) ->
     gen_server:cast(?SERVER, {new_proc,Pid}).
 
+ets_delete(Tab, Key) ->
+    catch ets:delete(Tab, Key).
+
 %%%----------------------------------------------------------------
 handle_call({switch,on,Types}, _From, D) ->
     NowOn = lists:usort(Types ++ D#data.types_on),
@@ -247,7 +253,7 @@ handle_cast(C, D) ->
 
 handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, D) ->
     %% Universal real-time synchronization (there might be dbg msgs in the queue to the tracer):
-    timer:apply_after(20000, ets, delete, [?MODULE, Pid]),
+    timer:apply_after(20000, ?MODULE, ets_delete, [?MODULE, Pid]),
     {noreply, D};
 
 handle_info(C, D) ->
