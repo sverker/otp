@@ -446,6 +446,7 @@ const char *ei_thishostname(const ei_cnode* ec);
 const char *ei_thisalivename(const ei_cnode* ec);
 
 erlang_pid *ei_self(ei_cnode* ec);
+int ei_make_ref(ei_cnode *ec, erlang_ref *ref);
 
 /* 
  * settings 

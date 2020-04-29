@@ -40,6 +40,7 @@ static void cmd_ei_send_funs(char* buf, int len);
 static void cmd_ei_reg_send(char* buf, int len);
 static void cmd_ei_rpc(char* buf, int len);
 static void cmd_ei_set_get_tracelevel(char* buf, int len);
+static void cmd_ei_make_ref(char* buf, int len);
 
 static void send_errno_result(int value);
 
@@ -60,6 +61,7 @@ static struct {
     "ei_rpc",  		     4, cmd_ei_rpc,
     "ei_set_get_tracelevel", 1, cmd_ei_set_get_tracelevel,
     "ei_format_pid",         2, cmd_ei_format_pid,
+    "ei_make_ref",           2, cmd_ei_make_ref,
 };
 
 
@@ -206,6 +208,28 @@ static void cmd_ei_send(char* buf, int len)
 	fail("ei_x_new_with_version");
     if (ei_x_append_buf(&x, &buf[index], len - index) < 0)
 	fail("append");
+    send_errno_result(ei_send(fd, &pid, x.buff, x.index));
+    ei_x_free(&x);
+}
+
+static void cmd_ei_make_ref(char* buf, int len)
+{
+    int index = 0;
+    long fd;
+    erlang_ref ref;
+    erlang_pid pid;
+    ei_x_buff x;
+
+    if (ei_decode_long(buf, &index, &fd) < 0)
+	fail("expected long");
+    if (ei_decode_pid(buf, &index, &pid) < 0)
+	fail("expected pid (node)");
+    if (ei_x_new_with_version(&x) < 0)
+	fail("ei_x_new_with_version");
+    if (ei_make_ref(&ec, &ref))
+        fail("ei_make_ref() failed");
+    if (ei_x_encode_ref(&x, &ref))
+        fail("ei_x_encode_ref() failed");
     send_errno_result(ei_send(fd, &pid, x.buff, x.index));
     ei_x_free(&x);
 }
