@@ -645,6 +645,3 @@ wait_until_aux(Fun, End) ->
                     end
             end
     end.
-                                   
-                                          
-                        
