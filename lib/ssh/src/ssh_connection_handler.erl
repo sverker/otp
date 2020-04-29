@@ -877,8 +877,8 @@ handle_event(_, Msg = #ssh_msg_service_request{name=ServiceName}, StateName = {s
 	"ssh-userauth" ->
 	    Ssh0 = #ssh{session_id=SessionId} = D0#data.ssh_params,
 	    {ok, {Reply, Ssh}} = ssh_auth:handle_userauth_request(Msg, SessionId, Ssh0),
-	    send_bytes(Reply, D0),
-	    {next_state, {userauth,server}, D0#data{ssh_params = Ssh}};
+            D = send_msg(Reply, D0#data{ssh_params = Ssh}),
+	    {next_state, {userauth,server}, D};
 
 	_ ->
             {Shutdown, D} =  
@@ -908,8 +908,8 @@ handle_event(_,
 	    %% Probably the very first userauth_request but we deny unauthorized login
 	    {not_authorized, _, {Reply,Ssh}} =
 		ssh_auth:handle_userauth_request(Msg, Ssh0#ssh.session_id, Ssh0),
-	    send_bytes(Reply, D0),
-	    {keep_state, D0#data{ssh_params = Ssh}};
+            D = send_msg(Reply, D0#data{ssh_params = Ssh}),
+	    {keep_state, D};
 	
 	{"ssh-connection", "ssh-connection", Method} ->
 	    %% Userauth request with a method like "password" or so
@@ -917,21 +917,21 @@ handle_event(_,
 		true ->
 		    %% Yepp! we support this method
 		    case ssh_auth:handle_userauth_request(Msg, Ssh0#ssh.session_id, Ssh0) of
-			{authorized, User, {Reply, Ssh}} ->
-			    send_bytes(Reply, D0),
-			    D0#data.starter ! ssh_connected,
-			    connected_fun(User, Method, D0),
-			    {next_state, {connected,server},
-			     D0#data{auth_user = User, 
-				    ssh_params = Ssh#ssh{authenticated = true}}};
+			{authorized, User, {Reply, Ssh1}} ->
+                            D = #data{ssh_params=Ssh} = 
+                                send_msg(Reply, D0#data{ssh_params = Ssh1}),
+			    D#data.starter ! ssh_connected,
+			    connected_fun(User, Method, D),
+			    {next_state, {connected,server}, D#data{auth_user=User, 
+                                                                    ssh_params = Ssh#ssh{authenticated = true}}};
 			{not_authorized, {User, Reason}, {Reply, Ssh}} when Method == "keyboard-interactive" ->
 			    retry_fun(User, Reason, D0),
-			    send_bytes(Reply, D0),
-			    {next_state, {userauth_keyboard_interactive,server}, D0#data{ssh_params = Ssh}};
+                            D = send_msg(Reply, D0#data{ssh_params = Ssh}),
+			    {next_state, {userauth_keyboard_interactive,server}, D};
 			{not_authorized, {User, Reason}, {Reply, Ssh}} ->
 			    retry_fun(User, Reason, D0),
-			    send_bytes(Reply, D0),
-			    {keep_state, D0#data{ssh_params = Ssh}}
+                            D = send_msg(Reply, D0#data{ssh_params = Ssh}),
+			    {keep_state, D}
 		    end;
 		false ->
 		    %% No we do not support this method (=/= none)
@@ -2119,7 +2119,7 @@ start_rekeying(Role, D0) ->
     {next_state, {kexinit,Role,renegotiate}, D}.
 
 
-init_renegotiate_timers(OldState, NewState, D) ->
+init_renegotiate_timers(_OldState, NewState, D) ->
     {RekeyTimeout,_MaxSent} = ?GET_OPT(rekey_limit, (D#data.ssh_params)#ssh.opts),
     {next_state, NewState, D, [{{timeout,renegotiate},     RekeyTimeout,       none},
                                {{timeout,check_data_size}, ?REKEY_DATA_TIMOUT, none} ]}.
