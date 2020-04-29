@@ -530,6 +530,100 @@ erlang_pid *ei_self(ei_cnode* ec)
     return &ec->self;
 }
 
+
+#ifdef _REENTRANT
+static ei_mutex_t* ref_mtx = NULL;
+#endif /* _REENTRANT */
+
+/*
+ * We use a global counter used by all
+ * c-nodes in this process. We wont wrap
+ * anyway due to the enormous amount of
+ * values available.
+ */
+static unsigned int ref_count[3];
+
+static int
+init_make_ref(int late)
+{
+#ifdef _REENTRANT
+    if (late)
+        return ENOTSUP; /* Refuse doing unsafe initialization... */
+    ref_mtx = ei_mutex_create();
+    if (!ref_mtx)
+        return ENOMEM;
+#endif /* _REENTRANT */
+
+    ref_count[0] = 0;
+    ref_count[1] = 0;
+    ref_count[2] = 0;
+
+    return 0;
+}
+
+int ei_make_ref(ei_cnode *ec, erlang_ref *ref)
+{
+    char *nodename;
+    int i, at, end;
+    
+    if (!ei_connect_initialized) {
+	fprintf(stderr,"<ERROR> erl_interface not initialized\n");
+        exit(1);
+    }
+
+    nodename = &ec->thisnodename[0];
+    for (i = at = end = 0; i < sizeof(ec->thisnodename); i++) {
+        if (!nodename[i]) {
+            end = !0;
+            break;
+        }
+        if (nodename[i] == '@')
+            at = !0;
+    }
+
+    if (!at || !end) {
+        /*
+         * write invalid utf8 in nodename
+         * which will make ei_encode_ref()
+         * fail if used...
+         */
+        ref->node[0] = 0xff;
+        ref->node[1] = 0;
+        ref->len = -1;
+        erl_errno = EINVAL;
+        return ERL_ERROR;
+    }
+
+    strcpy(ref->node, nodename);
+    ref->creation = ec->creation;
+    ref->len = 3;
+
+#ifdef _REENTRANT
+    ei_mutex_lock(ref_mtx, 0);
+#endif
+
+    ref->n[0] = ref_count[0];
+    ref->n[1] = ref_count[1];
+    ref->n[2] = ref_count[2];
+    
+    ref_count[0]++;
+    ref_count[0] &= 0x3ffff;
+    if (ref_count[0] == 0) {
+        ref_count[1]++;
+        ref_count[1] &= 0xffffffff;
+        if (ref_count[1] == 0) {
+            ref_count[2]++;
+            ref_count[2] &= 0xffffffff;
+        }
+    }
+    
+#ifdef _REENTRANT
+    ei_mutex_unlock(ref_mtx);
+#endif
+
+    return 0;
+}
+
 /* two internal functions that will let us support different cookies
 * (to be able to connect to other nodes that don't have the same
 * cookie as each other or us)
@@ -613,6 +707,12 @@ static int init_connect(int late)
     error = init_socket_info(late);
     if (error) {
         EI_TRACE_ERR0("ei_init_connect","can't initiate socket info");
+        return error;
+    }
+
+    error = init_make_ref(late);
+    if (error) {
+        EI_TRACE_ERR0("ei_init_connect","can't initiate make_ref()");
         return error;
     }
 

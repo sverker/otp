@@ -34,19 +34,21 @@
          ei_send_funs/1,
          ei_threaded_send/1,
          ei_set_get_tracelevel/1,
-         ei_connect_host_port_test/1]).
+         ei_connect_host_port_test/1,
+         ei_make_ref/1]).
 
 -import(runner, [get_term/1,send_term/2]).
 
 suite() ->
     [{ct_hooks,[ts_install_cth]},
-     {timetrap, {seconds, 30}}].
+     {timetrap, {seconds, 240}}].
 
 all() -> 
     [ei_threaded_send,
      ei_connect_host_port_test,
      {group, default},
-     {group, ussi}].
+     {group, ussi},
+     ei_make_ref].
 
 groups() ->
     Members = [ei_send,
@@ -207,6 +209,35 @@ ei_connect_host_port_test(Config) when is_list(Config) ->
     runner:recv_eot(P),
     ok.
 
+%% Should be moved to another suite...
+ei_make_ref(Config) when is_list(Config) ->
+    P = runner:start(Config, ?interpret),
+    0 = ei_connect_init(P, 42, erlang:get_cookie(), 0, default),
+    {ok,Fd} = ei_connect(P, node()),
+
+    CNode = hd(nodes(hidden)),
+    io:format("CNode = ~p", [CNode]),
+
+    N = (1 bsl 18)+1,
+    Refs = make_refs(N, CNode, P, Fd, []),
+    io:format("Last Ref ~p~n", [hd(Refs)]),
+    N = length(lists:usort(Refs)),
+
+    runner:send_eot(P),
+    runner:recv_eot(P),
+    ok.
+
+make_refs(0, _CNode, _P, _Fd, Refs) ->
+    Refs;
+make_refs(N, CNode, P, Fd, Refs) ->
+    ok = ei_make_ref(P, Fd, self()),
+    receive
+        Ref ->
+            true = is_reference(Ref),
+            CNode = node(Ref),
+            make_refs(N-1, CNode, P, Fd, [Ref|Refs])
+    end.
+
 
 %%% Interface functions for ei (erl_interface) functions.
 
@@ -255,6 +286,10 @@ ei_reg_send(P, Fd, To, Msg) ->
 ei_rpc(P, Fd, To, Func, Msg) ->
     send_command(P, ei_rpc, [Fd, To, Func, Msg]),
     get_term(P).
+
+ei_make_ref(P, Fd, To) ->
+    send_command(P, ei_make_ref, [Fd,To]),
+    get_send_result(P).
 
 
 get_send_result(P) ->
