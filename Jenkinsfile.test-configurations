@@ -1,0 +1,65 @@
+branches = ["master-opu","opu","maint-22-opu","maint-21-opu","maint-20-opu"];
+
+tests = [
+    [ IMAGE_BRANCH: /.*/,             TYPE: "opt" ],
+    [ IMAGE_BRANCH: /master-opu/,     TYPE: "valgrind" ],
+    [ IMAGE_BRANCH: /master-opu|opu/, TYPE: "gcov" ],
+    [ IMAGE_BRANCH: /master-opu|opu/, TYPE: "debug" ],
+    [ IMAGE_BRANCH: /master-opu|opu/, TYPE: "opt", ERL_FLAGS: "+S 1:1", APPS: "emulator,stdlib,kernel" ],
+];
+
+runs = [];
+
+smoke_test = true;
+
+pipeline {
+    options {
+        timestamps();
+        buildDiscarder(logRotator(daysToKeepStr: '5'));
+    }
+    agent { label 'docker' }
+    stages {
+        stage("Calculate test targets") { steps { script {
+
+            /* If the only trigger is an scm trigger,
+               we do not want to do a full build, instead we just
+               run a smoke test in order to test that this Jenkinfile
+               works. */
+            for (cause in currentBuild.rawBuild.getCauses()) {
+                if (!(cause instanceof hudson.triggers.SCMTrigger$SCMTriggerCause))
+                    smoke_test = false;
+            }
+
+            for (test in tests) {
+                /* Add each branch to tests */
+                for (b in branches) {
+                    if (b ==~ test.IMAGE_BRANCH && (!smoke_test || test.TYPE == 'opt')) {
+                        def run = test.clone();
+                        run['IMAGE_BRANCH'] = b;
+                        run['SMOKE'] = smoke_test;
+                        runs.push(run);
+                    }
+                }
+            }
+        } } }
+        stage("Trigger Tests") { steps { script {
+            for (run in runs) {
+                def params = [];
+                for (e in run) {
+                    if (e.value instanceof CharSequence) {
+                        params.push([$class: 'StringParameterValue',
+                                     name: e.key,
+                                     value: e.value]);
+                    } else if (e.value instanceof Boolean) {
+                        params.push([$class: 'BooleanParameterValue',
+                                     name: e.key,
+                                     value: e.value]);
+                    }
+                }
+                print params;
+                build job: '/run-otp-tests', parameters: params,
+                    propagate: false, wait: false
+            }
+        } } }
+    }
+}

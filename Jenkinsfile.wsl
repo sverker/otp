@@ -1,0 +1,109 @@
+// -*- groovy -*-
+HTTP_PROXY = "http://www-proxy:8080"
+HTTPS_PROXY = "http://www-proxy:8080"
+NO_PROXY = "localhost,127.0.0.1,.otp.ericsson.se,otp.ericsson.se,otp,erlang,support,nessie,wiki,monitor,jenkins"
+
+DOC_HTML_PATH = "otptest@isildur.otp.ericsson.se:/usr/local/daily_build/master/docs"
+
+sendFailEmail = false
+
+pipeline {
+
+    options {
+        // Limit pipeline to only one build per branch at the same time
+        disableConcurrentBuilds();
+        timestamps();
+        buildDiscarder(logRotator(numToKeepStr: '50'));
+    }
+
+    parameters {
+        booleanParam(name: 'QUICK', defaultValue: false, description: '');
+    }
+
+    agent none
+
+    stages {
+        // We first pack on Linux because git ssh does not work properly on windows
+        stage('pack') {
+            agent { label 'docker' }
+	    steps { script {
+                if(!fileExists("erts/etc/win32/wsl_tools")) {
+		    // https://devops.stackexchange.com/questions/885/cleanest-way-to-prematurely-exit-a-jenkins-pipeline-job-as-a-success
+		    currentBuild.getRawBuild().getExecutor().interrupt(Result.NOT_BUILT)
+		    sleep(10)   // Interrupt is not blocking and does not take effect immediately.
+		}
+                sh 'git archive --format=tar.gz --prefix=otp_src/ -o scripts/otp_src.tar.gz HEAD'
+                archiveArtifacts artifacts: 'scripts/otp_src.tar.gz', fingerprint: true
+                stash name: "scripts", includes: "scripts/"
+		sendFailEmail = true;
+            } }
+	}
+        stage('windows') {
+	    agent { label 'WSL' }
+            options {
+                skipDefaultCheckout(true)
+            }
+            stages {
+                stage("64-bit") {
+		    options { timeout(time: 2, unit: 'HOURS'); }
+		    steps { script {
+                            cleanWs disableDeferredWipeout: true, deleteDirs: true
+			    unstash "scripts"
+			    sh 'tar mxzf scripts/otp_src.tar.gz --strip-components=1'
+			    sh "echo QUICK build = ${params.QUICK}"
+			    rel = get_file("OTP_VERSION").split("\\.")[0]
+			    if(!params.QUICK) {
+				sh "scp ${DOC_HTML_PATH}/otp_doc_html_${rel}.tar.gz ."
+			    }
+			    sh "./scripts/build-otp-windows x64 ${params.QUICK} wsl"
+                            sh "mv release/win32/otp_win64_*.exe ."
+			    sh "tar czf otp_win64_release.tar.gz release"
+			    archiveArtifacts artifacts: 'otp_win64_*', fingerprint: true
+                            recordIssues enabledForFailure: true, tools: [msBuild()],
+                            filters: [includeFile('.*\\.[cho]:?[0-9]*')]
+			}
+		    }
+		}
+	        stage("32-bit") {
+		    options { timeout(time: 2, unit: 'HOURS'); }
+		    steps { script {
+			    sh 'sleep 11' // Sleep in order to make the compiler server terminate
+			    sh './bin/win32/epmd.exe -kill || true'
+			    sh 'rm -rf *'
+			    unstash "scripts"
+			    sh 'tar mxzf scripts/otp_src.tar.gz --strip-components=1'
+			    rel = get_file("OTP_VERSION").split("\\.")[0]
+			    if(!params.QUICK) {
+				sh "scp ${DOC_HTML_PATH}/otp_doc_html_${rel}.tar.gz ."
+			    }
+			    sh "./scripts/build-otp-windows x86 ${params.QUICK}  wsl"
+                            sh "mv release/win32/otp_win32_*.exe ."
+			    archiveArtifacts artifacts: 'otp_win32_*.exe', fingerprint: true
+			}
+		    }
+		}
+
+            }
+        }
+    }
+    post {
+        unsuccessful { script {
+            if (sendFailEmail) {
+                /* See apollo:/ldisk/lukas/jenkins-data/email-templates/ for the template */
+                emailext subject: '${DEFAULT_SUBJECT}',
+                    body: '${SCRIPT, template="pack-and-build.template"}',
+                    to: 'lukas@erlang.org',
+                    recipientProviders: [[$class: 'CulpritsRecipientProvider']],
+                    presendScript: '${DEFAULT_PRESEND_SCRIPT}'
+            } else {
+	        // https://devops.stackexchange.com/questions/885/cleanest-way-to-prematurely-exit-a-jenkins-pipeline-job-as-a-success
+		currentBuild.getRawBuild().getExecutor().interrupt(Result.NOT_BUILT)
+		sleep(10)   // Interrupt is not blocking and does not take effect immediately.
+    	    }
+        } }
+    }
+}
+
+def get_file(filename) {
+    return  sh([script: "cat ${filename}", returnStdout: true]).trim();
+}
