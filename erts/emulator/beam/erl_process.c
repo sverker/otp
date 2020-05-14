@@ -26,6 +26,8 @@
 
 #define ERTS_WANT_BREAK_HANDLING
 
+#define ERTS_CPC_BUGTRAP
+
 #include <stddef.h> /* offsetof() */
 #include "sys.h"
 #include "erl_vm.h"
@@ -173,6 +175,14 @@ typedef struct {
 } ErtsBusyWaitParams;
 
 static ErtsBusyWaitParams sched_busy_wait_params[ERTS_SCHED_TYPE_LAST + 1];
+
+#ifdef ERTS_CPC_BUGTRAP
+static void init_cpc_info(void);
+static void cpc_info_request(Process *c_p, Process *proc, Eterm target, Eterm requester, Eterm redirect_to);
+static void cpc_info_response(Process *c_p, Eterm from, Eterm to, Eterm msg);
+static void cpc_info_dump(Process *c_p, int cpci_locked, Eterm bad_pid, char *fmt, ...);
+
+#endif
 
 static ERTS_INLINE ErtsBusyWaitParams *
 sched_get_busy_wait_params(ErtsSchedulerData *esdp)
@@ -446,6 +456,9 @@ struct ErtsProcSysTask_ {
     ErtsProcSysTask *next;
     ErtsProcSysTask *prev;
     ErtsProcSysTaskType type;
+#ifdef ERTS_CPC_BUGTRAP
+    Eterm target;
+#endif
     Eterm requester;
     Eterm reply_tag;
     Eterm req_id;
@@ -754,6 +767,10 @@ erts_init_process(int ncpu, int proc_tab_size, int legacy_proc_tab)
 			 legacy_proc_tab,
 			 1
 	);
+
+#ifdef ERTS_CPC_BUGTRAP
+    init_cpc_info();
+#endif
 
     last_reductions = 0;
     last_exact_reductions = 0;
@@ -10082,12 +10099,22 @@ notify_sys_task_executed(Process *c_p, ErtsProcSysTask *st,
 			 Eterm st_result, int normal_sched)
 {
     Process *rp;
+
+#ifdef ERTS_CPC_BUGTRAP
+    if (st->type == ERTS_PSTT_CPC) {
+        Eterm tmp_heap[4];
+	Eterm msg = TUPLE3(&tmp_heap[0], st->reply_tag, st->req_id, st_result);
+        cpc_info_response(c_p, st->target, st->requester, msg);
+    }
+#endif
+
     if (!normal_sched)
 	rp = erts_pid2proc_opt(c_p, ERTS_PROC_LOCK_MAIN,
 			       st->requester, 0,
 			       ERTS_P2P_FLG_INC_REFC);
     else
 	rp = erts_proc_lookup(st->requester);
+
     if (rp) {
 	ErtsProcLocks rp_locks;
 	ErlOffHeap *ohp;
@@ -10129,7 +10156,8 @@ notify_sys_task_executed(Process *c_p, ErtsProcSysTask *st,
 #endif
 
         ERL_MESSAGE_TOKEN(mp) = am_undefined;
-	erts_queue_proc_message(c_p, rp, rp_locks, mp, msg);
+
+        erts_queue_proc_message(c_p, rp, rp_locks, mp, msg);
 
 	if (c_p == rp)
 	    rp_locks &= ~ERTS_PROC_LOCK_MAIN;
@@ -10694,6 +10722,9 @@ dispatch_system_task(Process *c_p, erts_aint_t fail_state,
     switch (st->type) {
     case ERTS_PSTT_CPC:
 	rp = erts_dirty_process_signal_handler;
+#ifdef ERTS_CPC_BUGTRAP
+        cpc_info_request(c_p, rp, st->target, st->requester, rp->common.id);
+#endif
 	ASSERT(fail_state & ERTS_PSFLG_DIRTY_RUNNING);
 	if (c_p == rp) {
 	    ERTS_BIF_PREP_RET(ret, am_dirty_execution);
@@ -10735,7 +10766,7 @@ dispatch_system_task(Process *c_p, erts_aint_t fail_state,
 
 static BIF_RETTYPE
 request_system_task(Process *c_p, Eterm requester, Eterm target,
-		    Eterm priority, Eterm operation)
+		    Eterm priority, Eterm operation, Eterm redirect_to)
 {
     BIF_RETTYPE ret;
     Process *rp = erts_proc_lookup_raw(target);
@@ -10800,6 +10831,10 @@ request_system_task(Process *c_p, Eterm requester, Eterm target,
 	ERTS_INIT_OFF_HEAP(&st->off_heap);
 	hp = &st->heap[0];
 
+#ifdef ERTS_CPC_BUGTRAP
+        st->target = target;
+#endif
+
 	st->requester = requester;
 	st->reply_tag = req_type;
 	st->req_id_sz = req_id_sz;
@@ -10814,6 +10849,10 @@ request_system_task(Process *c_p, Eterm requester, Eterm target,
 							       &hp,
 							       &st->off_heap);
 	ASSERT(&st->heap[0] + tot_sz == hp);
+#ifdef ERTS_CPC_BUGTRAP
+        if (req_type == am_check_process_code) 
+            cpc_info_request(c_p, rp, target, requester, redirect_to);
+#endif
     }
 
     switch (req_type) {
@@ -10902,14 +10941,22 @@ BIF_RETTYPE
 erts_internal_request_system_task_3(BIF_ALIST_3)
 {
     return request_system_task(BIF_P, BIF_P->common.id,
-			       BIF_ARG_1, BIF_ARG_2, BIF_ARG_3);
+			       BIF_ARG_1, BIF_ARG_2, BIF_ARG_3
+#ifdef ERTS_CPC_BUGTRAP
+                               , THE_NON_VALUE
+#endif
+        );
 }
 
 BIF_RETTYPE
 erts_internal_request_system_task_4(BIF_ALIST_4)
 {
     return request_system_task(BIF_P, BIF_ARG_1,
-			       BIF_ARG_2, BIF_ARG_3, BIF_ARG_4);
+			       BIF_ARG_2, BIF_ARG_3, BIF_ARG_4
+#ifdef ERTS_CPC_BUGTRAP
+                               , BIF_ARG_2
+#endif
+        );
 }
 
 static int
@@ -13727,3 +13774,365 @@ erts_debug_proc_monitor_link_foreach(Process *proc,
 
     }
 }
+
+#ifdef ERTS_CPC_BUGTRAP
+
+#include "hash.h"
+
+typedef struct {
+    HashBucket bucket;
+    Eterm id;
+    Eterm requester;
+    Process *proc;
+    Eterm *redirect;
+    Uint rix;
+    Uint redirect_len;
+    Uint count;
+    Uint max_count;
+} erts_cpc_info_t;
+
+static Hash cpc_info_tab;
+static erts_mtx_t cpc_mtx;
+
+BIF_RETTYPE
+erts_internal_cpc_info_response_3(BIF_ALIST_3)
+{
+    if (BIF_P != erts_dirty_process_signal_handler
+        && BIF_P != erts_dirty_process_signal_handler_high
+        && BIF_P != erts_dirty_process_signal_handler_max)
+	BIF_ERROR(BIF_P, EXC_NOTSUP);
+    cpc_info_response(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3);
+    BIF_RET(am_ok);
+}
+
+BIF_RETTYPE
+erts_internal_cpc_info_dump_1(BIF_ALIST_1)
+{
+    cpc_info_dump(BIF_P, 0, am_undefined, "\n\nCheck Proces Code State\n\n");
+    if (is_not_nil(BIF_ARG_1)) {
+        erts_fprintf(stderr, "\n\n%T\n\n", BIF_ARG_1),
+        erts_exit(ERTS_ABORT_EXIT, "Check Process Code State");
+    }
+    BIF_RET(am_ok);
+}
+
+static int cpc_cmp(void *va, void *vb)
+{
+    erts_cpc_info_t *a = va, *b = vb;
+    if (a->id == b->id) {
+        if (a->requester == b->requester)
+            return 0;
+        if (a->requester < b->requester)
+            return -1;
+        return 1;
+    }
+    if (a->id < b->id)
+        return -1;
+    return 1;
+}
+
+static HashValue cpc_hash(void *vx)
+{
+    erts_cpc_info_t *x = vx;
+    Uint32 hv;
+    hv = make_internal_hash(x->requester, 0);
+    hv = make_internal_hash(x->id, hv);
+    return (HashValue) hv;
+}
+
+static void *cpc_alloc(void *vtmpl)
+{
+    erts_cpc_info_t *new, *tmpl;
+    tmpl = vtmpl;
+    new = erts_alloc(ERTS_ALC_T_CPC_INFO, sizeof(erts_cpc_info_t));
+    *new = *tmpl;
+    return new;
+}
+
+static void *cpc_meta_alloc(int t, size_t sz)
+{
+    return erts_alloc(t, sz);
+}
+
+static void cpc_meta_free(int t, void *x)
+{
+    erts_free(t, x);
+}
+
+static void cpc_free(void *x)
+{
+    erts_free(ERTS_ALC_T_CPC_INFO, x);
+}
+
+static void
+init_cpc_info(void)
+{
+    HashFunctions hf;
+    hf.hash = cpc_hash;
+    hf.cmp = cpc_cmp;
+    hf.alloc = cpc_alloc;
+    hf.free = cpc_free;
+    hf.meta_alloc = cpc_meta_alloc;
+    hf.meta_free = cpc_meta_free;
+    hf.meta_print = erts_print;
+    hash_init(ERTS_ALC_T_CPC_INFO, &cpc_info_tab, "cpc_info_tab", 1024, hf);
+    erts_mtx_init(&cpc_mtx, "cpc_info", NIL,
+                  ERTS_LOCK_FLAGS_PROPERTY_STATIC | ERTS_LOCK_FLAGS_CATEGORY_GENERIC);
+}
+
+static void
+cpc_info_request(Process *c_p, Process *proc, Eterm target, Eterm requester, Eterm redirect_to)
+{
+    erts_cpc_info_t tmpl = {{0}, target, requester};
+    Process *c_p_tmp = c_p;
+    erts_cpc_info_t *cpci;
+    int unlocked = 0;
+    int is_redirect = is_value(redirect_to);
+    Eterm redirect_from = c_p->common.id;
+    
+    ASSERT(is_internal_pid(requester));
+    ASSERT(is_non_value(redirect_to) || is_internal_pid(redirect_to));
+    
+    if (erts_mtx_trylock(&cpc_mtx) == EBUSY) {
+        erts_proc_unlock(c_p, ERTS_PROC_LOCK_MAIN);
+        c_p_tmp = NULL;
+        erts_mtx_lock(&cpc_mtx);
+        unlocked = !0;
+    }
+    cpci = hash_put(&cpc_info_tab, &tmpl);
+    if (!cpci->count) {
+        /* Inserted new request */
+        cpci->count = cpci->max_count = 1;
+        cpci->proc = proc;
+        if (proc)
+            erts_proc_inc_refc(proc);
+        if (is_redirect)
+            cpc_info_dump(c_p_tmp, !0, target,
+                          "CPC redirect to %T from %T without an original request\n\n",
+                          redirect_to, redirect_from);
+    }
+    else if (!is_redirect) {
+        /* Multiple outstanding requests... */
+        cpci->count++;
+        if (cpci->max_count < cpci->count)
+            cpci->max_count = cpci->count;
+        /* Unfortunately any redirects will be mixed between original requests... */
+    }
+    else {    
+        if (cpci->rix == cpci->redirect_len) {
+            if (!cpci->rix)
+                cpci->redirect = erts_alloc(ERTS_ALC_T_CPC_INFO, sizeof(Eterm)*10);
+            else
+                cpci->redirect = erts_realloc(ERTS_ALC_T_CPC_INFO,
+                                              cpci->redirect,
+                                              sizeof(Eterm)*(cpci->redirect_len + 10));
+            cpci->redirect_len += 10;
+        }
+        cpci->redirect[cpci->rix++] = redirect_to;
+    }
+    erts_mtx_unlock(&cpc_mtx);
+    if (unlocked)
+        erts_proc_lock(c_p, ERTS_PROC_LOCK_MAIN);
+}
+
+static void
+cpc_info_response(Process *c_p, Eterm from, Eterm to, Eterm msg)
+{
+    erts_cpc_info_t tmpl = {{0}, from, to};
+    erts_cpc_info_t *cpci;
+    Process *proc = NULL, *c_p_tmp = c_p;
+    Eterm *redirect = NULL;
+    int unlocked = 0;
+
+    if (erts_mtx_trylock(&cpc_mtx) == EBUSY) {
+        erts_proc_unlock(c_p, ERTS_PROC_LOCK_MAIN);
+        erts_mtx_lock(&cpc_mtx);
+        unlocked = !0;
+        c_p_tmp = NULL;
+    }
+    cpci = hash_get(&cpc_info_tab, &tmpl);
+    if (!cpci) {
+        cpc_info_dump(c_p_tmp, !0, from,
+                      "CPC response from %T to %T without a request: %T\n\n",
+                      from, to, msg);
+        erts_exit(ERTS_ABORT_EXIT, "CPC response from %T to %T without a request: %T",
+                  from, to, msg);
+    }
+    else {
+        ERTS_ASSERT(cpci->count);
+        if (--cpci->count == 0) {
+            proc = cpci->proc;
+            redirect = cpci->redirect;
+            cpci = hash_erase(&cpc_info_tab, &tmpl);
+            ERTS_ASSERT(cpci && !hash_get(&cpc_info_tab, &tmpl));
+        }
+    }
+    erts_mtx_unlock(&cpc_mtx);
+    if (proc) {
+        erts_proc_dec_refc(proc);
+        if (redirect)
+            erts_free(ERTS_ALC_T_CPC_INFO, redirect);
+    }
+    if (unlocked)
+        erts_proc_lock(c_p, ERTS_PROC_LOCK_MAIN);
+}
+
+static void
+print_cpc_sys_task_info(Process *proc)
+{
+    ErtsProcSysTaskQs *stqs = proc->sys_task_qs;
+    if (stqs) {
+        int prio;
+        for (prio = 0; prio <= PRIORITY_LOW; prio++) {
+            ErtsProcSysTask *st, *stq;
+            int print_header = !0;
+            char *priority;
+
+            stq = stqs->q[prio];
+            if (!stq)
+                continue;
+    
+            switch (prio) {
+            case PRIORITY_MAX:
+                priority = "max";
+                break;
+            case PRIORITY_HIGH:
+                priority = "high";
+                break;
+            case PRIORITY_NORMAL:
+                priority = "normal";
+                break;
+            case PRIORITY_LOW:
+                priority = "low";
+                break;
+            default:
+                ERTS_INTERNAL_ERROR("Invalid priority");
+                break;
+            }
+
+            st = stq;
+            do {
+                if (st->type == ERTS_PSTT_CPC) {
+                    if (print_header) {
+                        erts_print(ERTS_PRINT_STDERR, NULL,
+                                   "\n--- CPC system tasks scheduled on priority '%s' ---\n",
+                                   priority);
+                        print_header = 0;
+                    }
+                    erts_print(ERTS_PRINT_STDERR, NULL,
+                               "* requester=%T, reply_tag=%T, request_id=%T\n",
+                               st->requester, st->reply_tag, st->req_id);
+                }
+                ERTS_ASSERT(st->prev->next == st);
+                ERTS_ASSERT(st->next->prev == st);
+                st = st->next;
+            } while (st != stq);
+        }
+    }
+}
+
+static void
+cpc_info_print_info(void *vcpci, void *vmisc)
+{
+    erts_cpc_info_t *cpci = vcpci;
+    Process *proc = cpci ? cpci->proc : (Process *) vmisc;
+    if (cpci) {
+        Uint *req_counter_p = vmisc;
+        *req_counter_p += cpci->count;
+        erts_print(ERTS_PRINT_STDERR, NULL, "\n\n*****\n");
+        erts_print(ERTS_PRINT_STDERR, NULL, "***** Outstanding CPC Request(s) on %T\n",
+                   cpci->id);
+        erts_print(ERTS_PRINT_STDERR, NULL, "*****\n\n");
+        erts_print(ERTS_PRINT_STDERR, NULL, "Requester: %T\n", cpci->requester);
+        erts_print(ERTS_PRINT_STDERR, NULL, "Max concurrent reuqests: %bpu\n", cpci->max_count);
+        erts_print(ERTS_PRINT_STDERR, NULL, "Redirect history: ");
+        if (cpci->rix) {
+            Eterm *r = cpci->redirect;
+            Uint ix, rix = cpci->rix;
+            erts_print(ERTS_PRINT_STDERR, NULL, "%T", r[0]);
+            for (ix = 1; ix < rix; ix++)
+                erts_print(ERTS_PRINT_STDERR, NULL, ", %T", r[ix]);
+        }
+        erts_print(ERTS_PRINT_STDERR, NULL, "\n");
+    }
+    if (!proc)
+        erts_print(ERTS_PRINT_STDERR, NULL, "\n\nNo process struct registered\n");
+    else {
+        ErtsRunQueue *rq;
+        int bound;
+        erts_print(ERTS_PRINT_STDERR, NULL, "\n\n");
+        erts_proc_lock(proc, ERTS_PROC_LOCK_MAIN);
+        print_process_info(ERTS_PRINT_STDERR, NULL, proc, ERTS_PROC_LOCK_MAIN);
+        erts_proc_lock(proc, ERTS_PROC_LOCK_STATUS);
+        print_cpc_sys_task_info(proc);
+        erts_print(ERTS_PRINT_STDERR, NULL, "\nProcess struct: (Process*)%p\n", proc);
+        rq = erts_get_runq_proc(proc, &bound);
+        erts_print(ERTS_PRINT_STDERR, NULL, "Run Queue: (ErtsRunQueue*)%p\n", rq);
+        if (bound) {
+            int rix = rq ? rq->ix : -1;
+            erts_print(ERTS_PRINT_STDERR, NULL, "Bound rix: %d\n", rix);
+        }
+        erts_proc_unlock(proc, ERTS_PROC_LOCK_MAIN|ERTS_PROC_LOCK_STATUS);
+    }
+}
+
+static void
+cpc_info_dump(Process *c_p, int cpci_locked, Eterm bad_pid, char *fmt, ...)
+{
+    Uint count = 0;
+    int res;
+    va_list args;
+    va_start(args, fmt);
+    erts_vfprintf(stderr, fmt, args);
+    va_end(args);
+    if (c_p)
+        erts_proc_unlock(c_p, ERTS_PROC_LOCK_MAIN);
+    erts_print_system_version(ERTS_PRINT_STDERR, NULL, NULL);
+    res = erts_is_multi_scheduling_blocked();
+    if (res == 0)
+        erts_print(ERTS_PRINT_STDERR, NULL, "Multi scheduling enabled\n");
+    else if (res > 0)
+        erts_print(ERTS_PRINT_STDERR, NULL, "Multi scheduling blocked\n");
+    else
+        erts_print(ERTS_PRINT_STDERR, NULL, "Normal multi scheduling blocked\n");
+        
+    if (!cpci_locked)
+        erts_mtx_lock(&cpc_mtx);
+    if (is_internal_pid(bad_pid)) {
+        Process *proc;
+        ErtsSchedulerData *esdp = erts_get_scheduler_data();
+        if (esdp && esdp->type == ERTS_SCHED_NORMAL)
+            proc = erts_proc_lookup(bad_pid);
+        else
+            proc = erts_pid2proc_opt(c_p, ERTS_PROC_LOCK_MAIN,
+                                     bad_pid, 0,
+                                     ERTS_P2P_FLG_INC_REFC);
+        if (proc)
+            cpc_info_print_info(NULL, proc);
+        
+        if (proc && (!esdp || esdp->type != ERTS_SCHED_NORMAL))
+            erts_proc_dec_refc(proc);
+    }
+    hash_foreach(&cpc_info_tab, cpc_info_print_info, &count);
+    erts_print(ERTS_PRINT_STDERR, NULL, "\n\n=== Code Purger ===\n");
+    cpc_info_print_info(NULL, erts_code_purger);
+    erts_print(ERTS_PRINT_STDERR, NULL, "\n\n=== Dirty Process Signal Handler ===\n");
+    cpc_info_print_info(NULL, erts_dirty_process_signal_handler);
+    erts_print(ERTS_PRINT_STDERR, NULL, "\n\n=== Dirty Process Signal Handler High ===\n");
+    cpc_info_print_info(NULL, erts_dirty_process_signal_handler_high);
+    erts_print(ERTS_PRINT_STDERR, NULL, "\n\n=== Dirty Process Signal Handler Max ===\n");
+    cpc_info_print_info(NULL, erts_dirty_process_signal_handler_max);
+
+    erts_print(ERTS_PRINT_STDERR, NULL, "\n\n*****\n");
+    erts_print(ERTS_PRINT_STDERR, NULL, "***** Outstanding CPC requests: %bpu\n", count);
+    erts_print(ERTS_PRINT_STDERR, NULL, "*****\n");
+    
+
+    if (!cpci_locked)
+        erts_mtx_unlock(&cpc_mtx);
+
+    if (c_p)
+        erts_proc_lock(c_p, ERTS_PROC_LOCK_MAIN);
+}
+
+#endif /* ERTS_CPC_BUGTRAP */

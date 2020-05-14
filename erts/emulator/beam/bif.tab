@@ -758,3 +758,6 @@ bif erts_internal:ets_raw_next/2
 
 bif erts_internal:abort_pending_connection/2
 
+# if ERTS_CPC_BUGTRAP...
+bif erts_internal:cpc_info_response/3
+bif erts_internal:cpc_info_dump/1

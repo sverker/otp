@@ -20,6 +20,16 @@
 
 -module(erts_dirty_process_signal_handler).
 
+-define(ERTS_CPC_BUGTRAP, yes).
+
+-ifdef(ERTS_CPC_BUGTRAP).
+-define(CPC_INFO_RESPONSE(Target, Requester, Msg),
+        erts_internal:cpc_info_response(Target, Requester, Msg)).
+-else.
+-define(CPC_INFO_RESPONSE(Target, Requester, Msg), ok).
+-endif.
+
+
 -export([start/0]).
 
 %%
@@ -88,7 +98,9 @@ handle_incoming_signals(Pid, N) ->
 handle_sys_task(Requester, Target, check_process_code, ReqId, Module, N) ->
     case erts_internal:check_dirty_process_code(Target, Module) of
         Bool when Bool == true; Bool == false ->
-            Requester ! {check_process_code, ReqId, Bool},
+            Msg = {check_process_code, ReqId, Bool}, 
+            ?CPC_INFO_RESPONSE(Target, Requester, Msg),
+            Requester ! Msg,
             done;
         busy ->
             case N > 5 of

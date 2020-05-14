@@ -105,6 +105,14 @@
 
 -export([get_internal_state_blocked/1]).
 
+-define(ERTS_CPC_BUGTRAP, yes).
+
+-ifdef(ERTS_CPC_BUGTRAP).
+-export([cpc_info_response/3,
+         cpc_info_dump/1]).
+-endif.
+
+
 %%
 %% Await result of send to port
 %%
@@ -830,3 +838,17 @@ get_internal_state_blocked(Arg) ->
                  erlang:system_flag(multi_scheduling, unblock)
              end,
     Result.
+
+-ifdef(ERTS_CPC_BUGTRAP).
+
+-spec cpc_info_response(pid(), pid(), term()) -> 'ok'.
+
+cpc_info_response(_Target, _Requester, _Msg) ->
+    erlang:nif_error(undef).
+
+-spec cpc_info_dump(term()) -> 'ok'.
+    
+cpc_info_dump(_Bool) ->
+    erlang:nif_error(undef).
+
+-endif.

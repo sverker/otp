@@ -19,6 +19,8 @@
 %%
 -module(erts_code_purger).
 
+-define(DEFAULT_MAX_PURGE_RESPONSE_TIME, 5*60*1000).
+
 %% Purpose : Implement system process erts_code_purger
 %%           to handle code module purging.
 
@@ -189,7 +191,7 @@ do_finish_after_on_load(Mod, Keep, Reqs) ->
 
 -define(MAX_CPC_NO_OUTSTANDING_KILLS, 10).
 
--record(cpc_static, {hard, module, tag, purge_requests}).
+-record(cpc_static, {hard, module, tag, timer, timeout, purge_requests}).
 
 -record(cpc_kill, {outstanding = [],
 		   no_outstanding = 0,
@@ -197,12 +199,23 @@ do_finish_after_on_load(Mod, Keep, Reqs) ->
 		   killed = false}).
 
 check_proc_code(Pids, Mod, Hard, PReqs) ->
+    Tmo = case os:get_env_var("MAX_PURGE_RESPONSE_TIME") of
+              false ->
+                  ?DEFAULT_MAX_PURGE_RESPONSE_TIME;
+              "" ->
+                  ?DEFAULT_MAX_PURGE_RESPONSE_TIME;
+              Val ->
+                  list_to_integer(Val)
+          end,
     Tag = erlang:make_ref(),
     CpcS = #cpc_static{hard = Hard,
 		       module = Mod,
 		       tag = Tag,
 		       purge_requests = PReqs},
-    cpc_receive(CpcS, cpc_init(CpcS, Pids, 0), #cpc_kill{}, []).
+    TmoMsg = {timeout, Tag},
+    Init = cpc_init(CpcS, Pids, 0),
+    Timer = erlang:send_after(Tmo, self(), TmoMsg),
+    cpc_receive(CpcS#cpc_static{timer = Timer, timeout = Tmo}, Init, #cpc_kill{}, []).
 
 cpc_receive(#cpc_static{hard = true} = CpcS,
 	    0,
@@ -211,11 +224,16 @@ cpc_receive(#cpc_static{hard = true} = CpcS,
     %% No outstanding cpc requests. We did a hard check, so result is
     %% whether or not we killed any processes...
     cpc_result(CpcS, PReqs, Killed);
-cpc_receive(#cpc_static{hard = false} = CpcS, 0, _KillState, PReqs) ->
+cpc_receive(#cpc_static{hard = false, timer = Timer} = CpcS, 0, _KillState, PReqs) ->
     %% No outstanding cpc requests and we did a soft check that succeeded...
+    _ = erlang:cancel_timer(Timer, [{async,true}, {info,false}]),
     cpc_result(CpcS, PReqs, complete);
 cpc_receive(#cpc_static{tag = Tag} = CpcS, NoReq, KillState0, PReqs) ->
     receive
+        {timeout, Tag} ->
+            State = {code_purger_state, CpcS, NoReq, KillState0, PReqs},
+            erts_internal:cpc_info_dump(State),
+	    cpc_receive(CpcS, NoReq, KillState0, PReqs);
 	{check_process_code, {Tag, _Pid}, false} ->
 	    %% Process not referring the module; done with this process...
 	    cpc_receive(CpcS, NoReq-1, KillState0, PReqs);

@@ -81,6 +81,7 @@ static erts_lc_lock_order_t erts_lock_order[] = {
     {	"driver_lock",				"driver_name"		},
     {	"port_lock",				"port_id"		},
     {	"port_data_lock",			"address"		},
+    {	"cpc_info",				NULL			},
     {	"reg_tab",				NULL			},
     {	"proc_main",				"pid"			},
     {   "old_code",                             "address"               },

@@ -247,6 +247,10 @@ print_process_info(fmtfn_t to, void *to_arg, Process *p, ErtsProcLocks orig_lock
 
     state = erts_atomic32_read_acqb(&p->state);
     erts_dump_process_state(to, to_arg, state);
+
+    if (state & ERTS_PSFLG_FREE)
+        return;
+    
     if (state & ERTS_PSFLG_GC) {
         garbing = 1;
         running = 1;
