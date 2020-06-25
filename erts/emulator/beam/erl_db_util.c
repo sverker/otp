@@ -143,8 +143,6 @@ do {									\
 } while (0)
 
 
-#define TermWords(t) (((t) / (sizeof(UWord)/sizeof(Eterm))) + !!((t) % (sizeof(UWord)/sizeof(Eterm))))
-
 #define add_dmc_err(EINFO, STR, VAR, TERM, SEV) \
        vadd_dmc_err(EINFO, SEV, VAR, STR, TERM)
 
@@ -1597,6 +1595,8 @@ Binary *db_match_compile(Eterm *matchexpr,
     heap.size = DMC_DEFAULT_SIZE;
     heap.vars = heap.vars_def;
 
+    ASSERT(num_progs > 0);
+
     /*
     ** Compile the match expression
     */
@@ -2226,7 +2226,7 @@ restart:
 		FAIL();
 	    if (sys_memcmp(float_val(*ep) + 1, pc, sizeof(double)))
 		FAIL();
-	    pc += TermWords(2);
+	    pc += FLOAT_SIZE_OBJECT;
 	    ++ep;
 	    break;
 	case matchEqRef: {
@@ -2237,7 +2237,7 @@ restart:
 		FAIL();
 	    }
 	    i = thing_arityval(*epc);
-	    pc += TermWords(i+1);
+	    pc += i+1;
 	    ++ep;
 	    break;
 	}
@@ -2250,7 +2250,7 @@ restart:
 		if (*tp != *epc)
 		    FAIL();
 		i = BIG_ARITY(epc);
-		pc += TermWords(i+1);
+		pc += i+1;
 		while(i--) {
 		    if (*++tp != *++epc) {
 			FAIL();
@@ -5323,8 +5323,10 @@ static Eterm match_spec_test(Process *p, Eterm against, Eterm spec, int trace)
 	if (trace) {
 	    if (n)
 		arr = erts_alloc(ERTS_ALC_T_DB_TMP, sizeof(Eterm) * n);
-	    else 
+	    else {
+                ASSERT(!is_list(against));
 		arr = NULL;
+            }
 	    l = against;
 	    n = 0;
 	    while (is_list(l)) {
@@ -5540,18 +5542,18 @@ void db_match_dis(Binary *bp)
 		if (is_ordinary_ref_thing(t)) {
 		    ErtsORefThing *rt = (ErtsORefThing *) t;
 		    num = rt->num;
-		    t += TermWords(ERTS_REF_THING_SIZE);
+		    t += ERTS_REF_THING_SIZE;
 		}
 		else if (is_pid_ref_thing(t)) {
 		    ErtsPRefThing *prt = (ErtsPRefThing *) t;
 		    num = prt->num;
-		    t += TermWords(ERTS_PID_REF_THING_SIZE);
+		    t += ERTS_PID_REF_THING_SIZE;
 		}
 		else {
 		    ErtsMRefThing *mrt = (ErtsMRefThing *) t;
 		    ASSERT(is_magic_ref_thing(t));
 		    num = mrt->mb->refn;
-		    t += TermWords(ERTS_MAGIC_REF_THING_SIZE);
+		    t += ERTS_MAGIC_REF_THING_SIZE;
 		}
 
 		erts_printf("EqRef\t(%d) {", (int) ERTS_REF_NUMBERS);
@@ -5575,7 +5577,7 @@ void db_match_dis(Binary *bp)
 	    n = thing_arityval(*t);
 	    {
 		Eterm *et = (Eterm *) t;
-		t += TermWords(n+1);
+		t += n+1;
 		erts_printf("EqBig\t(%d) {", (int) n);
 		first = 1;
 		++n;
@@ -5599,7 +5601,7 @@ void db_match_dis(Binary *bp)
 	    {
 		double num;
 		sys_memcpy(&num,t,sizeof(double));
-		t += TermWords(2);
+		t += FLOAT_SIZE_OBJECT;
 		erts_printf("EqFloat\t%f\n", num);
 	    }
 	    break;
