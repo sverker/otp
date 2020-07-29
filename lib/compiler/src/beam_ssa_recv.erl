@@ -175,7 +175,7 @@ makes_ref(#b_set{dst=Dst,args=[Func0|_]}, Blocks) ->
     case MFA of
         {erlang,make_ref,0} ->
             {yes,Dst};
-        {erlang,monitor,2} ->
+        {erlang,monitor,A} when A == 2; A == 3 ->
             {yes,Dst};
         {erlang,spawn_request,A} when 1 =< A, A =< 5 ->
             {yes,Dst};

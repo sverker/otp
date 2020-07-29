@@ -76,6 +76,7 @@ atom ac
 atom active
 atom active_tasks
 atom active_tasks_all
+atom alias
 atom alive
 atom all
 atom all_but_first
@@ -201,6 +202,7 @@ atom decentralized_counters
 atom decimals
 atom default
 atom delay_trap
+atom demonitor
 atom dictionary
 atom dirty_bif_exception
 atom dirty_bif_result
@@ -489,6 +491,7 @@ atom old_heap_block_size
 atom old_heap_size
 atom on_heap
 atom on_load
+atom once
 atom open
 atom open_error
 atom opt
@@ -562,6 +565,7 @@ atom registered_name
 atom reload
 atom rem
 atom reply
+atom reply_demonitor
 atom reply_tag
 atom report_errors
 atom reset
@@ -679,6 +683,7 @@ atom true
 atom type
 atom ucompile
 atom ucp
+atom unalias
 atom undef
 atom ungreedy
 atom unicode
