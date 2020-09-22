@@ -25,6 +25,7 @@ httpd_util:hexlist_to_integer/1 since=24 remove=26
 httpd_util:integer_to_hexlist/1 since=24 remove=26
 httpd_util:strip/1 since=24 remove=26
 httpd_util:suffix/1 since=24 remove=26
+erlang:phash/2 since=24
 
 #
 # Added in OTP 23.
@@ -73,8 +74,6 @@ snmpm:async_get_bulk/5 since=23 remove=25
 snmpm:async_get_bulk/6 since=23 remove=25
 snmpm:async_get_bulk/7 since=23 remove=25
 snmpm:async_get_bulk/8 since=23 remove=25
-
-erlang:phash/2 since=23
 
 #
 # Added in OTP 22.
