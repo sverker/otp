@@ -79,6 +79,7 @@ BIF_RETTYPE spawn_3(BIF_ALIST_3)
     so.flags = erts_default_spo_flags;
     so.opts = NIL;
     so.tag = am_spawn_reply;
+    so.monitor_oflags = (Uint16) 0;
     pid = erl_create_process(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3, &so);
     if (is_non_value(pid)) {
 	BIF_ERROR(BIF_P, so.error_code);
@@ -805,6 +806,7 @@ BIF_RETTYPE spawn_link_3(BIF_ALIST_3)
     so.flags = erts_default_spo_flags|SPO_LINK;
     so.opts = CONS(&tmp_heap[0], am_link, NIL);
     so.tag = am_spawn_reply;
+    so.monitor_oflags = (Uint16) 0;
     pid = erl_create_process(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3, &so);
     if (is_non_value(pid)) {
 	BIF_ERROR(BIF_P, so.error_code);
