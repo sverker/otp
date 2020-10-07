@@ -525,12 +525,23 @@ float_data([D|Cs], Ds) when D >= $0, D =< $9 ->
 float_data([_|Cs], Ds) ->
     float_data(Cs, Ds).
 
-%%  Writes the shortest, correctly rounded string that converts
-%%  to Float when read back with list_to_float/1.
+%%  Returns a correctly rounded string that converts to Float when
+%%  read back with list_to_float/1.
 %%
-%%  See also "Printing Floating-Point Numbers Quickly and Accurately"
-%%  in Proceedings of the SIGPLAN '96 Conference on Programming
-%%  Language Design and Implementation.
+%%  When abs(Float) < float(1 bsl 53) the shortest such string is
+%%  returned, and otherwise the shortest such string using scientific
+%%  notation is returned. That is, scientific notation is used if and
+%%  only if scientific notation results in a shorter string than
+%%  normal notation when abs(Float) < float(1 bsl 53), and scientific
+%%  notation is used unconditionally if abs(Float) >= float(1 bsl
+%%  53). See comment in insert_decimal/2 for an explanation for why
+%%  float(1 bsl 53) is chosen as cutoff point.
+%%
+%%  The algorithm that is used to find the decimal number that is
+%%  represented by the returned String is described in "Printing
+%%  Floating-Point Numbers Quickly and Accurately" in Proceedings of
+%%  the SIGPLAN '96 Conference on Programming Language Design and
+%%  Implementation.
 
 -spec fwrite_g(float()) -> string().
 

@@ -182,6 +182,13 @@ float_w(Config) when is_list(Config) ->
     %% precision (float((1 bsl 53)+1) =:= float(1 bsl 53)).
     %%
     %% https://stackoverflow.com/questions/1848700/biggest-integer-that-can-be-stored-in-a-double?answertab=votes#tab-top
+    Nums = [-float((1 bsl 53) -1),
+            -float(1 bsl 53),
+            -float((1 bsl 53) + 1),
+            float((1 bsl 53) -1),
+            float(1 bsl 53),
+            float((1 bsl 53) + 1)],
+
 
     ["-9007199254740991.0",
      "-9.007199254740992e15",
@@ -189,9 +196,7 @@ float_w(Config) when is_list(Config) ->
      "9007199254740991.0",
      "9.007199254740992e15",
      "9.007199254740992e15"] =
-        [fmt("~w", [X]) ||
-            X <- [-float((1 bsl 53) -1), -float(1 bsl 53), -float((1 bsl 53) + 1),
-                  float((1 bsl 53) -1), float(1 bsl 53), float((1 bsl 53) + 1)]],
+        [begin g_t(X), fmt("~w", [X]) end || X <- Nums],
 
     ok.
 
@@ -1430,11 +1435,26 @@ gcd(A, B) -> gcd(B, A rem B).
 
 %%% End of rational numbers.
 
+%% Check that there is an exponent if and only if characters are saved
+%% when abs(list_to_float(S)) < float(1 bsl 53) and that there is an
+%% exponent when abs(list_to_float(S)) >= float(1 bsl 53).
+g_choice(S) when is_list(S) ->
+    ShouldAlwaysHaveExponent = abs(list_to_float(S)) >= float(1 bsl 53),
+    HasExponent = lists:member($e, S) orelse lists:member($E, S),
+    case ShouldAlwaysHaveExponent of
+        true ->
+            case HasExponent of
+                true -> ok;
+                false -> throw(should_have_exponent)
+            end;
+        false -> g_choice_small(S)
+    end.
+
 %% Check that there is an exponent if and only if characters are
 %% saved. Note: this assumes floating point numbers "Erlang style"
 %% (with a single zero before and after the dot, and no extra leading
 %% zero in the exponent).
-g_choice(S) when is_list(S) ->
+g_choice_small(S) when is_list(S) ->
     [MS | ES0] = string:tokens(S, "eE"),
     [IS, FS] = string:tokens(MS, "."),
     Il = length(IS),
