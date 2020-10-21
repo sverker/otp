@@ -76,9 +76,11 @@ struct enif_resource_type_t
     ErlNifResourceTypeInit fn;
     ErlNifResourceTypeInit fn_real;
     erts_refc_t refc;  /* num of resources of this type (HOTSPOT warning)
-                          +1 for active erl_module_nif */
+                          +1 for active owning erl_module_nif
+                          +1 per user erl_module_nif */
     Eterm module;
     Eterm name;
+    Eterm name_scope;  /* same as 'module' or THE_NON_VALUE for global scope */
 };
 
 typedef struct

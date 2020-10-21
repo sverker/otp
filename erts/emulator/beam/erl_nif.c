@@ -95,6 +95,9 @@ struct erl_module_nif {
                                */
     Module* mod;    /* Can be NULL if purged and dynlib_refc > 0 */
 
+    ErlNifResourceType* rt_usedv[3];
+    int rt_used_cnt;
+
     ErlNifFunc _funcs_copy_[1];  /* only used for old libs */
 };
 
@@ -2225,14 +2228,14 @@ int enif_vsnprintf(char* buffer, size_t size, const char *format, va_list ap)
  */
 struct enif_resource_type_t resource_type_list; 
 
-static ErlNifResourceType* find_resource_type(Eterm module, Eterm name)
+static ErlNifResourceType* find_resource_type(Eterm name_scope, Eterm name)
 {
     ErlNifResourceType* type;
     for (type = resource_type_list.next;
 	 type != &resource_type_list;
 	 type = type->next) {
 
-	if (type->module == module && type->name == name) {
+        if (type->name_scope == name_scope && type->name == name) {
 	    return type;
 	}
     }
@@ -2335,6 +2338,7 @@ struct opened_resource_type
 {
     struct opened_resource_type* next;
 
+    int is_new;
     ErlNifResourceFlags op;
     ErlNifResourceType* type;
     ErlNifResourceTypeInit new_callbacks;
@@ -2351,46 +2355,70 @@ ErlNifResourceType* open_resource_type(ErlNifEnv* env,
 {
     ErlNifResourceType* type = NULL;
     ErlNifResourceFlags op = flags;
-    Eterm module_am, name_am;
+    int is_new = 0;
+    Eterm module_am, name_am, name_scope;
+    struct erl_module_nif* lib = env->mod_nif;
 
     ERTS_LC_ASSERT(erts_has_code_write_permission());
-    module_am = make_atom(env->mod_nif->mod->module);
+    module_am = make_atom(lib->mod->module);
     name_am = enif_make_atom(env, name_str);
+    name_scope = flags & ERL_NIF_RT_GLOBAL ? THE_NON_VALUE : module_am;
 
-    type = find_resource_type(module_am, name_am);
-    if (type == NULL) {
-	if (flags & ERL_NIF_RT_CREATE) {
-	    type = erts_alloc(ERTS_ALC_T_NIF,
-			      sizeof(struct enif_resource_type_t));
-	    type->module = module_am;
-	    type->name = name_am;
-	    erts_refc_init(&type->refc, 1);
-	    op = ERL_NIF_RT_CREATE;
-	#ifdef DEBUG
-            type->fn.dtor = (void*)1;
-	    type->fn_real.dtor = (void*)1;
-	    type->owner = (void*)2;
-	    type->prev = (void*)3;
-	    type->next = (void*)4;
-	#endif
-	}
+    type = find_resource_type(name_scope, name_am);
+    if (type == NULL && (flags & (ERL_NIF_RT_CREATE | ERL_NIF_RT_USE))) {
+        is_new = 1;
+        type = erts_alloc(ERTS_ALC_T_NIF,
+                          sizeof(struct enif_resource_type_t));
+        type->name = name_am;
+        type->name_scope = name_scope;
+        erts_refc_init(&type->refc, 1);
+        type->owner = NULL;
+
+    #ifdef DEBUG
+        type->fn.dtor = (void*)1;
+        type->fn_real.dtor = (void*)1;
+        type->prev = (void*)3;
+        type->next = (void*)4;
+    #endif
     }
-    else {
-	if (flags & ERL_NIF_RT_TAKEOVER) {
-	    op = ERL_NIF_RT_TAKEOVER;
-	}
-	else {
-	    type = NULL;
-	}
+
+    if (type) {
+        if (!type->owner) {
+            if (flags & ERL_NIF_RT_CREATE) {
+                type->owner = lib;
+                type->module = module_am;
+                op = ERL_NIF_RT_CREATE;
+            }
+            else if (flags & ERL_NIF_RT_USE) {
+                /* user loaded before owner */
+                type->module = THE_NON_VALUE;
+                op = ERL_NIF_RT_USE;
+            }
+            else {
+                ASSERT(!is_new);
+                type = NULL;
+            }
+        }
+        else if (flags & ERL_NIF_RT_TAKEOVER)
+            op = ERL_NIF_RT_TAKEOVER;
+        else if (flags & ERL_NIF_RT_USE)
+            op = ERL_NIF_RT_USE;
+        else {
+            ASSERT(!is_new);
+            type = NULL;
+        }
     }
     if (type != NULL) {
 	struct opened_resource_type* ort = erts_alloc(ERTS_ALC_T_TMP,
 						sizeof(struct opened_resource_type));
 	ort->op = op;
 	ort->type = type;
+        ort->is_new = is_new;
         sys_memzero(&ort->new_callbacks, sizeof(ErlNifResourceTypeInit));
-        ASSERT(sizeof_init > 0 && sizeof_init <= sizeof(ErlNifResourceTypeInit));
-        sys_memcpy(&ort->new_callbacks, init, sizeof_init);
+        if (init) {
+            ASSERT(sizeof_init > 0 && sizeof_init <= sizeof(ErlNifResourceTypeInit));
+            sys_memcpy(&ort->new_callbacks, init, sizeof_init);
+        }
         if (!ort->new_callbacks.dtor && (ort->new_callbacks.down ||
                                          ort->new_callbacks.stop)) {
             /* Set dummy dtor for fast rt_have_callbacks()
@@ -2431,6 +2459,13 @@ enif_open_resource_type_x(ErlNifEnv* env,
                               env->mod_nif->entry.sizeof_ErlNifResourceTypeInit);
 }
 
+static void add_used_rt(struct erl_module_nif* lib, ErlNifResourceType* rt)
+{
+    const int max_used_cnt = sizeof(lib->rt_usedv) / sizeof(*lib->rt_usedv);
+    ERTS_ASSERT(lib->rt_used_cnt < max_used_cnt);
+    lib->rt_usedv[lib->rt_used_cnt++] = rt;
+}
+
 static void prepare_opened_rt(struct erl_module_nif* lib)
 {
     struct opened_resource_type* ort = opened_rt_list;
@@ -2438,16 +2473,20 @@ static void prepare_opened_rt(struct erl_module_nif* lib)
     while (ort) {
 	ErlNifResourceType* type = ort->type;
 
-	if (ort->op == ERL_NIF_RT_CREATE) {
-            type->fn = ort->new_callbacks;
-            type->fn_real = ort->new_callbacks;
+        if (ort->is_new) {
 	    type->prev = &resource_type_list;
 	    type->next = resource_type_list.next;
 	    type->next->prev = type;
 	    type->prev->next = type;
-	}
-	else { /* ERL_NIF_RT_TAKEOVER */
+        }
+        switch (ort->op) {
+        case ERL_NIF_RT_CREATE:
+            type->fn = ort->new_callbacks;
+            type->fn_real = ort->new_callbacks;
+            break;
+        case ERL_NIF_RT_TAKEOVER:
 	    steal_resource_type(type);
+            type->owner = lib;
 
             /*
              * Prepare for atomic change of callbacks with lock-wrappers
@@ -2455,8 +2494,15 @@ static void prepare_opened_rt(struct erl_module_nif* lib)
             type->fn.dtor = resource_dtor_during_takeover;
             type->fn.stop = resource_stop_during_takeover;
             type->fn.down = resource_down_during_takeover;
-	}
-        type->owner = lib;
+            break;
+        case ERL_NIF_RT_USE:
+            add_used_rt(lib, type);
+            if (!ort->is_new)
+                erts_refc_inc(&type->refc, 2);
+            break;
+        default:
+            ASSERT(!"Invalid resource type op");
+        }
 
         if (rt_have_callbacks(&ort->new_callbacks))
 	    erts_refc_inc(&lib->dynlib_refc, 2);
@@ -2505,7 +2551,7 @@ static void rollback_opened_resource_types(void)
     while (opened_rt_list) {
 	struct opened_resource_type* ort = opened_rt_list;
 
-	if (ort->op == ERL_NIF_RT_CREATE) {
+	if (ort->op & ERL_NIF_RT_CREATE) {
 	    erts_free(ERTS_ALC_T_NIF, ort->type);
 	}
 
@@ -4213,6 +4259,7 @@ static struct erl_module_nif* create_lib(const ErlNifEntry* src)
     lib = erts_alloc(ERTS_ALC_T_NIF, bytes);
     erts_mtx_init(&lib->load_mtx, "nif_load", NIL,
                   ERTS_LOCK_FLAGS_CATEGORY_GENERIC);
+    lib->rt_used_cnt = 0;
     dst = &lib->entry;
 
     sys_memcpy(dst, src, offsetof(ErlNifEntry, vm_variant));
@@ -4889,6 +4936,7 @@ erts_unload_nif(struct erl_module_nif* lib)
 {
     ErlNifResourceType* rt;
     ErlNifResourceType* next;
+    int i;
 
     ASSERT(lib != NULL);
     ASSERT(lib->mod != NULL);
@@ -4916,6 +4964,17 @@ erts_unload_nif(struct erl_module_nif* lib)
 	    }
 	}
     }
+    for (i = 0; i < lib->rt_used_cnt; i++) {
+        ErlNifResourceType *rt = lib->rt_usedv[i];
+        if (erts_refc_dectest(&rt->refc, 0) == 0) {
+            ASSERT(rt->next == NULL);
+            ASSERT(rt->owner != NULL);
+            ASSERT(rt->owner->mod == NULL);
+            steal_resource_type(rt);
+            erts_free(ERTS_ALC_T_NIF, rt);
+        }
+    }
+
     lib->mod = NULL;   /* purged Elang module */
 
     if (erts_refc_dectest(&lib->dynlib_refc, 0) == 0)

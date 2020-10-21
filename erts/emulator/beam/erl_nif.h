@@ -178,7 +178,9 @@ typedef int ErlNifEvent;
 typedef enum
 {
     ERL_NIF_RT_CREATE = 1,
-    ERL_NIF_RT_TAKEOVER = 2
+    ERL_NIF_RT_TAKEOVER = 2,
+    ERL_NIF_RT_GLOBAL = 4,
+    ERL_NIF_RT_USE = 8
 }ErlNifResourceFlags;
 
 typedef enum
