@@ -10455,13 +10455,13 @@ static void tcp_inet_send_timeout(ErlDrvData e, ErlDrvTermData dummy)
     ASSERT(IS_BUSY(INETP(desc)));
     ASSERT(desc->pending_sendtimeout);
     desc->inet.caller = desc->inet.busy_caller;
+    desc->inet.busy_caller = 0;
     desc->pending_sendtimeout = 0;
-    desc->inet.state &= ~INET_F_BUSY;
-    set_busy_port(desc->inet.port, 0);
     inet_reply_error_am(INETP(desc), am_timeout);
     if (desc->send_timeout_close) {
         tcp_desc_close(desc);
     }
+    /* keep port busy (ERL-1390) */
 }
 
 /*
@@ -11762,18 +11762,19 @@ static int tcp_sendfile_completed(tcp_descriptor* desc) {
 
     if (driver_sizeq(desc->inet.port) <= desc->low) {
         if (IS_BUSY(INETP(desc))) {
-            desc->inet.caller = desc->inet.busy_caller;
             desc->inet.state &= ~INET_F_BUSY;
-
             set_busy_port(desc->inet.port, 0);
 
-            /* if we have a timer then cancel and send ok to client */
+            /* if we have a timer then cancel */
             if (desc->pending_sendtimeout) {
                 cancel_multi_timer(desc, INETP(desc)->port,
                                    &tcp_inet_send_timeout);
                 desc->pending_sendtimeout = 0;
             }
 
+            /* send ok to waiting client (if any) */
+            desc->inet.caller = desc->inet.busy_caller;
+            desc->inet.busy_caller = 0;
             inet_reply_ok(INETP(desc));
         }
     }
@@ -12107,14 +12108,16 @@ static int tcp_inet_output(tcp_descriptor* desc, HANDLE event)
 	    }
 	    if (driver_deq(ix, n) <= desc->low) {
 		if (IS_BUSY(INETP(desc))) {
-		    desc->inet.caller = desc->inet.busy_caller;
 		    desc->inet.state &= ~INET_F_BUSY;
 		    set_busy_port(desc->inet.port, 0);
-		    /* if we have a timer then cancel and send ok to client */
+		    /* if we have a timer then cancel it */
 		    if (desc->pending_sendtimeout) {
                         cancel_multi_timer(desc, INETP(desc)->port, &tcp_inet_send_timeout);
 			desc->pending_sendtimeout = 0;
 		    }
+                    /* send ok to waiting client (if any) */
+                    desc->inet.caller = desc->inet.busy_caller;
+                    desc->inet.busy_caller = 0;
 		    inet_reply_ok(INETP(desc));
 		}
 	    }
