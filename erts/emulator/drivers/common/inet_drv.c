@@ -1306,7 +1306,7 @@ struct _tcp_descriptor {
     int   low;                  /* low watermark */
     int   send_timeout;         /* timeout to use in send */
     int   send_timeout_close;   /* auto-close socket on send_timeout */
-    int   busy_on_send;         /* busy on send with timeout! */
+    int   pending_sendtimeout;  /* has scheduled send timeout */
     int   i_bufsz;              /* current input buffer size (<= bufsz) */
     ErlDrvBinary* i_buf;        /* current binary buffer */
     char*         i_ptr;        /* current pos in buf */
@@ -9875,7 +9875,7 @@ static ErlDrvData prep_tcp_inet_start(ErlDrvPort port, char* args)
     desc->low  = INET_LOW_WATERMARK;
     desc->send_timeout = INET_INFINITY;
     desc->send_timeout_close = 0;
-    desc->busy_on_send = 0;
+    desc->pending_sendtimeout = 0;
     desc->i_buf = NULL;
     desc->i_ptr = NULL;
     desc->i_ptr_start = NULL;
@@ -10453,10 +10453,10 @@ static void tcp_inet_send_timeout(ErlDrvData e, ErlDrvTermData dummy)
 {
     tcp_descriptor* desc = (tcp_descriptor*)e;
     ASSERT(IS_BUSY(INETP(desc)));
-    ASSERT(desc->busy_on_send);
+    ASSERT(desc->pending_sendtimeout);
     desc->inet.caller = desc->inet.busy_caller;
+    desc->pending_sendtimeout = 0;
     desc->inet.state &= ~INET_F_BUSY;
-    desc->busy_on_send = 0;
     set_busy_port(desc->inet.port, 0);
     inet_reply_error_am(INETP(desc), am_timeout);
     if (desc->send_timeout_close) {
@@ -10653,9 +10653,9 @@ static int tcp_recv_closed(tcp_descriptor* desc)
 	/* A send is blocked */
 	desc->inet.caller = desc->inet.busy_caller;
 	tcp_clear_output(desc);
-	if (desc->busy_on_send) {
+	if (desc->pending_sendtimeout) {
             cancel_multi_timer(desc, INETP(desc)->port, &tcp_inet_send_timeout);
-	    desc->busy_on_send = 0;
+	    desc->pending_sendtimeout = 0;
 	    DEBUGF(("tcp_recv_closed(%p): busy on send\r\n", port));
 	}
 	desc->inet.state &= ~INET_F_BUSY;
@@ -10715,9 +10715,9 @@ static int tcp_recv_error(tcp_descriptor* desc, int err)
 	    /* A send is blocked */
 	    desc->inet.caller = desc->inet.busy_caller;
 	    tcp_clear_output(desc);
-	    if (desc->busy_on_send) {
+	    if (desc->pending_sendtimeout) {
                 cancel_multi_timer(desc, INETP(desc)->port, &tcp_inet_send_timeout);
-		desc->busy_on_send = 0;
+		desc->pending_sendtimeout = 0;
 	    }
 	    desc->inet.state &= ~INET_F_BUSY;
 	    set_busy_port(desc->inet.port, 0);
@@ -11390,9 +11390,9 @@ static int tcp_send_or_shutdown_error(tcp_descriptor* desc, int err)
      */
     if (IS_BUSY(INETP(desc))) {
 	desc->inet.caller = desc->inet.busy_caller;
-	if (desc->busy_on_send) {
+	if (desc->pending_sendtimeout) {
             cancel_multi_timer(desc, INETP(desc)->port, &tcp_inet_send_timeout);
-	    desc->busy_on_send = 0;
+	    desc->pending_sendtimeout = 0;
 	}
 	desc->inet.state &= ~INET_F_BUSY;
 	set_busy_port(desc->inet.port, 0);
@@ -11554,7 +11554,7 @@ static int tcp_sendv(tcp_descriptor* desc, ErlIOVec* ev)
 	    desc->inet.busy_caller = desc->inet.caller;
 	    set_busy_port(desc->inet.port, 1);
 	    if (desc->send_timeout != INET_INFINITY) {
-		desc->busy_on_send = 1;
+		desc->pending_sendtimeout = 1;
                 add_multi_timer(desc, INETP(desc)->port,
                                 0 /* arg */, desc->send_timeout /* timeout */,
                                 &tcp_inet_send_timeout);
@@ -11659,7 +11659,7 @@ static int tcp_send(tcp_descriptor* desc, char* ptr, ErlDrvSizeT len)
 	    desc->inet.busy_caller = desc->inet.caller;
 	    set_busy_port(desc->inet.port, 1);
 	    if (desc->send_timeout != INET_INFINITY) {
-		desc->busy_on_send = 1;
+		desc->pending_sendtimeout = 1;
                 add_multi_timer(desc, INETP(desc)->port,
                                 0 /* arg */, desc->send_timeout /* timeout */,
                                 &tcp_inet_send_timeout);
@@ -11768,10 +11768,10 @@ static int tcp_sendfile_completed(tcp_descriptor* desc) {
             set_busy_port(desc->inet.port, 0);
 
             /* if we have a timer then cancel and send ok to client */
-            if (desc->busy_on_send) {
+            if (desc->pending_sendtimeout) {
                 cancel_multi_timer(desc, INETP(desc)->port,
                                    &tcp_inet_send_timeout);
-                desc->busy_on_send = 0;
+                desc->pending_sendtimeout = 0;
             }
 
             inet_reply_ok(INETP(desc));
@@ -12111,9 +12111,9 @@ static int tcp_inet_output(tcp_descriptor* desc, HANDLE event)
 		    desc->inet.state &= ~INET_F_BUSY;
 		    set_busy_port(desc->inet.port, 0);
 		    /* if we have a timer then cancel and send ok to client */
-		    if (desc->busy_on_send) {
+		    if (desc->pending_sendtimeout) {
                         cancel_multi_timer(desc, INETP(desc)->port, &tcp_inet_send_timeout);
-			desc->busy_on_send = 0;
+			desc->pending_sendtimeout = 0;
 		    }
 		    inet_reply_ok(INETP(desc));
 		}
