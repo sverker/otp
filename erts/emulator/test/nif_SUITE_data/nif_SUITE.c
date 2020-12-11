@@ -2559,6 +2559,9 @@ static ERL_NIF_TERM select_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
     case ERL_NIF_SELECT_CUSTOM_MSG | ERL_NIF_SELECT_WRITE:
         retval = enif_select_write(env, fdr->fd, obj, pid, ref_or_msg, msg_env);
         break;
+    case ERL_NIF_SELECT_CUSTOM_MSG | ERL_NIF_SELECT_ERROR:
+        retval = enif_select_error(env, fdr->fd, obj, pid, ref_or_msg, msg_env);
+        break;
     default:
         retval = enif_select(env, fdr->fd, mode, obj, pid, ref_or_msg);
     }
@@ -2696,6 +2699,23 @@ static ERL_NIF_TERM read_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
             return enif_make_tuple2(env, atom_error, enif_make_int(env, errno));
         }
     }
+}
+
+static ERL_NIF_TERM close_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    struct fd_resource* fdr;
+    int ret;
+
+    if (!get_fd(env, argv[0], &fdr))
+        return enif_make_badarg(env);
+
+    assert(fdr->fd > 0);
+    assert(!fdr->was_selected);
+
+    ret = close(fdr->fd);
+    fdr->fd = -1;
+
+    return enif_make_int(env, ret);
 }
 
 static ERL_NIF_TERM is_closed_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -3729,6 +3749,7 @@ static ErlNifFunc nif_funcs[] =
     {"write_nif", 2, write_nif},
     {"dupe_resource_nif", 1, dupe_resource_nif},
     {"read_nif", 2, read_nif},
+    {"close_nif", 1, close_nif},
     {"is_closed_nif", 1, is_closed_nif},
     {"clear_select_nif", 1, clear_select_nif},
 #endif
