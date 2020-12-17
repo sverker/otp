@@ -1172,7 +1172,7 @@ enif_select_x(ErlNifEnv* env,
 
         new_events = erts_io_control_wakeup(state,
                                             ctl_op,
-                                            state->active_events  & ~ERTS_POLL_EV_ERR,
+                                            state->active_events,
                                             &wake_poller);
 
         if (new_events & ERTS_POLL_EV_NVAL) {
@@ -1187,7 +1187,7 @@ enif_select_x(ErlNifEnv* env,
             ret = INT_MIN | ERL_NIF_SELECT_FAILED;
             goto done;
         }
-        ASSERT(new_events == (state->events & ~ERTS_POLL_EV_ERR));
+        ASSERT(new_events == state->events);
     }
 
     ASSERT(state->type == ERTS_EV_TYPE_NIF
@@ -1269,6 +1269,7 @@ enif_select_x(ErlNifEnv* env,
                 state->type = ERTS_EV_TYPE_STOP_NIF;
                 ret |= ERL_NIF_SELECT_STOP_SCHEDULED;
             }
+            state->flags &= ~ERTS_EV_FLAG_WANT_ERROR;
         }
         else
             ASSERT(mode & ERL_NIF_SELECT_CANCEL);
