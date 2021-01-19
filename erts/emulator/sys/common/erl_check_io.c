@@ -1108,7 +1108,12 @@ enif_select_x(ErlNifEnv* env,
             ctl_events |= ERTS_POLL_EV_OUT;
         }
         if (mode & ERL_NIF_SELECT_ERROR) {
+#if (!ERTS_ENABLE_KERNEL_POLL || ERTS_POLL_USE_EPOLL) && ERTS_USE_POLL
             ctl_events |= ERTS_POLL_EV_ERR;
+#else
+            erts_mtx_unlock(fd_mtx(fd));
+            return INT_MIN | ERL_NIF_SELECT_NOTSUP;
+#endif
         }
     }
 

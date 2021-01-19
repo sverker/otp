@@ -652,6 +652,7 @@ load_traced_nif(Config) when is_list(Config) ->
 -define(ERL_NIF_SELECT_READ_CANCELLED, (1 bsl 4)).
 -define(ERL_NIF_SELECT_WRITE_CANCELLED, (1 bsl 5)).
 -define(ERL_NIF_SELECT_ERROR_CANCELLED, (1 bsl 6)).
+-define(ERL_NIF_SELECT_NOTSUP, (1 bsl 7)).
 
 select(Config) when is_list(Config) ->
     ensure_lib_loaded(Config),
@@ -790,14 +791,24 @@ receive_ready(_, Msg, _) ->
 
 select_error(Config) when is_list(Config) ->
     ensure_lib_loaded(Config),
+
+    case check_select_error_supported() of
+	true ->
+	    select_error_do();
+	false ->
+	    false = (os:type() =:= {unix,linux}),
+	    {skipped, "enif_select_error not supported"}
+    end.
+
+select_error_do() ->
     RefBin = list_to_binary(lists:duplicate(100, $x)),
 
-    select_error_do(0, make_ref(), null),
-    select_error_do(?ERL_NIF_SELECT_CUSTOM_MSG, [a, "list", RefBin], null),
-    select_error_do(?ERL_NIF_SELECT_CUSTOM_MSG, [a, "list", RefBin], alloc_env),
+    select_error_do1(0, make_ref(), null),
+    select_error_do1(?ERL_NIF_SELECT_CUSTOM_MSG, [a, "list", RefBin], null),
+    select_error_do1(?ERL_NIF_SELECT_CUSTOM_MSG, [a, "list", RefBin], alloc_env),
     ok.
 
-select_error_do(Flag, Ref, MsgEnv) ->
+select_error_do1(Flag, Ref, MsgEnv) ->
     {{R, _R_ptr}, {W, W_ptr}} = pipe_nif(),
     ok = write_nif(W, <<"hej">>),
     <<"hej">> = read_nif(R, 3),
@@ -834,6 +845,20 @@ select_error_do2(Flag, Ref, MsgEnv) ->
     true = is_closed_nif(W),
     ok.
 
+check_select_error_supported() ->
+    {{R, _R_ptr}, {W, W_ptr}} = pipe_nif(),
+    Ref = make_ref(),
+    case select_nif(W, ?ERL_NIF_SELECT_ERROR, W, null, Ref, null) of
+	0 ->
+	    check_stop_ret(select_nif(W, ?ERL_NIF_SELECT_STOP, W, null, Ref, null)),
+	    [{fd_resource_stop, W_ptr, _}] = flush(),
+	    {1, {W_ptr,_}} = last_fd_stop_call(),
+	    true = is_closed_nif(W),
+	    true;
+
+	R when R < 0, (R band ?ERL_NIF_SELECT_NOTSUP) =/= 0 ->
+	    false
+    end.
 
 %% @doc The stealing child process for the select_steal test. Duplicates given
 %% W/RFds and runs select on them to steal
