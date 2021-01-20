@@ -2550,7 +2550,6 @@ static ERL_NIF_TERM select_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
         ref_or_msg = enif_make_copy(msg_env, ref_or_msg);
     }
 
-    fdr->was_selected = 1;
     enif_self(env, &fdr->pid);
     switch (mode) {
     case ERL_NIF_SELECT_CUSTOM_MSG | ERL_NIF_SELECT_READ:
@@ -2564,6 +2563,10 @@ static ERL_NIF_TERM select_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
         break;
     default:
         retval = enif_select(env, fdr->fd, mode, obj, pid, ref_or_msg);
+    }
+
+    if (retval >= 0) {
+	fdr->was_selected = 1;
     }
 
     if (msg_env)

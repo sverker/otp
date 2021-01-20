@@ -846,7 +846,7 @@ select_error_do2(Flag, Ref, MsgEnv) ->
     ok.
 
 check_select_error_supported() ->
-    {{R, _R_ptr}, {W, W_ptr}} = pipe_nif(),
+    {{_R, _R_ptr}, {W, W_ptr}} = pipe_nif(),
     Ref = make_ref(),
     case select_nif(W, ?ERL_NIF_SELECT_ERROR, W, null, Ref, null) of
 	0 ->
@@ -856,7 +856,7 @@ check_select_error_supported() ->
 	    true = is_closed_nif(W),
 	    true;
 
-	R when R < 0, (R band ?ERL_NIF_SELECT_NOTSUP) =/= 0 ->
+	Err when Err < 0, (Err band ?ERL_NIF_SELECT_NOTSUP) =/= 0 ->
 	    false
     end.
 
