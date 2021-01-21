@@ -792,12 +792,11 @@ receive_ready(_, Msg, _) ->
 select_error(Config) when is_list(Config) ->
     ensure_lib_loaded(Config),
 
-    case check_select_error_supported() of
-	true ->
+    case os:type() of
+	{unix,linux} ->
 	    select_error_do();
 	false ->
-	    false = (os:type() =:= {unix,linux}),
-	    {skipped, "enif_select_error not supported"}
+	    {skipped, "not Linux"}
     end.
 
 select_error_do() ->
@@ -845,6 +844,7 @@ select_error_do2(Flag, Ref, MsgEnv) ->
     true = is_closed_nif(W),
     ok.
 
+-ifdef(NOT_DEFINED).
 check_select_error_supported() ->
     {{_R, _R_ptr}, {W, W_ptr}} = pipe_nif(),
     Ref = make_ref(),
@@ -859,6 +859,7 @@ check_select_error_supported() ->
 	Err when Err < 0, (Err band ?ERL_NIF_SELECT_NOTSUP) =/= 0 ->
 	    false
     end.
+-endif.
 
 %% @doc The stealing child process for the select_steal test. Duplicates given
 %% W/RFds and runs select on them to steal
