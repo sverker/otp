@@ -795,7 +795,7 @@ select_error(Config) when is_list(Config) ->
     case os:type() of
 	{unix,linux} ->
 	    select_error_do();
-	false ->
+	_ ->
 	    {skipped, "not Linux"}
     end.
 
