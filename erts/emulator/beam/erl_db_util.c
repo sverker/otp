@@ -1595,8 +1595,6 @@ Binary *db_match_compile(Eterm *matchexpr,
     heap.size = DMC_DEFAULT_SIZE;
     heap.vars = heap.vars_def;
 
-    ASSERT(num_progs > 0);
-
     /*
     ** Compile the match expression
     */
