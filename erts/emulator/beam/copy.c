@@ -276,6 +276,7 @@ do {									\
 do {                                                                    \
     UWord result;                                                       \
     if (WSTK_CONCAT(s,_bitoffs) <= 0) {                                 \
+        ASSERT(WSTK_CONCAT(s,_offset) < (s.wsp - s.wstart));            \
         WSTK_CONCAT(s,_buffer) = s.wstart[WSTK_CONCAT(s,_offset)];      \
         WSTK_CONCAT(s,_offset)++;                                       \
         WSTK_CONCAT(s,_bitoffs) = 8*sizeof(UWord);                      \
