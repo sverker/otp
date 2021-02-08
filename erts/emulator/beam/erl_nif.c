@@ -3170,6 +3170,8 @@ enif_schedule_nif(ErlNifEnv* env, const char* fun_name, int flags,
 	return fun_name_atom;
 
     execution_state(env, &proc, &scheduler);
+    ASSERT(proc);
+
     if (scheduler <= 0) {
 	if (scheduler == 0)
 	    enif_make_badarg(env);
