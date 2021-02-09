@@ -52,6 +52,12 @@
 #endif
 #define QUOTE(s) s
 
+#ifdef DEBUG
+# define ASSERT(Cnd) ((void)((Cnd) ? 1 : abort()))
+#else
+# define ASSERT(Cnd)
+#endif
+
 /* +M alloc_util allocators */
 static const char plusM_au_allocs[]= {
     'u',	/* all alloc_util allocators */
@@ -1342,6 +1348,7 @@ ensure_EargsSz(int sz)
     if (EargsSz < sz)
 	Eargsp = (char **) erealloc((void *) Eargsp,
 				    sizeof(char *) * (EargsSz = sz));
+    ASSERT(Eargsp);
 }
 
 static void
