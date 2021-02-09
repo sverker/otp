@@ -982,6 +982,7 @@ start_compile_server(char* node_name, char** argv)
         putc('\n', stderr);
     }
 
+    ASSERT(eargv[0]);
 #ifdef __WIN32__
     if (my_spawnvp(0, eargv) == -1) {
 	fprintf(stderr, "erlc: Error executing '%s': %d", progname,
