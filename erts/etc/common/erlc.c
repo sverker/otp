@@ -574,6 +574,8 @@ run_erlang(char* progname, char** argv)
     int status;
 #endif
 
+    ASSERT(progname && argv[0]);
+
     if (debug > 0) {
         fprintf(stderr, "spawning erl for %s", source_file);
     }
