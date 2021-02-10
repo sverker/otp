@@ -967,6 +967,7 @@ static int subtract_start(Process *p, Eterm lhs, Eterm rhs,
     /* Silence CodeChecker in subtract_ctx_move() */
     context->lhs_remaining = 17;
     context->rhs_remaining = 42;
+    context->result = 99;
 #endif
     return subtract_continue(p, context);
 }
