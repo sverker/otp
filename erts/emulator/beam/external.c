@@ -5265,9 +5265,10 @@ encode_size_struct_int(TTBSizeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj,
             else if (dflags & DFLAG_PENDING_CONNECT) {
                 /* This is the odd case when we have an un-aligned bit-string
                    during a pending connect. */
-                Uint csz = result - ctx->last_result;
+                Uint csz;
                 ASSERT(dflags & DFLAG_BIT_BINARIES);
 		ASSERT(ctx);
+                csz = result - ctx->last_result;
                 /* potentially multiple elements leading up to binary */
                 vlen += (csz + MAX_SYSIOVEC_IOVLEN - 1)/MAX_SYSIOVEC_IOVLEN;
 
