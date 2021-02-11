@@ -5360,7 +5360,7 @@ static int call_getifaddrs(inet_descriptor* desc_p, struct ifaddrs **ifa_pp)
 	if (current_ns == INVALID_SOCKET) {
             save_errno = sock_errno();
             ASSERT(save_errno != 0);
-	    return sock_errno();
+	    return save_errno;
         }
 	new_ns = open(desc_p->netns, O_RDONLY);
 	if (new_ns == INVALID_SOCKET) {
