@@ -38,7 +38,10 @@ help() ->
                  did_output = false, % output contribution from srcfile
                  app = none,         % current application
                  app_err = 0,        % nr of reported errors from application
-                 tc_err = 0}).       % nr of reported errors from srcfile (test case)
+                 tc_err = 0,         % nr of reported errors from srcfile (test case)
+                 app_stat_bytes = 0,
+                 app_stat_blocks = 0,
+                 app_stat_errors = 0}).
 
 run(OutDir, InDir) ->
     {ok, InFilesUS} = file:list_dir(InDir),
@@ -107,7 +110,10 @@ analyze_log_file(Out, SrcFile, {LeakMap0, RegEx0, LogAcc0}=Acc) ->
                                              app=NewApp,
                                              app_err=0,
                                              tc_err=0,
-                                             did_output=false}
+                                             did_output=false,
+                                             app_stat_bytes=0,
+                                             app_stat_blocks=0,
+                                             app_stat_errors=0}
                       end,
 
             case LogAcc2#logacc.app_err of
@@ -165,7 +171,7 @@ match_loop(Out, Bin, RegEx0, LogAcc0, PrevEnd, Unmatched0, LM0) ->
             ok = io:format(Out, "</pre></p>\n", []),
             Unmatched1 = [BP({PrevEnd, Start-PrevEnd}) | Unmatched0],
             End = Start + MatchLen,
-            match_loop(Out, Bin, RegEx1, LogAcc1, End, Unmatched1, LM0);
+            match_loop(Out, Bin, RegEx1, app_stats(LogAcc1,0,0,1), End, Unmatched1, LM0);
 
         [LeakReport, TypeIx, BytesIx, BlocksIx, StackIx | _] ->
             {Start, MatchLen} = LeakReport,
@@ -187,7 +193,7 @@ match_loop(Out, Bin, RegEx0, LogAcc0, PrevEnd, Unmatched0, LM0) ->
                         ok = io:format(Out, "<p><pre~s>\n", [style(new, TypeBin)]),
                         ok = file:write(Out, BP(LeakReport)),
                         ok = io:format(Out, "</pre></p>\n", []),
-                        {LogAcc1, LM1};
+                        {app_stats(LogAcc1,Bytes,Blocks,0), LM1};
 
                     {Bytes, Blocks} ->
                         %% Exact same leak(s) repeated, ignore
@@ -197,14 +203,15 @@ match_loop(Out, Bin, RegEx0, LogAcc0, PrevEnd, Unmatched0, LM0) ->
                         %% More leaked bytes/blocks of same type&stack as before
                         LM1 = insert_leak(LM0, Key, Bytes, Blocks),
                         LogAcc1 = log_error(Out, LogAcc0),
+                        ByteDiff = Bytes - OldBytes,
+                        BlockDiff = Blocks - OldBlocks,
                         ok = io:format(Out, "<p><pre~s>\n", [style(more, TypeBin)]),
                         ok = io:format(Out, "More ~s leak of ~w(~w) byte(s) "
                                        "in ~w(~w) object(s) allocated from:\n",
-                                       [TypeBin, Bytes - OldBytes, Bytes,
-                                        Blocks - OldBlocks, Blocks]),
+                                       [TypeBin, ByteDiff, Bytes, BlockDiff, Blocks]),
                         ok = file:write(Out, BP(StackIx)),
                         ok = io:format(Out, "</pre></p>\n", []),
-                        {LogAcc1, LM1}
+                        {app_stats(LogAcc1, ByteDiff, BlockDiff, 0), LM1}
                 end,
             match_loop(Out, Bin, RegEx1, LogAcc2, End, Unmatched1, LM2);
 
@@ -262,7 +269,8 @@ log_error(Out, #logacc{app_err=AppErr, tc_err=TcErr}=LogAcc) ->
                                            [App]);
                         [_Exe, _App, "tc", Num, Mod, Rest] ->
                             [Func | _] = string:lexemes(Rest, "."),
-                            ok = io:format(Out, "<h3>Test case #~s ~s:~s</h3>\n", [Num, Mod, Func]);
+                            ok = io:format(Out, "<h3>Test case #~s ~s:~s</h3>\n",
+                                           [Num, Mod, Func]);
                         _ ->
                             ok = io:format(Out, "<h3>Strange log file name '~s'</h3>\n",
                                            [SrcFile])
@@ -273,6 +281,12 @@ log_error(Out, #logacc{app_err=AppErr, tc_err=TcErr}=LogAcc) ->
             end,
     LogAcc#logacc{app_err=AppErr+1, tc_err=TcErr+1,
                   did_output = (LogAcc#logacc.did_output or DidApp or DidTc)}.
+
+app_stats(#logacc{}=LogAcc, Bytes, Blocks, Errors) ->
+    LogAcc#logacc{app_stat_bytes = LogAcc#logacc.app_stat_bytes + Bytes,
+                  app_stat_blocks = LogAcc#logacc.app_stat_blocks + Blocks,
+                  app_stat_errors = LogAcc#logacc.app_stat_errors + Errors}.
+
 
 app_end(Out, LogAcc) ->
     case LogAcc of
