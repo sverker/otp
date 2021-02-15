@@ -297,11 +297,21 @@ app_end(Out, LogAcc) ->
                            [LogAcc#logacc.app]),
             LogAcc#logacc{did_output = true};
         #logacc{} ->
-            %% Print clickable app button
-            ok = io:format(Out, "<button type=\"button\" "
-                           "class=\"app_err\">"
-                           "~s</button>\n"
-                           "<div class=\"content\">", [LogAcc#logacc.app]),
+            %% Print red clickable app button with stats
+            %% and all the buffered logs.
+            ok = io:format(Out, "<button type=\"button\" class=\"app_err\">~s"
+                           "<span class=\"stats\">Leaks: ~p bytes in ~p blocks</span>",
+                           [LogAcc#logacc.app,
+                            LogAcc#logacc.app_stat_bytes,
+                            LogAcc#logacc.app_stat_blocks]),
+            case LogAcc#logacc.app_stat_errors of
+                0 -> ignore;
+                _ ->
+                    ok = io:format(Out, "<span class=\"stats\">Errors: ~p</span>",
+                                   [LogAcc#logacc.app_stat_errors])
+            end,
+            ok = io:format(Out, "</button>\n"
+                           "<div class=\"content\">", []),
 
             flush_obuf(Out, LogAcc#logacc.obuf),
 
@@ -404,6 +414,11 @@ style_block() ->
 .app_ok {
   width: 100%;
   background-color: #292;
+}
+
+.stats {
+  font-style: italic;
+  margin-left: 50px;
 }
 
 .content {
