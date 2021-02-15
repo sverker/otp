@@ -35,14 +35,14 @@ help() ->
 	      "is not specified\n\n", []).
 
 -record(logacc, {srcfile,            % full path of current log file
-                 obuf = [],          % output buffer
                  did_output = false, % output contribution from srcfile
+                 obuf = [],          % output buffer
                  app = none,         % current application
-                 app_err = 0,        % nr of reported errors from application
-                 tc_err = 0,         % nr of reported errors from srcfile (test case)
-                 app_stat_bytes = 0,
-                 app_stat_blocks = 0,
-                 app_stat_errors = 0}).
+                 app_err = 0,        % nr of reports from application
+                 tc_err = 0,         % nr of reports from srcfile (test case)
+                 app_stat_bytes = 0,    % total leaked bytes from app
+                 app_stat_blocks = 0,   % total leaked blocks from app
+                 app_stat_errors = 0}). % total errors from app
 
 run(OutDir, InDir) ->
     {ok, InFilesUS} = file:list_dir(InDir),
@@ -167,9 +167,9 @@ match_loop(Out, Bin, RegEx0, LogAcc0, PrevEnd, Unmatched0, LM0) ->
     case Match of
         [ErrorReport, {-1,0}, {-1,0}, {-1,0}, {-1,0}, Captured] ->
             {Start,MatchLen} = ErrorReport,
-            Txt = [io_format("<p><pre~s>\n", [style(error)]),
+            Txt = [io_format("<pre~s>\n", [style(error)]),
                    file_write(BP(Captured)),
-                   io_format("</pre></p>\n", [])],
+                   io_format("</pre>\n", [])],
             LogAcc1 = log_error(Out, LogAcc0, Txt),
             Unmatched1 = [BP({PrevEnd, Start-PrevEnd}) | Unmatched0],
             End = Start + MatchLen,
@@ -192,9 +192,9 @@ match_loop(Out, Bin, RegEx0, LogAcc0, PrevEnd, Unmatched0, LM0) ->
                     undefined ->
                         %% A new leak
                         LM1 = insert_leak(LM0, Key, Bytes, Blocks),
-                        Txt = [io_format("<p><pre~s>\n", [style(new, TypeBin)]),
+                        Txt = [io_format("<pre~s>\n", [style(new, TypeBin)]),
                                file_write(BP(LeakReport)),
-                               io_format("</pre></p>\n", [])],
+                               io_format("</pre>\n", [])],
                         LogAcc1 = log_error(Out, LogAcc0, Txt),
                         {app_stats(LogAcc1,Bytes,Blocks,0), LM1};
 
@@ -207,12 +207,12 @@ match_loop(Out, Bin, RegEx0, LogAcc0, PrevEnd, Unmatched0, LM0) ->
                         LM1 = insert_leak(LM0, Key, Bytes, Blocks),
                         ByteDiff = Bytes - OldBytes,
                         BlockDiff = Blocks - OldBlocks,
-                        Txt = [io_format("<p><pre~s>\n", [style(more, TypeBin)]),
+                        Txt = [io_format("<pre~s>\n", [style(more, TypeBin)]),
                                io_format("More ~s leak of ~w(~w) byte(s) "
                                          "in ~w(~w) object(s) allocated from:\n",
                                          [TypeBin, ByteDiff, Bytes, BlockDiff, Blocks]),
                               file_write(BP(StackIx)),
-                              io_format("</pre></p>\n", [])],
+                              io_format("</pre>\n", [])],
                         LogAcc1 = log_error(Out, LogAcc0, Txt),
                         {app_stats(LogAcc1, ByteDiff, BlockDiff, 0), LM1}
                 end,
@@ -228,18 +228,17 @@ match_loop(Out, Bin, RegEx0, LogAcc0, PrevEnd, Unmatched0, LM0) ->
         nomatch ->
             Unmatched1 = [BP({PrevEnd, byte_size(Bin)-PrevEnd}) | Unmatched0],
 
-            LogAcc2 =
+            LogAcc1 =
                 case iolist_size(Unmatched1) > 500 of
                     true ->
                         Txt = [io_format("<h2>WARNING!!! May be unmatched error reports"
-                                         " in file ~s:</h2>\n<p><pre>~s</pre></p>",
+                                         " in file ~s:</h2>\n<pre>~s</pre>",
                                          [LogAcc0#logacc.srcfile, Unmatched1])],
-                        LogAcc1 = log_error(Out, LogAcc0, Txt),
-                        LogAcc1#logacc{tc_err = LogAcc1#logacc.tc_err+1};
+                        log_error(Out, LogAcc0, Txt);
                     false ->
                         LogAcc0
                 end,
-            {LM0, RegEx1, LogAcc2}
+            {LM0, RegEx1, LogAcc1}
     end.
 
 lookup_leak(LeakMap, Key) ->
@@ -249,13 +248,6 @@ insert_leak(LeakMap, Key, Bytes, Blocks) ->
     LeakMap#{Key => {Bytes, Blocks}}.
 
 log_error(_Out, #logacc{app_err=AppErr, tc_err=TcErr}=LogAcc, Txt0) ->
-    DidApp = case AppErr of
-                 0 ->
-                     true;
-                 _ ->
-                     false
-             end,
-
     {DidTc, Txt1} =
         case TcErr of
             0 ->
@@ -280,7 +272,7 @@ log_error(_Out, #logacc{app_err=AppErr, tc_err=TcErr}=LogAcc, Txt0) ->
         end,
     LogAcc#logacc{app_err=AppErr+1, tc_err=TcErr+1,
                   obuf = [Txt1 | LogAcc#logacc.obuf],
-                  did_output = (LogAcc#logacc.did_output or DidApp or DidTc)}.
+                  did_output = (LogAcc#logacc.did_output or DidTc)}.
 
 app_stats(#logacc{}=LogAcc, Bytes, Blocks, Errors) ->
     LogAcc#logacc{app_stat_bytes = LogAcc#logacc.app_stat_bytes + Bytes,
@@ -326,8 +318,8 @@ flush_obuf(Out, Obuf) ->
     flush_obuf_rev(Out, lists:reverse(Obuf)).
 
 flush_obuf_rev(_Out, []) -> ok;
-flush_obuf_rev(Out, [H | T]) ->
-    [OutFun(Out) || OutFun <- H],
+flush_obuf_rev(Out, [Txt | T]) ->
+    [OutFun(Out) || OutFun <- Txt],
     flush_obuf_rev(Out, T).
 
 io_format(Frmt, List) ->
