@@ -45,6 +45,8 @@ help() ->
                  app_stat_errors = 0}). % total errors from app
 
 run(OutDir, InDir) ->
+    StartTime = erlang:monotonic_time(millisecond),
+
     {ok, InFilesUS} = file:list_dir(InDir),
     InFiles = lists:sort(InFilesUS),
 
@@ -75,10 +77,11 @@ run(OutDir, InDir) ->
     ThisFile = escript:script_name(),
     User = string:trim(os:cmd("whoami")),
     {ok, Host} = inet:gethostname(),
+    Seconds = (erlang:monotonic_time(millisecond) - StartTime) / 1000,
     ok = io:format(Out, "\n<hr><p><small>This page was generated ~s\n"
                    " by <tt>~s</tt>\n"
-                   " run by ~s@~s.</small></p>\n",
-                   [Time, ThisFile, User, Host]),
+                   " run by ~s@~s in ~.1f seconds.</small></p>\n",
+                   [Time, ThisFile, User, Host, Seconds]),
 
     ok = file:write(Out, script_block()),
     ok = file:write(Out, <<"</body>\n</html>\n">>),
