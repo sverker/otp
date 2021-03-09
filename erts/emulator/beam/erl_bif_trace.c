@@ -473,7 +473,6 @@ erts_trace_flags(Eterm List,
 	list = CDR(list_val(list));
     }
     if (is_not_nil(list)) {
-        ERTS_TRACER_CLEAR(&tracer);
         goto error;
     }
     
@@ -481,7 +480,10 @@ erts_trace_flags(Eterm List,
     if (!ERTS_TRACER_IS_NIL(tracer)) *pTracer       = tracer;
     if (cpu_timestamp)               *pCpuTimestamp = cpu_timestamp;
     return !0;
+
  error:
+    if (tracer != THE_NON_VALUE)
+	ERTS_TRACER_CLEAR(&tracer);
     return 0;
 }
 
