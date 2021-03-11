@@ -114,8 +114,15 @@ coverage(_) ->
     {'EXIT',{undef,[{erlang,error,[a,b,c,d],_}|_]}} =
 	(catch erlang:error(a, b, c, d)),
 
-    {'EXIT',{badarith,[{?MODULE,bar,1,[File,{line,9}]}|_]}} =
-	(catch bar(x)),
+    case catch bar(x) of
+        {'EXIT',{badarith,[{?MODULE,bar,1,[File,{line,9}]}|_]}} ->
+            ok;
+        {'EXIT',{badarith,[{erlang,'+',[x,1],[_|_]},
+                           {?MODULE,bar,1,[File,{line,9}]}|_]}} ->
+            %% Unoptimized JIT code generation.
+            ok
+    end,
+
     {'EXIT',{{case_clause,{1}},[{?MODULE,bar,1,[File,{line,9}]}|_]}} =
 	(catch bar(0)),
 
