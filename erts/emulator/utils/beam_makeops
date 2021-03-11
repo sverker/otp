@@ -621,7 +621,7 @@ error("there were previous type errors") if $any_errors;
         my(undef,$where) = @{$c_code{$unused}};
         warn "$where: $unused is unused\n";
     }
-    die "\n" if @unused;
+    warn "\n" if @unused;
 }
 
 #
