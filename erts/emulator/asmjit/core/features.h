@@ -47,7 +47,7 @@ public:
   typedef Support::BitVectorIterator<BitWord> Iterator;
 
   enum : uint32_t {
-    kMaxFeatures = 256,
+    kMaxFeatures = 128,
     kNumBitWords = kMaxFeatures / Support::kBitWordSizeInBits
   };
 

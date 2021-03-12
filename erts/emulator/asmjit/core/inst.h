@@ -62,7 +62,7 @@ public:
     kOptionReserved = 0x00000001u,
 
     //! Prevents following a jump during compilation (BaseCompiler).
-    kOptionUnfollow = 0x00000002u,
+    kOptionUnfollow = 0x00000010u,
 
     //! Overwrite the destination operand(s) (BaseCompiler).
     //!
@@ -102,17 +102,17 @@ public:
     //!
     //!     - `sqrtss x, y` - only LO element of `x` is changed, if you don't
     //!       use HI elements, use `compiler.overwrite().sqrtss(x, y)`.
-    kOptionOverwrite = 0x00000004u,
+    kOptionOverwrite = 0x00000020u,
 
     //! Emit short-form of the instruction.
-    kOptionShortForm = 0x00000010u,
+    kOptionShortForm = 0x00000040u,
     //! Emit long-form of the instruction.
-    kOptionLongForm = 0x00000020u,
+    kOptionLongForm = 0x00000080u,
 
     //! Conditional jump is likely to be taken.
-    kOptionTaken = 0x00000040u,
+    kOptionTaken = 0x00000100u,
     //! Conditional jump is unlikely to be taken.
-    kOptionNotTaken = 0x00000080u
+    kOptionNotTaken = 0x00000200u
   };
 
   //! Control type.

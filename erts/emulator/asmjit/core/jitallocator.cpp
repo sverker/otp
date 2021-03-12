@@ -506,10 +506,16 @@ static inline size_t JitAllocatorImpl_calculateIdealBlockSize(JitAllocatorPrivat
 
 ASMJIT_FAVOR_SPEED static void JitAllocatorImpl_fillPattern(void* mem, uint32_t pattern, size_t sizeInBytes) noexcept {
   size_t n = sizeInBytes / 4u;
+#if defined(__APPLE__)
+  pthread_jit_write_protect_np(false);
+#endif
   uint32_t* p = static_cast<uint32_t*>(mem);
 
   for (size_t i = 0; i < n; i++)
     p[i] = pattern;
+#if defined(__APPLE__)
+  pthread_jit_write_protect_np(true);
+#endif
 }
 
 // Allocate a new `JitAllocatorBlock` for the given `blockSize`.
