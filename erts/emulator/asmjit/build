@@ -1,0 +1,20 @@
+#!/bin/sh
+
+FLAGS="-DASMJIT_EMBED=1 -DASMJIT_NO_BUILDER=1 -DASMJIT_NO_DEPRECATED=1 -DASMJIT_STATIC"
+
+for x in `ls core/*.cpp`
+do
+    echo $x
+    gcc $FLAGS -c $x -o obj/$x.o
+done
+
+
+for x in `ls x86/*.cpp`
+do
+    echo $x
+    gcc $FLAGS -c $x -o obj/$x.o
+done
+
+ar rcs asmjit.a obj/core/*.o obj/x86/*.o
+
+g++ -g -O0 sverk.cpp -I.. asmjit.a -lrt -o sverk
