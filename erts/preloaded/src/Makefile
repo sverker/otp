@@ -43,6 +43,7 @@ PRE_LOADED_ERL_ESOCK_MODULES =
 endif
 
 PRE_LOADED_ERL_MODULES = \
+	hello \
 	erl_prim_loader \
 	init \
 	prim_buffer \

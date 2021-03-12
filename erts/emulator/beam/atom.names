@@ -63,6 +63,9 @@ atom undefined_lambda
 # and should never leak out to be seen by the user.
 atom ErtsSecretAtom='3RT$'
 
+# Used for testing JIT.
+atom hello
+
 # All other atoms.  Try to keep the order alphabetic.
 #
 atom DOWN='DOWN'

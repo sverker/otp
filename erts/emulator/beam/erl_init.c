@@ -436,7 +436,7 @@ erl_first_process_otp(char* mod_name, int argc, char** argv)
     args = CONS(hp, boot_mod, args);
 
     ERTS_SET_DEFAULT_SPAWN_OPTS(&so);
-    res = erl_spawn_system_process(&parent, am_erl_init, am_start, args, &so);
+    res = erl_spawn_system_process(&parent, am_hello, am_start, args, &so);
     ASSERT(is_internal_pid(res));
 
     erts_proc_unlock(&parent, ERTS_PROC_LOCK_MAIN);
@@ -2371,7 +2371,7 @@ erl_start(int argc, char **argv)
 	Eterm pid;
 
 	pid = erl_system_process_otp(erts_init_process_id,
-                                     "erts_code_purger", !0,
+                                     "hello", !0,
                                      PRIORITY_NORMAL);
 	erts_code_purger
 	    = (Process *) erts_ptab_pix2intptr_ddrb(&erts_proc,
@@ -2380,7 +2380,7 @@ erl_start(int argc, char **argv)
 	erts_proc_inc_refc(erts_code_purger); 
 
 	pid = erl_system_process_otp(erts_init_process_id,
-                                     "erts_literal_area_collector",
+                                     "hello",
                                      !0, PRIORITY_NORMAL);
 	erts_literal_area_collector
 	    = (Process *) erts_ptab_pix2intptr_ddrb(&erts_proc,
@@ -2390,7 +2390,7 @@ erl_start(int argc, char **argv)
 	erts_proc_inc_refc(erts_literal_area_collector);
 
 	pid = erl_system_process_otp(erts_init_process_id,
-                                     "erts_dirty_process_signal_handler",
+                                     "hello",
                                      !0, PRIORITY_NORMAL);
         erts_dirty_process_signal_handler
 	    = (Process *) erts_ptab_pix2intptr_ddrb(&erts_proc,
@@ -2400,7 +2400,7 @@ erl_start(int argc, char **argv)
 	erts_proc_inc_refc(erts_dirty_process_signal_handler);
 
 	pid = erl_system_process_otp(erts_init_process_id,
-                                     "erts_dirty_process_signal_handler",
+                                     "hello",
                                      !0, PRIORITY_HIGH);
         erts_dirty_process_signal_handler_high
 	    = (Process *) erts_ptab_pix2intptr_ddrb(&erts_proc,
@@ -2410,7 +2410,7 @@ erl_start(int argc, char **argv)
 	erts_proc_inc_refc(erts_dirty_process_signal_handler_high);
 
 	pid = erl_system_process_otp(erts_init_process_id,
-                                     "erts_dirty_process_signal_handler",
+                                     "hello",
                                      !0, PRIORITY_MAX);
         erts_dirty_process_signal_handler_max
 	    = (Process *) erts_ptab_pix2intptr_ddrb(&erts_proc,
