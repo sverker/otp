@@ -66,35 +66,22 @@ Error BaseEmitter::finalize() {
 // [asmjit::BaseEmitter - Internals]
 // ============================================================================
 
-static constexpr uint32_t kEmitterPreservedFlags = BaseEmitter::kFlagOwnLogger | BaseEmitter::kFlagOwnErrorHandler;
+static constexpr uint32_t kEmitterPreservedFlags =
+    BaseEmitter::kFlagOwnLogger |
+    BaseEmitter::kFlagOwnErrorHandler ;
 
 static ASMJIT_NOINLINE void BaseEmitter_updateForcedOptions(BaseEmitter* self) noexcept {
-  bool emitComments = false;
-  bool hasValidationOptions = false;
+  bool hasLogger = self->_logger != nullptr;
+  bool hasValidationOptions;
 
-  if (self->emitterType() == BaseEmitter::kTypeAssembler) {
-    // Assembler: Don't emit comments if logger is not attached.
-    emitComments = self->_code != nullptr && self->_logger != nullptr;
+  if (self->emitterType() == BaseEmitter::kTypeAssembler)
     hasValidationOptions = self->hasValidationOption(BaseEmitter::kValidationOptionAssembler);
-  }
-  else {
-    // Builder/Compiler: Always emit comments, we cannot assume they won't be used.
-    emitComments = self->_code != nullptr;
+  else
     hasValidationOptions = self->hasValidationOption(BaseEmitter::kValidationOptionIntermediate);
-  }
 
-  if (emitComments)
-    self->_addEmitterFlags(BaseEmitter::kFlagLogComments);
-  else
-    self->_clearEmitterFlags(BaseEmitter::kFlagLogComments);
-
-  // The reserved option tells emitter (Assembler/Builder/Compiler) that there
-  // may be either a border case (CodeHolder not attached, for example) or that
-  // logging or validation is required.
-  if (self->_code == nullptr || self->_logger || hasValidationOptions)
+  self->_forcedInstOptions &= ~BaseInst::kOptionReserved;
+  if (hasLogger || hasValidationOptions)
     self->_forcedInstOptions |= BaseInst::kOptionReserved;
-  else
-    self->_forcedInstOptions &= ~BaseInst::kOptionReserved;
 }
 
 // ============================================================================
@@ -319,22 +306,15 @@ ASMJIT_FAVOR_SIZE Error BaseEmitter::emitArgsAssignment(const FuncFrame& frame, 
 // ============================================================================
 
 Error BaseEmitter::commentf(const char* fmt, ...) {
-  if (!hasEmitterFlag(kFlagLogComments)) {
-    if (!hasEmitterFlag(kFlagAttached))
-      return reportError(DebugUtils::errored(kErrorNotInitialized));
-    return kErrorOk;
-  }
+  if (ASMJIT_UNLIKELY(!_code))
+    return DebugUtils::errored(kErrorNotInitialized);
 
 #ifndef ASMJIT_NO_LOGGING
-  StringTmp<1024> sb;
-
   va_list ap;
   va_start(ap, fmt);
-  Error err = sb.appendVFormat(fmt, ap);
+  Error err = commentv(fmt, ap);
   va_end(ap);
-
-  ASMJIT_PROPAGATE(err);
-  return comment(sb.data(), sb.size());
+  return err;
 #else
   DebugUtils::unused(fmt);
   return kErrorOk;
@@ -342,17 +322,16 @@ Error BaseEmitter::commentf(const char* fmt, ...) {
 }
 
 Error BaseEmitter::commentv(const char* fmt, va_list ap) {
-  if (!hasEmitterFlag(kFlagLogComments)) {
-    if (!hasEmitterFlag(kFlagAttached))
-      return reportError(DebugUtils::errored(kErrorNotInitialized));
-    return kErrorOk;
-  }
+  if (ASMJIT_UNLIKELY(!_code))
+    return DebugUtils::errored(kErrorNotInitialized);
 
 #ifndef ASMJIT_NO_LOGGING
   StringTmp<1024> sb;
   Error err = sb.appendVFormat(fmt, ap);
 
-  ASMJIT_PROPAGATE(err);
+  if (ASMJIT_UNLIKELY(err))
+    return err;
+
   return comment(sb.data(), sb.size());
 #else
   DebugUtils::unused(fmt, ap);
@@ -367,7 +346,6 @@ Error BaseEmitter::commentv(const char* fmt, va_list ap) {
 Error BaseEmitter::onAttach(CodeHolder* code) noexcept {
   _code = code;
   _environment = code->environment();
-  _addEmitterFlags(kFlagAttached);
 
   const ArchTraits& archTraits = ArchTraits::byArch(code->arch());
   uint32_t nativeRegType = Environment::is32Bit(code->arch()) ? BaseReg::kTypeGp32 : BaseReg::kTypeGp64;
@@ -380,15 +358,15 @@ Error BaseEmitter::onAttach(CodeHolder* code) noexcept {
 Error BaseEmitter::onDetach(CodeHolder* code) noexcept {
   DebugUtils::unused(code);
 
+  _clearEmitterFlags(~kEmitterPreservedFlags);
+  _forcedInstOptions = BaseInst::kOptionReserved;
+  _privateData = 0;
+
   if (!hasOwnLogger())
     _logger = nullptr;
 
   if (!hasOwnErrorHandler())
     _errorHandler = nullptr;
-
-  _clearEmitterFlags(~kEmitterPreservedFlags);
-  _forcedInstOptions = BaseInst::kOptionReserved;
-  _privateData = 0;
 
   _environment.reset();
   _gpRegInfo.reset();

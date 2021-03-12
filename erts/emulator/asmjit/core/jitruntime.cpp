@@ -27,6 +27,10 @@
 #include "../core/cpuinfo.h"
 #include "../core/jitruntime.h"
 
+#if defined(__APPLE__)
+#include <libkern/OSCacheControl.h>
+#endif
+
 ASMJIT_BEGIN_NAMESPACE
 
 // ============================================================================
@@ -41,6 +45,9 @@ static inline void JitRuntime_flushInstructionCache(const void* p, size_t size) 
 # if defined(_WIN32)
   // Windows has a built-in support in `kernel32.dll`.
   ::FlushInstructionCache(::GetCurrentProcess(), p, size);
+# elif defined(__APPLE__)
+  char* start = static_cast<char*>(const_cast<void*>(p));
+  sys_icache_invalidate(start, size);
 # elif defined(__GNUC__)
   char* start = static_cast<char*>(const_cast<void*>(p));
   char* end = start + size;
@@ -91,7 +98,9 @@ Error JitRuntime::_add(void** dst, CodeHolder* code) noexcept {
   // Recalculate the final code size and shrink the memory we allocated for it
   // in case that some relocations didn't require records in an address table.
   size_t codeSize = code->codeSize();
-
+#if defined(__APPLE__)
+  pthread_jit_write_protect_np(false);
+#endif
   for (Section* section : code->_sections) {
     size_t offset = size_t(section->offset());
     size_t bufferSize = size_t(section->bufferSize());
@@ -105,7 +114,9 @@ Error JitRuntime::_add(void** dst, CodeHolder* code) noexcept {
       memset(rw + offset + bufferSize, 0, virtualSize - bufferSize);
     }
   }
-
+#if defined(__APPLE__)
+  pthread_jit_write_protect_np(true);
+#endif
   if (codeSize < estimatedCodeSize)
     _allocator.shrink(ro, codeSize);
 
