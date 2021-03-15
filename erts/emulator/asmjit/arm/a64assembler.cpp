@@ -827,7 +827,7 @@ Error Assembler::_emit(uint32_t instId, const Operand_& o0, const Operand_& o1, 
       Operand_ opArray[Globals::kMaxOpCount];
       EmitterUtils::opArrayFromEmitArgs(opArray, o0, o1, o2, opExt);
 
-      err = InstAPI::validate(arch(), BaseInst(instId, options, _extraReg), opArray, Globals::kMaxOpCount);
+      err = InstInternal::validate(arch(), BaseInst(instId, options, _extraReg), opArray, Globals::kMaxOpCount);
       if (ASMJIT_UNLIKELY(err))
         goto Failed;
     }
