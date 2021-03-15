@@ -30,6 +30,7 @@
 #include "../arm/armformatter_p.h"
 #include "../arm/armoperand.h"
 #include "../arm/a64instdb_p.h"
+#include "../arm/a64instapi_p.h"
 
 #ifndef ASMJIT_NO_COMPILER
   #include "../core/compiler.h"
@@ -397,10 +398,10 @@ ASMJIT_FAVOR_SIZE Error FormatterInternal::formatInstruction(
 
   if (Environment::isArchAArch64(arch)) {
     // Format instruction options and instruction mnemonic.
-    if (instId < a64::Inst::_kIdCount)
-      ASMJIT_PROPAGATE(InstAPI::instIdToString(arch, instId, sb));
-    else
-      ASMJIT_PROPAGATE(sb.appendFormat("[InstId=#%u]", unsigned(instId)));
+      if (instId < a64::Inst::_kIdCount) {
+          ASMJIT_PROPAGATE(a64::InstInternal::instIdToString(arch, instId, sb));
+      } else
+          ASMJIT_PROPAGATE(sb.appendFormat("[InstId=#%u]", unsigned(instId)));
   }
   else {
     // TODO: [ARM] 32-bit ARM support.
