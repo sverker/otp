@@ -291,11 +291,13 @@ void beamasm_init() {
         }
     }
 
+#ifdef NOT_YET
     /* This instruction relies on register contents, and can only be reached
      * from a `call_ext_*`-instruction, hence the lack of a wrapper function. */
     beam_save_calls = (ErtsCodePtr)bga->get_dispatch_save_calls();
     beam_export_trampoline = (ErtsCodePtr)bga->get_export_trampoline();
     beam_bif_export_trap = (ErtsCodePtr)bga->get_bif_export_trap();
+#endif
 }
 
 bool BeamAssembler::hasCpuFeature(uint32_t featureId) {

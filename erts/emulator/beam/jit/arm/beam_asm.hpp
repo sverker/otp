@@ -780,6 +780,9 @@ class BeamGlobalAssembler : public BeamAssembler {
 
     /* Please keep this in alphabetical order. */
 #define BEAM_GLOBAL_FUNCS(_)                                                   \
+    _(process_main)
+
+#define BEAM_GLOBAL_STUBS(_)                                                   \
     _(arith_compare_shared)                                                    \
     _(arith_eq_shared)                                                         \
     _(bif_nif_epilogue)                                                        \
@@ -815,7 +818,6 @@ class BeamGlobalAssembler : public BeamAssembler {
     _(i_new_small_map_lit_shared)                                              \
     _(i_test_yield_shared)                                                     \
     _(new_map_shared)                                                          \
-    _(process_main)                                                            \
     _(update_map_assoc_shared)                                                 \
     _(update_map_exact_guard_shared)                                           \
     _(update_map_exact_body_shared)
@@ -841,6 +843,7 @@ class BeamGlobalAssembler : public BeamAssembler {
 #define DECL_FUNC(NAME) void emit_##NAME(void);
 
     BEAM_GLOBAL_FUNCS(DECL_FUNC);
+    BEAM_GLOBAL_STUBS(DECL_FUNC);
 #undef DECL_FUNC
 
     template<typename T>
