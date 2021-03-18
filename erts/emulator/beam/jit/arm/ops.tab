@@ -123,9 +123,7 @@ deallocate t
 
 init y
 
-trim N Remaining => i_trim N
-
-i_trim t
+trim t t
 
 test_heap I t?
 

@@ -4737,9 +4737,20 @@ static void load_nif_1st_finisher(void* vlib)
 
 #ifdef BEAMASM
             char *code_ptr = (char*)erts_codeinfo_to_code(ci);
-            sys_memcpy(&code_ptr[BEAM_ASM_FUNC_PROLOGUE_SIZE],
-                       fin->beam_stubv[i].code.call_nif,
-                       sizeof(fin->beam_stubv[0].code.call_nif));
+            char* cpy_to = &code_ptr[BEAM_ASM_FUNC_PROLOGUE_SIZE];
+            size_t cpy_sz = sizeof(fin->beam_stubv[0].code.call_nif);
+            sys_memcpy(cpy_to, fin->beam_stubv[i].code.call_nif, cpy_sz);
+
+#    if defined(__aarch64__)
+            /* FIXME: break out into a helper */
+            /* FIXME: maybe combine with cache invalidation in 2nd finisher? */
+#        if defined(__APPLE__)
+            sys_icache_invalidate(cpy_to, cpy_sz);
+#        elif defined(__GNUC__)
+            __builtin___clear_cache(cpy_to, cpy_to + cpy_sz);
+#        endif
+#    endif
+
 #else
             BeamInstr *code_ptr = (BeamInstr*)erts_codeinfo_to_code(ci);
 

@@ -27,6 +27,10 @@
 #    include "beam_file.h"
 #    include "beam_common.h"
 
+#    if defined(__APPLE__)
+#        include <libkern/OSCacheControl.h>
+#    endif
+
 /* Global configuration variables */
 #    ifdef HAVE_LINUX_PERF_SUPPORT
 #        define BEAMASM_PERF_DUMP (1 << 0)
@@ -80,8 +84,15 @@ char *beamasm_get_base(void *instance);
 /* Return current instruction offset, for line information. */
 size_t beamasm_get_offset(void *ba);
 
-// Number of bytes emitted at first label in order to support trace and nif load
-#    define BEAM_ASM_FUNC_PROLOGUE_SIZE 8
+/* Number of bytes emitted at first label in order to support trace and nif
+ * load. */
+#    if defined(__aarch64__)
+#        define BEAM_ASM_BP_RETURN_OFFSET 8
+#        define BEAM_ASM_BP_SKIP_OFFSET (5 * 4)
+#        define BEAM_ASM_FUNC_PROLOGUE_SIZE 24
+#    else
+#        define BEAM_ASM_FUNC_PROLOGUE_SIZE 8
+#    endif
 
 /*
  * The code below is used to deal with intercepting the execution of
@@ -130,8 +141,31 @@ enum erts_asm_bp_flag {
             ERTS_ASM_BP_FLAG_CALL_NIF_EARLY | ERTS_ASM_BP_FLAG_BP
 };
 
+#    if defined(__aarch64__)
+#        define BP_TRAMP_INCR 32
+#    endif
 static inline void erts_asm_bp_set_flag(ErtsCodeInfo *ci,
                                         enum erts_asm_bp_flag flag) {
+#    if defined(__aarch64__)
+    Uint32 volatile *code_ptr = (Uint32 *)erts_codeinfo_to_code(ci);
+    const Sint32 genericBPTramp_offset = code_ptr[3];
+    const Uint32 old_flags = code_ptr[4];
+    const Uint32 new_flags = old_flags | flag;
+    const Sint32 new_offset =
+            genericBPTramp_offset + (new_flags * BP_TRAMP_INCR / 4);
+    const Uint32 bl_instr = (0x25 << 26) | (new_offset & ((1 << 26) - 1));
+
+    code_ptr[1] = bl_instr;
+    code_ptr[4] = new_flags;
+
+    /* FIXME: break out into a helper */
+#        if defined(__APPLE__)
+    sys_icache_invalidate((char *)code_ptr, sizeof(Uint32[5]));
+#        elif defined(__GNUC__)
+    __builtin___clear_cache((char *)code_ptr,
+                            (char *)code_ptr + sizeof(Uint32[5]));
+#        endif
+#    else /* x86_64 */
     BeamInstr volatile *code_ptr = (BeamInstr *)erts_codeinfo_to_code(ci);
     BeamInstr code = *code_ptr;
     byte *codebytes = (byte *)&code;
@@ -142,15 +176,48 @@ static inline void erts_asm_bp_set_flag(ErtsCodeInfo *ci,
     codebytes[2] |= flag;
     *code32 += flag * 16;
     code_ptr[0] = code;
+#    endif
 }
 
 static inline enum erts_asm_bp_flag erts_asm_bp_get_flags(ErtsCodeInfo *ci) {
+#    if defined(__aarch64__)
+    Uint32 *code_ptr = (Uint32 *)erts_codeinfo_to_code(ci);
+    return (enum erts_asm_bp_flag)code_ptr[4];
+
+#    else /* x86_64 */
     byte *codebytes = (byte *)erts_codeinfo_to_code(ci);
     return (enum erts_asm_bp_flag)codebytes[2];
+#    endif
 }
 
 static inline void erts_asm_bp_unset_flag(ErtsCodeInfo *ci,
                                           enum erts_asm_bp_flag flag) {
+#    if defined(__aarch64__)
+    Uint32 volatile *code_ptr = (Uint32 *)erts_codeinfo_to_code(ci);
+    const Uint32 old_flags = code_ptr[4];
+    const Uint32 new_flags = old_flags & ~(Uint32)flag;
+    Uint32 instr;
+
+    if (new_flags == ERTS_ASM_BP_FLAG_NONE) {
+        instr = (0x5 << 26) | (BEAM_ASM_BP_SKIP_OFFSET / 4); /* B */
+    } else {
+        const Sint32 genericBPTramp_offset = code_ptr[3];
+        const Sint32 new_offset =
+                genericBPTramp_offset + (new_flags * BP_TRAMP_INCR / 4);
+        instr = (0x25 << 26) | (new_offset & ((1 << 26) - 1)); /* BL */
+    }
+    code_ptr[1] = instr;
+    code_ptr[4] = new_flags;
+
+    /* FIXME: break out into a helper */
+#        if defined(__APPLE__)
+    sys_icache_invalidate((char *)code_ptr, sizeof(Uint32[5]));
+#        elif defined(__GNUC__)
+    __builtin___clear_cache((char *)code_ptr,
+                            (char *)code_ptr + sizeof(Uint32[5]));
+#        endif
+
+#    else /* x86_64 */
     BeamInstr volatile *code_ptr = (BeamInstr *)erts_codeinfo_to_code(ci);
     BeamInstr code = *code_ptr;
     byte *codebytes = (byte *)&code;
@@ -163,6 +230,7 @@ static inline void erts_asm_bp_unset_flag(ErtsCodeInfo *ci,
         codebytes[1] = 6;
     }
     code_ptr[0] = code;
+#    endif
 }
 
 #endif

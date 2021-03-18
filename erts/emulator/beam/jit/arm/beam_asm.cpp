@@ -26,6 +26,10 @@ extern "C"
 #include "beam_common.h"
 #include "code_ix.h"
 #include "export.h"
+
+#if defined(__APPLE__)
+#    include <libkern/OSCacheControl.h>
+#endif
 }
 
 /* Global configuration variables (under the `+J` prefix) */
@@ -291,13 +295,11 @@ void beamasm_init() {
         }
     }
 
-#ifdef NOT_YET
     /* This instruction relies on register contents, and can only be reached
      * from a `call_ext_*`-instruction, hence the lack of a wrapper function. */
     beam_save_calls = (ErtsCodePtr)bga->get_dispatch_save_calls();
     beam_export_trampoline = (ErtsCodePtr)bga->get_export_trampoline();
     beam_bif_export_trap = (ErtsCodePtr)bga->get_bif_export_trap();
-#endif
 }
 
 bool BeamAssembler::hasCpuFeature(uint32_t featureId) {
@@ -332,7 +334,288 @@ static Process *erts_debug_schedule(ErtsSchedulerData *esdp,
 
 /* void process_main(ErtsSchedulerData *esdp); */
 void BeamGlobalAssembler::emit_process_main() {
-    ERTS_ASSERT(!"NYI");
+    Label context_switch_local = a.newLabel(),
+          context_switch_simplified_local = a.newLabel(),
+          do_schedule_local = a.newLabel(), schedule_next = a.newLabel();
+
+    const arm::Mem start_time_i =
+            getSchedulerRegRef(offsetof(ErtsSchedulerRegisters, start_time_i));
+    const arm::Mem start_time =
+            getSchedulerRegRef(offsetof(ErtsSchedulerRegisters, start_time));
+
+    /* Be kind to debuggers and perf by setting up a proper stack frame. */
+    a.stp(a64::x29, a64::x30, arm::Mem(a64::sp, -16).pre());
+
+    /* Allocate the register structure on the stack to allow computing the
+     * runtime stack address from it, greatly reducing the cost of stack
+     * swapping. */
+    a.mov(TMP1, a64::sp);
+    sub(TMP1, TMP1, sizeof(ErtsSchedulerRegisters) + ERTS_CACHE_LINE_SIZE);
+    a.and_(TMP1, TMP1, imm(~ERTS_CACHE_LINE_MASK));
+    a.mov(a64::sp, TMP1);
+    a.mov(a64::x29, a64::sp);
+
+    a.str(TMP1, arm::Mem(ARG1, offsetof(ErtsSchedulerData, registers)));
+
+    a.mov(scheduler_registers, a64::sp);
+
+    load_erl_bits_state(ARG1);
+    runtime_call<1>(erts_bits_init_state);
+
+    /* Save the initial SP of the thread so that we can verify that it
+     * doesn't grow. */
+#ifdef JIT_HARD_DEBUG
+    a.mov(TMP1, a64::sp);
+    a.str(TMP1, getInitialSPRef());
+#endif
+
+    a.str(a64::xzr, start_time_i);
+    a.str(a64::xzr, start_time);
+
+    mov_imm(c_p, 0);
+    mov_imm(FCALLS, 0);
+    mov_imm(ARG3, 0); /* Set reds_used for erts_schedule call */
+
+    a.b(schedule_next);
+
+    a.bind(do_schedule_local);
+    {
+        /* Figure out reds_used. def_arg_reg[5] = REDS_IN */
+        a.ldr(TMP1, arm::Mem(c_p, offsetof(Process, def_arg_reg[5])));
+        a.sub(ARG3, TMP1, FCALLS);
+        a.b(schedule_next);
+    }
+
+    /*
+     * The *next* instruction pointer is provided in ARG3, and must be preceded
+     * by an ErtsCodeMFA.
+     */
+    a.bind(context_switch_local);
+    comment("Context switch, unknown arity/MFA");
+    {
+        Sint arity_offset = offsetof(ErtsCodeMFA, arity) - sizeof(ErtsCodeMFA);
+
+        a.ldur(TMP1, arm::Mem(ARG3, arity_offset));
+        a.str(TMP1, arm::Mem(c_p, offsetof(Process, arity)));
+
+        a.sub(TMP1, ARG3, imm((Uint)sizeof(ErtsCodeMFA)));
+        a.str(TMP1, arm::Mem(c_p, offsetof(Process, current)));
+
+        /* !! Fall through !! */
+    }
+
+    a.bind(context_switch_simplified_local);
+    comment("Context switch, known arity and MFA");
+    {
+        Label not_exiting = a.newLabel();
+
+#ifdef DEBUG
+        Label check_i = a.newLabel();
+        /* Check that ARG3 is set to a valid CP. */
+        a.tst(ARG3, imm(_CPMASK));
+        a.cond_eq().b(check_i);
+        a.udf(1);
+        a.bind(check_i);
+#endif
+
+        a.str(ARG3, arm::Mem(c_p, offsetof(Process, i)));
+        a.ldr(TMP1.w(), arm::Mem(c_p, offsetof(Process, state.value)));
+
+        a.tst(TMP1, imm(ERTS_PSFLG_EXITING));
+        a.cond_eq().b(not_exiting);
+        {
+            comment("Process exiting");
+
+            /* We load the beam_exit pointer from memory because it
+             * has not yet been set when the global assembler is
+             * created. */
+            mov_imm(TMP1, (UWord)&beam_exit);
+            a.ldr(TMP1, arm::Mem(TMP1));
+            a.str(TMP1, arm::Mem(c_p, offsetof(Process, i)));
+            a.str(ZERO, arm::Mem(c_p, offsetof(Process, arity)));
+            a.str(ZERO, arm::Mem(c_p, offsetof(Process, current)));
+            a.b(do_schedule_local);
+        }
+
+        a.bind(not_exiting);
+
+        /* Figure out reds_used. def_arg_reg[5] = REDS_IN */
+        a.ldr(TMP1, arm::Mem(c_p, offsetof(Process, def_arg_reg[5])));
+        a.sub(FCALLS, TMP1, FCALLS);
+
+        comment("Copy out X registers");
+        a.mov(ARG1, c_p);
+        load_x_reg_array(ARG2);
+        runtime_call<2>(copy_out_registers);
+
+        /* Restore reds_used from FCALLS */
+        a.mov(ARG3, FCALLS);
+
+        /* !! Fall through !! */
+    }
+
+    a.bind(schedule_next);
+    comment("schedule_next");
+
+    {
+        Label schedule = a.newLabel(), skip_long_schedule = a.newLabel();
+
+        /* ARG3 contains reds_used at this point */
+
+        a.ldr(TMP1, start_time);
+        a.cbz(TMP1, schedule);
+        {
+            a.mov(ARG1, c_p);
+            a.ldr(ARG2, start_time);
+
+            /* Spill reds_used in start_time slot */
+            a.str(ARG3, start_time);
+
+            a.ldr(ARG3, start_time_i);
+            runtime_call<3>(check_monitor_long_schedule);
+
+            /* Restore reds_used */
+            a.ldr(ARG3, start_time);
+        }
+
+        a.bind(schedule);
+        mov_imm(ARG1, 0);
+        a.mov(ARG2, c_p);
+#if defined(DEBUG) || defined(ERTS_ENABLE_LOCK_CHECK)
+        runtime_call<3>(erts_debug_schedule);
+#else
+        runtime_call<3>(erts_schedule);
+#endif
+        a.mov(c_p, ARG1);
+
+#ifdef ERTS_MSACC_EXTENDED_STATES
+        lea(ARG1,
+            arm::Mem(registers,
+                     offsetof(ErtsSchedulerRegisters,
+                              aux_regs.d.erts_msacc_cache)));
+        runtime_call<1>(erts_msacc_update_cache);
+#endif
+
+        a.str(ZERO, start_time);
+        mov_imm(ARG1, (UWord)&erts_system_monitor_long_schedule);
+        a.ldr(TMP1, arm::Mem(ARG1));
+        a.cbz(TMP1, skip_long_schedule);
+
+        {
+            /* Enable long schedule test */
+            runtime_call<0>(erts_timestamp_millis);
+            a.str(ARG1, start_time);
+            a.ldr(TMP1, arm::Mem(c_p, offsetof(Process, i)));
+            a.str(TMP1, start_time_i);
+        }
+
+        a.bind(skip_long_schedule);
+        comment("skip_long_schedule");
+
+        /* Copy arguments */
+        a.mov(ARG1, c_p);
+        load_x_reg_array(ARG2);
+        runtime_call<2>(copy_in_registers);
+
+        /* Setup reduction counting */
+        a.ldr(FCALLS, arm::Mem(c_p, offsetof(Process, fcalls)));
+        a.str(FCALLS, arm::Mem(c_p, offsetof(Process, def_arg_reg[5])));
+
+#ifdef DEBUG
+        a.str(FCALLS, a64::Mem(c_p, offsetof(Process, debug_reds_in)));
+#endif
+
+        comment("check whether save calls is on");
+        a.mov(ARG1, c_p);
+        mov_imm(ARG2, ERTS_PSD_SAVED_CALLS_BUF);
+        runtime_call<2>(erts_psd_get);
+
+        /* Read the active code index, overriding it with
+         * ERTS_SAVE_CALLS_CODE_IX when save_calls is enabled (RET != 0). */
+        mov_imm(TMP1, (UWord)&the_active_code_index);
+        a.ldr(TMP1.w(), arm::Mem(TMP1));
+        a.mov(TMP2, imm(ERTS_SAVE_CALLS_CODE_IX));
+        a.cmp(ARG1, ZERO);
+        a.csel(active_code_ix, TMP1, TMP2, arm::Cond::kEQ);
+
+        /* Start executing the Erlang process. Note that reductions have
+         * already been set up above. */
+        emit_leave_runtime<Update::eStack | Update::eHeap>(all_xregs);
+
+        /* Check if we are just returning from a dirty nif/bif call and if so we
+         * need to do a bit of cleaning up before continuing. */
+        a.ldr(ARG1, arm::Mem(c_p, offsetof(Process, i)));
+
+        a.ldr(TMP1, arm::Mem(ARG1));
+        a.cmp(TMP1, imm(op_call_nif_WWW));
+        a.cond_eq().b(labels[dispatch_nif]);
+        a.cmp(TMP1, imm(op_call_bif_W));
+        a.cond_eq().b(labels[dispatch_bif]);
+
+        a.br(ARG1);
+    }
+
+    /* Processes may jump to the exported entry points below, executing on the
+     * Erlang stack when entering. These are separate from the `_local` labels
+     * above as we don't want to worry about which stack we're on when the
+     * cases overlap. */
+
+    /* `ga->get_context_switch()`
+     *
+     * The *next* instruction pointer is provided in ARG3, and must be preceded
+     * by an ErtsCodeMFA.
+     *
+     * The X registers are expected to be in CPU registers.
+     */
+    a.bind(labels[context_switch]);
+    {
+        emit_enter_runtime<Update::eStack | Update::eHeap>(all_xregs);
+
+        a.b(context_switch_local);
+    }
+
+    /* `ga->get_context_switch_simplified()`
+     *
+     * The next instruction pointer is provided in ARG3, which does not need to
+     * point past an ErtsCodeMFA as the process structure has already been
+     * updated.
+     *
+     * The X registers are expected to be in CPU registers.
+     */
+    a.bind(labels[context_switch_simplified]);
+    {
+        emit_enter_runtime<Update::eStack | Update::eHeap>(all_xregs);
+
+        a.b(context_switch_simplified_local);
+    }
+
+    /* `ga->get_context_switch_simplified_saved_xregs()`
+     *
+     * The next instruction pointer is provided in ARG3, which does not need to
+     * point past an ErtsCodeMFA as the process structure has already been
+     * updated.
+     *
+     * The X registers values are expected to be in the X register array.
+     */
+    a.bind(labels[context_switch_simplified_saved_xregs]);
+    {
+        emit_enter_runtime<Update::eStack | Update::eHeap>();
+
+        a.b(context_switch_simplified_local);
+    }
+
+    /* `ga->get_do_schedule()`
+     *
+     * `c_p->i` must be set prior to jumping here.
+     *
+     * The X registers are expected to be in CPU registers.
+     */
+    a.bind(labels[do_schedule]);
+    {
+        emit_enter_runtime<Update::eStack | Update::eHeap>(all_xregs);
+
+        a.b(do_schedule_local);
+    }
 }
 
 enum jit_actions : uint32_t {
@@ -499,6 +782,13 @@ extern "C"
                  ArgVal(ArgVal::i, (BeamInstr)dirty_fptr)});
 
         ba.codegen(buff, buff_len);
+
+        /* FIXME: break out into a helper */
+#if defined(__APPLE__)
+        sys_icache_invalidate(buff, buff_len);
+#elif defined(__GNUC__)
+        __builtin___clear_cache(buff, buff + buff_len);
+#endif
     }
 
     void beamasm_emit_call_bif(const ErtsCodeInfo *info,
@@ -520,6 +810,13 @@ extern "C"
         ba.emit(op_call_bif_W, {ArgVal(ArgVal::i, (BeamInstr)bif)});
 
         ba.codegen(buff, buff_len);
+
+        /* FIXME: break out into a helper */
+#if defined(__APPLE__)
+        sys_icache_invalidate(buff, buff_len);
+#elif defined(__GNUC__)
+        __builtin___clear_cache(buff, buff + buff_len);
+#endif
     }
 
     void beamasm_delete_assembler(void *instance) {

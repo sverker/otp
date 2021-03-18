@@ -29,22 +29,75 @@ extern "C"
 }
 
 void BeamModuleAssembler::emit_ensure_map(const ArgVal &map) {
-    emit_nyi("emit_ensure_map");
+    Label next = a.newLabel(), badmap = a.newLabel();
+
+    JitRegister map_reg = init_src_reg(map, TMP1);
+
+    a.udf(0xf00b);
+
+    emit_is_boxed(badmap, map_reg.reg);
+
+    arm::Gp boxed_ptr = emit_ptr_val(TMP2, map_reg.reg);
+    a.ldur(TMP2, emit_boxed_val(boxed_ptr));
+    a.and_(TMP2, TMP2, imm(_TAG_HEADER_MASK));
+    a.cmp(TMP2, imm(_TAG_HEADER_MAP));
+    a.cond_eq().b(next);
+
+    a.bind(badmap);
+    {
+        a.stur(map_reg.reg, arm::Mem(c_p, offsetof(Process, fvalue)));
+        emit_error(BADMAP);
+    }
+
+    a.bind(next);
 }
 
 void BeamGlobalAssembler::emit_new_map_shared() {
-    ERTS_ASSERT(!"NYI");
+    emit_enter_runtime_frame();
+    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+
+    a.mov(ARG1, c_p);
+    load_x_reg_array(ARG2);
+    runtime_call<5>(erts_gc_new_map);
+
+    emit_leave_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+    emit_leave_runtime_frame();
+
+    a.ret(a64::x30);
 }
 
 void BeamModuleAssembler::emit_new_map(const ArgVal &Dst,
                                        const ArgVal &Live,
                                        const ArgVal &Size,
                                        const std::vector<ArgVal> &args) {
-    emit_nyi("emit_new_map");
+    Label data = embed_vararg_rodata(args);
+
+    ASSERT(Size.getValue() == args.size());
+
+    mov_imm(ARG3, Live.getValue());
+    mov_imm(ARG4, args.size());
+    a.adr(ARG5, data);
+    fragment_call(ga->get_new_map_shared());
+
+    mov_arg(Dst, ARG1);
 }
 
 void BeamGlobalAssembler::emit_i_new_small_map_lit_shared() {
-    ERTS_ASSERT(!"NYI");
+    emit_enter_runtime_frame();
+    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+
+    a.mov(ARG1, c_p);
+    load_x_reg_array(ARG2);
+    runtime_call<5>(erts_gc_new_small_map_lit);
+
+    emit_leave_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+    emit_leave_runtime_frame();
+
+    a.ret(a64::x30);
 }
 
 void BeamModuleAssembler::emit_i_new_small_map_lit(
@@ -53,14 +106,42 @@ void BeamModuleAssembler::emit_i_new_small_map_lit(
         const ArgVal &Keys,
         const ArgVal &Size,
         const std::vector<ArgVal> &args) {
-    emit_nyi("emit_i_new_small_map_lit");
+    Label data = embed_vararg_rodata(args);
+
+    ASSERT(Size.getValue() == args.size());
+
+    ASSERT(Keys.isLiteral());
+    mov_arg(ARG3, Keys);
+    mov_imm(ARG4, Live.getValue());
+    a.adr(ARG5, data);
+
+    fragment_call(ga->get_i_new_small_map_lit_shared());
+
+    mov_arg(Dst, ARG1);
 }
 
 void BeamModuleAssembler::emit_i_get_map_element(const ArgVal &Fail,
                                                  const ArgVal &Src,
                                                  const ArgVal &Key,
                                                  const ArgVal &Dst) {
-    emit_nyi("emit_i_get_map_element");
+    mov_arg(ARG1, Src);
+    mov_arg(ARG2, Key);
+
+    emit_enter_runtime<Update::eFragileXregs>();
+
+    runtime_call<2>(get_map_element);
+
+    emit_leave_runtime<Update::eFragileXregs>();
+
+    emit_branch_if_not_value(ARG1, labels[Fail.getValue()]);
+
+    /*
+     * Don't store the result if the destination is the scratch X register.
+     * (This instruction was originally a has_map_fields instruction.)
+     */
+    if (!(Dst.getType() == ArgVal::x && Dst.getValue() == SCRATCH_X_REG)) {
+        mov_arg(Dst, ARG1);
+    }
 }
 
 void BeamModuleAssembler::emit_i_get_map_elements(
@@ -68,7 +149,22 @@ void BeamModuleAssembler::emit_i_get_map_elements(
         const ArgVal &Src,
         const ArgVal &Size,
         const std::vector<ArgVal> &args) {
-    emit_nyi("emit_i_get_map_elements");
+    Label data = embed_vararg_rodata(args);
+
+    ASSERT(Size.getValue() == args.size());
+
+    mov_arg(ARG1, Src);
+    a.mov(ARG3, E);
+
+    emit_enter_runtime(all_xregs);
+
+    mov_imm(ARG4, args.size() / 3);
+    a.adr(ARG5, data);
+    load_x_reg_array(ARG2);
+    runtime_call<5>(beam_jit_get_map_elements);
+
+    emit_leave_runtime(all_xregs);
+    a.cbz(ARG1, labels[Fail.getValue()]);
 }
 
 void BeamModuleAssembler::emit_i_get_map_element_hash(const ArgVal &Fail,
@@ -76,12 +172,42 @@ void BeamModuleAssembler::emit_i_get_map_element_hash(const ArgVal &Fail,
                                                       const ArgVal &Key,
                                                       const ArgVal &Hx,
                                                       const ArgVal &Dst) {
-    emit_nyi("emit_i_get_map_element_hash");
+    mov_arg(ARG1, Src);
+    mov_arg(ARG2, Key);
+    mov_arg(ARG3, Hx);
+
+    emit_enter_runtime<Update::eFragileXregs>();
+
+    runtime_call<3>(get_map_element_hash);
+
+    emit_leave_runtime<Update::eFragileXregs>();
+
+    emit_branch_if_not_value(ARG1, labels[Fail.getValue()]);
+
+    /*
+     * Don't store the result if the destination is the scratch X register.
+     * (This instruction was originally a has_map_fields instruction.)
+     */
+    if (!(Dst.getType() == ArgVal::x && Dst.getValue() == SCRATCH_X_REG)) {
+        mov_arg(Dst, ARG1);
+    }
 }
 
 /* ARG3 = live registers, ARG4 = update vector size, ARG5 = update vector. */
 void BeamGlobalAssembler::emit_update_map_assoc_shared() {
-    ERTS_ASSERT(!"NYI");
+    emit_enter_runtime_frame();
+    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+
+    a.mov(ARG1, c_p);
+    load_x_reg_array(ARG2);
+    runtime_call<5>(erts_gc_update_map_assoc);
+
+    emit_leave_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+    emit_leave_runtime_frame();
+
+    a.ret(a64::x30);
 }
 
 void BeamModuleAssembler::emit_update_map_assoc(
@@ -90,21 +216,72 @@ void BeamModuleAssembler::emit_update_map_assoc(
         const ArgVal &Live,
         const ArgVal &Size,
         const std::vector<ArgVal> &args) {
-    emit_nyi("emit_update_map_assoc");
+    Label data = embed_vararg_rodata(args);
+
+    JitRegister src_reg = init_src_reg(Src, TMP1);
+
+    ASSERT(Size.getValue() == args.size());
+
+    /* FIXME: UGLY. Pass Src as ARG1 and move this into the shared fragment. */
+    if (Live.getValue() < num_register_backed_xregs) {
+        a.mov(register_backed_xregs[Live.getValue()], src_reg.reg);
+    } else {
+        a.str(src_reg.reg, getXRef(Live.getValue()));
+    }
+
+    mov_imm(ARG3, Live.getValue());
+    mov_imm(ARG4, args.size());
+    a.adr(ARG5, data);
+    fragment_call(ga->get_update_map_assoc_shared());
+
+    mov_arg(Dst, ARG1);
 }
 
 /* ARG3 = live registers, ARG4 = update vector size, ARG5 = update vector.
  *
  * Result is returned in RET, error is indicated by ZF. */
 void BeamGlobalAssembler::emit_update_map_exact_guard_shared() {
-    ERTS_ASSERT(!"NYI");
+    emit_enter_runtime_frame();
+    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+
+    a.mov(ARG1, c_p);
+    load_x_reg_array(ARG2);
+    runtime_call<5>(erts_gc_update_map_exact);
+
+    emit_leave_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+    emit_leave_runtime_frame();
+
+    a.ret(a64::x30);
 }
 
 /* ARG3 = live registers, ARG4 = update vector size, ARG5 = update vector.
  *
  * Does not return on error. */
 void BeamGlobalAssembler::emit_update_map_exact_body_shared() {
-    ERTS_ASSERT(!"NYI");
+    Label error = a.newLabel();
+
+    emit_enter_runtime_frame();
+    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+
+    a.mov(ARG1, c_p);
+    load_x_reg_array(ARG2);
+    runtime_call<5>(erts_gc_update_map_exact);
+
+    emit_leave_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+    emit_leave_runtime_frame();
+
+    emit_branch_if_not_value(ARG1, error);
+    a.ret(a64::x30);
+
+    a.bind(error);
+    {
+        mov_imm(ARG4, 0);
+        a.b(labels[raise_exception]);
+    }
 }
 
 void BeamModuleAssembler::emit_update_map_exact(
@@ -114,5 +291,31 @@ void BeamModuleAssembler::emit_update_map_exact(
         const ArgVal &Live,
         const ArgVal &Size,
         const std::vector<ArgVal> &args) {
-    emit_nyi("emit_update_map_exact");
+    Label data = embed_vararg_rodata(args);
+
+    JitRegister src_reg = init_src_reg(Src, TMP1);
+
+    ASSERT(Size.getValue() == args.size());
+
+    /* We _KNOW_ Src is a map */
+
+    /* FIXME: UGLY. Pass Src as ARG1 and move this into the shared fragment. */
+    if (Live.getValue() < num_register_backed_xregs) {
+        a.mov(register_backed_xregs[Live.getValue()], src_reg.reg);
+    } else {
+        a.str(src_reg.reg, getXRef(Live.getValue()));
+    }
+
+    mov_imm(ARG3, Live.getValue());
+    mov_imm(ARG4, args.size());
+    a.adr(ARG5, data);
+
+    if (Fail.getValue() != 0) {
+        fragment_call(ga->get_update_map_exact_guard_shared());
+        emit_branch_if_not_value(ARG1, labels[Fail.getValue()]);
+    } else {
+        fragment_call(ga->get_update_map_exact_body_shared());
+    }
+
+    mov_arg(Dst, ARG1);
 }

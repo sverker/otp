@@ -31,7 +31,7 @@ extern "C"
  *
  * RET = export entry */
 void BeamGlobalAssembler::emit_generic_bp_global() {
-    ERTS_ASSERT(!"NYI");
+    a.udf(1535);
 }
 
 /* This function is called from the module header, which is in turn called from
@@ -40,7 +40,7 @@ void BeamGlobalAssembler::emit_generic_bp_global() {
  *
  * See beam_asm.h about more details */
 void BeamGlobalAssembler::emit_generic_bp_local() {
-    ERTS_ASSERT(!"NYI");
+    a.ret(a64::x30);
 }
 
 /* This function is called from the module header which is called from the
@@ -91,5 +91,24 @@ void BeamModuleAssembler::emit_i_return_to_trace() {
 }
 
 void BeamModuleAssembler::emit_i_hibernate() {
-    emit_nyi("emit_i_hibernate");
+    Label error = a.newLabel();
+
+    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>(
+            all_xregs);
+
+    a.mov(ARG1, c_p);
+    load_x_reg_array(ARG2);
+    runtime_call<2>(erts_hibernate);
+
+    emit_leave_runtime<Update::eReductions | Update::eStack | Update::eHeap>();
+
+    a.cbz(ARG1, error);
+
+    a.ldr(TMP1, arm::Mem(c_p, offsetof(Process, flags)));
+    a.and_(TMP1, TMP1, imm(~F_HIBERNATE_SCHED));
+    a.str(TMP1, arm::Mem(c_p, offsetof(Process, flags)));
+    abs_jmp(ga->get_do_schedule());
+
+    a.bind(error);
+    emit_raise_exception(&BIF_TRAP_EXPORT(BIF_hibernate_3)->info.mfa);
 }
