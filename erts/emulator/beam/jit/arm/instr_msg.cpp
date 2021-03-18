@@ -49,7 +49,12 @@ void BeamModuleAssembler::emit_i_recv_mark() {
      *
      * Save the current end of message queue
      */
-    emit_nyi("emit_i_recv_mark");
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    runtime_call<1>(recv_mark);
+
+    emit_leave_runtime();
 }
 
 void BeamModuleAssembler::emit_i_recv_set() {
@@ -59,7 +64,12 @@ void BeamModuleAssembler::emit_i_recv_set() {
      *
      * If previously saved recv mark, set save pointer to it
      */
-    emit_nyi("emit_i_recv_set");
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    runtime_call<1>(recv_mark_set);
+
+    emit_leave_runtime();
 }
 
 #endif /* ERTS_SUPPORT_OLD_RECV_MARK_INSTRS */
@@ -104,19 +114,163 @@ int erts_lc_proc_sig_receive_helper(Process *c_p,
 #endif
 
 void BeamGlobalAssembler::emit_i_loop_rec_shared() {
-    ERTS_ASSERT(!"NYI");
+    Label restart = a.newLabel(), peek_message = a.newLabel(),
+          schedule_out = a.newLabel(), check_is_distributed = a.newLabel(),
+          done = a.newLabel();
+
+    arm::Mem await_addr = TMP_MEM1q, message_ptr = TMP_MEM2q,
+             get_out = TMP_MEM3q;
+    arm::Mem flags = arm::Mem(c_p, offsetof(Process, flags));
+
+    a.mov(XREG1, a64::x30);
+
+    a.ldr(TMP1, flags);
+    a.orr(TMP1, TMP1, imm(F_DELAY_GC));
+    a.str(TMP1, flags);
+    a.str(ARG1, arm::Mem(c_p, offsetof(Process, i)));
+    a.str(ARG2, await_addr);
+
+    a.bind(restart);
+    {
+        a.tst(FCALLS, FCALLS);
+        a.cond_le().b(schedule_out);
+
+        /* !! FALL THROUGH !! */
+    }
+
+    comment("Peek next message");
+    a.bind(peek_message);
+    {
+        a.ldr(TMP1, arm::Mem(c_p, offsetof(Process, sig_qs.save)));
+        a.ldr(ARG1, arm::Mem(TMP1));
+        a.cbnz(ARG1, check_is_distributed);
+        comment("Inner queue empty, fetch more from outer/middle queues");
+
+        emit_enter_runtime<Update::eReductions | Update::eStack |
+                           Update::eHeap>();
+
+        a.str(ZERO, message_ptr);
+        a.mov(ARG1, c_p);
+        a.mov(ARG2, FCALLS);
+        mov_imm(ARG3, 0);
+        lea(ARG4, message_ptr);
+        lea(ARG5, get_out);
+#ifdef ERTS_ENABLE_LOCK_CHECK
+        runtime_call<5>(erts_lc_proc_sig_receive_helper);
+#else
+        runtime_call<5>(erts_proc_sig_receive_helper);
+#endif
+
+        /* erts_proc_sig_receive_helper merely inspects FCALLS, so we don't
+         * need to update it here.
+         *
+         * Also note that another process may have loaded new code and sent us
+         * a message to notify us about it, so we must update the active code
+         * index. */
+        emit_leave_runtime<Update::eStack | Update::eHeap |
+                           Update::eCodeIndex>();
+
+        a.sub(FCALLS, FCALLS, ARG1);
+
+        /* Need to spill message_ptr to ARG1 as check_is_distributed uses it. */
+        a.ldr(ARG1, message_ptr);
+        a.cbnz(ARG1, check_is_distributed);
+
+        /* Did we receive a signal or run out of reds? */
+        a.ldr(TMP1.w(), get_out);
+        a.cbnz(TMP1, schedule_out);
+
+        /* The queue is empty and we're not yielding or exiting, so we'll jump
+         * to our wait/timeout instruction.
+         *
+         * Note that the message queue lock is still held in this case. */
+        a.ldr(TMP1, flags);
+        a.and_(TMP1, TMP1, imm(~F_DELAY_GC));
+        a.str(TMP1, flags);
+
+        a.ldr(TMP1, await_addr);
+        a.br(TMP1);
+    }
+    a.bind(schedule_out);
+    {
+        /* We either ran out of reductions or received an exit signal; schedule
+         * ourselves out. The yield address (`c_p->i`) was set on ingress. */
+        a.ldr(TMP1, flags);
+        a.and_(TMP1, TMP1, imm(~F_DELAY_GC));
+        a.str(TMP1, flags);
+        a.str(ZERO, arm::Mem(c_p, offsetof(Process, arity)));
+        a.str(ZERO, arm::Mem(c_p, offsetof(Process, current)));
+
+        a.b(labels[do_schedule]);
+    }
+
+    /*
+     * ARG1 now contains the pointer to a message.
+     */
+    comment("Check if message is distributed");
+    a.bind(check_is_distributed);
+    {
+        a.ldr(TMP1, arm::Mem(ARG1, offsetof(ErtsSignal, common.tag)));
+        emit_branch_if_value(TMP1, done);
+
+        sub(FCALLS, FCALLS, 10);
+
+        emit_enter_runtime();
+
+        a.mov(ARG2, ARG1);
+        a.mov(ARG1, c_p);
+        runtime_call<2>(beam_jit_decode_dist);
+
+        emit_leave_runtime();
+
+        a.cbz(ARG1, restart);
+
+        /* !! FALL THROUGH !! */
+    }
+
+    a.bind(done);
+    {
+        a.ldr(XREG0, arm::Mem(ARG1, offsetof(ErtsMessage, m[0])));
+        a.ret(XREG1);
+    }
 }
 
 void BeamModuleAssembler::emit_i_loop_rec(const ArgVal &Wait) {
-    emit_nyi("i_loop_rec");
+    Label entry = a.newLabel();
+
+    a.bind(entry);
+    a.adr(ARG1, entry);
+    a.adr(ARG2, labels[Wait.getValue()]);
+    fragment_call(ga->get_i_loop_rec_shared());
 }
 
 void BeamModuleAssembler::emit_remove_message() {
-    emit_nyi("remove_message");
+    /* HTOP and E are passed explicitly and only read from, so we don't need to
+     * swap them out. */
+    a.mov(ARG3, HTOP);
+    a.mov(ARG4, E);
+
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    a.mov(ARG2, FCALLS);
+    a.mov(ARG5, active_code_ix);
+    runtime_call<5>(beam_jit_remove_message);
+    a.mov(FCALLS, ARG1);
+
+    emit_leave_runtime();
 }
 
 void BeamModuleAssembler::emit_loop_rec_end(const ArgVal &Dest) {
-    emit_nyi("emit_loop_rec_end");
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    runtime_call<1>(erts_msgq_set_save_next);
+
+    emit_leave_runtime();
+
+    a.sub(FCALLS, FCALLS, imm(1));
+    a.b(labels[Dest.getValue()]);
 }
 
 void BeamModuleAssembler::emit_wait_unlocked(const ArgVal &Dest) {
@@ -124,17 +278,54 @@ void BeamModuleAssembler::emit_wait_unlocked(const ArgVal &Dest) {
 }
 
 void BeamModuleAssembler::emit_wait_locked(const ArgVal &Dest) {
-    emit_nyi("wait_locked");
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    a.adr(ARG2, labels[Dest.getValue()]);
+    runtime_call<2>(beam_jit_wait_locked);
+
+    emit_leave_runtime();
+
+    abs_jmp(ga->get_do_schedule());
 }
 
 void BeamModuleAssembler::emit_wait_timeout_unlocked(const ArgVal &Src,
                                                      const ArgVal &Dest) {
-    emit_nyi("emit_wait_timeout_unlocked");
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    runtime_call<1>(beam_jit_take_receive_lock);
+
+    emit_leave_runtime();
+
+    emit_wait_timeout_locked(Src, Dest);
 }
 
 void BeamModuleAssembler::emit_wait_timeout_locked(const ArgVal &Src,
                                                    const ArgVal &Dest) {
-    emit_nyi("emit_wait_timeout_locked");
+    Label wait = a.newLabel(), next = a.newLabel();
+
+    mov_arg(ARG2, Src);
+
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    a.adr(ARG3, next);
+    runtime_call<3>(beam_jit_wait_timeout);
+
+    emit_leave_runtime();
+
+    ERTS_CT_ASSERT(RET_next < RET_wait && RET_wait < RET_badarg);
+    a.cmp(ARG1, imm(RET_wait));
+    a.cond_eq().b(wait);
+    a.cond_lt().b(next);
+
+    emit_raise_exception(currLabel, (ErtsCodeMFA *)nullptr);
+
+    a.bind(wait);
+    emit_wait_locked(Dest);
+
+    a.bind(next);
 }
 
 void BeamModuleAssembler::emit_timeout_locked() {
@@ -142,5 +333,10 @@ void BeamModuleAssembler::emit_timeout_locked() {
 }
 
 void BeamModuleAssembler::emit_timeout() {
-    emit_nyi("emit_timeout");
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    runtime_call<1>(beam_jit_timeout);
+
+    emit_leave_runtime();
 }

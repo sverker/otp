@@ -103,18 +103,36 @@ BeamGlobalAssembler::BeamGlobalAssembler(JitAllocator *allocator)
     }
 }
 
-void BeamGlobalAssembler::emit_handle_error() {
-    /* Move return address into ARG2 so we know where we crashed.
-     *
-     * This bluntly assumes that we haven't pushed anything to the (Erlang)
-     * stack in the fragments that jump here. */
-    ERTS_ASSERT(!"NYI");
-}
-
-/* ARG3 = (HTOP + bytes needed) !!
- * ARG4 = Live registers */
+/*
+ * ARG3 = (HTOP + bytes needed)
+ * ARG4 = Live registers
+ */
 void BeamGlobalAssembler::emit_garbage_collect() {
-    ERTS_ASSERT(!"NYI");
+    a.stp(a64::x29, a64::x30, arm::Mem(a64::sp, -16).pre());
+    a.mov(a64::x29, a64::sp);
+
+    /* Convert ARG3 to words needed and move it to the correct argument slot. */
+    a.sub(ARG2, ARG3, HTOP);
+    a.lsr(ARG2, ARG2, imm(3));
+
+    /* Save our return address in c_p->i so we can tell where we crashed if we
+     * did so during GC. */
+    a.str(a64::x30, arm::Mem(c_p, offsetof(Process, i)));
+
+    emit_enter_runtime<Update::eStack | Update::eHeap>(all_xregs);
+
+    a.mov(ARG1, c_p);
+    /* ARG2 is already loaded. */
+    load_x_reg_array(ARG3);
+    /* ARG4 (live registers) is already loaded. */
+    a.mov(ARG5, FCALLS);
+    runtime_call<5>(erts_garbage_collect_nobump);
+    a.sub(FCALLS, FCALLS, ARG1);
+
+    emit_leave_runtime<Update::eStack | Update::eHeap>(all_xregs);
+
+    a.ldp(a64::x29, a64::x30, arm::Mem(a64::sp).post(16));
+    a.ret(a64::x30);
 }
 
 /* Handles trapping to exports from C code, setting registers up in the same
@@ -123,54 +141,179 @@ void BeamGlobalAssembler::emit_garbage_collect() {
  *
  * Assumes that c_p->current points into the MFA of an export entry. */
 void BeamGlobalAssembler::emit_bif_export_trap() {
-    ERTS_ASSERT(!"NYI");
+    int export_offset = offsetof(Export, info.mfa);
+
+    a.ldr(ARG1, arm::Mem(c_p, offsetof(Process, current)));
+    a.sub(ARG1, ARG1, export_offset);
+    a.ldr(TMP1, emit_setup_export_call(ARG1));
+    a.br(TMP1);
 }
 
 /* Handles export breakpoints, error handler, jump tracing, and so on.
  *
- * RET = export entry */
+ * ARG1 = export entry */
 void BeamGlobalAssembler::emit_export_trampoline() {
-    ERTS_ASSERT(!"NYI");
+    Label call_bif = a.newLabel(), error_handler = a.newLabel(),
+          jump_trace = a.newLabel();
+
+    /* What are we supposed to do? */
+    a.ldr(TMP1, arm::Mem(ARG1, offsetof(Export, trampoline.common.op)));
+
+    /* We test the generic bp first as it is most likely to be triggered in a
+     * loop. */
+#if 0
+    a.cmp(TMP1, imm(op_i_generic_breakpoint));
+    a.cond_eq().b(labels[generic_bp_global]);
+#endif
+
+    a.cmp(TMP1, imm(op_call_bif_W));
+    a.cond_eq().b(call_bif);
+
+    a.cmp(TMP1, imm(op_call_error_handler));
+    a.cond_eq().b(error_handler);
+
+    a.cmp(TMP1, imm(op_trace_jump_W));
+    a.cond_eq().b(jump_trace);
+
+    /* Must never happen. */
+    a.udf(0xffff);
+
+    a.bind(call_bif);
+    {
+        /* Emulate a `call_bif` instruction.
+         *
+         * Note that we don't check reductions: yielding here is very tricky
+         * and error-prone, and there's little point in doing so as we can only
+         * land here directly after being scheduled in. */
+        ssize_t func_offset = offsetof(Export, trampoline.bif.address);
+
+        lea(ARG2, arm::Mem(ARG1, offsetof(Export, info.mfa)));
+        a.ldr(ARG3, arm::Mem(c_p, offsetof(Process, i)));
+        a.ldr(ARG4, arm::Mem(ARG1, func_offset));
+
+        a.b(labels[call_bif_shared]);
+    }
+
+    a.bind(jump_trace);
+    a.udf(22001);
+#if 0
+    a.jmp(x86::qword_ptr(RET, offsetof(Export, trampoline.trace.address)));
+#endif
+
+    a.bind(error_handler);
+    {
+        emit_enter_runtime<Update::eReductions | Update::eStack |
+                           Update::eHeap>(all_xregs);
+
+        lea(ARG2, arm::Mem(ARG1, offsetof(Export, info.mfa)));
+        a.mov(ARG1, c_p);
+        load_x_reg_array(ARG3);
+        mov_imm(ARG4, am_undefined_function);
+        runtime_call<4>(call_error_handler);
+
+        /* If there is no error_handler, any number of X registers
+         * can be live. */
+        emit_leave_runtime<Update::eReductions | Update::eStack |
+                           Update::eHeap>(all_xregs);
+
+        a.tst(ARG1, ARG1);
+        a.cond_eq().b(labels[error_action_code]);
+        a.ldr(TMP1, emit_setup_export_call(ARG1));
+
+        a.br(TMP1);
+    }
 }
 
 /*
  * Get the error address implicitly by calling the shared fragment and using
  * the return address as the error address.
  */
-void BeamModuleAssembler::emit_handle_error() {
-    emit_handle_error(nullptr);
+void BeamModuleAssembler::emit_raise_exception() {
+    emit_raise_exception(nullptr);
 }
 
-void BeamModuleAssembler::emit_handle_error(const ErtsCodeMFA *exp) {
-    ERTS_ASSERT(!"NYI");
+void BeamModuleAssembler::emit_raise_exception(const ErtsCodeMFA *exp) {
+    mov_imm(ARG4, (Uint)exp);
+    fragment_call(ga->get_raise_exception());
+
+    /*
+     * It is important that error address is not equal to a line
+     * instruction that may follow this BEAM instruction. To avoid
+     * that, BeamModuleAssembler::emit() will emit a nop instruction
+     * if necessary.
+     */
+    last_error_offset = getOffset() & -8;
 }
 
-void BeamModuleAssembler::emit_handle_error(Label I, const ErtsCodeMFA *exp) {
-    ERTS_ASSERT(!"NYI");
+void BeamModuleAssembler::emit_raise_exception(Label I,
+                                               const ErtsCodeMFA *exp) {
+    a.adr(ARG2, I);
+    mov_imm(ARG4, (Uint)exp);
+
+    abs_jmp(ga->get_raise_exception_shared());
 }
 
-/* This is an alias for handle_error */
+/* This is an alias for raise_exception_shared, but with default NULL values
+ * for the error address and BIF mfa. */
 void BeamGlobalAssembler::emit_error_action_code() {
-    ERTS_ASSERT(!"NYI");
+    mov_imm(ARG2, 0);
+    mov_imm(ARG4, 0);
+
+    a.b(labels[raise_exception_shared]);
 }
 
-void BeamGlobalAssembler::emit_handle_error_shared_prologue() {
-    ERTS_ASSERT(!"NYI");
+/* You must have already done emit_leave_runtime_frame()! */
+void BeamGlobalAssembler::emit_raise_exception() {
+    a.mov(ARG2, a64::x30);
+    a.b(labels[raise_exception_shared]);
 }
 
-void BeamGlobalAssembler::emit_handle_error_shared() {
-    ERTS_ASSERT(!"NYI");
+void BeamGlobalAssembler::emit_raise_exception_shared() {
+    Label crash = a.newLabel();
+
+    /* Push a fake CP to ensure that we can handle a topmost frame
+     * with `catch` and an instruction raising and exception. The fake
+     * CP will be discarded by handle_error(). */
+    a.str(ZERO, arm::Mem(E, -8).pre());
+
+    emit_enter_runtime<Update::eStack | Update::eHeap>(all_xregs);
+
+    /* The error address must be a valid CP or NULL. */
+    a.tst(ARG2, imm(_CPMASK));
+    a.cond_ne().b(crash);
+
+    /* ARG2 and ARG4 must be set prior to jumping here! */
+    a.mov(ARG1, c_p);
+    load_x_reg_array(ARG3);
+    runtime_call<4>(handle_error);
+
+    emit_leave_runtime<Update::eStack | Update::eHeap>();
+
+    a.cbz(ARG1, labels[do_schedule]);
+
+    /* The catch_end instruction expects the XREG0 to be valid. The
+     * rest of the X registers will be read from the X register
+     * array. */
+    a.ldr(XREG0, getXRef(0));
+    a.br(ARG1);
+
+    a.bind(crash);
+    a.udf(0xbad);
 }
 
 void BeamModuleAssembler::emit_proc_lc_unrequire(void) {
 #ifdef ERTS_ENABLE_LOCK_CHECK
-    ERTS_ASSERT(!"NYI");
+    a.mov(ARG1, c_p);
+    mov_imm(ARG2, ERTS_PROC_LOCK_MAIN);
+    runtime_call<2>(erts_proc_lc_unrequire_lock);
 #endif
 }
 
 void BeamModuleAssembler::emit_proc_lc_require(void) {
 #ifdef ERTS_ENABLE_LOCK_CHECK
-    ERTS_ASSERT(!"NYI");
+    a.mov(ARG1, c_p);
+    mov_imm(ARG2, ERTS_PROC_LOCK_MAIN);
+    runtime_call<4>(erts_proc_lc_require_lock);
 #endif
 }
 

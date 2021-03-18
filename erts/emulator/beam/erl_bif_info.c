@@ -102,7 +102,7 @@ static char erts_system_version[] = ("Erlang/OTP " ERLANG_OTP_RELEASE
 #endif
 				     " [async-threads:%d]"
 #ifdef BEAMASM
-#ifdef NATIVE_ERLANG_STACK
+#if defined(NATIVE_ERLANG_STACK) && defined(__aarch64__)
 				     " [jit]"
 #else
 				     " [jit:no-native-stack]"

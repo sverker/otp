@@ -80,8 +80,13 @@ char *beamasm_get_base(void *instance);
 /* Return current instruction offset, for line information. */
 size_t beamasm_get_offset(void *ba);
 
-// Number of bytes emitted at first label in order to support trace and nif load
-#    define BEAM_ASM_FUNC_PROLOGUE_SIZE 8
+/* Number of bytes emitted at first label in order to support trace and nif
+ * load. */
+#    if defined(__aarch64__)
+#        define BEAM_ASM_FUNC_PROLOGUE_SIZE 16
+#    else
+#        define BEAM_ASM_FUNC_PROLOGUE_SIZE 8
+#    endif
 
 /*
  * The code below is used to deal with intercepting the execution of

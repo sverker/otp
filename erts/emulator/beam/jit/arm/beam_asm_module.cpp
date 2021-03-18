@@ -94,7 +94,47 @@ BeamModuleAssembler::BeamModuleAssembler(BeamGlobalAssembler *ga,
                                          unsigned num_labels,
                                          unsigned num_functions)
         : BeamModuleAssembler(ga, mod, num_labels) {
-    emit_nyi("BeamModuleAssembler() constructor");
+    codeHeader = a.newLabel();
+    a.align(kAlignCode, 8);
+    a.bind(codeHeader);
+
+    embed_zeros(sizeof(BeamCodeHeader) +
+                sizeof(ErtsCodeInfo *) * num_functions);
+
+    /* Shared trampoline for function_clause errors, which can't jump straight
+     * to `i_func_info_shared` due to size restrictions. */
+    funcInfo = a.newLabel();
+    a.align(kAlignCode, 8);
+    a.bind(funcInfo);
+    abs_jmp(ga->get_i_func_info_shared());
+
+    /* Shared trampoline for yielding on function ingress. */
+    funcYield = a.newLabel();
+    a.align(kAlignCode, 8);
+    a.bind(funcYield);
+    abs_jmp(ga->get_i_test_yield_shared());
+
+    /* Setup the early_nif/breakpoint trampoline. */
+    genericBPTramp = a.newLabel();
+    a.align(kAlignCode, 16);
+    a.bind(genericBPTramp);
+    {
+        a.ret(a64::x30);
+
+#if 0
+        a.align(kAlignCode, 16);
+        abs_jmp(ga->get_call_nif_early());
+
+        a.align(kAlignCode, 16);
+        aligned_call(ga->get_generic_bp_local());
+        a.ret();
+
+        a.align(kAlignCode, 16);
+        ASSERT(a.offset() - code.labelOffsetFromBase(genericBPTramp) == 16 * 3);
+        aligned_call(ga->get_generic_bp_local());
+        abs_jmp(ga->get_call_nif_early());
+#endif
+    }
 }
 
 ErtsCodePtr BeamModuleAssembler::getCode(unsigned label) {
@@ -159,7 +199,30 @@ void BeamModuleAssembler::emit_i_nif_padding() {
 }
 
 void BeamModuleAssembler::emit_i_breakpoint_trampoline() {
-    emit_nyi("i_breakpoint_trampoline");
+    /* This little prologue is used by nif loading and tracing to insert
+     * alternative instructions. The call is filled with a relative call to a
+     * trampoline in the module header and then the jmp target is zeroed so that
+     * it effectively becomes a nop */
+    Label next = a.newLabel();
+
+    a.b(next);
+
+    /* We embed a zero byte here, which is used to flag whether to make an early
+     * nif call, call a breakpoint handler, or both. */
+    a.embedUInt32(ERTS_ASM_BP_FLAG_NONE);
+
+    if (genericBPTramp.isValid()) {
+        a.bl(genericBPTramp);
+    } else {
+        /* NIF or BIF stub; we're not going to use this trampoline as-is, but
+         * we need to reserve space for it. */
+        a.udf(0);
+    }
+
+    a.align(kAlignCode, 8);
+    a.bind(next);
+    ASSERT((a.offset() - code.labelOffsetFromBase(currLabel)) ==
+           BEAM_ASM_FUNC_PROLOGUE_SIZE);
 }
 
 void BeamModuleAssembler::emit_nyi(const char *msg) {
@@ -220,14 +283,46 @@ bool BeamModuleAssembler::emit(unsigned specific_op,
  */
 
 void BeamGlobalAssembler::emit_i_func_info_shared() {
-    ERTS_ASSERT(!"NYI");
+    /* a64::x30 now points 4 bytes into the ErtsCodeInfo struct for the
+     * function. Put the address of the MFA into ARG1. */
+    a.add(ARG1, a64::x30, offsetof(ErtsCodeInfo, mfa) - 4);
+    mov_imm(TMP1, EXC_FUNCTION_CLAUSE);
+    a.str(TMP1, arm::Mem(c_p, offsetof(Process, freason)));
+    a.str(ARG1, arm::Mem(c_p, offsetof(Process, current)));
+    a.b(labels[error_action_code]);
 }
 
 void BeamModuleAssembler::emit_i_func_info(const ArgVal &Label,
                                            const ArgVal &Module,
                                            const ArgVal &Function,
                                            const ArgVal &Arity) {
-    emit_nyi("i_func_info");
+    ErtsCodeInfo info;
+
+    functions.push_back(Label.getValue());
+
+    info.mfa.module = Module.getValue();
+    info.mfa.function = Function.getValue();
+    info.mfa.arity = Arity.getValue();
+    info.u.gen_bp = NULL;
+
+    comment("%T:%T/%d", info.mfa.module, info.mfa.function, info.mfa.arity);
+
+    /* This is an ErtsCodeInfo structure that has a valid ARM opcode as its `op`
+     * field, which *calls* the funcInfo trampoline so we can trace it back to
+     * this particular function.
+     *
+     * We make a relative call to a trampoline in the module header because this
+     * needs to fit into a word, and an directy call to `i_func_info_shared`
+     * would be too large. */
+    if (funcInfo.isValid()) {
+        a.bl(funcInfo);
+    } else {
+        a.nop();
+    }
+
+    a.align(kAlignCode, sizeof(UWord));
+    a.embed(&info.u.gen_bp, sizeof(info.u.gen_bp));
+    a.embed(&info.mfa, sizeof(info.mfa));
 }
 
 void BeamModuleAssembler::emit_label(const ArgVal &Label) {
@@ -346,8 +441,8 @@ BeamCodeHeader *BeamModuleAssembler::getCodeHeader() {
 }
 
 const ErtsCodeInfo *BeamModuleAssembler::getOnLoad() {
-    ERTS_ASSERT(!"NYI");
     if (on_load.isValid()) {
+        ERTS_ASSERT(!"NYI");
         return erts_code_to_codeinfo((ErtsCodePtr)getCode(on_load));
     } else {
         return 0;
@@ -355,7 +450,6 @@ const ErtsCodeInfo *BeamModuleAssembler::getOnLoad() {
 }
 
 unsigned BeamModuleAssembler::patchCatches(char *rw_base) {
-    ERTS_ASSERT(!"NYI");
     unsigned catch_no = BEAM_CATCHES_NIL;
 
     for (const auto &c : catches) {
@@ -384,7 +478,6 @@ unsigned BeamModuleAssembler::patchCatches(char *rw_base) {
 void BeamModuleAssembler::patchImport(char *rw_base,
                                       unsigned index,
                                       BeamInstr I) {
-    ERTS_ASSERT(!"NYI");
     for (const auto &patch : imports[index].patches) {
         auto offset = code.labelOffsetFromBase(patch.where);
         auto where = (Eterm *)&rw_base[offset + patch.ptr_offs];
@@ -397,7 +490,6 @@ void BeamModuleAssembler::patchImport(char *rw_base,
 void BeamModuleAssembler::patchLambda(char *rw_base,
                                       unsigned index,
                                       BeamInstr I) {
-    ERTS_ASSERT(!"NYI");
     for (const auto &patch : lambdas[index].patches) {
         auto offset = code.labelOffsetFromBase(patch.where);
         auto where = (Eterm *)&rw_base[offset + patch.ptr_offs];
@@ -410,7 +502,6 @@ void BeamModuleAssembler::patchLambda(char *rw_base,
 void BeamModuleAssembler::patchLiteral(char *rw_base,
                                        unsigned index,
                                        Eterm lit) {
-    ERTS_ASSERT(!"NYI");
     for (const auto &patch : literals[index].patches) {
         auto offset = code.labelOffsetFromBase(patch.where);
         auto where = (Eterm *)&rw_base[offset + patch.ptr_offs];
@@ -422,10 +513,11 @@ void BeamModuleAssembler::patchLiteral(char *rw_base,
 
 void BeamModuleAssembler::patchStrings(char *rw_base,
                                        const byte *string_table) {
-    ERTS_ASSERT(!"NYI");
     for (const auto &patch : strings) {
         auto offset = code.labelOffsetFromBase(patch.where);
         auto where = (const byte **)&rw_base[offset + 2];
+
+        ERTS_ASSERT(!"NYI");
 
         ASSERT(LLONG_MAX == (Eterm)*where);
         *where = string_table + patch.val_offs;
