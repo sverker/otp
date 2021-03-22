@@ -2191,8 +2191,8 @@ Error Assembler::_emit(uint32_t instId, const Operand_& o0, const Operand_& o1, 
         opcode.reset(opData.opcode);
         rmRel = &o0;
 
-        if (attributes & Inst::kAttributeCondFlagMask) {
-          uint32_t cond = (attributes >> Inst::kAttributeCondCodeShift) & 0xFu;
+        if (options & Inst::kAttributeCondFlagMask) {
+          uint32_t cond = (options >> Inst::kAttributeCondCodeShift) & 0xFu;
           if (cond != Cond::kAL) {
             opcode |= B(30);
             opcode.addImm(cond, 0);
