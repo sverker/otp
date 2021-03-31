@@ -116,7 +116,7 @@ static int try_seize_cwp(Process* c_p,
                          void *aux_arg);
 
 #if defined(DEBUG) || defined(ADDRESS_SANITIZER)
-#    define CWP_DBG_FORCE_TRAP
+//#    define CWP_DBG_FORCE_TRAP
 #endif
 
 /*
