@@ -1169,7 +1169,7 @@ void BeamModuleAssembler::emit_raw_raise() {
 
 void BeamGlobalAssembler::emit_i_test_yield_shared() {
     int mfa_offset =
-            -(int)sizeof(ErtsCodeMFA) - BEAM_ASM_FUNC_PROLOGUE_SIZE - 4;
+            -(int)sizeof(ErtsCodeMFA) - BEAM_ASM_FUNC_PROLOGUE_SIZE;
 
     /* Yield address is in ARG3. */
     add(ARG2, ARG3, mfa_offset);
@@ -1187,8 +1187,6 @@ void BeamModuleAssembler::emit_i_test_yield() {
      * breakpoint trampoline. */
 
     ASSERT(a.offset() % 8 == 0);
-
-    emit_enter_erlang_frame();
 
     a.bind(entry);
     a.subs(FCALLS, FCALLS, imm(1));

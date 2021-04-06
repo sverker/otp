@@ -205,6 +205,8 @@ void BeamModuleAssembler::emit_i_breakpoint_trampoline() {
      * it effectively becomes a nop */
     Label next = a.newLabel();
 
+    emit_enter_erlang_frame();
+
     a.b(next);
 
     /* We embed a zero byte here, which is used to flag whether to make an early
