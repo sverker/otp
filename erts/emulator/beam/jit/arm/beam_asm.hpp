@@ -910,6 +910,7 @@ class BeamGlobalAssembler : public BeamAssembler {
     _(call_bif_shared)                                                         \
     _(call_light_bif_shared)                                                   \
     _(catch_end_shared)                                                        \
+    _(call_nif_early)                                                          \
     _(check_float_error)                                                       \
     _(dispatch_bif)                                                            \
     _(dispatch_return)                                                         \
@@ -917,6 +918,7 @@ class BeamGlobalAssembler : public BeamAssembler {
     _(export_trampoline)                                                       \
     _(error_action_code)                                                       \
     _(fconv_shared)                                                            \
+    _(generic_bp_local)                                                        \
     _(i_bif_body_shared)                                                       \
     _(i_bif_guard_shared)                                                      \
     _(i_func_info_shared)                                                      \
@@ -935,11 +937,9 @@ class BeamGlobalAssembler : public BeamAssembler {
     _(bs_size_check_shared)                                                    \
     _(bs_fixed_integer_shared)                                                 \
     _(bs_get_tail_shared)                                                      \
-    _(call_nif_early)                                                          \
     _(call_nif_shared)                                                         \
     _(dispatch_nif)                                                            \
     _(generic_bp_global)                                                       \
-    _(generic_bp_local)                                                        \
     _(debug_bp)                                                                \
     _(i_load_nif_shared)                                                       \
     _(i_new_small_map_lit_shared)                                              \

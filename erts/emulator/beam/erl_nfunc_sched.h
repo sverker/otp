@@ -42,7 +42,7 @@ typedef struct {
 #ifdef BEAMASM
         /* Code used by tracing/nif load. */
 #  ifdef __aarch64__
-        BeamInstr trace[2];
+        BeamInstr trace[3];
 #  else
         BeamInstr trace[1];
 #  endif

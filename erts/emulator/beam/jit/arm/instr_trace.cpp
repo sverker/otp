@@ -40,7 +40,8 @@ void BeamGlobalAssembler::emit_generic_bp_global() {
  *
  * See beam_asm.h about more details */
 void BeamGlobalAssembler::emit_generic_bp_local() {
-    ERTS_ASSERT(!"NYI");
+    a.ret(a64::x30);
+    //ERTS_ASSERT(!"NYI");
 }
 
 /* This function is called from the module header which is called from the

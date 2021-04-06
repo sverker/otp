@@ -83,7 +83,7 @@ size_t beamasm_get_offset(void *ba);
 /* Number of bytes emitted at first label in order to support trace and nif
  * load. */
 #    if defined(__aarch64__)
-#        define BEAM_ASM_FUNC_PROLOGUE_SIZE 16
+#        define BEAM_ASM_FUNC_PROLOGUE_SIZE 24
 #    else
 #        define BEAM_ASM_FUNC_PROLOGUE_SIZE 8
 #    endif
@@ -135,8 +135,23 @@ enum erts_asm_bp_flag {
             ERTS_ASM_BP_FLAG_CALL_NIF_EARLY | ERTS_ASM_BP_FLAG_BP
 };
 
+#if defined(__aarch64__)
+#    define BP_TRAMP_INCR 32
+#endif
 static inline void erts_asm_bp_set_flag(ErtsCodeInfo *ci,
                                         enum erts_asm_bp_flag flag) {
+#if defined(__aarch64__)
+    Uint32 volatile *code_ptr = (Uint32 *)erts_codeinfo_to_code(ci);
+    const Sint32 genericBPTramp_offset = code_ptr[3];
+    const Uint32 old_flags = code_ptr[4];
+    const Uint32 new_flags = old_flags | flag;
+    const Sint32 new_offset = genericBPTramp_offset + (new_flags * BP_TRAMP_INCR/4);
+    const Uint32 bl_instr = (0x25 << 26) | (new_offset & ((1 << 26)-1));
+
+    code_ptr[1] = bl_instr;
+    code_ptr[4] = new_flags;
+
+#else /* x86_64 */
     BeamInstr volatile *code_ptr = (BeamInstr *)erts_codeinfo_to_code(ci);
     BeamInstr code = *code_ptr;
     byte *codebytes = (byte *)&code;
@@ -147,15 +162,40 @@ static inline void erts_asm_bp_set_flag(ErtsCodeInfo *ci,
     codebytes[2] |= flag;
     *code32 += flag * 16;
     code_ptr[0] = code;
+#endif
 }
 
 static inline enum erts_asm_bp_flag erts_asm_bp_get_flags(ErtsCodeInfo *ci) {
+#if defined(__aarch64__)
+    Uint32 *code_ptr = (Uint32 *)erts_codeinfo_to_code(ci);
+    return (enum erts_asm_bp_flag)code_ptr[4];
+
+#else /* x86_64 */
     byte *codebytes = (byte *)erts_codeinfo_to_code(ci);
     return (enum erts_asm_bp_flag)codebytes[2];
+#endif
 }
 
 static inline void erts_asm_bp_unset_flag(ErtsCodeInfo *ci,
                                           enum erts_asm_bp_flag flag) {
+#if defined(__aarch64__)
+    Uint32 volatile *code_ptr = (Uint32 *)erts_codeinfo_to_code(ci);
+    const Uint32 old_flags = code_ptr[4];
+    const Uint32 new_flags = old_flags & ~(Uint32)flag;
+    Uint32 instr;
+
+    if (new_flags == ERTS_ASM_BP_FLAG_NONE) {
+        instr = (0x5 << 26) | (BEAM_ASM_FUNC_PROLOGUE_SIZE / 4); /* B */
+    }
+    else {
+        const Sint32 genericBPTramp_offset = code_ptr[3];
+        const Sint32 new_offset = genericBPTramp_offset + (new_flags * BP_TRAMP_INCR/4);
+        instr = (0x25 << 26) | (new_offset & ((1 << 26)-1)); /* BL */
+    }
+    code_ptr[1] = instr;
+    code_ptr[4] = new_flags;
+
+#else /* x86_64 */
     BeamInstr volatile *code_ptr = (BeamInstr *)erts_codeinfo_to_code(ci);
     BeamInstr code = *code_ptr;
     byte *codebytes = (byte *)&code;
@@ -168,6 +208,7 @@ static inline void erts_asm_bp_unset_flag(ErtsCodeInfo *ci,
         codebytes[1] = 6;
     }
     code_ptr[0] = code;
+#endif
 }
 
 #endif

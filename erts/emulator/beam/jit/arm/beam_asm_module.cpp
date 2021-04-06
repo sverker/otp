@@ -116,24 +116,25 @@ BeamModuleAssembler::BeamModuleAssembler(BeamGlobalAssembler *ga,
 
     /* Setup the early_nif/breakpoint trampoline. */
     genericBPTramp = a.newLabel();
-    a.align(kAlignCode, 16);
+    a.align(kAlignCode, BP_TRAMP_INCR);
     a.bind(genericBPTramp);
     {
         a.ret(a64::x30);
 
-#if 0
-        a.align(kAlignCode, 16);
+        a.align(kAlignCode, BP_TRAMP_INCR);
+        ASSERT(a.offset() - code.labelOffsetFromBase(genericBPTramp) == BP_TRAMP_INCR * 1);
         abs_jmp(ga->get_call_nif_early());
 
-        a.align(kAlignCode, 16);
-        aligned_call(ga->get_generic_bp_local());
-        a.ret();
+        a.align(kAlignCode, BP_TRAMP_INCR);
+        ASSERT(a.offset() - code.labelOffsetFromBase(genericBPTramp) == BP_TRAMP_INCR * 2);
+        abs_jmp(ga->get_generic_bp_local());
 
-        a.align(kAlignCode, 16);
-        ASSERT(a.offset() - code.labelOffsetFromBase(genericBPTramp) == 16 * 3);
+        a.align(kAlignCode, BP_TRAMP_INCR);
+        ASSERT(a.offset() - code.labelOffsetFromBase(genericBPTramp) == BP_TRAMP_INCR * 3);
+        emit_enter_erlang_frame();
         aligned_call(ga->get_generic_bp_local());
+        emit_leave_erlang_frame();
         abs_jmp(ga->get_call_nif_early());
-#endif
     }
 }
 
@@ -203,23 +204,21 @@ void BeamModuleAssembler::emit_i_breakpoint_trampoline() {
      * alternative instructions. The call is filled with a relative call to a
      * trampoline in the module header and then the jmp target is zeroed so that
      * it effectively becomes a nop */
+    Sint32 genericBPTramp_offset;
     Label next = a.newLabel();
 
     emit_enter_erlang_frame();
 
+    genericBPTramp_offset =
+        (code.labelOffsetFromBase(genericBPTramp) - a.offset()) / 4;
+    a.b(next); /* may be patched as bl(genericBPTramp+flag*16) */
     a.b(next);
 
-    /* We embed a zero byte here, which is used to flag whether to make an early
+    /* We embed jump offset to top of genericBPTramp here,
+     * and a flag word which is used to flag whether to make an early
      * nif call, call a breakpoint handler, or both. */
+    a.embed(&genericBPTramp_offset, sizeof(genericBPTramp_offset));
     a.embedUInt32(ERTS_ASM_BP_FLAG_NONE);
-
-    if (genericBPTramp.isValid()) {
-        a.bl(genericBPTramp);
-    } else {
-        /* NIF or BIF stub; we're not going to use this trampoline as-is, but
-         * we need to reserve space for it. */
-        a.udf(0);
-    }
 
     a.align(kAlignCode, 8);
     a.bind(next);

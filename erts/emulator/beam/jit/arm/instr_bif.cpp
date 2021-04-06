@@ -756,7 +756,8 @@ void BeamModuleAssembler::emit_call_bif_mfa(const ArgVal &M,
 }
 
 void BeamGlobalAssembler::emit_call_nif_early() {
-    ERTS_ASSERT(!"NYI");
+    a.ret(a64::x30);
+    //ERTS_ASSERT(!"NYI");
 }
 
 /* Used by call_nif, call_nif_early, and dispatch_nif.
