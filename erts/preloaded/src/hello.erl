@@ -123,6 +123,7 @@ test(BootArgs) ->
     test_receive_timeout(),
     test_selective_receive(),
     test_error_action_code(),
+    test_trace_breakpoint(),
 
     ok.
 
@@ -1135,6 +1136,13 @@ test_error_action_code() ->
     end,
     process_flag(trap_exit, false),
 
+    ok.
+
+test_trace_breakpoint() ->
+    erts_internal:trace_pattern({hello,id,1}, true, [local]),
+    42 = id(42),
+    erts_internal:trace_pattern({hello,id,1}, false, [local]),
+    17 = id(17),
     ok.
 
 %%%
