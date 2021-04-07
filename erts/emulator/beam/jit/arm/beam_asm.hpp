@@ -519,7 +519,7 @@ protected:
     }
 
     void emit_discard_cp() {
-        a.add(a64::x30, imm(8));
+        a.add(a64::x30, a64::x30, imm(8));
     }
 
     void emit_enter_runtime_frame() {

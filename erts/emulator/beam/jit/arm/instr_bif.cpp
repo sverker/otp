@@ -757,7 +757,7 @@ void BeamModuleAssembler::emit_call_bif_mfa(const ArgVal &M,
 
 void BeamGlobalAssembler::emit_call_nif_early() {
     a.mov(ARG2, a64::x30);
-    a.sub(ARG2, imm(BEAM_ASM_BP_RETURN_OFFSET + sizeof(ErtsCodeInfo)));
+    a.sub(ARG2, ARG2, imm(BEAM_ASM_BP_RETURN_OFFSET + sizeof(ErtsCodeInfo)));
 
     emit_enter_runtime();
 
@@ -772,7 +772,7 @@ void BeamGlobalAssembler::emit_call_nif_early() {
     /* Emulate `emit_call_nif`, loading the current (phony) instruction
      * pointer into ARG3. */
     a.mov(ARG3, RET);
-    a.jmp(labels[call_nif_shared]);
+    a.b(labels[call_nif_shared]);
 }
 
 /* Used by call_nif, call_nif_early, and dispatch_nif.
