@@ -771,7 +771,7 @@ void BeamGlobalAssembler::emit_call_nif_early() {
 
     /* Emulate `emit_call_nif`, loading the current (phony) instruction
      * pointer into ARG3. */
-    a.mov(ARG3, RET);
+    a.mov(ARG3, ARG1);
     a.b(labels[call_nif_shared]);
 }
 
