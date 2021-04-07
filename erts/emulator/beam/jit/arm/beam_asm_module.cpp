@@ -209,9 +209,10 @@ void BeamModuleAssembler::emit_i_breakpoint_trampoline() {
 
     emit_enter_erlang_frame();
 
-    genericBPTramp_offset =
-        (code.labelOffsetFromBase(genericBPTramp) - a.offset()) / 4;
-    a.b(next); /* may be patched as bl(genericBPTramp+flag*16) */
+    genericBPTramp_offset = genericBPTramp.isValid()
+        ? (code.labelOffsetFromBase(genericBPTramp) - a.offset()) / 4
+        : 0; /* NIF or BIF stub; breakpoint never used */
+    a.b(next); /* may be patched as bl(genericBPTramp + flag*BP_TRAMP_INCR) */
 
     ASSERT((a.offset() - code.labelOffsetFromBase(currLabel)) ==
            BEAM_ASM_BP_RETURN_OFFSET);
