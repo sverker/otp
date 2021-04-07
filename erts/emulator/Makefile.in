@@ -714,6 +714,7 @@ ESOCK_PRELOAD_BEAM =
 endif
 
 PRELOAD_BEAM =	$(ERL_TOP)/erts/preloaded/ebin/hello.beam \
+	        $(ERL_TOP)/erts/preloaded/ebin/prim_buffer.beam \
 	        $(ERL_TOP)/erts/preloaded/ebin/prim_file.beam
 
 ifeq ($(TARGET),win32)

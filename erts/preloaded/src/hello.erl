@@ -1147,7 +1147,13 @@ test_trace_breakpoint() ->
     ok.
 
 test_load_nif() ->
-    prim_file:on_load().
+    prim_file:on_load(),
+    prim_buffer:on_load(),
+    B = prim_buffer:new(),
+    0 = prim_buffer:size(B),
+    0 = prim_buffer:write(B, [1,2,3,4,5]),
+    5 = prim_buffer:size(B),
+    ok.
 
 %%%
 %%% Here follows Estone, extracted from estone_SUITE.
