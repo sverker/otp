@@ -467,7 +467,7 @@ protected:
      * need to be memcpy'd for performance reasons (e.g. export entries) */
     template<typename T>
     void pic_jmp(T(*addr)) {
-        ERTS_ASSERT(!"NYI");
+        abs_jmp(addr);
     }
 
     constexpr arm::Mem getArgRef(const ArgVal &val) const {

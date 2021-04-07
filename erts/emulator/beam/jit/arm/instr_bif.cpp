@@ -827,9 +827,6 @@ void BeamGlobalAssembler::emit_dispatch_nif(void) {
 void BeamModuleAssembler::emit_call_nif(const ArgVal &Func,
                                         const ArgVal &NifMod,
                                         const ArgVal &DirtyFunc) {
-#if 1
-    emit_nyi("emit_call_nif");
-#else
     Label dispatch = a.newLabel();
     uint64_t val;
 
@@ -849,17 +846,16 @@ void BeamModuleAssembler::emit_call_nif(const ArgVal &Func,
     {
         Label yield = a.newLabel();
 
-        a.lea(ARG3, x86::qword_ptr(currLabel));
+        a.adr(ARG3, currLabel);
 
-        a.dec(FCALLS);
-        a.jl(yield);
+        a.subs(FCALLS, FCALLS, imm(1));
+        a.cond_le().b(yield);
 
         pic_jmp(ga->get_call_nif_shared());
 
         a.bind(yield);
         pic_jmp(ga->get_context_switch());
     }
-#endif
 }
 
 /* ARG2 = entry address. */
