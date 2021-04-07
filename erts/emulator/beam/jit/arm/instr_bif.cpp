@@ -835,11 +835,11 @@ void BeamModuleAssembler::emit_call_nif(const ArgVal &Func,
 
     a.align(kAlignCode, 8);
     /* ErtsNativeFunc.dfunc */
-    a.embedUint64(Func.getValue());
+    a.embedUInt64(Func.getValue());
     /* ErtsNativeFunc.m */
-    a.embedUint64(NifMod.getValue());
+    a.embedUInt64(NifMod.getValue());
     /* ErtsNativeFunc.func */
-    a.embedUint64(DirtyFunc.getValue());
+    a.embedUInt64(DirtyFunc.getValue());
 
     /* The real code starts here */
     a.bind(dispatch);
