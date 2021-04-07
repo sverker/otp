@@ -756,8 +756,23 @@ void BeamModuleAssembler::emit_call_bif_mfa(const ArgVal &M,
 }
 
 void BeamGlobalAssembler::emit_call_nif_early() {
-    a.ret(a64::x30);
-    //ERTS_ASSERT(!"NYI");
+    a.mov(ARG2, a64::x30);
+    a.sub(ARG2, imm(BEAM_ASM_BP_RETURN_OFFSET + sizeof(ErtsCodeInfo)));
+
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    runtime_call<2>(erts_call_nif_early);
+
+    emit_leave_runtime();
+
+    /* We won't return to the original code. */
+    emit_discard_cp();
+
+    /* Emulate `emit_call_nif`, loading the current (phony) instruction
+     * pointer into ARG3. */
+    a.mov(ARG3, RET);
+    a.jmp(labels[call_nif_shared]);
 }
 
 /* Used by call_nif, call_nif_early, and dispatch_nif.
@@ -768,7 +783,34 @@ void BeamGlobalAssembler::emit_call_nif_early() {
  *
  * ARG3 = current I, just past the end of an ErtsCodeInfo. */
 void BeamGlobalAssembler::emit_call_nif_shared(void) {
-    ERTS_ASSERT(!"NYI");
+        /* The corresponding leave can be found in the epilogue. */
+    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>();
+
+#ifdef ERTS_MSACC_EXTENDED_STATES
+    {/* ToDO: x86 -> arm */
+        Label skip_msacc = a.newLabel();
+
+        a.cmp(erts_msacc_cache, 0);
+        a.short_().je(skip_msacc);
+        a.mov(TMP_MEM1q, ARG3);
+        a.mov(ARG1, erts_msacc_cache);
+        a.mov(ARG2, imm(ERTS_MSACC_STATE_NIF));
+        a.mov(ARG3, imm(1));
+        runtime_call<3>(erts_msacc_set_state_m__);
+        a.mov(ARG3, TMP_MEM1q);
+        a.bind(skip_msacc);
+    }
+#endif
+
+    a.mov(ARG1, c_p);
+    a.mov(ARG2, ARG3);
+    load_x_reg_array(ARG3);
+    a.ldr(ARG4, arm::Mem(ARG2, 8 + BEAM_ASM_FUNC_PROLOGUE_SIZE));
+    a.ldr(ARG5, arm::Mem(ARG2, 16 + BEAM_ASM_FUNC_PROLOGUE_SIZE));
+    a.ldr(ARG6, arm::Mem(ARG2, 24 + BEAM_ASM_FUNC_PROLOGUE_SIZE));
+    runtime_call<5>(beam_jit_call_nif);
+
+    emit_bif_nif_epilogue();
 }
 
 void BeamGlobalAssembler::emit_dispatch_nif(void) {
@@ -785,7 +827,39 @@ void BeamGlobalAssembler::emit_dispatch_nif(void) {
 void BeamModuleAssembler::emit_call_nif(const ArgVal &Func,
                                         const ArgVal &NifMod,
                                         const ArgVal &DirtyFunc) {
+#if 1
     emit_nyi("emit_call_nif");
+#else
+    Label dispatch = a.newLabel();
+    uint64_t val;
+
+    /* The start of this function has to mimic the layout of ErtsNativeFunc. */
+    a.b(dispatch); /* call_op */
+
+    a.align(kAlignCode, 8);
+    /* ErtsNativeFunc.dfunc */
+    a.embedUint64(Func.getValue());
+    /* ErtsNativeFunc.m */
+    a.embedUint64(NifMod.getValue());
+    /* ErtsNativeFunc.func */
+    a.embedUint64(DirtyFunc.getValue());
+
+    /* The real code starts here */
+    a.bind(dispatch);
+    {
+        Label yield = a.newLabel();
+
+        a.lea(ARG3, x86::qword_ptr(currLabel));
+
+        a.dec(FCALLS);
+        a.jl(yield);
+
+        pic_jmp(ga->get_call_nif_shared());
+
+        a.bind(yield);
+        pic_jmp(ga->get_context_switch());
+    }
+#endif
 }
 
 /* ARG2 = entry address. */

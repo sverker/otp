@@ -518,6 +518,10 @@ protected:
         a.ldr(a64::x30, arm::Mem(E).post(8));
     }
 
+    void emit_discard_cp() {
+        a.add(a64::x30, imm(8));
+    }
+
     void emit_enter_runtime_frame() {
         a.stp(a64::x29, a64::x30, arm::Mem(a64::sp, -16).pre());
         a.mov(a64::x29, a64::sp);
@@ -911,6 +915,7 @@ class BeamGlobalAssembler : public BeamAssembler {
     _(call_light_bif_shared)                                                   \
     _(catch_end_shared)                                                        \
     _(call_nif_early)                                                          \
+    _(call_nif_shared)                                                         \
     _(check_float_error)                                                       \
     _(dispatch_bif)                                                            \
     _(dispatch_return)                                                         \
@@ -937,7 +942,6 @@ class BeamGlobalAssembler : public BeamAssembler {
     _(bs_size_check_shared)                                                    \
     _(bs_fixed_integer_shared)                                                 \
     _(bs_get_tail_shared)                                                      \
-    _(call_nif_shared)                                                         \
     _(dispatch_nif)                                                            \
     _(generic_bp_global)                                                       \
     _(debug_bp)                                                                \

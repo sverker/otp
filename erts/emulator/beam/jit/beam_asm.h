@@ -83,6 +83,7 @@ size_t beamasm_get_offset(void *ba);
 /* Number of bytes emitted at first label in order to support trace and nif
  * load. */
 #    if defined(__aarch64__)
+#        define BEAM_ASM_BP_RETURN_OFFSET 8
 #        define BEAM_ASM_FUNC_PROLOGUE_SIZE 24
 #    else
 #        define BEAM_ASM_FUNC_PROLOGUE_SIZE 8

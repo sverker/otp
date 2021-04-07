@@ -212,6 +212,9 @@ void BeamModuleAssembler::emit_i_breakpoint_trampoline() {
     genericBPTramp_offset =
         (code.labelOffsetFromBase(genericBPTramp) - a.offset()) / 4;
     a.b(next); /* may be patched as bl(genericBPTramp+flag*16) */
+
+    ASSERT((a.offset() - code.labelOffsetFromBase(currLabel)) ==
+           BEAM_ASM_BP_RETURN_OFFSET);
     a.b(next);
 
     /* We embed jump offset to top of genericBPTramp here,
