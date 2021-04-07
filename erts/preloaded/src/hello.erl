@@ -124,6 +124,7 @@ test(BootArgs) ->
     test_selective_receive(),
     test_error_action_code(),
     test_trace_breakpoint(),
+    test_load_nif(),
 
     ok.
 
@@ -1144,6 +1145,9 @@ test_trace_breakpoint() ->
     erts_internal:trace_pattern({hello,id,1}, false, [local]),
     17 = id(17),
     ok.
+
+test_load_nif() ->
+    prim_file:on_load().
 
 %%%
 %%% Here follows Estone, extracted from estone_SUITE.
