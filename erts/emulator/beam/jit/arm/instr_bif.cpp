@@ -874,14 +874,14 @@ void BeamModuleAssembler::emit_i_load_nif() {
 
     a.bind(entry);
 
-    emit_enter_runtime<Update::eStack | Update::eHeap>();
+    emit_enter_runtime<Update::eStack | Update::eHeap>(2);
 
     a.mov(ARG1, c_p);
     a.adr(ARG2, currLabel);
     load_x_reg_array(ARG3);
     runtime_call<3>(beam_jit_load_nif);
 
-    emit_leave_runtime<Update::eStack | Update::eHeap>();
+    emit_leave_runtime<Update::eStack | Update::eHeap>(2);
 
     a.cmp(ARG1, imm(RET_NIF_yield));
     a.cond_eq().b(schedule);

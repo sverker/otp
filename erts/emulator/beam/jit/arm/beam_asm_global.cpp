@@ -255,7 +255,7 @@ void BeamModuleAssembler::emit_raise_exception(Label I,
 
 void BeamModuleAssembler::emit_handle_error(Label I, const ErtsCodeMFA *exp) {
     // called by emit_i_load_nif
-    emit_nyi("emit_call_bif");
+    emit_nyi("emit_handle_error");
 }
 
 /* This is an alias for raise_exception_shared, but with default NULL values
