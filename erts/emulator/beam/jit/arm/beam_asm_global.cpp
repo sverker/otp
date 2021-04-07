@@ -253,6 +253,11 @@ void BeamModuleAssembler::emit_raise_exception(Label I,
     abs_jmp(ga->get_raise_exception_shared());
 }
 
+void BeamModuleAssembler::emit_handle_error(Label I, const ErtsCodeMFA *exp) {
+    // called by emit_i_load_nif
+    emit_nyi("emit_call_bif");
+}
+
 /* This is an alias for raise_exception_shared, but with default NULL values
  * for the error address and BIF mfa. */
 void BeamGlobalAssembler::emit_error_action_code() {

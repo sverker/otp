@@ -1170,6 +1170,8 @@ protected:
     void emit_raise_exception(const ErtsCodeMFA *exp);
     void emit_raise_exception(Label I, const ErtsCodeMFA *exp);
 
+    void emit_handle_error(Label I, const ErtsCodeMFA *exp);
+
     void emit_validate(const ArgVal &arity);
     void emit_bs_skip_bits(const ArgVal &Fail, const ArgVal &Ctx);
 
