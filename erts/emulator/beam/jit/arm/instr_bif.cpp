@@ -759,12 +759,12 @@ void BeamGlobalAssembler::emit_call_nif_early() {
     a.mov(ARG2, a64::x30);
     a.sub(ARG2, ARG2, imm(BEAM_ASM_BP_RETURN_OFFSET + sizeof(ErtsCodeInfo)));
 
-    emit_enter_runtime();
+    emit_enter_runtime(all_xregs);
 
     a.mov(ARG1, c_p);
     runtime_call<2>(erts_call_nif_early);
 
-    emit_leave_runtime();
+    emit_leave_runtime(all_xregs);
 
     /* We won't return to the original code. */
     emit_discard_cp();
@@ -784,7 +784,7 @@ void BeamGlobalAssembler::emit_call_nif_early() {
  * ARG3 = current I, just past the end of an ErtsCodeInfo. */
 void BeamGlobalAssembler::emit_call_nif_shared(void) {
         /* The corresponding leave can be found in the epilogue. */
-    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>();
+    emit_enter_runtime<Update::eReductions | Update::eStack | Update::eHeap>(all_xregs);
 
 #ifdef ERTS_MSACC_EXTENDED_STATES
     {/* ToDO: x86 -> arm */
