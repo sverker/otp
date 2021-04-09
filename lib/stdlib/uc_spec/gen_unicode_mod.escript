@@ -175,6 +175,7 @@ gen_header(Fd) ->
     io:put_chars(Fd, "-export([spec_version/0, lookup/1, get_case/1]).\n"),
     io:put_chars(Fd, "-inline([class/1]).\n"),
     io:put_chars(Fd, "-compile(nowarn_unused_vars).\n"),
+    io:put_chars(Fd, "-compile(nowarn_unused_function).\n"),
     io:put_chars(Fd, "-dialyzer({no_improper_lists, [cp/1, gc/1, gc_prepend/2]}).\n"),
     io:put_chars(Fd, "-type gc() :: char()|[char()].\n\n\n"),
     ok.
@@ -615,13 +616,13 @@ gen_gc(Fd, GBP) ->
 
     io:put_chars(Fd, "\n%% Handle Hangul L\n"),
     GenHangulL = fun(Range) -> io:format(Fd, "gc_1~s gc_h_L(R1,[CP]);\n", [gen_clause(Range)]) end,
-    [GenHangulL(CP) || CP <- merge_ranges(maps:get(l,GBP))],
+    _ = [CP || CP <- merge_ranges(maps:get(l,GBP))],
     io:put_chars(Fd, "%% Handle Hangul V\n"),
     GenHangulV = fun(Range) -> io:format(Fd, "gc_1~s gc_h_V(R1,[CP]);\n", [gen_clause(Range)]) end,
-    [GenHangulV(CP) || CP <- merge_ranges(maps:get(v,GBP))],
+    _ = [CP || CP <- merge_ranges(maps:get(v,GBP))],
     io:put_chars(Fd, "%% Handle Hangul T\n"),
     GenHangulT = fun(Range) -> io:format(Fd, "gc_1~s gc_h_T(R1,[CP]);\n", [gen_clause(Range)]) end,
-    [GenHangulT(CP) || CP <- merge_ranges(maps:get(t,GBP))],
+    _ = [CP || CP <- merge_ranges(maps:get(t,GBP))],
     io:put_chars(Fd, "%% Handle Hangul LV and LVT special, since they are large\n"),
     io:put_chars(Fd, "gc_1([CP|_]=R0) when 44000 < CP, CP < 56000 -> gc_h_lv_lvt(R0, R0, []);\n"),
 
