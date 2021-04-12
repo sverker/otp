@@ -942,7 +942,7 @@ void BeamModuleAssembler::emit_i_call_on_load_function() {
     emit_enter_runtime();
 
     a.mov(ARG1, c_p);
-    a.mov(ARG2, getXRef(0));
+    a.ldr(ARG2, getXRef(0));
     runtime_call<2>(get_on_load_address);
 
     emit_leave_runtime();
