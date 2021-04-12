@@ -471,6 +471,21 @@ i_load_nif
 %hot
 
 #
+# The call_on_load_function/1 BIF is an instruction.
+#
+
+call_ext u==1 u$func:erlang:call_on_load_function/1 => \
+    i_call_on_load_function
+call_ext_last u==1 u$func:erlang:call_on_load_function/1 D => \
+    i_call_on_load_function | deallocate D | return
+call_ext_only u==1 u$func:erlang:call_on_load_function/1 => \
+    i_call_on_load_function | return
+
+%cold
+i_call_on_load_function
+%hot
+
+#
 # apply/2 is an instruction, not a BIF.
 #
 
