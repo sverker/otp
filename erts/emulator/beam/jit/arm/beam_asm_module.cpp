@@ -496,7 +496,6 @@ BeamCodeHeader *BeamModuleAssembler::getCodeHeader() {
 
 const ErtsCodeInfo *BeamModuleAssembler::getOnLoad() {
     if (on_load.isValid()) {
-        ERTS_ASSERT(!"NYI");
         return erts_code_to_codeinfo((ErtsCodePtr)getCode(on_load));
     } else {
         return 0;

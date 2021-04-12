@@ -917,6 +917,44 @@ void BeamModuleAssembler::emit_call_nif(const ArgVal &Func,
     }
 }
 
+static ErtsCodePtr get_on_load_address(Process *c_p, Eterm module) {
+    const Module *modp = erts_get_module(module, erts_active_code_ix());
+
+    if (modp && modp->on_load) {
+        const BeamCodeHeader *hdr = (modp->on_load)->code_hdr;
+
+        if (hdr) {
+            return erts_codeinfo_to_code(hdr->on_load);
+        }
+    }
+
+    c_p->freason = BADARG;
+
+    return NULL;
+}
+
+/* Implements the internal and undocumented erlang:call_on_load_function/1,
+ * which is tricky to implement in the face of frame pointers. */
+void BeamModuleAssembler::emit_i_call_on_load_function() {
+    static ErtsCodeMFA mfa = {am_erlang, am_call_on_load_function, 1};
+    Label next = a.newLabel();
+
+    emit_enter_runtime();
+
+    a.mov(ARG1, c_p);
+    a.mov(ARG2, getXRef(0));
+    runtime_call<2>(get_on_load_address);
+
+    emit_leave_runtime();
+
+    a.cbnz(RET, next);
+
+    emit_raise_exception(&mfa);
+
+    a.bind(next);
+    erlang_call(RET);
+}
+
 /* ARG2 = entry address. */
 void BeamGlobalAssembler::emit_i_load_nif_shared() {
     ERTS_ASSERT(!"NYI");
