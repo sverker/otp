@@ -939,13 +939,13 @@ void BeamModuleAssembler::emit_i_call_on_load_function() {
     static ErtsCodeMFA mfa = {am_erlang, am_call_on_load_function, 1};
     Label next = a.newLabel();
 
-    emit_enter_runtime();
+    emit_enter_runtime(1);
 
     a.mov(ARG1, c_p);
     a.ldr(ARG2, getXRef(0));
     runtime_call<2>(get_on_load_address);
 
-    emit_leave_runtime();
+    emit_leave_runtime(1);
 
     a.cbnz(ARG1, next);
 
