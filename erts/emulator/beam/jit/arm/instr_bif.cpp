@@ -947,12 +947,12 @@ void BeamModuleAssembler::emit_i_call_on_load_function() {
 
     emit_leave_runtime();
 
-    a.cbnz(RET, next);
+    a.cbnz(ARG1, next);
 
     emit_raise_exception(&mfa);
 
     a.bind(next);
-    erlang_call(RET);
+    erlang_call(ARG1);
 }
 
 /* ARG2 = entry address. */
