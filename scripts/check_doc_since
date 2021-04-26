@@ -57,7 +57,7 @@ my %ambiguous_0args = (
     'io:columns' => 1,
     'io:nl' => 1,
     'io:getopts' => 1,
-   'io:rows' => 1,
+    'io:rows' => 1,
     'eldap:open' => 0,
     "eldap:'and'" => 0,
     "eldap:'or'" => 0,
@@ -90,7 +90,7 @@ my %complex_arglist = (
     'ttb:ctpg' => [1,2,3]
     );
 
-my %fixed_functions = (
+my %suppressions = (
     'beam_lib:strip/2' => 'OTP 22.0',
     'beam_lib:strip_files/2' => 'OTP 22.0',
     'beam_lib:strip_release/2' => 'OTP 22.0',
@@ -103,6 +103,8 @@ my %fixed_functions = (
     'ei_global:ei_global_register/C' => 'OTP 23.0',
     'ei_global:ei_global_unregister/C' => 'OTP 23.0',
     'ei_global:ei_global_whereis/C' => 'OTP 23.0',
+    'eprof:profile/4' => "",
+    'public_key:pkix_hash_type/1' => 'OTP 23.0',
     'public_key:pkix_subject_id/1' => 'OTP 23.1',
     'snmpa:which_transports/0' => 'OTP 23.3',
     'snmpm:restart/1' => 'OTP 22.3',
@@ -329,8 +331,8 @@ while (next_tag(\$tag)) {
 	filter_newer_versions($tag, \@{$prev_facc{$f}});
 	if (@{$prev_facc{$f}} != 0) {
             if (@{$prev_facc{$f}} != 1 ||
-                !exists($fixed_functions{$f}) ||
-                $fixed_functions{$f} ne $prev_facc{$f}->[0])
+                !exists($suppressions{$f}) ||
+                $suppressions{$f} ne $prev_facc{$f}->[0])
             {
                 print "${headline}FUNC: $f since = @{$prev_facc{$f}}\n";
                 $headline = "";
