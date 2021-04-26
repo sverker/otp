@@ -89,7 +89,39 @@ my %complex_arglist = (
     'ttb:ctpl' => [1,2,3],
     'ttb:ctpg' => [1,2,3]
     );
- 
+
+my %fixed_functions = (
+    'beam_lib:strip/2' => 'OTP 22.0',
+    'beam_lib:strip_files/2' => 'OTP 22.0',
+    'beam_lib:strip_release/2' => 'OTP 22.0',
+    'crypto:crypto_final/1' => 'OTP 23.0',
+    'crypto:crypto_get_data/1' => 'OTP 23.0',
+    'ct_property_test:present_result/4' => 'OTP 22.3',
+    'ct_property_test:present_result/5' => 'OTP 22.3',
+    'dialyzer:format_warning/2' => 'R14B02',
+    'ei_global:ei_global_names/C' => 'OTP 23.0',
+    'ei_global:ei_global_register/C' => 'OTP 23.0',
+    'ei_global:ei_global_unregister/C' => 'OTP 23.0',
+    'ei_global:ei_global_whereis/C' => 'OTP 23.0',
+    'public_key:pkix_subject_id/1' => 'OTP 23.1',
+    'snmpa:which_transports/0' => 'OTP 23.3',
+    'snmpm:restart/1' => 'OTP 22.3',
+    'ssh:connection_info/1' => 'OTP 22.1',
+    'ssh:daemon_info/2' => 'OTP 22.1',
+    'ssh:get_sock_opts/2' => 'OTP 22.3',
+    'ssh:set_sock_opts/2' => 'OTP 22.3',
+    'ssh:tcpip_tunnel_from_server/5' => 'OTP 23.0',
+    'ssh:tcpip_tunnel_from_server/6' => 'OTP 23.0',
+    'ssh:tcpip_tunnel_to_server/5' => 'OTP 23.0',
+    'ssh:tcpip_tunnel_to_server/6' => 'OTP 23.0',
+    'ssh_agent:add_host_key/3' => 'OTP 23.0',
+    'ssh_agent:add_host_key/4' => 'OTP 23.0',
+    'ssh_agent:is_host_key/4' => 'OTP 23.0',
+    'ssh_agent:is_host_key/5' => 'OTP 23.0',
+    'ssh_agent:user_key/2' => 'OTP 23.0',
+    );
+
+
 my %seen_shas;
 my %warnings;
 local $tag;
@@ -296,9 +328,14 @@ while (next_tag(\$tag)) {
     foreach my $f (sort keys %prev_facc) {
 	filter_newer_versions($tag, \@{$prev_facc{$f}});
 	if (@{$prev_facc{$f}} != 0) {
-	    print "${headline}FUNC: $f since = @{$prev_facc{$f}}\n";
+            if (@{$prev_facc{$f}} != 1 ||
+                !exists($fixed_functions{$f}) ||
+                $fixed_functions{$f} ne $prev_facc{$f}->[0])
+            {
+                print "${headline}FUNC: $f since = @{$prev_facc{$f}}\n";
+                $headline = "";
+            }
 	}
-	$headline = "";
     }
     $prev_tag = $tag;
 }
