@@ -559,7 +559,7 @@ sub read_xml_functions {
 		#}
 		my $fa = $$fa_since{arity};
 		my $since = $$fa_since{since};
-		print "$$module_ref:$fname/$fa since=$since\n";
+		#print "$$module_ref:$fname/$fa since=$since\n";
 		push @{ $functions{"$$module_ref:$fname/$fa"} }, $since;
 	    }
 	}
@@ -636,7 +636,7 @@ sub count_args {
     my($arglist,$fname,$module,$since) = @_;
     my @arities;
  
-    print "count_args $module:$fname($arglist)\n";
+    #print "count_args $module:$fname($arglist)\n";
  
     $arglist = trim($arglist);
     if ($arglist eq '') {
@@ -681,7 +681,7 @@ sub count_args {
 	    warning("Complex optional arguments for $module:$fname($arglist)\n");
 	}
 	foreach my $fa (@{$complex_arglist{"$module:$fname"}}) {
-	    print "complex_arglist: $module:$fname/$fa\n";
+	    #print "complex_arglist: $module:$fname/$fa\n";
 	    push @arities, { arity => $fa, since => $since };
 	}
 	return @arities;
@@ -724,9 +724,9 @@ sub count_args {
 	push @arities, { arity => $nargs, since => $since};
     }
 
-    foreach my $h (@arities) {
-	print "count_args: $module:$fname/$$h{arity}\n";
-    }
+    #foreach my $h (@arities) {
+    #    print "count_args: $module:$fname/$$h{arity}\n";
+    #}
  
     return @arities;
 }
