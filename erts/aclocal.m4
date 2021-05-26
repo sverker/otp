@@ -3011,6 +3011,8 @@ if test "x$GCC" = xyes; then
     # such dubious duplicates.
     LM_TRY_ENABLE_CFLAG([-fno-common], [DED_CFLAGS])
 
+    LM_TRY_ENABLE_CFLAG([-fno-strict-aliasing], [DED_CFLAGS])
+
     DED_STATIC_CFLAGS="$DED_CFLAGS"
     DED_CFLAGS="$DED_CFLAGS -fPIC"
     # Remove -fPIE and -fno-PIE
