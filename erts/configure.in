@@ -29,8 +29,8 @@ LM_PRECIOUS_VARS
 dnl We check if -Werror was given on command line and if so
 dnl we disable it for the configure and only use it when
 dnl actually building erts
-no_werror_CFLAGS=$(echo "$CFLAGS" | sed -E 's/-Werror( |$)/ /g')
-if test "$CFLAGS" != "$no_werror_CFLAGS"; then
+no_werror_CFLAGS=$(echo " $CFLAGS " | sed 's/ -Werror / /g')
+if test "X $CFLAGS " != "X$no_werror_CFLAGS"; then
    CFLAGS="$no_werror_CFLAGS"
    WERRORFLAGS=-Werror
 fi
@@ -3564,9 +3564,9 @@ LDFLAGS="$LDFLAGS $sanitizers"
 ])
 
 AC_MSG_CHECKING([CFLAGS for -O switch])
-dnl                                     Remove all "-O*" options
-no_opt_CFLAGS=$(echo "$CFLAGS" | sed -E 's/(^| )-O[[^ ]]*/ /g')
-if test "X$CFLAGS" = "X$no_opt_CFLAGS"; then
+dnl                               Remove all "-O*" options
+no_opt_CFLAGS=$(echo " $CFLAGS" | sed 's/ -O[[^ ]]*/ /g')
+if test "X $CFLAGS" = "X$no_opt_CFLAGS"; then
    AC_MSG_ERROR([
 	CFLAGS must contain a -O flag. If you need to edit the CFLAGS you probably
 	also want to add the default CFLAGS. The default CFLAGS are "-O2 -g".
