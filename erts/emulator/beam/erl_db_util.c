@@ -3983,6 +3983,7 @@ dmc_map(DMCContext *context, DMCHeap *heap, DMC_STACK_TYPE(UWord) *text,
         flatmap_t *m = (flatmap_t *)flatmap_val(t);
         Eterm *values = flatmap_get_values(m);
         int textpos = DMC_STACK_NUM(*text);
+        int stackpos = context->stack_used;
 
         nelems = flatmap_get_size(m);
 
@@ -4004,6 +4005,7 @@ dmc_map(DMCContext *context, DMCHeap *heap, DMC_STACK_TYPE(UWord) *text,
            constants and then re-emit the keys. */
         if (constant_values) {
             DMC_STACK_NUM(*text) = textpos;
+            context->stack_used = stackpos;
             ASSERT(!constant_keys);
             for (int i = nelems; i--;) {
                 do_emit_constant(context, text, values[i]);
