@@ -2677,7 +2677,7 @@ mon_port_remote_on_remote(_Config) ->
     Port3 = binary_to_term(<<131, 102,          % Ext term format: PORT_EXT
                              100, 0, 13, "fgsfds@fgsfds", % Node :: ATOM_EXT
                              1:32/big,          % Id
-                             0>>),              % Creation
+                             1>>),              % Creation
     ?assertError(badarg, erlang:monitor(port, Port3)),
     ok.
 
@@ -2687,7 +2687,7 @@ mon_port_bad_remote_on_local(_Config) ->
     Port4 = binary_to_term(<<131, 102,          % Ext term format: PORT_EXT
                              100, 0, 13, "nonode@nohost", % Node
                              167772160:32/big,  % Id
-                             0>>),              % Creation
+                             1>>),              % Creation
     ?assertError(badarg, erlang:monitor(port, Port4)),
     ok.
 

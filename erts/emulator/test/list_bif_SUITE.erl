@@ -175,6 +175,10 @@ t_list_to_ext_pidportref(Config) when is_list(Config) ->
     true = rpc:call(Node, erlang, '=:=', [Ref, Ref2]),
     true = rpc:call(Node, erlang, '==',  [Ref, Ref2]),
 
+    %% Make sure 0-creation is not allowed.
+    badarg = make_0_creation(Pid),
+    badarg = make_0_creation(Port),
+    badarg = make_0_creation(Ref),
 
     slave:stop(Node),
     ok.
@@ -205,7 +209,11 @@ make_0_creation(X) when is_pid(X); is_port(X); is_reference(X) ->
                  true = (Cr =/= 0),
                  <<B:PreSz/binary, 0:32, PostFix/binary>>
          end,
-    binary_to_term(B2).
+    try
+        binary_to_term(B2)
+    catch
+        error:badarg -> badarg
+    end.
 
 
 %% Test list_to_float/1 with correct and incorrect arguments.

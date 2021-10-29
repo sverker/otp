@@ -2977,6 +2977,9 @@ dec_pid(ErtsDistExternal *edep, ErtsHeapFactory* factory, const byte* ep,
         ep += 4;
     }
 
+    if (cre == 0)
+        return NULL;
+
     /*
      * We are careful to create the node entry only after all
      * validity tests are done.
@@ -4291,7 +4294,9 @@ dec_term_atom_common:
                     cre = get_int32(ep);
                     ep += 4;
                 }
-		node = dec_get_node(sysname, cre, make_boxed(hp));
+                if (cre == 0)
+                    goto error;
+                node = dec_get_node(sysname, cre, make_boxed(hp));
 		if(node == erts_this_node) {
 		    if (num > ERTS_MAX_INTERNAL_PORT_NUMBER)
 			goto error;
@@ -4377,7 +4382,9 @@ dec_term_atom_common:
 		if (ref_words > ERTS_MAX_REF_NUMBERS)
 		    goto error;
 
-		node = dec_get_node(sysname, cre, make_boxed(hp));
+                if (cre == 0)
+                    goto error;
+                node = dec_get_node(sysname, cre, make_boxed(hp));
 		if(node == erts_this_node) {
                     Eterm *rtp = hp;
                     Uint32 ref_num_buf[ERTS_MAX_REF_NUMBERS];
