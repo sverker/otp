@@ -21,6 +21,7 @@
 -record(b_module, {anno=#{} :: beam_ssa:anno(),
                    name :: module(),
                    exports :: [{atom(),arity()}],
+                   nifs :: [{atom(),arity()}],
                    attributes :: list(),
                    body :: [beam_ssa:b_function()]}).
 -record(b_function, {anno=#{} :: beam_ssa:anno(),

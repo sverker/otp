@@ -45,8 +45,9 @@
 -spec module(beam_ssa:b_module(), [compile:option()]) ->
                     {'ok',beam_asm:module_code()}.
 
-module(#b_module{name=Mod,exports=Es,attributes=Attrs,body=Fs}, _Opts) ->
-    {Asm,St} = functions(Fs, {atom,Mod}),
+module(#b_module{name=Mod,exports=Es,nifs=Ns,attributes=Attrs,body=Fs}, _Opts) ->
+    Nifs = maps:from_keys(Ns, true),
+    {Asm,St} = functions(Fs, {atom,Mod}, Nifs),
     {ok,{Mod,Es,Attrs,Asm,St#cg.lcount}}.
 
 -record(need, {h=0 :: non_neg_integer(),   % heap words
@@ -110,11 +111,11 @@ module(#b_module{name=Mod,exports=Es,attributes=Attrs,body=Fs}, _Opts) ->
 
 -type ssa_register() :: xreg() | yreg() | {'fr',reg_num()} | {'z',reg_num()}.
 
-functions(Forms, AtomMod) ->
-    mapfoldl(fun (F, St) -> function(F, AtomMod, St) end,
+functions(Forms, AtomMod, Nifs) ->
+    mapfoldl(fun (F, St) -> function(F, AtomMod, Nifs, St) end,
              #cg{lcount=1}, Forms).
 
-function(#b_function{anno=Anno,bs=Blocks}, AtomMod, St0) ->
+function(#b_function{anno=Anno,bs=Blocks}, AtomMod, Nifs, St0) ->
     #{func_info:={_,Name,Arity}} = Anno,
     try
         assert_exception_block(Blocks),            %Assertion.
@@ -128,16 +129,26 @@ function(#b_function{anno=Anno,bs=Blocks}, AtomMod, St0) ->
         St5 = St4#cg{labels=Labels,used_labels=gb_sets:singleton(Entry),
                      ultimate_fail=Ult},
         {Body,St} = cg_fun(Blocks, St5#cg{fc_label=Fi}),
-        Asm = [{label,Fi},line(Anno),
-               {func_info,AtomMod,{atom,Name},Arity}] ++
-               add_parameter_annos(Body, Anno) ++
-               [{label,Ult},if_end],
+        Asm =
+            [{label,Fi},line(Anno),
+             {func_info,AtomMod,{atom,Name},Arity}] ++
+            add_nif_start(Nifs, Name, Arity) ++
+            add_parameter_annos(Body, Anno) ++
+            [{label,Ult},if_end],
         Func = {function,Name,Arity,Entry,Asm},
         {Func,St}
     catch
         Class:Error:Stack ->
             io:fwrite("Function: ~w/~w\n", [Name,Arity]),
             erlang:raise(Class, Error, Stack)
+    end.
+
+add_nif_start(Nifs, Name, Arity) ->
+    case maps:is_key({Name,Arity}, Nifs) of
+        true ->
+            [{nif_start}];
+        false ->
+            []
     end.
 
 assert_exception_block(Blocks) ->

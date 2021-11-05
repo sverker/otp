@@ -126,14 +126,15 @@ copy_anno(Kdst, Ksrc) ->
 -spec module(cerl:c_module(), [compile:option()]) ->
 	{'ok', #k_mdef{}, [warning()]}.
 
-module(#c_module{anno=A,name=M,exports=Es,attrs=As,defs=Fs}, Options) ->
+module(#c_module{anno=A,name=M,exports=Es,nifs=Ns,attrs=As,defs=Fs}, Options) ->
     Kas = attributes(As),
     Kes = map(fun (#c_var{name={_,_}=Fname}) -> Fname end, Es),
+    Kns = map(fun (#c_var{name={_,_}=Fname}) -> Fname end, Ns),
     NoSharedFunWrappers = proplists:get_bool(no_shared_fun_wrappers,
                                              Options),
     St0 = #kern{no_shared_fun_wrappers=NoSharedFunWrappers},
     {Kfs,St} = mapfoldl(fun function/2, St0, Fs),
-    {ok,#k_mdef{anno=A,name=M#c_literal.val,exports=Kes,attributes=Kas,
+    {ok,#k_mdef{anno=A,name=M#c_literal.val,exports=Kes,nifs=Kns,attributes=Kas,
                 body=Kfs ++ St#kern.funs},sort(St#kern.ws)}.
 
 attributes([{#c_literal{val=Name},#c_literal{val=Val}}|As]) ->

@@ -55,10 +55,10 @@
 
 -spec module(#k_mdef{}, [compile:option()]) -> {'ok',#b_module{}}.
 
-module(#k_mdef{name=Mod,exports=Es,attributes=Attr,body=Forms}, Opts) ->
+module(#k_mdef{name=Mod,exports=Es,nifs=Ns,attributes=Attr,body=Forms}, Opts) ->
     NoMakeFun3 = proplists:get_bool(no_make_fun3, Opts),
     Body = functions(Forms, Mod, NoMakeFun3),
-    Module = #b_module{name=Mod,exports=Es,attributes=Attr,body=Body},
+    Module = #b_module{name=Mod,exports=Es,nifs=Ns,attributes=Attr,body=Body},
     {ok,Module}.
 
 functions(Forms, Mod, NoMakeFun3) ->

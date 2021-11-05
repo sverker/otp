@@ -653,3 +653,7 @@ BEAM_FORMAT_NUMBER=0
 ## @spec bs_create_bin Fail Alloc Live Unit Dst OpList
 ## @doc  Builda a new binary using the binary syntax.
 177: bs_create_bin/6
+
+## @spec nif_start
+## @doc  No-op at start of each function declared in -nifs().
+178: nif_start/0

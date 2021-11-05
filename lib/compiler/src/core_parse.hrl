@@ -84,6 +84,7 @@
 
 -record(c_module, {anno=[] :: list(), name :: cerl:cerl(),
 		   exports :: [cerl:cerl()],
+                   nifs :: [cerl:cerl()],
 		   attrs :: [{cerl:cerl(), cerl:cerl()}],
 		   defs :: [{cerl:cerl(), cerl:cerl()}]}).
 

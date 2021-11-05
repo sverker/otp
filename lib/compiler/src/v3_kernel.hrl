@@ -43,7 +43,7 @@
 -record(k_remote, {anno=[],mod,name,arity}).
 -record(k_internal, {anno=[],name,arity}).
 
--record(k_mdef, {anno=[],name,exports,attributes,body}).
+-record(k_mdef, {anno=[],name,exports,nifs,attributes,body}).
 -record(k_fdef, {anno=[],func,arity,vars,body}).
 
 -record(k_seq, {anno=[],arg,body}).

@@ -170,6 +170,7 @@
 
 -record(imodule, {name = [],
 		  exports = ordsets:new(),
+                  nifs = ordsets:new(),
 		  attrs = [],
 		  defs = [],
 		  file = [],
@@ -184,15 +185,16 @@ module(Forms0, Opts) ->
     Module = foldl(fun (F, Acc) ->
 			   form(F, Acc, Opts)
 		   end, #imodule{}, Forms),
-    #imodule{name=Mod,exports=Exp0,attrs=As0,defs=Kfs0,ws=Ws} = Module,
+    #imodule{name=Mod,exports=Exp0,nifs=Nifs,attrs=As0,defs=Kfs0,ws=Ws} = Module,
     Exp = case member(export_all, Opts) of
 	      true -> defined_functions(Forms);
 	      false -> Exp0
 	  end,
     Cexp = [#c_var{name=FA} || {_,_}=FA <- Exp],
+    Cnifs = [#c_var{name=FA} || {_,_}=FA <- Nifs],
     As = reverse(As0),
     Kfs = reverse(Kfs0),
-    {ok,#c_module{name=#c_literal{val=Mod},exports=Cexp,attrs=As,defs=Kfs},Ws}.
+    {ok,#c_module{name=#c_literal{val=Mod},exports=Cexp,nifs=Cnifs,attrs=As,defs=Kfs},Ws}.
 
 form({function,_,_,_,_}=F0, Module, Opts) ->
     #imodule{file=File,defs=Defs,ws=Ws0} = Module,
@@ -209,6 +211,9 @@ form({attribute,_,import,_}, Module, _Opts) ->
 form({attribute,_,export,Es}, #imodule{exports=Exp0}=Module, _Opts) ->
     Exp = ordsets:union(ordsets:from_list(Es), Exp0),
     Module#imodule{exports=Exp};
+form({attribute,_,nifs,Ns}, #imodule{nifs=Nifs0}=Module, _Opts) ->
+    Nifs = ordsets:union(ordsets:from_list(Ns), Nifs0),
+    Module#imodule{nifs=Nifs};
 form({attribute,_,_,_}=F, #imodule{attrs=As}=Module, _Opts) ->
     Module#imodule{attrs=[attribute(F)|As]};
 form(_, Module, _Opts) ->
