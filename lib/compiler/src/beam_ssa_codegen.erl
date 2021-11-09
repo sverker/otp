@@ -112,6 +112,7 @@ module(#b_module{name=Mod,exports=Es,nifs=Ns,attributes=Attrs,body=Fs}, _Opts) -
 -type ssa_register() :: xreg() | yreg() | {'fr',reg_num()} | {'z',reg_num()}.
 
 functions(Forms, AtomMod, Nifs) ->
+    io:format("Nifs = ~p\n", [Nifs]),
     mapfoldl(fun (F, St) -> function(F, AtomMod, Nifs, St) end,
              #cg{lcount=1}, Forms).
 
@@ -147,6 +148,7 @@ function(#b_function{anno=Anno,bs=Blocks}, AtomMod, Nifs, St0) ->
 add_nif_start([{label, _}=Entry | Body], Nifs, Name, Arity) ->
     NifStart = case maps:is_key({Name,Arity}, Nifs) of
                    true ->
+                       io:format("~p/~p is a NIF\n", [Name, Arity]),
                        [nif_start];
                    false ->
                        []

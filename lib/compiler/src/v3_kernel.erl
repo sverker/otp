@@ -134,6 +134,7 @@ module(#c_module{anno=A,name=M,exports=Es,nifs=Ns,attrs=As,defs=Fs}, Options) ->
                                              Options),
     St0 = #kern{no_shared_fun_wrappers=NoSharedFunWrappers},
     {Kfs,St} = mapfoldl(fun function/2, St0, Fs),
+    io:format("v3k Nifs = ~p\n", [Kns]),
     {ok,#k_mdef{anno=A,name=M#c_literal.val,exports=Kes,nifs=Kns,attributes=Kas,
                 body=Kfs ++ St#kern.funs},sort(St#kern.ws)}.
 
