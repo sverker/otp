@@ -128,12 +128,13 @@ function(#b_function{anno=Anno,bs=Blocks}, AtomMod, Nifs, St0) ->
         Labels = (St4#cg.labels)#{0=>Entry,?EXCEPTION_BLOCK=>0},
         St5 = St4#cg{labels=Labels,used_labels=gb_sets:singleton(Entry),
                      ultimate_fail=Ult},
-        {Body,St} = cg_fun(Blocks, St5#cg{fc_label=Fi}),
+        {Body0,St} = cg_fun(Blocks, St5#cg{fc_label=Fi}),
+        Body1 = add_parameter_annos(Body0, Anno),
+        Body = add_nif_start(Body1, Nifs, Name, Arity),
         Asm =
             [{label,Fi},line(Anno),
              {func_info,AtomMod,{atom,Name},Arity}] ++
-            add_nif_start(Nifs, Name, Arity) ++
-            add_parameter_annos(Body, Anno) ++
+            Body ++
             [{label,Ult},if_end],
         Func = {function,Name,Arity,Entry,Asm},
         {Func,St}
@@ -143,13 +144,15 @@ function(#b_function{anno=Anno,bs=Blocks}, AtomMod, Nifs, St0) ->
             erlang:raise(Class, Error, Stack)
     end.
 
-add_nif_start(Nifs, Name, Arity) ->
-    case maps:is_key({Name,Arity}, Nifs) of
-        true ->
-            [{nif_start}];
-        false ->
-            []
-    end.
+add_nif_start([{label, _}=Entry | Body], Nifs, Name, Arity) ->
+    NifStart = case maps:is_key({Name,Arity}, Nifs) of
+                   true ->
+                       [nif_start];
+                   false ->
+                       []
+               end,
+    [Entry | NifStart] ++ Body.
+
 
 assert_exception_block(Blocks) ->
     %% Assertion: ?EXCEPTION_BLOCK must be a call erlang:error(badarg).
