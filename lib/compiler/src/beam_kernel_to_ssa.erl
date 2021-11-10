@@ -59,7 +59,6 @@ module(#k_mdef{name=Mod,exports=Es,nifs=Ns,attributes=Attr,body=Forms}, Opts) ->
     NoMakeFun3 = proplists:get_bool(no_make_fun3, Opts),
     Body = functions(Forms, Mod, NoMakeFun3),
     Module = #b_module{name=Mod,exports=Es,nifs=Ns,attributes=Attr,body=Body},
-    io:format("bkts Nifs = ~p\n", [Ns]),
     {ok,Module}.
 
 functions(Forms, Mod, NoMakeFun3) ->

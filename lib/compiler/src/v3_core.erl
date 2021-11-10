@@ -181,7 +181,6 @@
         {'ok',cerl:c_module(),[warning()]}.
 
 module(Forms0, Opts) ->
-    io:format("Forms0 = ~p\n", [Forms0]),
     Forms = erl_internal:add_predefined_functions(Forms0),
     Module = foldl(fun (F, Acc) ->
 			   form(F, Acc, Opts)
@@ -195,8 +194,6 @@ module(Forms0, Opts) ->
     Cnifs = [#c_var{name=FA} || {_,_}=FA <- Nifs],
     As = reverse(As0),
     Kfs = reverse(Kfs0),
-    io:format("v3c Nifs = ~p\n", [Nifs]),
-    io:format("v3c Cnifs = ~p\n", [Cnifs]),
     {ok,#c_module{name=#c_literal{val=Mod},exports=Cexp,nifs=Cnifs,attrs=As,defs=Kfs},Ws}.
 
 form({function,_,_,_,_}=F0, Module, Opts) ->
@@ -213,11 +210,9 @@ form({attribute,_,import,_}, Module, _Opts) ->
     Module;
 form({attribute,_,export,Es}, #imodule{exports=Exp0}=Module, _Opts) ->
     Exp = ordsets:union(ordsets:from_list(Es), Exp0),
-    io:format("export Es=~p Exp=~p\n", [Es, Exp]),
     Module#imodule{exports=Exp};
 form({attribute,_,nifs,Ns}, #imodule{nifs=Nifs0}=Module, _Opts) ->
     Nifs = ordsets:union(ordsets:from_list(Ns), Nifs0),
-    io:format("attribute Ns=~p Nifs=~p\n", [Ns, Nifs]),
     Module#imodule{nifs=Nifs};
 form({attribute,_,_,_}=F, #imodule{attrs=As}=Module, _Opts) ->
     Module#imodule{attrs=[attribute(F)|As]};
