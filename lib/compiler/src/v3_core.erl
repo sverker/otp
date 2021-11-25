@@ -2654,7 +2654,11 @@ ren_is_subst(_V, []) -> no.
 
 cbody(B0, St0) ->
     {B1,_,_,St1} = cexpr(B0, [], St0),
-    {B1,St1}.
+    #c_fun{body=Body0} = B1,
+    Body1 = #c_seq{arg=#c_primop{name=#c_literal{val=nif_start}, args=[]},
+                   body=Body0},
+    B2 = B1#c_fun{body=Body1},
+    {B2,St1}.
 
 %% cclause(Lclause, [AfterVar], State) -> {Cclause,State}.
 %%  The AfterVars are the exported variables.
