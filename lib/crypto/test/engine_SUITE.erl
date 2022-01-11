@@ -716,7 +716,7 @@ ensure_load(Config) when is_list(Config) ->
                 Md5Hash2 =  <<0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15>>,
                 case crypto:ensure_engine_loaded(<<"MD5">>, Engine) of
                     {ok, E} ->
-                        {ok, _E1} = crypto:ensure_engine_loaded(<<"MD5">>, Engine),
+                        {ok, E1} = crypto:ensure_engine_loaded(<<"MD5">>, Engine),
                         case crypto:hash(md5, "Don't panic") of
                             Md5Hash1 ->
                                 ct:fail(fail_to_load_still_original_engine);
@@ -724,6 +724,15 @@ ensure_load(Config) when is_list(Config) ->
                                 ok;
                             _ ->
                                 ct:fail(fail_to_load_engine)
+                        end,
+                        ok = crypto:ensure_engine_unloaded(E1),
+                        case crypto:hash(md5, "Don't panic") of
+                            Md5Hash2 ->
+                                ct:fail(fail_to_unload_still_test_engine);
+                            Md5Hash1 ->
+                                ok;
+                            _ ->
+                                ct:fail(fail_to_unload_engine)
                         end,
                         ok = crypto:ensure_engine_unloaded(E),
                         case crypto:hash(md5, "Don't panic") of
@@ -739,7 +748,7 @@ ensure_load(Config) when is_list(Config) ->
                 end
            catch
                error:notsup ->
-                  {skip, "Engine not supported on this SSL version"}
+                   {skip, "Engine not supported on this SSL version"}
            end
     end.
 
