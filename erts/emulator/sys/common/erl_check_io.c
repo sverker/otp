@@ -2342,12 +2342,12 @@ erts_check_io_size(void)
     erts_poll_info(get_fallback_pollset(), &pi);
     res += pi.memory_size;
 #endif
-
+#if ERTS_POLL_USE_SCHEDULER_POLLING
     if (erts_sched_poll_enabled()) {
         erts_poll_info(sched_pollset, &pi);
         res += pi.memory_size;
     }
-
+#endif
     for (i = 0; i < erts_no_pollsets; i++) {
         erts_poll_info(pollsetv[i], &pi);
         res += pi.memory_size;
@@ -2388,14 +2388,14 @@ erts_check_io_info(void *proc)
     piv[0].active_fds = 0;
     piv++;
 #endif
-
+#if ERTS_POLL_USE_SCHEDULER_POLLING
     if (erts_sched_poll_enabled()) {
         erts_poll_info(sched_pollset, &piv[0]);
         piv[0].poll_threads = 0;
         piv[0].active_fds = 0;
         piv++;
     }
-
+#endif
     for (j = 0; j < erts_no_pollsets; j++) {
         erts_poll_info(pollsetv[j], &piv[j]);
         piv[j].active_fds = 0;
@@ -2916,6 +2916,7 @@ erts_check_io_debug(ErtsCheckIoDebugInfo *ciodip)
             doit_erts_check_io_debug(&drv_ev_state.v[fd], &counters, dsbufp);
     }
 #endif
+#if ERTS_POLL_USE_SCHEDULER_POLLING
     if (erts_sched_poll_enabled()) {
         erts_dsprintf(dsbufp, "--- fds in scheduler pollset ----------------------------\n");
         erts_poll_get_selected_events(sched_pollset, counters.epep,
@@ -2928,7 +2929,7 @@ erts_check_io_debug(ErtsCheckIoDebugInfo *ciodip)
             }
         }
     }
-
+#endif
     erts_dsprintf(dsbufp, "--- fds in pollset --------------------------------------\n");
 
     for (i = 0; i < erts_no_pollsets; i++) {

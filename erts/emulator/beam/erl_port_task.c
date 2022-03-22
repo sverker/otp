@@ -1326,7 +1326,7 @@ erts_port_task_abort(ErtsPortTaskHandle *pthp)
 	    res = - 1; /* Task already aborted, executing, or executed */
 	else {
 	    reset_port_task_handle(pthp);
-
+#if ERTS_POLL_USE_SCHEDULER_POLLING
             if (erts_sched_poll_enabled()) {
                 switch (ptp->type) {
                 case ERTS_PORT_TASK_INPUT:
@@ -1341,7 +1341,7 @@ erts_port_task_abort(ErtsPortTaskHandle *pthp)
                     break;
                 }
             }
-
+#endif
 	    res = 0;
 	}
     }
@@ -1844,14 +1844,14 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
     }
 
     ERTS_MSACC_POP_STATE_M();
-
+#if ERTS_POLL_USE_SCHEDULER_POLLING
     if (erts_sched_poll_enabled() && io_tasks_executed) {
         ASSERT(erts_atomic_read_nob(&erts_port_task_outstanding_io_tasks)
 	       >= io_tasks_executed);
         erts_atomic_add_relb(&erts_port_task_outstanding_io_tasks,
 				 -1*io_tasks_executed);
     }
-
+#endif
     ASSERT(runq == erts_get_runq_port(pp));
 
     active = finalize_exec(pp, &execq, processing_busy_q);

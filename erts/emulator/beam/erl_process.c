@@ -9523,9 +9523,11 @@ Process *erts_schedule(ErtsSchedulerData *esdp, Process *p, int calls)
 	    reds = ERTS_PROC_MIN_CONTEXT_SWITCH_REDS_COST;
 	esdp->virtual_reds = 0;
 
+#if ERTS_POLL_USE_SCHEDULER_POLLING
         if (erts_sched_poll_enabled()) {
             fcalls = (int)erts_atomic32_add_read_acqb(&function_calls, reds);
         }
+#endif
 
 	ASSERT(esdp && esdp == erts_get_scheduler_data());
 
