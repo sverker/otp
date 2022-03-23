@@ -765,7 +765,7 @@ concurrent_update_pollset(ErtsPollSet *ps, int fd, ErtsPollOp op,
     struct epoll_event epe;
 
     epe_templ.events = ERTS_POLL_EV_E2N(events);
-    epe_templ.data.fd = fd;
+    epe_templ.data.u64 = fd | ((uint64_t)epe_templ.events << 32);
 
     if (ps->oneshot)
         epe_templ.events |= EPOLLONESHOT;
@@ -799,7 +799,7 @@ concurrent_update_pollset(ErtsPollSet *ps, int fd, ErtsPollOp op,
 	/* We init 'epe' every time since epoll_ctl() may modify it
 	   (not declared const and not documented as const). */
 	epe.events = epe_templ.events;
-	epe.data.fd = epe_templ.data.fd;
+        epe.data.u64 = epe_templ.data.u64;
 	res = epoll_ctl(ps->kp_fd, epoll_op, fd, &epe);
     } while (res != 0 && errno == EINTR);
 
@@ -831,7 +831,7 @@ concurrent_update_pollset(ErtsPollSet *ps, int fd, ErtsPollOp op,
 		/* We init 'epe' every time since epoll_ctl() may modify it
 		   (not declared const and not documented as const). */
 		epe.events = 0;
-		epe.data.fd = fd;
+		epe.data.u64 = fd;
 		res = epoll_ctl(ps->kp_fd, EPOLL_CTL_DEL, fd, &epe);
 	    } while (res != 0 && errno == EINTR);
 	/* Fall through ... */
@@ -2490,6 +2490,8 @@ ERTS_POLL_EXPORT(erts_poll_get_selected_events)(ErtsPollSet *ps,
         int fd;
         uint32_t events;
         uint64_t data;
+        int data_fd;
+        uint32_t data_events;
         if (sscanf(s,"tfd:%d events:%x data:%llx", &fd, &events,
                    (unsigned long long*)&data) != 3) {
             fprintf(stderr,"failed to parse file %s on line %d, errno = %d\n",
@@ -2504,11 +2506,12 @@ ERTS_POLL_EXPORT(erts_poll_get_selected_events)(ErtsPollSet *ps,
         if (fd == ps->timer_fd)
             continue;
 #endif
-        data &= 0xFFFFFFFF;
-        ASSERT(fd == data);
+        data_fd = data & 0xFFFFFFFF;
+        data_events = data >> 32;
+        ERTS_ASSERT(fd == data_fd);
         /* Events are the events that are being monitored, which of course include
            error and hup events, but we are only interested in IN/OUT events */
-        ev[fd] = (ERTS_POLL_EV_IN|ERTS_POLL_EV_OUT) & ERTS_POLL_EV_N2E(events);
+        ev[fd] = (ERTS_POLL_EV_IN|ERTS_POLL_EV_OUT) & ERTS_POLL_EV_N2E(events|data_events);
         line++;
     }
     fclose(f);
