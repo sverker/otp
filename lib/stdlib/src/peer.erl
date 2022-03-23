@@ -272,8 +272,6 @@ init([Notify, Options]) ->
 
     Env = maps:get(env, Options, []),
 
-    io:format("SVERKER Exec=~p\nSVERKER Args=~p\n",[Exec,Args]),
-
     %% close port if running detached
     Conn =
         case maps:find(connection, Options)  of
@@ -804,7 +802,7 @@ exec(Options) when not is_map_key(exec, Options) ->
         {ok, [[Prog]]} ->
             case os:find_executable(Prog) of
                 Exec when is_list(Exec) ->
-                    {Exec, ["-debug"]};
+                    {Exec, []};
                 false ->
                     maybe_otp_test_suite(Prog)
             end;
@@ -833,7 +831,7 @@ maybe_otp_test_suite(Prog) ->
             %% work for an installed system. Also, it is
             %% probably a good idea to stop using 'slave'
             %% before attempting to do this.
-            {filename:join(CerlPath, "cerl"), ["-debug", "-rr" | parse_args(Args)]};
+            {filename:join(CerlPath, "cerl"), parse_args(Args)};
         _ ->
             default_erts()
     end.
