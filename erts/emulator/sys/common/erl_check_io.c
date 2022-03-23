@@ -2726,19 +2726,19 @@ static int erts_debug_print_checkio_state(erts_dsprintf_buf_t *dsbufp,
                 (aio_events != 0 && ep_events == ERTS_POLL_EV_NONE)) {
                 erts_dsprintf(dsbufp, " ep_ev=");
                 print_events(dsbufp, ep_events);
-                err |= 8;
+                err |= 0x10;
             }
         }
 #else
         if (print_events(dsbufp, cio_events) != 0)
-            err |= 0x10;
+            err |= 0x20;
 #endif
         erts_dsprintf(dsbufp, " ");
         if (cio_events & ERTS_POLL_EV_IN) {
             Eterm id = state->driver.select->inport;
             if (is_nil(id)) {
                 erts_dsprintf(dsbufp, "inport=none inname=none indrv=none ");
-                err |= 0x20;
+                err |= 0x40;
             }
             else {
                 ErtsPortNames *pnp = erts_get_port_names(id, ERTS_INVALID_ERL_DRV_PORT);
@@ -2755,7 +2755,7 @@ static int erts_debug_print_checkio_state(erts_dsprintf_buf_t *dsbufp,
             Eterm id = state->driver.select->outport;
             if (is_nil(id)) {
                 erts_dsprintf(dsbufp, "outport=none outname=none outdrv=none ");
-                err |= 0x40;
+                err |= 0x80;
             }
             else {
                 ErtsPortNames *pnp = erts_get_port_names(id, ERTS_INVALID_ERL_DRV_PORT);
@@ -2777,16 +2777,16 @@ static int erts_debug_print_checkio_state(erts_dsprintf_buf_t *dsbufp,
 #ifdef ERTS_SYS_CONTINOUS_FD_NUMBERS
         if (internal) {
             erts_dsprintf(dsbufp, "internal ");
-            err |= 0x80;
+            err |= 0x100;
         }
 
         if (cio_events == ep_events) {
             erts_dsprintf(dsbufp, "ev=");
             if (print_events(dsbufp, cio_events) != 0)
-                err |= 0x100;
+                err |= 0x200;
         }
         else {
-            err |= 0x200;
+            err |= 0x400;
             erts_dsprintf(dsbufp, "cio_ev=");
             print_events(dsbufp, cio_events);
             erts_dsprintf(dsbufp, " ep_ev=");
@@ -2794,7 +2794,7 @@ static int erts_debug_print_checkio_state(erts_dsprintf_buf_t *dsbufp,
         }
 #else
         if (print_events(dsbufp, cio_events) != 0)
-            err |= 0x400;
+            err |= 0x800;
 #endif
         erts_dsprintf(dsbufp, " inpid=%T", state->driver.nif->in.pid);
         erts_dsprintf(dsbufp, " outpid=%T", state->driver.nif->out.pid);
@@ -2806,7 +2806,7 @@ static int erts_debug_print_checkio_state(erts_dsprintf_buf_t *dsbufp,
     else if (internal) {
         erts_dsprintf(dsbufp, "internal ");
         if (cio_events) {
-            err |= 0x800;
+            err |= 0x1000;
             erts_dsprintf(dsbufp, "cio_ev=");
             print_events(dsbufp, cio_events);
         }
@@ -2817,7 +2817,7 @@ static int erts_debug_print_checkio_state(erts_dsprintf_buf_t *dsbufp,
     }
 #endif
     else {
-        err |= 0x1000;
+        err |= 0x2000;
         erts_dsprintf(dsbufp, "control_type=%d ", (int)state->type);
 #ifdef ERTS_SYS_CONTINOUS_FD_NUMBERS
         if (cio_events == ep_events) {
