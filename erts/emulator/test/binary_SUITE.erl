@@ -953,7 +953,7 @@ safe_binary_to_term2(Config) when is_list(Config) ->
 %% Tests bad input to binary_to_term/1.
 
 bad_terms(Config) when is_list(Config) ->
-    test_terms(fun corrupter/1),
+    [test_terms(fun corrupter/1) || _ <- lists:seq(1,10000)],
     {'EXIT',{badarg,_}} = (catch binary_to_term(<<131,$M,3:32,0,11,22,33>>)),
     {'EXIT',{badarg,_}} = (catch binary_to_term(<<131,$M,3:32,9,11,22,33>>)),
     {'EXIT',{badarg,_}} = (catch binary_to_term(<<131,$M,0:32,1,11,22,33>>)),
@@ -986,14 +986,14 @@ corrupter(Term) ->
     corrupter0(Term).
 
 corrupter0(Term) ->
-    try
-	      S = io_lib:format("About to corrupt: ~P", [Term,12]),
-	      io:put_chars(S)
-	  catch
-	      error:badarg ->
-		  io:format("About to corrupt: <<bit-level-binary:~p",
-			    [bit_size(Term)])
-	  end,
+    %% try
+    %%     S = io_lib:format("About to corrupt: ~P", [Term,12]),
+    %%     io:put_chars(S)
+    %% catch
+    %%     error:badarg ->
+    %%         io:format("About to corrupt: <<bit-level-binary:~p",
+    %%                   [bit_size(Term)])
+    %% end,
     Bin = term_to_binary(Term),
     corrupter(Bin, size(Bin)-1),
     CompressedBin = term_to_binary(Term, [compressed]),
@@ -1469,10 +1469,12 @@ test_terms(Test_Func) ->
 
     %% Maps.
     SmallMap = #{a => 1, b => 2, c => 3},
+    Sz1 = rand:uniform(100),
+    Sz2 = rand:uniform(100),
     LargeMap1 = maps:from_list([{list_to_atom(integer_to_list(36#cafe+N*N*N, 36)),N} ||
-                                   N <- lists:seq(1, 33)]),
+                                   N <- lists:seq(1, Sz1)]),
     LargeMap2 = maps:from_list([{list_to_atom(integer_to_list(36#dead+N, 36)),N} ||
-                                   N <- lists:seq(1, 50)]),
+                                   N <- lists:seq(1, Sz2)]),
     MapWithMap = LargeMap1#{SmallMap => a, LargeMap1 => LargeMap2, LargeMap2 => LargeMap1,
                             [LargeMap1,LargeMap2] => LargeMap1,
                             <<"abc">> => SmallMap, <<"qrs">> => LargeMap1,
