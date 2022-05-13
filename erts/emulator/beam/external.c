@@ -4976,7 +4976,8 @@ encode_size_struct_int(TTBSizeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj,
     }
 
 #define LIST_TAIL_OP ((0 << _TAG_PRIMARY_SIZE) | TAG_PRIMARY_HEADER)
-#define TERM_ARRAY_OP(N) (((N) << _TAG_PRIMARY_SIZE) | TAG_PRIMARY_HEADER)
+#define PATCH_FUN_SIZE_OP ((1 << _TAG_PRIMARY_SIZE) | TAG_PRIMARY_HEADER)
+#define TERM_ARRAY_OP(N) (((N+1) << _TAG_PRIMARY_SIZE) | TAG_PRIMARY_HEADER)
 #define TERM_ARRAY_OP_DEC(OP) ((OP) - (1 << _TAG_PRIMARY_SIZE))
 
 
@@ -5293,6 +5294,9 @@ encode_size_struct_int(TTBSizeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj,
 		ErlFunThing* funp = (ErlFunThing *) fun_val(obj);
 		
                 ASSERT(dflags & DFLAG_NEW_FUN_TAGS);
+                if (dflags & DFLAG_PENDING_CONNECT) {
+                    WSTACK_PUSH(s, PATCH_FUN_SIZE_OP);
+                }
                 result += 20+1+1+4;	/* New ID + Tag */
                 result += 4; /* Length field (number of free variables */
                 result += encode_size_struct2(acmp, funp->creator, dflags);
@@ -5302,10 +5306,10 @@ encode_size_struct_int(TTBSizeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj,
 		    WSTACK_PUSH2(s, (UWord) (funp->env + 1),
 				    (UWord) TERM_ARRAY_OP(funp->num_free-1));
 		}
-		if (funp->num_free != 0) {
-		    obj = funp->env[0];
-		    continue; /* big loop */
-		}
+                if (funp->num_free != 0) {
+                    obj = funp->env[0];
+                    continue; /* big loop */
+                }
 		break;
 	    }
 
@@ -5339,6 +5343,7 @@ encode_size_struct_int(TTBSizeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj,
 		     obj);
 	}
 
+      pop_next:
 	if (WSTACK_ISEMPTY(s)) {
 	    break;
 	}
@@ -5356,6 +5361,17 @@ encode_size_struct_int(TTBSizeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj,
 		}
 		break;
 
+            case PATCH_FUN_SIZE_OP: {
+                Uint csz;
+                ERTS_ASSERT(dflags & DFLAG_PENDING_CONNECT);
+                csz = result - ctx->last_result;
+                /* potentially multiple elements leading up to hopefull entry */
+                vlen += (csz/MAX_SYSIOVEC_IOVLEN + 1);
+                result += 4;     /* hopefull index */
+                ctx->last_result = result;
+                result += 1 + 4; /* HOPEFUL_END_OF_FUN + size_p */
+                goto pop_next;
+            }
 	    case TERM_ARRAY_OP(1):
 		obj = *(Eterm*)WSTACK_POP(s);
 		break;
