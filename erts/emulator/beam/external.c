@@ -5643,12 +5643,11 @@ init_done:
 	case NEW_FUN_EXT:
 	    {
 		unsigned num_free;
+		Uint total_size;
 
 		CHKSIZE(1+16+4+4);
-                /* Ignore faulty Size field as we have bugs since OTP 23.0
-                 * that can encode it too large if fun contains EXPORT_EXT or
-                 * BIT_BINARY_EXT hopefully encoded for pending connection.
-                 */
+		total_size = get_int32(ep);
+		CHKSIZE(total_size);		
 		ep += 1+16+4+4;
 		CHKSIZE(4);
 		num_free = get_int32(ep);
