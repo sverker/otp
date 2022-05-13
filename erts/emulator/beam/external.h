@@ -67,6 +67,7 @@
 #define BINARY_INTERNAL_REF 'J'
 #define BIT_BINARY_INTERNAL_REF 'L'
 #define COMPRESSED        'P'
+#define HOPEFUL_END_OF_FUN 'Q'
 
 #if 0
 /* Not used anymore */

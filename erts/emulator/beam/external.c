@@ -125,6 +125,7 @@ static ErtsExtSzRes encode_size_struct_int(TTBSizeContext*, ErtsAtomCacheMap *ac
 static Export binary_to_term_trap_export;
 static BIF_RETTYPE binary_to_term_trap_1(BIF_ALIST_1);
 static Sint transcode_dist_obuf(ErtsDistOutputBuf*, DistEntry*, Uint64 dflags, Sint reds);
+static byte *begin_hopefull_data(TTBEncodeContext *ctx, byte *ep);
 static byte *hopefull_bit_binary(TTBEncodeContext* ctx, byte **epp, Binary *pb_val, Eterm pb_term,
                                  byte *bytes, byte bitoffs, byte bitsize, Uint sz);
 static void hopefull_export(TTBEncodeContext* ctx, byte **epp, Export* exp, Uint32 dflags,
@@ -3098,8 +3099,17 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 	    break;
 	case ENC_PATCH_FUN_SIZE:
 	    {
-		byte* size_p = (byte *) obj;
-		put_int32(ep - size_p, size_p);
+                byte* size_p = (byte *) obj;
+
+                if (dflags & DFLAG_PENDING_CONNECT) {
+                    ep = begin_hopefull_data(ctx, ep);
+                    *ep++ = HOPEFUL_END_OF_FUN;
+                    sys_memcpy(ep, size_p, sizeof(size_p));
+                    ep += sizeof(size_p);
+                }
+                else {
+                    put_int32(ep - size_p, size_p);
+                }
 	    }
 	    goto outer_loop;
 	case ENC_BIN_COPY: {
@@ -3606,6 +3616,7 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 		int ei;
 
 		ASSERT(dflags & DFLAG_NEW_FUN_TAGS);
+
                 *ep++ = NEW_FUN_EXT;
                 WSTACK_PUSH2(s, ENC_PATCH_FUN_SIZE,
                              (UWord) ep); /* Position for patching in size */
@@ -6173,6 +6184,32 @@ Sint transcode_dist_obuf(ErtsDistOutputBuf* ob,
                 eiov->size += new_len;
                 iov[hopefull_ix].iov_len = new_len;
                 r--;
+                break;
+            }
+
+            case HOPEFUL_END_OF_FUN: {
+                byte* size_p;
+                Sint32 ix;
+                Uint32 fun_size;
+
+                ERTS_ASSERT(iov[hopefull_ix].iov_len >= (1 + sizeof(size_p)));
+                ep++;
+                sys_memcpy(&size_p, ep, sizeof(size_p));
+
+                fun_size = 0;
+                for (ix = hopefull_ix-1; ix >= 0; ix--) {
+                    fun_size += iov[ix].iov_len;
+
+                    if (ErtsInArea(size_p, iov[ix].iov_base, iov[ix].iov_len)) {
+                        ERTS_ASSERT(size_p[-1] == NEW_FUN_EXT);
+                        fun_size -= (size_p - (byte*)iov[ix].iov_base);
+                        put_int32(fun_size, size_p);
+                        break;
+                    }
+                }
+                ERTS_ASSERT(ix >= 0);
+
+                iov[hopefull_ix].iov_base += (1 + sizeof(size_p));
                 break;
             }
 
