@@ -5838,11 +5838,11 @@ init_done:
 	case NEW_FUN_EXT:
 	    {
 		unsigned num_free;
-		Uint total_size;
+		//Uint total_size;
 
 		CHKSIZE(1+16+4+4);
-		total_size = get_uint32(ep);
-		CHKSIZE(total_size);		
+		//total_size = get_uint32(ep);
+                //CHKSIZE(total_size);
 		ep += 1+16+4+4;
 		CHKSIZE(4);
 		num_free = get_uint32(ep);
