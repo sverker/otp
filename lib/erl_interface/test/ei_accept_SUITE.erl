@@ -54,7 +54,7 @@ ei_accept(Config) when is_list(Config) ->
 
 ei_accept_do(Config, CompatRel, SockImpl) ->
     io:format("CompatRel=~p, SockImpl=~p\n", [CompatRel, SockImpl]),
-    P = runner:start(Config, ?interpret),
+    P = runner:start(Config, ?interpret, rr),
     0 = ei_connect_init(P, 42, erlang:get_cookie(), 0, CompatRel, SockImpl),
 
     Myname = hd(tl(string:tokens(atom_to_list(node()), "@"))),
