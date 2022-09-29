@@ -57,6 +57,7 @@
 #define EXI_POSITION am_position /* The position is out of range. */
 #define EXI_OWNER    am_owner	 /* The receiving process is already the owner. */
 #define EXI_NOT_OWNER am_not_owner /* The current process is not the owner. */
+#define EXI_ALREADY_EXISTS am_already_exists /* The table identifier already exists. */
 
 #define DB_WRITE_CONCURRENCY_MIN_LOCKS 1
 #define DB_WRITE_CONCURRENCY_MAX_LOCKS 32768
@@ -2529,12 +2530,13 @@ BIF_RETTYPE ets_new_2(BIF_ALIST_2)
         tid_clear(BIF_P, tb);
         delete_owned_table(BIF_P, tb);
 
-	db_lock(tb,LCK_WRITE);
-	free_heir_data(tb);
-	tb->common.meth->db_free_empty_table(tb);
-	db_unlock(tb,LCK_WRITE);
+        db_lock(tb,LCK_WRITE);
+        free_heir_data(tb);
+        tb->common.meth->db_free_empty_table(tb);
+        db_unlock(tb,LCK_WRITE);
         table_dec_refc(tb, 0);
-	BIF_ERROR(BIF_P, BADARG);
+        BIF_P->fvalue = EXI_ALREADY_EXISTS;
+        BIF_ERROR(BIF_P, BADARG | EXF_HAS_EXT_INFO);
     }
 
     BIF_P->flags |= F_USING_DB; /* So we can remove tb if p dies */

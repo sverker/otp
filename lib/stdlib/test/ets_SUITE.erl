@@ -21,8 +21,8 @@
 
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1,
 	 init_per_group/2,end_per_group/2]).
--export([default/1,setbag/1,badnew/1,verybadnew/1,named/1,keypos2/1,
-	 privacy/1]).
+-export([default/1,setbag/1,badnew/1,verybadnew/1,named/1, keypos2/1,
+	 privacy/1, already_exists/1]).
 -export([empty/1,badinsert/1]).
 -export([badlookup/1,lookup_order/1]).
 -export([delete_elem/1,delete_tab/1,delete_large_tab/1,
@@ -187,8 +187,8 @@ all() ->
 
 groups() ->
     [{new, [],
-      [default, setbag, badnew, verybadnew, named, keypos2,
-       privacy]},
+      [default, setbag, badnew, verybadnew, named, already_exists,
+      keypos2, privacy]},
      {insert, [], [empty, badinsert]},
      {lookup, [], [badlookup, lookup_order]},
      {lookup_element, [], [lookup_element_mult]},
@@ -3797,6 +3797,18 @@ named(Config) when is_list(Config) ->
     [{key,val}] = ets:lookup(foo,key),
     true = ets:delete(Tab),
     verify_etsmem(EtsMem).
+
+already_exists(Config) when is_list(Config)->
+    EtsMem = etsmem(),
+    Tab = make_table(foo, [named_table], [{key,val}]),
+    % Use the same name as before
+    {'EXIT', {badarg, Reason}} = (catch ets:new(foo,[named_table])),
+
+    [{ets, new, [foo, [named_table]], Cause} | _] = Reason,
+    [{error_info, #{cause := already_exists, module := erl_stdlib_errors}} | _] = Cause,
+    true = ets:delete(Tab),
+    verify_etsmem(EtsMem),
+    {comment, "Tests creating a named_table with a used name should create an error"}.
 
 %% Test case to check if specified keypos works.
 keypos2(Config) when is_list(Config) ->
