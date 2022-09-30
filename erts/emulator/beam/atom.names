@@ -90,6 +90,7 @@ atom allocator
 atom allocator_sizes
 atom alloc_util_allocators
 atom allow_passive_connect
+atom already_exists
 atom already_loaded
 atom amd64
 atom anchored
@@ -756,4 +757,3 @@ atom yield
 atom nifs
 atom auto
 atom debug_hash_fixed_number_of_locks
-atom already_exists

@@ -2530,10 +2530,10 @@ BIF_RETTYPE ets_new_2(BIF_ALIST_2)
         tid_clear(BIF_P, tb);
         delete_owned_table(BIF_P, tb);
 
-        db_lock(tb,LCK_WRITE);
-        free_heir_data(tb);
-        tb->common.meth->db_free_empty_table(tb);
-        db_unlock(tb,LCK_WRITE);
+	db_lock(tb,LCK_WRITE);
+	free_heir_data(tb);
+	tb->common.meth->db_free_empty_table(tb);
+	db_unlock(tb,LCK_WRITE);
         table_dec_refc(tb, 0);
         BIF_P->fvalue = EXI_ALREADY_EXISTS;
         BIF_ERROR(BIF_P, BADARG | EXF_HAS_EXT_INFO);
