@@ -661,7 +661,7 @@ format_ets_error(new, [Name,Options], Cause) ->
     OptsError = must_be_list(Options),
     case {NameError, OptsError, Cause} of
         {[], [], already_exists} ->
-            [[], name_already_exists];
+            [name_already_exists, []];
         {[], [], _} ->
             [[], bad_options];
         {_, _, _} ->
