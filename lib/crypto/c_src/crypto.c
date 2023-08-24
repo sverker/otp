@@ -39,6 +39,7 @@
 #include "ecdh.h"
 #include "eddsa.h"
 #include "engine.h"
+#include "provider.h"
 #include "evp.h"
 #include "fips.h"
 #include "hash.h"
@@ -131,7 +132,11 @@ static ErlNifFunc nif_funcs[] = {
     {"engine_get_id_nif", 1, engine_get_id_nif, 0},
     {"engine_get_name_nif", 1, engine_get_name_nif, 0},
     {"engine_get_all_methods_nif", 0, engine_get_all_methods_nif, 0},
-    {"ensure_engine_loaded_nif", 2, ensure_engine_loaded_nif, 0}
+    {"ensure_engine_loaded_nif", 2, ensure_engine_loaded_nif, 0},
+    {"provider_load_nif", 1, provider_load_nif, 0},
+    {"providers_loaded_nif", 0, providers_loaded_nif, 0},
+    {"md_fetch_nif", 2, md_fetch_nif, 0},
+    {"make_algo_list_nif", 2, make_algo_list_nif, 0}
 };
 
 #ifdef HAS_3_0_API
@@ -220,6 +225,9 @@ static int initialize(ErlNifEnv* env, ERL_NIF_TERM load_info)
     }
     if (!create_curve_mutex())
         return __LINE__;
+    if (!init_provider(env)) {
+        return __LINE__;
+    }
 
 #ifdef HAS_3_0_API
     prov_cnt = 0;
@@ -337,6 +345,7 @@ static void unload(ErlNifEnv* env, void* priv_data)
     if (--library_refc == 0) {
         destroy_curve_mutex();
         destroy_engine_mutex(env);
+        cleanup_provider(env);
     }
 
 #ifdef HAS_3_0_API

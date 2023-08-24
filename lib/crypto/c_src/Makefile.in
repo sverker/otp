@@ -110,6 +110,7 @@ CRYPTO_OBJS = $(OBJDIR)/crypto$(TYPEMARKER).o \
 	$(OBJDIR)/mac$(TYPEMARKER).o \
 	$(OBJDIR)/math$(TYPEMARKER).o \
 	$(OBJDIR)/pkey$(TYPEMARKER).o \
+	$(OBJDIR)/provider$(TYPEMARKER).o \
 	$(OBJDIR)/rand$(TYPEMARKER).o \
 	$(OBJDIR)/rsa$(TYPEMARKER).o \
 	$(OBJDIR)/srp$(TYPEMARKER).o \
@@ -128,9 +129,13 @@ DISABLE_OTP_TEST_ENGINE = @DISABLE_OTP_TEST_ENGINE@
 ifeq ($(DISABLE_OTP_TEST_ENGINE),yes)
 TEST_ENGINE_LIB =
 TEST_ENGINE_OBJS =
+TEST_PROVIDER_LIB =
+TEST_PROVIDER_OBJS =
 else
 TEST_ENGINE_LIB = $(LIBDIR)/otp_test_engine$(TYPEMARKER).@DED_EXT@
 TEST_ENGINE_OBJS = $(OBJDIR)/otp_test_engine$(TYPEMARKER).o
+TEST_PROVIDER_LIB = $(LIBDIR)/otp_test_provider$(TYPEMARKER).@DED_EXT@
+TEST_PROVIDER_OBJS = $(OBJDIR)/otp_test_provider$(TYPEMARKER).o
 endif
 
 DYNAMIC_CRYPTO_LIB=@SSL_DYNAMIC_ONLY@
@@ -186,7 +191,7 @@ ALL_STATIC_CFLAGS = @DED_STATIC_CFLAGS@ $(TYPE_EXTRA_CFLAGS) $(CONFIGURE_ARGS) $
 
 _create_dirs := $(shell mkdir -p $(OBJDIR) $(LIBDIR))
 
-debug opt valgrind asan: $(NIF_LIB) $(CALLBACK_LIB) $(TEST_ENGINE_LIB)
+debug opt valgrind asan: $(NIF_LIB) $(CALLBACK_LIB) $(TEST_ENGINE_LIB) $(TEST_PROVIDER_LIB)
 
 static_lib: $(NIF_ARCHIVE)
 
@@ -196,13 +201,25 @@ $(OBJDIR)/otp_test_engine$(TYPEMARKER).o: otp_test_engine.c
 	$(V_at)$(INSTALL_DIR) $(OBJDIR)
 	$(V_CC) -c -o $@ $(filter-out -Wmissing-prototypes,$(ALL_CFLAGS) $(CRYPTO_NO_DEPRECATE_WARN)) $<
 
+$(OBJDIR)/otp_test_provider$(TYPEMARKER).o: otp_test_provider.c
+	$(V_at)$(INSTALL_DIR) $(OBJDIR)
+	$(V_CC) -c -o $@ $(filter-out -Wmissing-prototypes,$(ALL_CFLAGS) $(CRYPTO_NO_DEPRECATE_WARN)) $<
+
 $(LIBDIR)/otp_test_engine$(TYPEMARKER).so: $(TEST_ENGINE_OBJS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@ $^ $(LDLIBS) $(CRYPTO_LINK_LIB) $(SSL_EXTRA_LIBS)
+
+$(LIBDIR)/otp_test_provider$(TYPEMARKER).so: $(TEST_PROVIDER_OBJS)
 	$(V_at)$(INSTALL_DIR) $(LIBDIR)
 	$(V_LD) $(LDFLAGS) -o $@ $^ $(LDLIBS) $(CRYPTO_LINK_LIB) $(SSL_EXTRA_LIBS)
 
 $(LIBDIR)/otp_test_engine$(TYPEMARKER).dll: $(TEST_ENGINE_OBJS)
 	$(V_at)$(INSTALL_DIR) $(LIBDIR)
 	$(V_LD) $(LDFLAGS) -o $@  $(SSL_DED_LD_RUNTIME_LIBRARY_PATH) -L$(SSL_LIBDIR) $(TEST_ENGINE_OBJS) -l$(SSL_CRYPTO_LIBNAME) -l$(SSL_SSL_LIBNAME) $(SSL_EXTRA_LIBS)
+
+$(LIBDIR)/otp_test_provider$(TYPEMARKER).dll: $(TEST_PROVIDER_OBJS)
+	$(V_at)$(INSTALL_DIR) $(LIBDIR)
+	$(V_LD) $(LDFLAGS) -o $@  $(SSL_DED_LD_RUNTIME_LIBRARY_PATH) -L$(SSL_LIBDIR) $(TEST_PROVIDER_OBJS) -l$(SSL_CRYPTO_LIBNAME) -l$(SSL_SSL_LIBNAME) $(SSL_EXTRA_LIBS)
 endif
 
 # $(OBJDIR)/ec$(TYPEMARKER).o: ec.c
@@ -251,10 +268,10 @@ $(LIBDIR)/crypto_callback$(TYPEMARKER).dll: $(CALLBACK_OBJS)
 endif
 
 
-CLEAN_OBJS_RAW = $(CRYPTO_OBJS) $(CALLBACK_OBJS) $(CRYPTO_STATIC_OBJS) $(TEST_ENGINE_OBJS)
+CLEAN_OBJS_RAW = $(CRYPTO_OBJS) $(CALLBACK_OBJS) $(CRYPTO_STATIC_OBJS) $(TEST_ENGINE_OBJS) $(TEST_PROVIDER_OBJS)
 CLEAN_OBJS_O = $(patsubst %.debug.o,%.o,$(CLEAN_OBJS_RAW:.valgrind.o=.o))
 
-CLEAN_LIBS_RAW = $(NIF_LIB) $(CALLBACK_LIB) $(TEST_ENGINE_LIB)
+CLEAN_LIBS_RAW = $(NIF_LIB) $(CALLBACK_LIB) $(TEST_ENGINE_LIB) $(TEST_PROVIDER_LIB)
 CLEAN_LIBS_SO = $(patsubst %.debug.@DED_EXT@,%.@DED_EXT@,$(CLEAN_LIBS_RAW:.valgrind.@DED_EXT@=.@DED_EXT@))
 
 clean_dynamic_libs:
@@ -284,6 +301,7 @@ endif
 ifeq ($(DISABLE_OTP_TEST_ENGINE),yes)
 else
 	$(INSTALL_PROGRAM) $(TEST_ENGINE_LIB) "$(RELSYSDIR)/priv/lib"
+	$(INSTALL_PROGRAM) $(TEST_PROVIDER_LIB) "$(RELSYSDIR)/priv/lib"
 endif
 
 release_docs_spec:

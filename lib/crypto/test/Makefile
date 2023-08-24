@@ -10,7 +10,8 @@ MODULES= \
 	crypto_bench_SUITE \
 	crypto_SUITE \
 	crypto_property_test_SUITE \
-	engine_SUITE
+	engine_SUITE \
+	provider_SUITE
 
 ERL_FILES= $(MODULES:%=%.erl)
 

@@ -141,7 +141,12 @@ ERL_NIF_TERM atom_engine_method_ec;
 
 ERL_NIF_TERM atom_engine;
 ERL_NIF_TERM atom_key_id;
+ERL_NIF_TERM atom_key_type;
 ERL_NIF_TERM atom_password;
+ERL_NIF_TERM atom_provider;
+ERL_NIF_TERM atom_loaded;
+ERL_NIF_TERM atom_already_loaded;
+
 #endif
 
 int init_atoms(ErlNifEnv *env) {
@@ -261,7 +266,12 @@ int init_atoms(ErlNifEnv *env) {
 
     atom_engine = enif_make_atom(env,"engine");
     atom_key_id = enif_make_atom(env,"key_id");
+    atom_key_type = enif_make_atom(env,"key_type");
     atom_password = enif_make_atom(env,"password");
+    atom_provider = enif_make_atom(env,"provider");
+    atom_loaded = enif_make_atom(env, "loaded");
+    atom_already_loaded = enif_make_atom(env, "already_loaded");
+
 #endif
 
     return 1;

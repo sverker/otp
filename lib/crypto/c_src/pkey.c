@@ -25,6 +25,7 @@
 #include "ec.h"
 #include "eddsa.h"
 #include "engine.h"
+#include "provider.h"
 #include "rsa.h"
 
 typedef struct PKeyCryptOptions {
@@ -341,16 +342,20 @@ static int get_pkey_private_key(ErlNifEnv *env,
         /* Use key stored in engine */
         ENGINE *e;
 
-        if (!get_engine(env, argv[key_arg_num], &e))
-            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get engine"));
-
         if (!get_key_id(env, argv[key_arg_num], &id))
             assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get key id"));
 
         password = get_key_password(env, argv[key_arg_num]);
-        *pkey = ENGINE_load_private_key(e, id, NULL, password);
+
+        if (get_provider_pkey(env, argv[key_arg_num], id, password, pkey, 1))
+            ;
+        else if (get_engine(env, argv[key_arg_num], &e))
+            *pkey = ENGINE_load_private_key(e, id, NULL, password);
+        else
+            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get engine or provider"));
+
         if (!*pkey)
-            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get private key from engine"));
+            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get private key from engine/provider"));
 #else
         assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "No engine support"));
 #endif
@@ -422,16 +427,20 @@ static int get_pkey_public_key(ErlNifEnv *env,
         /* Use key stored in engine */
         ENGINE *e;
 
-        if (!get_engine(env, argv[key_arg_num], &e))
-            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get engine"));
-
         if (!get_key_id(env, argv[key_arg_num], &id))
             assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get key id"));
 
         password = get_key_password(env, argv[key_arg_num]);
-        *pkey = ENGINE_load_public_key(e, id, NULL, password);
-        if (!pkey)
-            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get public key from engine"));
+
+        if (get_provider_pkey(env, argv[key_arg_num], id, password, pkey, 0))
+            ;
+        else if (get_engine(env, argv[key_arg_num], &e))
+            *pkey = ENGINE_load_public_key(e, id, NULL, password);
+        else
+            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get engine or provider"));
+
+        if (!*pkey)
+            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get public key from engine/provider"));
 #else
         assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "No engine support"));
 #endif

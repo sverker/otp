@@ -140,7 +140,12 @@ extern ERL_NIF_TERM atom_engine_method_ec;
 
 extern ERL_NIF_TERM atom_engine;
 extern ERL_NIF_TERM atom_key_id;
+extern ERL_NIF_TERM atom_key_type;
 extern ERL_NIF_TERM atom_password;
+extern ERL_NIF_TERM atom_provider;
+extern ERL_NIF_TERM atom_loaded;
+extern ERL_NIF_TERM atom_already_loaded;
+
 #endif
 
 int init_atoms(ErlNifEnv *env);

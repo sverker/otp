@@ -132,7 +132,12 @@
          ensure_engine_loaded/2,
          ensure_engine_loaded/3,
          ensure_engine_unloaded/1,
-         ensure_engine_unloaded/2
+         ensure_engine_unloaded/2,
+
+         provider_load/1,
+         providers_loaded/0,
+         provider_algos/1,
+         provider_register/3
         ]).
 
 -nifs([info_nif/0, info_lib/0, info_fips/0, enable_fips_mode_nif/1,
@@ -156,7 +161,12 @@
        engine_unregister_nif/2, engine_add_nif/1, engine_remove_nif/1,
        engine_get_first_nif/0, engine_get_next_nif/1, engine_get_id_nif/1,
        engine_get_name_nif/1, engine_get_all_methods_nif/0,
-       ensure_engine_loaded_nif/2
+       ensure_engine_loaded_nif/2,
+
+       provider_load_nif/1,
+       providers_loaded_nif/0,
+       md_fetch_nif/2,
+       make_algo_list_nif/2
       ]).
 
 -export_type([ %% A minimum exported: only what public_key needs.
@@ -186,7 +196,7 @@
 
 %% Private. For tests.
 -export([packed_openssl_version/4, engine_methods_convert_to_bitmask/2,
-	 get_test_engine/0]).
+	 get_test_engine/0, get_test_provider/0]).
 -export([rand_plugin_aes_jump_2pow20/1]).
 
 -deprecated({rand_uniform, 2, "use rand:uniform/1 instead"}).
@@ -2455,10 +2465,10 @@ ensure_bin_as_int(Bin) when is_binary(Bin) ->
 ensure_bin_as_int(E) ->
     E.
 
-format_pkey(_Alg, #{engine:=_, key_id:=T}=M) when is_binary(T) -> format_pwd(M);
-format_pkey(_Alg, #{engine:=_, key_id:=T}=M) when is_list(T) -> format_pwd(M#{key_id:=list_to_binary(T)});
-format_pkey(_Alg, #{engine:=_           }=M) -> error({bad_key_id, M});
-format_pkey(_Alg, #{}=M) -> error({bad_engine_map, M});
+format_pkey(Alg, #{key_id := T}=M) when is_list(T) ->
+    format_pkey(Alg, M#{key_id := list_to_binary(T)});
+format_pkey(Alg, #{password := Pwd}=M) when is_list(Pwd) ->
+    format_pkey(Alg, M#{password := list_to_binary(Pwd)});
 %%%
 format_pkey(rsa, Key) ->
     map_ensure_int_as_bin(Key);
@@ -2471,9 +2481,6 @@ format_pkey(dss, Key) ->
     map_ensure_int_as_bin(Key);
 format_pkey(_, Key) ->
     Key.
-
-format_pwd(#{password := Pwd}=M) when is_list(Pwd) -> M#{password := list_to_binary(Pwd)};
-format_pwd(M) -> M.
 
 %%--------------------------------------------------------------------
 %%
@@ -2541,6 +2548,11 @@ engine_get_name_nif(_Engine) -> ?nif_stub.
 engine_get_all_methods_nif() -> ?nif_stub.
 ensure_engine_loaded_nif(_EngineId, _LibPath) -> ?nif_stub.
 
+provider_load_nif(_LibPath) -> ?nif_stub.
+providers_loaded_nif() -> ?nif_stub.
+md_fetch_nif(_Digest, _Properties) -> ?nif_stub.
+make_algo_list_nif(_Provider, _OpId) -> ?nif_stub.
+
 %%--------------------------------------------------------------------
 %% Engine internals
 engine_nif_wrapper(ok) ->
@@ -2593,16 +2605,23 @@ engine_method_atom_to_int(X) ->
     erlang:error(badarg, [X]).
 
 get_test_engine() ->
+    get_test_dynlib("otp_test_engine").
+
+get_test_provider() ->
+    get_test_dynlib("otp_test_provider").
+
+get_test_dynlib(DynLib) ->
     Type = erlang:system_info(system_architecture),
     LibDir = filename:join([code:priv_dir(crypto), "lib"]),
     ArchDir = filename:join([LibDir, Type]),
-    case filelib:is_dir(ArchDir) of
-	true  -> check_otp_test_engine(ArchDir);
-	false -> check_otp_test_engine(LibDir)
-    end.
+    Dir = case filelib:is_dir(ArchDir) of
+              true  -> ArchDir;
+              false -> LibDir
+          end,
+    check_otp_test_dynlib(DynLib, Dir).
 
-check_otp_test_engine(LibDir) ->
-    case choose_otp_test_engine(LibDir) of
+check_otp_test_dynlib(DynLib, LibDir) ->
+    case choose_otp_test_dynlib(DynLib, LibDir) of
         false ->
             {error, notexist};
         LibName ->
@@ -2616,23 +2635,58 @@ check_otp_test_engine(LibDir) ->
     end.
 
 
-choose_otp_test_engine(LibDir) ->
-    LibNames = filelib:wildcard("otp_test_engine.*", LibDir),
+choose_otp_test_dynlib(DynLib, LibDir) ->
+    LibNames = filelib:wildcard(DynLib ++ ".*", LibDir),
     Type = atom_to_list(erlang:system_info(build_type)),
-    choose_otp_test_engine(LibNames, Type, false).
+    choose_otp_test_dynlib(LibNames, Type, false).
 
-choose_otp_test_engine([LibName | T], Type, Acc) ->
+choose_otp_test_dynlib([LibName | T], Type, Acc) ->
     case string:lexemes(LibName, ".") of
         [_, Type, _SO] ->
             LibName;  %% Choose typed if exists (valgrind,asan)
         [_, _SO] ->
             %% Fallback on typeless (opt)
-            choose_otp_test_engine(T, Type, LibName);
+            choose_otp_test_dynlib(T, Type, LibName);
         _ ->
-            choose_otp_test_engine(T, Type, Acc)
+            choose_otp_test_dynlib(T, Type, Acc)
     end;
-choose_otp_test_engine([], _, Acc) ->
+choose_otp_test_dynlib([], _, Acc) ->
     Acc.
+
+
+provider_register(digest, DigestType, Properties) ->
+    md_fetch_nif(DigestType, Properties).
+
+provider_load(Path) ->
+    provider_load_nif(Path).
+
+providers_loaded() ->
+    providers_loaded_nif().
+
+provider_algos(ProviderRef) ->
+    maps:fold(fun(Op, Id, Acc) ->
+                      case make_algo_list_nif(ProviderRef, Id) of
+                          [] -> Acc;
+                          List -> [{Op, List} | Acc]
+                      end
+              end,
+              [],
+              provider_operation_ids()).
+
+provider_operation_ids() ->
+    #{digest => 1,
+      cipher => 2,
+      mac => 3,
+      kdf => 4,
+      rand => 5,
+      keymgmt => 10,
+      keyexch => 11,
+      signature => 12,
+      asym_cipher => 13,
+      kem => 14,
+      encoder => 20,
+      decoder => 21,
+      store => 22}.
 
 %%%----------------------------------------------------------------
 %%% Error internals
