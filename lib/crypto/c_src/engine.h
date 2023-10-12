@@ -24,7 +24,8 @@
 #include "common.h"
 
 #ifdef HAS_ENGINE_SUPPORT
-int get_engine_and_key_id(ErlNifEnv *env, ERL_NIF_TERM key, char ** id, ENGINE **e);
+int get_engine(ErlNifEnv *env, ERL_NIF_TERM key, ENGINE **e);
+int get_key_id(ErlNifEnv *env, ERL_NIF_TERM key, char ** id);
 char *get_key_password(ErlNifEnv *env, ERL_NIF_TERM key);
 #endif /* HAS_ENGINE_SUPPORT */
 

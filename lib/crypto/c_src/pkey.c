@@ -341,8 +341,11 @@ static int get_pkey_private_key(ErlNifEnv *env,
         /* Use key stored in engine */
         ENGINE *e;
 
-        if (!get_engine_and_key_id(env, argv[key_arg_num], &id, &e))
-            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get engine and/or key id"));
+        if (!get_engine(env, argv[key_arg_num], &e))
+            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get engine"));
+
+        if (!get_key_id(env, argv[key_arg_num], &id))
+            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get key id"));
 
         password = get_key_password(env, argv[key_arg_num]);
         *pkey = ENGINE_load_private_key(e, id, NULL, password);
@@ -419,8 +422,11 @@ static int get_pkey_public_key(ErlNifEnv *env,
         /* Use key stored in engine */
         ENGINE *e;
 
-        if (!get_engine_and_key_id(env, argv[key_arg_num], &id, &e))
-            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get engine and/or key id"));
+        if (!get_engine(env, argv[key_arg_num], &e))
+            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get engine"));
+
+        if (!get_key_id(env, argv[key_arg_num], &id))
+            assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get key id"));
 
         password = get_key_password(env, argv[key_arg_num]);
         *pkey = ENGINE_load_public_key(e, id, NULL, password);

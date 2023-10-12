@@ -53,22 +53,33 @@ static void engine_ctx_dtor(ErlNifEnv* env, struct engine_ctx* ctx) {
     }
 }
 
-int get_engine_and_key_id(ErlNifEnv *env, ERL_NIF_TERM key, char ** id, ENGINE **e)
+int get_engine(ErlNifEnv *env, ERL_NIF_TERM key, ENGINE **e)
 {
-    ERL_NIF_TERM engine_res, key_id_term;
+    ERL_NIF_TERM engine_res;
     struct engine_ctx *ctx;
-    ErlNifBinary key_id_bin;
 
     if (!enif_get_map_value(env, key, atom_engine, &engine_res))
         goto err;
     if (!enif_get_resource(env, engine_res, engine_ctx_rtype, (void**)&ctx))
         goto err;
+
+    *e = ctx->engine;
+    return 1;
+
+ err:
+    return 0;
+}
+
+int get_key_id(ErlNifEnv *env, ERL_NIF_TERM key, char ** id)
+{
+    ERL_NIF_TERM key_id_term;
+    ErlNifBinary key_id_bin;
+
     if (!enif_get_map_value(env, key, atom_key_id, &key_id_term))
         goto err;
     if (!enif_inspect_binary(env, key_id_term, &key_id_bin))
         goto err;
 
-    *e = ctx->engine;
     return zero_terminate(&key_id_bin, id);
 
  err:
