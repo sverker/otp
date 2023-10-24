@@ -21,6 +21,20 @@
 #include "common.h"
 #include <string.h>
 
+int zero_terminate(const ErlNifBinary* bin, char **buf)
+{
+    if ((*buf = enif_alloc(bin->size + 1)) == NULL)
+        goto err;
+
+    memcpy(*buf, bin->data, bin->size);
+    *(*buf + bin->size) = 0;
+
+    return 1;
+
+ err:
+    return 0;
+}
+
 #define MAX_CRYPTOLIB_ERR_SIZE 256
 #define SEP ": "
 

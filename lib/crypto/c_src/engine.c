@@ -33,9 +33,6 @@ struct engine_ctx {
 static ErlNifResourceType* engine_ctx_rtype;
 static ErlNifMutex *ensure_engine_loaded_mtx = NULL;
 
-static int zero_terminate(ErlNifBinary bin, char **buf);
-
-
 static void engine_ctx_dtor(ErlNifEnv* env, struct engine_ctx* ctx) {
     if (ctx == NULL)
         return;
@@ -72,7 +69,7 @@ int get_engine_and_key_id(ErlNifEnv *env, ERL_NIF_TERM key, char ** id, ENGINE *
         goto err;
 
     *e = ctx->engine;
-    return zero_terminate(key_id_bin, id);
+    return zero_terminate(&key_id_bin, id);
 
  err:
     return 0;
@@ -87,7 +84,7 @@ char *get_key_password(ErlNifEnv *env, ERL_NIF_TERM key) {
         goto err;
     if (!enif_inspect_binary(env, tmp_term, &pwd_bin))
         goto err;
-    if (!zero_terminate(pwd_bin, &pwd))
+    if (!zero_terminate(&pwd_bin, &pwd))
         goto err;
 
     return pwd;
@@ -96,18 +93,6 @@ char *get_key_password(ErlNifEnv *env, ERL_NIF_TERM key) {
     return NULL;
 }
 
-static int zero_terminate(ErlNifBinary bin, char **buf) {
-    if ((*buf = enif_alloc(bin.size + 1)) == NULL)
-        goto err;
-
-    memcpy(*buf, bin.data, bin.size);
-    *(*buf + bin.size) = 0;
-
-    return 1;
-
- err:
-    return 0;
-}
 #endif /* HAS_ENGINE_SUPPORT */
 
 int init_engine_ctx(ErlNifEnv *env) {
