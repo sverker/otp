@@ -970,7 +970,7 @@ set_default_trace_pattern(Eterm module)
 				      match_spec,
 				      meta_match_spec,
 				      1, trace_pattern_flags,
-				      meta_tracer, 1);
+				      meta_tracer, erts_tracer_nil, 1);
     }
 }
 

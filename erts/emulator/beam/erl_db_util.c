@@ -2827,8 +2827,8 @@ restart:
 		int   cputs = 0;
                 erts_tracer_update(&tracer, ERTS_TRACER(c_p));
 		
-		if (! erts_trace_flags(esp[-1], &d_flags, &tracer, &cputs) ||
-		    ! erts_trace_flags(esp[-2], &e_flags, &tracer, &cputs) ||
+		if (! erts_trace_flags(esp[-1], &d_flags, &tracer, &cputs, NULL) ||
+		    ! erts_trace_flags(esp[-2], &e_flags, &tracer, &cputs, NULL) ||
 		    cputs ) {
 		    (--esp)[-1] = FAIL_TERM;
                     ERTS_TRACER_CLEAR(&tracer);
@@ -2855,8 +2855,8 @@ restart:
 
                 erts_tracer_update(&tracer, ERTS_TRACER(c_p));
 		
-		if (! erts_trace_flags(esp[-1], &d_flags, &tracer, &cputs) ||
-		    ! erts_trace_flags(esp[-2], &e_flags, &tracer, &cputs) ||
+		if (! erts_trace_flags(esp[-1], &d_flags, &tracer, &cputs, NULL) ||
+		    ! erts_trace_flags(esp[-2], &e_flags, &tracer, &cputs, NULL) ||
 		    cputs ||
 		    ! (tmpp = get_proc(c_p, ERTS_PROC_LOCK_MAIN, 
 				       tracee, ERTS_PROC_LOCKS_ALL))) {

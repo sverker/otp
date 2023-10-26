@@ -260,6 +260,7 @@
 -export([suspend_process/2, system_monitor/0]).
 -export([system_monitor/1, system_monitor/2, system_profile/0]).
 -export([system_profile/2, throw/1, time/0, trace/3, trace_delivered/1]).
+-export([trace_session_create/1, trace_session_destroy/1]).
 -export([trace_info/2, trunc/1, tuple_size/1, universaltime/0]).
 -export([universaltime_to_posixtime/1, unlink/1, unregister/1, whereis/1]).
 
@@ -2799,6 +2800,18 @@ term_to_iovec(_Term, _Options) ->
 tl(_List) ->
     erlang:nif_error(undefined).
 
+trace_session_create(Opts) ->
+    try erts_internal:trace_session_create(Opts) of
+        Ref -> Ref
+    catch error:R:Stk ->
+            error_with_inherited_info(R, Opts, Stk)
+    end.
+trace_session_destroy(Ref) ->
+    try erts_internal:trace_session_destroy(Ref) of
+        Res -> Res
+    catch error:R:Stk ->
+            error_with_inherited_info(R, [Ref], Stk)
+    end.
 -type match_variable() :: atom(). % Approximation of '$1' | '$2' | ...
 -type trace_pattern_mfa() ::
       {atom(),atom(),arity() | '_'} | on_load.

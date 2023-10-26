@@ -100,7 +100,7 @@ typedef union {
  * It is assumed that the flags, refc, and orig_size fields are 4 bytes on
  * 32-bits architectures and 8 bytes on 64-bits architectures.
  */
-
+int CMP_REFN(Eterm mref1, Eterm mref2);
 #define ERTS_MAGIC_BIN_REFN(BP) \
   ((ErtsBinary *) (BP))->magic_binary.refn
 #define ERTS_MAGIC_BIN_ATYPE(BP) \

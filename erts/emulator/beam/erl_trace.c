@@ -571,10 +571,13 @@ erts_change_default_port_tracing(int setflags, Uint flagsp,
 }
 
 void
-erts_get_default_proc_tracing(Uint *flagsp, ErtsTracer *tracerp)
+erts_get_default_proc_tracing(Uint *flagsp, ErtsTracer *tracerp,
+                              ErtsTrace * tracesessionp)
 {
+    ErtsTrace initialize_sessions = {.flags = 0,.tracers = {{NIL}} };
     erts_rwmtx_rlock(&sys_trace_rwmtx);
     *tracerp = erts_tracer_nil; /* initialize */
+    *tracesessionp = initialize_sessions;
     get_default_tracing(
         flagsp, tracerp,
         &default_proc_trace_flags,
@@ -731,7 +734,8 @@ trace_send(Process *p, Eterm to, Eterm msg)
     ErtsThrPrgrDelayHandle dhndl;
 
     ASSERT(ARE_TRACE_FLAGS_ON(p, F_TRACE_SEND));
-
+    // ErtsTracingEvent contains each trace session
+    // iterate through that
     te = &erts_send_tracing[erts_active_bp_ix()];
     if (!te->on) {
 	return;
@@ -790,6 +794,10 @@ trace_receive(Process* receiver,
     Eterm pam_result;
 
     if (!te) {
+        // ErtsTracingEvent contains each trace session
+        // iterate through that
+        // TODO, why can we receive a match_spec outside of erts_receive_tracing?
+
         te = &erts_receive_tracing[erts_active_bp_ix()];
         if (!te->on)
             return;
@@ -1074,6 +1082,20 @@ erts_trace_exception(Process* p, ErtsCodeMFA *mfa, Eterm class, Eterm value,
 }
 
 /*
+ * Returns an NIL terminated array of ErtsTracer.
+ * The array is sorted according to the order of the
+ * reference that identifies it.
+ */
+ErtsTracer *
+erts_get_tracers (Process * p, Uint flag)
+{
+    Uint bp = 1 << flag;
+    Uint flags = p->common.trace.flags;
+    ASSERT (flags & bp);
+    return p->common.trace.tracers[hashmap_bitcount (flags & (bp - 1))];
+}
+
+/*
  * This function implements the new call trace.
  *
  * Send {trace_ts, Pid, call, {Mod, Func, A}, PamResult, Timestamp}
@@ -1131,6 +1153,14 @@ erts_call_trace(Process* p, ErtsCodeInfo *info, Binary *match_spec,
             return 0;
         }
     } else {
+        // TODO: if tracer is a ref, extract the tracer
+        if (is_internal_magic_ref (*tracer))
+            {
+                *tracer =
+                    *(ErtsTracer *)
+                    ERTS_MAGIC_BIN_UNALIGNED_DATA (erts_magic_ref2bin (*tracer));
+            }
+
 	/* Tracer not specified in process structure =>
 	 *   tracer specified in breakpoint =>
 	 *     meta trace =>
@@ -1140,6 +1170,8 @@ erts_call_trace(Process* p, ErtsCodeInfo *info, Binary *match_spec,
             /* No trace messages for sensitive processes. */
             return 0;
         }
+        // Check breakpoint for active session tracer
+
 	meta_flags = F_TRACE_CALLS | F_NOW_TS;
 	tracee_flags = &meta_flags;
         switch (call_enabled_tracer(*tracer,
@@ -2651,7 +2683,7 @@ lookup_tracer_nif(const ErtsTracer tracer)
    It returns THE_NON_VALUE if an invalid tracer term was given.
    Accepted input is:
      pid() || port() || {prefix, pid()} || {prefix, port()} ||
-     {prefix, atom(), term()} || {atom(), term()}
+   {prefix, magicref()} || {prefix, atom(), term()} || {atom(), term()}
  */
 ErtsTracer
 erts_term_to_tracer(Eterm prefix, Eterm t)
@@ -2664,7 +2696,16 @@ erts_term_to_tracer(Eterm prefix, Eterm t)
         if (is_tuple(t)) {
             Eterm *tp = tuple_val(t);
             if (prefix != THE_NON_VALUE) {
-                if (arityval(tp[0]) == 2 && tp[1] == prefix)
+                if (arityval (tp[0]) == 2 && tp[1] == am_session
+                    && is_internal_magic_ref (tp[2]))
+                    {
+                        lookup_tracer_session (&tracer, tp[2]);
+                        if (ERTS_TRACER_COMPARE (tracer, erts_tracer_nil)) {
+                            return THE_NON_VALUE;     // TODO Why is my magic_ref tracer nil the second time?
+                        }
+                        goto tracer_found;
+                    }
+                else if (arityval(tp[0]) == 2 && tp[1] == prefix)
                     t = tp[2];
                 else if (arityval(tp[0]) == 3 && tp[1] == prefix && is_atom(tp[2])) {
                     module = tp[2];
@@ -3020,6 +3061,10 @@ void
 erts_tracer_update(ErtsTracer *tracer, const ErtsTracer new_tracer)
 {
     ErlHeapFragment *hf;
+
+    if (is_not_nil (*tracer) && is_internal_magic_ref (*tracer)) {
+        tracer = ERTS_MAGIC_BIN_UNALIGNED_DATA (erts_magic_ref2bin (*tracer));
+    }
 
     if (is_not_nil(*tracer)) {
         Uint offs = 2;

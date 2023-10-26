@@ -60,6 +60,7 @@ typedef struct
 {
     int on;
     struct binary* match_spec;
+    //BpSessionTracer session_tracer;
 } ErtsTracingEvent;
 
 extern ErtsTracingEvent erts_send_tracing[];
@@ -69,6 +70,12 @@ extern ErtsTracingEvent erts_receive_tracing[];
 Eterm erl_seq_trace_info(Process *p, Eterm arg1);
 void erts_system_monitor_clear(Process *c_p);
 void erts_system_profile_clear(Process *c_p);
+void lookup_tracer_session(ErtsTracer *tracer, Eterm SessionRef);
+void insert_tracer_session(Eterm Ref);
+void delete_tracer_session(Eterm Ref);
+ErtsTracer ref2tracer(Eterm Ref);
+// contains a list of tuples with 
+extern ErtsTracer global_session_tracer_list[];
 
 /* erl_trace.c */
 void erts_init_trace(void);
@@ -79,7 +86,7 @@ ErtsTracer erts_set_system_seq_tracer(Process *c_p,
 ErtsTracer erts_get_system_seq_tracer(void);
 void erts_change_default_proc_tracing(int setflags, Uint flagsp,
                                       const ErtsTracer tracerp);
-void erts_get_default_proc_tracing(Uint *flagsp, ErtsTracer *tracerp);
+void erts_get_default_proc_tracing(Uint *flagsp, ErtsTracer *tracerp, ErtsTrace *tracesessionp);
 void erts_change_default_port_tracing(int setflags, Uint flagsp,
                                       const ErtsTracer tracerp);
 void erts_get_default_port_tracing(Uint *flagsp, ErtsTracer *tracerp);
@@ -141,7 +148,7 @@ void monitor_large_heap(Process *p);
 void monitor_generic(Process *p, Eterm type, Eterm spec);
 Uint erts_trace_flag2bit(Eterm flag);
 int erts_trace_flags(Eterm List, 
-		 Uint *pMask, ErtsTracer *pTracer, int *pCpuTimestamp);
+                     Uint *pMask, ErtsTracer *pTracer, int *pCpuTimestamp, Eterm *pSessionRef);
 
 void erts_send_pending_trace_msgs(ErtsSchedulerData *esdp);
 #define ERTS_CHK_PEND_TRACE_MSGS(ESDP)				\
@@ -179,7 +186,7 @@ int erts_set_trace_pattern(Process*p, ErtsCodeMFA *mfa, int specified,
 			   struct binary* match_prog_set,
 			   struct binary *meta_match_prog_set,
 			   int on, struct trace_pattern_flags,
-			   ErtsTracer meta_tracer, int is_blocking);
+			   ErtsTracer meta_tracer, ErtsTracer session_tracer, int is_blocking);
 void
 erts_get_default_trace_pattern(int *trace_pattern_is_on,
 			       struct binary **match_spec,
@@ -204,7 +211,12 @@ void erts_tracer_replace(ErtsPTabElementCommon *t_p,
                          const ErtsTracer new_tracer);
 void erts_tracer_update(ErtsTracer *tracer, const ErtsTracer new_tracer);
 int erts_tracer_nif_clear(void);
-
+/*
+ * Returns an NIL terminated array of ErtsTracer.
+ * The array is sorted according to the order of the
+ * reference that identifies it.
+ */
+ErtsTracer * erts_get_tracers(Process *p, Uint flag);
 #define erts_tracer_update(t,n) do { if (*(t) != (n)) erts_tracer_update(t,n); } while(0)
 #define ERTS_TRACER_CLEAR(t) erts_tracer_update(t, erts_tracer_nil)
 

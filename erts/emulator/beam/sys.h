@@ -708,6 +708,10 @@ typedef struct preload {
  */
 typedef Eterm ErtsTracer;
 
+typedef struct {
+    Uint flags;
+    ErtsTracer tracers[32][32]; // sorted on the reference that identifies it
+} ErtsTrace;
 
 /*
  * This structure contains the rb tree for the erlang osenv copy

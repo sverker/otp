@@ -58,12 +58,16 @@ typedef struct {
     erts_atomic_t tracer;
     erts_refc_t refc;
 } BpMetaTracer;
-
+typedef struct {
+    erts_atomic_t tracer;
+    erts_refc_t refc;
+} BpSessionTracer;
 typedef struct generic_bp_data {
     Uint flags;
     Binary* local_ms;		/* Match spec for local call trace */
     Binary* meta_ms;		/* Match spec for meta trace */
-    BpMetaTracer* meta_tracer;	/* Meta tracer */
+    BpMetaTracer* meta_tracer;	/* Meta tracer */ /*is meta trace to be considered as a session trace?*/
+    BpSessionTracer *session_tracer; /* Session tracer */
     BpCount* count;		/* For call count */
     BpDataTime* time;		/* For time trace */
 } GenericBpData;
@@ -72,7 +76,7 @@ typedef struct generic_bp_data {
 
 typedef struct generic_bp {
     BeamInstr orig_instr;
-    GenericBpData data[ERTS_NUM_BP_IX];
+    GenericBpData data[32][ERTS_NUM_BP_IX]; // this is not very efficient
 } GenericBp;
 
 #define ERTS_BP_CALL_TIME_SCHEDULE_IN      (0)
@@ -126,6 +130,8 @@ void erts_clear_trace_break(BpFunctions *f);
 
 void erts_set_export_trace(ErtsCodeInfo *ci, Binary *match_spec, int local);
 void erts_clear_export_trace(ErtsCodeInfo *ci, int local);
+
+void erts_set_session_trace_break(BpFunctions* f, Binary *match_spec, ErtsTracer tracer);
 
 void erts_set_mtrace_break(BpFunctions *f, Binary *match_spec,
 			  ErtsTracer tracer);

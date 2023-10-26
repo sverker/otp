@@ -36,7 +36,7 @@
 #undef ERL_THR_PROGRESS_TSD_TYPE_ONLY
 #include "erl_alloc.h"
 #include "erl_monitor_link.h"
-
+#define ERTS_TRACER_SESSIONS(P) ((P)->common.trace)
 #define ERTS_TRACER(P)          ((P)->common.tracer)
 #define ERTS_TRACER_MODULE(T) 	(CAR(list_val(T)))
 #define ERTS_TRACER_STATE(T) 	(CDR(list_val(T)))
@@ -59,6 +59,7 @@ typedef struct {
 	erts_atomic_t atmc;
 	Sint sint;
     } refc;
+    ErtsTrace trace;
     ErtsTracer tracer;
     Uint trace_flags;
     erts_atomic_t timer;

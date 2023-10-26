@@ -12380,7 +12380,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 	    : STORE_NC(&p->htop, &p->off_heap, group_leader);
     }
 
-    erts_get_default_proc_tracing(&ERTS_TRACE_FLAGS(p), &ERTS_TRACER(p));
+    erts_get_default_proc_tracing(&ERTS_TRACE_FLAGS(p), &ERTS_TRACER(p), &ERTS_TRACER_SESSIONS(p));
 
     p->uniq = 0;
     p->sig_qs.first = NULL;
