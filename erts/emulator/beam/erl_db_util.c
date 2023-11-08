@@ -1606,7 +1606,6 @@ void db_initialize_util(void){
 	  sizeof(DMCGuardBif), 
 	  (int (*)(const void *, const void *)) &cmp_guard_bif);
     match_pseudo_process_init();
-    erts_atomic32_init_nob(&trace_control_word, 0);
     if (erts_check_if_stack_grows_downwards(&c))
         stack_guard = stack_guard_downwards;
     else

@@ -84,26 +84,32 @@ static void install_exp_breakpoints(BpFunctions* f);
 static void uninstall_exp_breakpoints(BpFunctions* f);
 static void clean_export_entries(BpFunctions* f);
 
-ErtsTracingEvent erts_send_tracing[ERTS_NUM_BP_IX];
-ErtsTracingEvent erts_receive_tracing[ERTS_NUM_BP_IX];
+ErtsTraceSession erts_trace_session_0;
+
+static
+void erts_trace_session_init(ErtsTraceSession* s)
+{
+    int i;
+
+    for (i=0; i<ERTS_NUM_BP_IX; i++) {
+        s->send_tracing[i].on = 1;
+        s->send_tracing[i].match_spec = NULL;
+        s->receive_tracing[i].on = 1;
+        s->receive_tracing[i].match_spec = NULL;
+    }
+    erts_atomic32_init_nob(&s->trace_control_word, 0);
+}
 
 void
 erts_bif_trace_init(void)
 {
-    int i;
-
     erts_default_trace_pattern_is_on = 0;
     erts_default_match_spec = NULL;
     erts_default_meta_match_spec = NULL;
     erts_default_trace_pattern_flags = erts_trace_pattern_flags_off;
     erts_default_meta_tracer = erts_tracer_nil;
 
-    for (i=0; i<ERTS_NUM_BP_IX; i++) {
-        erts_send_tracing[i].on = 1;
-        erts_send_tracing[i].match_spec = NULL;
-	erts_receive_tracing[i].on = 1;
-	erts_receive_tracing[i].match_spec = NULL;
-    }
+    erts_trace_session_init(&erts_trace_session_0);
 }
 
 /*
@@ -1429,8 +1435,8 @@ trace_info_event(Process* p, Eterm event, Eterm key)
     Eterm* hp;
 
     switch (event) {
-    case am_send:    te = erts_send_tracing;    break;
-    case am_receive: te = erts_receive_tracing; break;
+    case am_send: te = erts_trace_session_0.send_tracing;    break;
+    case am_receive: te = erts_trace_session_0.receive_tracing; break;
     default:
         goto error;
     }
@@ -1592,8 +1598,8 @@ erts_set_tracing_event_pattern(Eterm event, Binary* match_spec, int on)
     ErtsTracingEvent* st;
 
     switch (event) {
-    case am_send: st = &erts_send_tracing[ix]; break;
-    case am_receive: st = &erts_receive_tracing[ix]; break;
+    case am_send: st = &erts_trace_session_0.send_tracing[ix]; break;
+    case am_receive: st = &erts_trace_session_0.receive_tracing[ix]; break;
     default: return -1;
     }
 
@@ -1697,8 +1703,8 @@ erts_finish_breakpointing(void)
 	erts_consolidate_local_bp_data(&finish_bp.f);
 	erts_bp_free_matched_functions(&finish_bp.e);
 	erts_bp_free_matched_functions(&finish_bp.f);
-        consolidate_event_tracing(erts_send_tracing);
-	consolidate_event_tracing(erts_receive_tracing);
+        consolidate_event_tracing(erts_trace_session_0.send_tracing);
+	consolidate_event_tracing(erts_trace_session_0.receive_tracing);
         return 1;
     case 4:
         /* All schedulers have run a code barrier (or will as soon as they

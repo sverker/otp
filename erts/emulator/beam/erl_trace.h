@@ -62,8 +62,19 @@ typedef struct
     struct binary* match_spec;
 } ErtsTracingEvent;
 
-extern ErtsTracingEvent erts_send_tracing[];
-extern ErtsTracingEvent erts_receive_tracing[];
+#include "beam_bp.h"    // ERTS_NUM_BP_IX
+
+typedef struct ErtsTraceSession_ {
+    struct ErtsTraceSession_* next;   // in global list
+
+    Uint session_bit;
+    ErtsTracer tracer;
+    erts_atomic32_t trace_control_word;
+    ErtsTracingEvent send_tracing[ERTS_NUM_BP_IX];
+    ErtsTracingEvent receive_tracing[ERTS_NUM_BP_IX];
+}ErtsTraceSession;
+
+extern ErtsTraceSession erts_trace_session_0;
 
 /* erl_bif_trace.c */
 Eterm erl_seq_trace_info(Process *p, Eterm arg1);

@@ -732,7 +732,7 @@ trace_send(Process *p, Eterm to, Eterm msg)
 
     ASSERT(ARE_TRACE_FLAGS_ON(p, F_TRACE_SEND));
 
-    te = &erts_send_tracing[erts_active_bp_ix()];
+    te = &erts_trace_session_0.send_tracing[erts_active_bp_ix()];
     if (!te->on) {
 	return;
     }
@@ -790,7 +790,7 @@ trace_receive(Process* receiver,
     Eterm pam_result;
 
     if (!te) {
-        te = &erts_receive_tracing[erts_active_bp_ix()];
+        te = &erts_trace_session_0.receive_tracing[erts_active_bp_ix()];
         if (!te->on)
             return;
     }

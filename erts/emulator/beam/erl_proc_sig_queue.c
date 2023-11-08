@@ -3413,7 +3413,8 @@ adjust_tracing_state(Process *c_p, ErtsSigRecvTracing *tracing, int setup)
         else {
             if (tracing->messages.bp_ix < 0)
                 tracing->messages.bp_ix = erts_active_bp_ix();
-            tracing->messages.event = &erts_receive_tracing[tracing->messages.bp_ix];
+            tracing->messages.event =
+                &erts_trace_session_0.receive_tracing[tracing->messages.bp_ix];
         }
         if (setup) {
             if (recv_trace)
