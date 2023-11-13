@@ -76,6 +76,7 @@ typedef struct ErtsTraceSession_ {
 
 extern ErtsTraceSession erts_trace_session_0;
 
+
 /* erl_bif_trace.c */
 Eterm erl_seq_trace_info(Process *p, Eterm arg1);
 void erts_system_monitor_clear(Process *c_p);
@@ -214,10 +215,10 @@ Eterm erts_build_tracer_to_term(Eterm **hpp, ErlOffHeap *ohp, Uint *szp, ErtsTra
 ErtsTracer erts_term_to_tracer(Eterm prefix, Eterm term);
 void erts_tracer_replace(ErtsPTabElementCommon *t_p,
                          const ErtsTracer new_tracer);
-void erts_tracer_update(ErtsTracer *tracer, const ErtsTracer new_tracer);
+void erts_tracer_update_impl(ErtsTracer *tracer, const ErtsTracer new_tracer);
 int erts_tracer_nif_clear(void);
 
-#define erts_tracer_update(t,n) do { if (*(t) != (n)) erts_tracer_update(t,n); } while(0)
+#define erts_tracer_update(t,n) do { if (*(t) != (n)) erts_tracer_update_impl(t,n); } while(0)
 #define ERTS_TRACER_CLEAR(t) erts_tracer_update(t, erts_tracer_nil)
 
 static const ErtsTracer
