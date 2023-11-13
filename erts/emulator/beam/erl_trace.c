@@ -2838,7 +2838,8 @@ send_to_tracer_nif(Process *c_p, ErtsPTabElementCommon *t_p,
 
     return send_to_tracer_nif_raw(c_p,
                                   is_internal_pid(t_p->id) ? (Process*)t_p : NULL,
-                                  t_p->tracer, t_p->trace_flags,
+                                  t_p->tracee.tracers.tracer,
+                                  t_p->tracee.tracers.flags,
                                   t_p_id, tnif, topt, tag, msg, extra,
                                   pam_result);
 }
@@ -2892,7 +2893,8 @@ is_tracer_enabled(Process* c_p, ErtsProcLocks c_p_locks,
     }
 #endif
 
-    nif_result = call_enabled_tracer(t_p->tracer, tnif_ret, topt, tag, t_p->id);
+    nif_result = call_enabled_tracer(t_p->tracee.tracers.tracer, tnif_ret,
+                                     topt, tag, t_p->id);
     switch (nif_result) {
     case am_discard: return 0;
     case am_trace: return 1;
@@ -2922,7 +2924,7 @@ is_tracer_enabled(Process* c_p, ErtsProcLocks c_p_locks,
             }
 
             erts_tracer_replace(t_p, erts_tracer_nil);
-            t_p->trace_flags &= ~TRACEE_FLAGS;
+            t_p->tracee.tracers.flags &= ~TRACEE_FLAGS;
 
             if (c_p_xlocks)
                 erts_proc_unlock(c_p, c_p_xlocks);
@@ -2974,10 +2976,10 @@ void erts_tracer_replace(ErtsPTabElementCommon *t_p, const ErtsTracer tracer)
                        || erts_thr_progress_is_blocking());
     }
 #endif
-    if (ERTS_TRACER_COMPARE(t_p->tracer, tracer))
+    if (ERTS_TRACER_COMPARE(t_p->tracee.tracers.tracer, tracer))
         return;
 
-    erts_tracer_update(&t_p->tracer, tracer);
+    erts_tracer_update(&t_p->tracee.tracers.tracer, tracer);
 }
 
 static void free_tracer(void *p)

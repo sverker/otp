@@ -37,10 +37,23 @@
 #include "erl_alloc.h"
 #include "erl_monitor_link.h"
 
-#define ERTS_TRACER(P)          ((P)->common.tracer)
+typedef struct ErtsTracerRef {
+    //ErtsTraceSession* session;
+    ErtsTracer tracer;
+    Uint32 flags;
+} ErtsTracerRef;
+
+typedef struct ErtsTracee_ {
+    //Uint all_trace_flags;
+    //Uint all_session_bits;
+    //Uint ntracers;
+    ErtsTracerRef tracers;
+} ErtsTracee;
+
+#define ERTS_TRACER(P)          ((P)->common.tracee.tracers.tracer)
 #define ERTS_TRACER_MODULE(T) 	(CAR(list_val(T)))
 #define ERTS_TRACER_STATE(T) 	(CDR(list_val(T)))
-#define ERTS_TRACE_FLAGS(P)	((P)->common.trace_flags)
+#define ERTS_TRACE_FLAGS(P)	((P)->common.tracee.tracers.flags)
 
 #define ERTS_P_LINKS(P)		((P)->common.u.alive.links)
 #define ERTS_P_MONITORS(P)	((P)->common.u.alive.monitors)
@@ -76,8 +89,7 @@ typedef struct {
 	/* --- While being released --- */
 	ErtsThrPrgrLaterOp release;
     } u;
-    ErtsTracer tracer;
-    Uint32 trace_flags;
+    ErtsTracee tracee;
 } ErtsPTabElementCommon;
 
 typedef struct ErtsPTabDeletedElement_ ErtsPTabDeletedElement;
