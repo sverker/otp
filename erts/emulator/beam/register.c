@@ -232,7 +232,7 @@ int erts_register_name(Process *c_p, Eterm name, Eterm id)
     
     rp = (RegProc*) hash_put(&process_reg, (void*) &r);
     if (proc && rp->p == proc) {
-	if (IS_TRACED_FL(proc, F_TRACE_PROCS)) {
+	if (ERTS_TRACE_FLAGS(proc) & F_TRACE_PROCS) {
 	    trace_proc(proc, ERTS_PROC_LOCK_MAIN,
                        proc, am_register, name);
 	}
@@ -512,7 +512,7 @@ int erts_unregister_name(Process *c_p,
 			       ERTS_PROC_LOCK_MAIN);
 	    current_c_p_locks = c_p_locks;
 	    rp->p->common.u.alive.reg = NULL;
-	    if (IS_TRACED_FL(rp->p, F_TRACE_PROCS)) {
+	    if (ERTS_TRACE_FLAGS(rp->p) & F_TRACE_PROCS) {
                 trace_proc(rp->p, (c_p == rp->p) ? c_p_locks : ERTS_PROC_LOCK_MAIN,
                            rp->p, am_unregister, r.name);
 	    }

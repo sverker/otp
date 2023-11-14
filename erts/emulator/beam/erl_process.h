@@ -1651,7 +1651,8 @@ extern int erts_system_profile_ts_type;
 
 #define F_NUM_FLAGS          (ERTS_TRACE_TS_TYPE_BITS + 22)
 #ifdef DEBUG
-#  define F_INITIAL_TRACE_FLAGS (5 << F_NUM_FLAGS)
+// Was there a point with this high 5?
+#  define F_INITIAL_TRACE_FLAGS 0 //(5 << F_NUM_FLAGS)
 #else
 #  define F_INITIAL_TRACE_FLAGS 0
 #endif

@@ -125,6 +125,7 @@ MODULES= \
 	trace_call_time_SUITE \
 	trace_call_memory_SUITE \
 	tracer_SUITE \
+	trace_session_SUITE \
 	tracer_test \
 	scheduler_SUITE \
 	port_trace_SUITE \

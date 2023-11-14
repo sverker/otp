@@ -73,7 +73,8 @@ erts_set_tracing_event_pattern(Eterm event, Binary*, int on);
 static void smp_bp_finisher(void* arg);
 static BIF_RETTYPE
 system_monitor(Process *p, Eterm monitor_pid, Eterm list);
-
+static Eterm trace_session_create(Process* p, Eterm list);
+static Eterm trace_session_destroy(Process* p, Eterm Ref);
 static void new_seq_trace_token(Process* p, int); /* help func for seq_trace_2*/
 static Eterm trace_info_pid(Process* p, Eterm pid_spec, Eterm key);
 static Eterm trace_info_func(Process* p, Eterm pid_spec, Eterm key);
@@ -87,7 +88,7 @@ static void clean_export_entries(BpFunctions* f);
 ErtsTraceSession erts_trace_session_0;
 
 static
-void erts_trace_session_init(ErtsTraceSession* s)
+void erts_trace_session_init(ErtsTraceSession* s, ErtsTracer tracer)
 {
     int i;
 
@@ -98,6 +99,7 @@ void erts_trace_session_init(ErtsTraceSession* s)
         s->receive_tracing[i].match_spec = NULL;
     }
     erts_atomic32_init_nob(&s->trace_control_word, 0);
+    s->tracer = tracer;
 }
 
 void
@@ -109,7 +111,7 @@ erts_bif_trace_init(void)
     erts_default_trace_pattern_flags = erts_trace_pattern_flags_off;
     erts_default_meta_tracer = erts_tracer_nil;
 
-    erts_trace_session_init(&erts_trace_session_0);
+    erts_trace_session_init(&erts_trace_session_0, erts_tracer_nil);
 }
 
 /*
@@ -458,6 +460,23 @@ erts_trace_flag2bit(Eterm flag)
     }
 }
 
+static int tracer_session_destructor(Binary *btid);
+
+static int ref2session(Eterm mref, ErtsTraceSession **session_p)
+{
+    Binary *bin;
+
+    if (!is_internal_magic_ref(mref))
+	return 0;
+
+    bin = erts_magic_ref2bin(mref);
+    if (ERTS_MAGIC_BIN_DESTRUCTOR(bin) != tracer_session_destructor)
+	return 0;
+
+    *session_p = (ErtsTraceSession*) ERTS_MAGIC_BIN_DATA(bin);
+    return 1;
+}
+
 /* Scan the argument list and sort out the trace flags.
 **
 ** Returns !0 on success, 0 on failure.
@@ -467,7 +486,8 @@ erts_trace_flag2bit(Eterm flag)
 */
 int
 erts_trace_flags(Eterm List,
-                 Uint *pMask, ErtsTracer *pTracer, int *pCpuTimestamp)
+                 Uint *pMask, ErtsTracer *pTracer, int *pCpuTimestamp,
+		 ErtsTraceSession** session_p)
 {
     Eterm list = List;
     Uint mask = 0;
@@ -484,10 +504,17 @@ erts_trace_flags(Eterm List,
 	    cpu_timestamp = !0;
 #endif
 	} else if (is_tuple(item)) {
-            ERTS_TRACER_CLEAR(&tracer);
-            tracer = erts_term_to_tracer(am_tracer, item);
-            if (tracer == THE_NON_VALUE)
-                goto error;
+	    Eterm* tpl = tuple_val(item);
+	    if (tpl[0] == make_arityval(2) && tpl[1] == am_session) {
+		if (!session_p || !ref2session(tpl[2], session_p))
+		    goto error;
+	    }
+	    else {
+		ERTS_TRACER_CLEAR(&tracer);
+		tracer = erts_term_to_tracer(am_tracer, item);
+		if (tracer == THE_NON_VALUE)
+		    goto error;
+	    }
 	} else goto error;
 	list = CDR(list_val(list));
     }
@@ -506,8 +533,22 @@ erts_trace_flags(Eterm List,
     return 0;
 }
 
-static ERTS_INLINE int
-start_trace(Process *c_p, ErtsTracer tracer,
+static Uint32 sum_all_trace_flags(ErtsPTabElementCommon* t_p)
+{
+    ErtsTracerRef* ref;
+    Uint32 all_flags = 0;
+
+    for (ref = &t_p->tracee.tracers; ref; ref = ref->next)
+	all_flags |= ref->flags;
+
+    return all_flags;
+}
+
+
+static int
+start_trace(Process *c_p,
+	    ErtsTraceSession* session,
+	    ErtsTracer tracer,
             ErtsPTabElementCommon *common,
             ErtsProcLocks locks,
             int on, int mask)
@@ -522,12 +563,18 @@ start_trace(Process *c_p, ErtsTracer tracer,
      * * all locks are held on port common
      */
 
-    if (!ERTS_TRACER_IS_NIL(tracer)) {
-        if ((ERTS_TRACE_FLAGS(port) & TRACEE_FLAGS)
-            && !ERTS_TRACER_COMPARE(ERTS_TRACER(port), tracer)) {
+    ErtsTracerRef* ref = get_tracer_ref(common, session);
+
+    if (!ref && on) {
+	ref = new_tracer_ref(common, session);
+    }
+
+    if (on && !ERTS_TRACER_IS_NIL(ref->tracer)) {
+	if (ref->flags & TRACEE_FLAGS
+            && !ERTS_TRACER_COMPARE(ref->tracer, tracer)) {
             /* This tracee is already being traced, and not by the
              * tracer to be */
-            if (erts_is_tracer_enabled(ERTS_TRACER(port), common)) {
+            if (erts_is_tracer_enabled(ref->tracer, common)) {
                 /* The tracer is still in use */
                 return 1;
             }
@@ -535,10 +582,15 @@ start_trace(Process *c_p, ErtsTracer tracer,
         }
     }
 
-    if (!on)
-        ERTS_TRACE_FLAGS(port) &= ~mask;
+    if (!on) {
+	ref->flags &= ~mask;
+	ERTS_TRACE_FLAGS(port) = sum_all_trace_flags(common);
+    }
     else {
+	ref->flags |= mask;
         ERTS_TRACE_FLAGS(port) |= mask;
+	ASSERT((ERTS_TRACE_FLAGS(port) & TRACEE_FLAGS) == sum_all_trace_flags(common));
+
         if ((mask & F_TRACE_RECEIVE) && is_internal_pid(common->id)) {
             Process *proc = (Process *) common;
             erts_aint32_t state = erts_atomic32_read_nob(&proc->state);
@@ -547,11 +599,10 @@ start_trace(Process *c_p, ErtsTracer tracer,
         }
     }
 
-    if ((ERTS_TRACE_FLAGS(port) & TRACEE_FLAGS) == 0) {
-        tracer = erts_tracer_nil;
-        erts_tracer_replace(common, erts_tracer_nil);
+    if ((ref->flags & TRACEE_FLAGS) == 0) {
+	delete_tracer_ref(common, &ref);
     } else if (!ERTS_TRACER_IS_NIL(tracer))
-        erts_tracer_replace(common, tracer);
+        erts_tracer_replace(common, ref, tracer);
 
     return 0;
 }
@@ -564,12 +615,13 @@ Eterm erts_internal_trace_3(BIF_ALIST_3)
     Eterm list = BIF_ARG_3;
     int on;
     ErtsTracer tracer = erts_tracer_nil;
+    ErtsTraceSession *session = &erts_trace_session_0;
     int matches = 0;
     Uint mask = 0;
     int cpu_ts = 0;
     int system_blocked = 0;
 
-    if (! erts_trace_flags(list, &mask, &tracer, &cpu_ts)) {
+    if (! erts_trace_flags(list, &mask, &tracer, &cpu_ts, &session)) {
         p->fvalue = am_badopt;
 	BIF_ERROR(p, BADARG | EXF_HAS_EXT_INFO);
     }
@@ -586,8 +638,14 @@ Eterm erts_internal_trace_3(BIF_ALIST_3)
 	break;
     case am_true: 
 	on = 1;
-        if (ERTS_TRACER_IS_NIL(tracer))
-            tracer = erts_term_to_tracer(am_tracer, p->common.id);
+        if (ERTS_TRACER_IS_NIL(tracer)) {
+	    if (ERTS_TRACER_IS_NIL(session->tracer)) {
+		tracer = erts_term_to_tracer(am_tracer, p->common.id);
+	    }
+	    else {
+		erts_tracer_update(&tracer, session->tracer);
+	    }
+	}
 
         if (tracer == THE_NON_VALUE) {
             tracer = erts_tracer_nil;
@@ -620,7 +678,7 @@ Eterm erts_internal_trace_3(BIF_ALIST_3)
 	if (!tracee_port)
 	    goto error;
 
-        if (start_trace(p, tracer, &tracee_port->common, 0, on, mask)) {
+        if (start_trace(p, session, tracer, &tracee_port->common, 0, on, mask)) {
 	    erts_port_release(tracee_port);
 	    goto already_traced;
         }
@@ -643,7 +701,7 @@ Eterm erts_internal_trace_3(BIF_ALIST_3)
 	if (!tracee_p)
 	    goto error;
 
-        if (start_trace(tracee_p, tracer, &tracee_p->common,
+        if (start_trace(tracee_p, session, tracer, &tracee_p->common,
                         ERTS_PROC_LOCKS_ALL, on, mask)) {
 	    erts_proc_unlock(tracee_p,
 				 (tracee_p == p
@@ -736,7 +794,7 @@ Eterm erts_internal_trace_3(BIF_ALIST_3)
 		    Process* tracee_p = erts_pix2proc(i);
 		    if (! tracee_p) 
 			continue;
-                    if (!start_trace(p, tracer, &tracee_p->common, 0, on, mask))
+                    if (!start_trace(p, session, tracer, &tracee_p->common, 0, on, mask))
                         matches++;
 		}
 	    }
@@ -751,7 +809,7 @@ Eterm erts_internal_trace_3(BIF_ALIST_3)
 		    state = erts_atomic32_read_nob(&tracee_port->state);
 		    if (state & ERTS_PORT_SFLGS_DEAD)
 			continue;
-                    if (!start_trace(p, tracer, &tracee_port->common, 0, on, mask))
+                    if (!start_trace(p, session, tracer, &tracee_port->common, 0, on, mask))
                         matches++;
 		}
 	    }
@@ -813,6 +871,68 @@ Eterm erts_internal_trace_3(BIF_ALIST_3)
     erts_release_code_mod_permission();
 
     BIF_ERROR(p, BADARG);
+}
+
+Eterm //return a magic ref
+erts_internal_trace_session_create_1(BIF_ALIST_1)
+{
+    return trace_session_create(BIF_P, BIF_ARG_1);
+}
+
+static int
+tracer_session_destructor(Binary *btid)
+{
+    return 1;
+}
+
+static Eterm
+trace_session_create(Process* p, Eterm list){
+    Binary* bptr;
+    Eterm* hp;
+    Eterm m_ref;
+    ErtsTracer tracer = NIL;
+    ErtsTraceSession* session;
+
+    while(is_list(list)){
+        Eterm item = CAR(list_val(list));
+        if (is_tuple(item)) {
+            ERTS_TRACER_CLEAR(&tracer);
+            tracer = erts_term_to_tracer(am_tracer, item);
+            if (tracer == THE_NON_VALUE){
+                p->fvalue = am_badopt;
+                BIF_ERROR(p, BADARG | EXF_HAS_EXT_INFO);
+            }
+        }else{
+            p->fvalue = am_badopt;
+            BIF_ERROR(p, BADARG | EXF_HAS_EXT_INFO);
+        }
+        list = CDR(list_val(list));
+    }
+    // A tracer should have been created now,
+    // save it somewhere and return a ref to find it again.
+    bptr = erts_create_magic_binary_x(sizeof(ErtsTraceSession), 
+                                      tracer_session_destructor,
+                                      ERTS_ALC_T_BINARY,
+                                      0);    
+    session = (ErtsTraceSession*) ERTS_MAGIC_BIN_DATA(bptr);
+    erts_trace_session_init(session, tracer);
+    //session->session_bit = new_session_bit();
+    hp = HAlloc(p, ERTS_MAGIC_REF_THING_SIZE);
+    m_ref = erts_mk_magic_ref(&hp, &MSO(p), bptr);
+    //insert_tracer_session(m_ref);
+    return m_ref;
+}
+
+Eterm
+erts_internal_trace_session_destroy_1(BIF_ALIST_1)
+{
+    return trace_session_destroy(BIF_P, BIF_ARG_1);
+}
+static Eterm
+trace_session_destroy(Process* p, Eterm Ref){
+    //delete_tracer_session(Ref);
+    //free(global_session_tracer_list[i].tracer);
+    return am_ok;
 }
 
 /*

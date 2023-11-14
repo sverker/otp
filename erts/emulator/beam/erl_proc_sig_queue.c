@@ -7800,7 +7800,7 @@ handle_trace_change_state(Process *c_p,
     ERTS_TRACE_FLAGS(c_p) |= trace_info->flags_on;
     ERTS_TRACE_FLAGS(c_p) &= ~trace_info->flags_off;
     if (is_value(trace_info->tracer))
-        erts_tracer_replace(&c_p->common, trace_info->tracer);
+        erts_tracer_replace(&c_p->common, &c_p->common.tracee.tracers, trace_info->tracer);
 
     erts_proc_unlock(c_p, ERTS_PROC_LOCKS_ALL_MINOR);
 

@@ -67,10 +67,10 @@ typedef struct
 #  define ERTS_NUM_BP_IX 2   // ToDo FIXME UGLY
 #endif
 
-typedef struct ErtsTraceSession_ {
-    struct ErtsTraceSession_* next;   // in global list
+typedef struct ErtsTraceSession {
+    struct ErtsTraceSession* next;   // in global list
 
-    Uint session_bit;
+    //Uint session_bit;
     ErtsTracer tracer;
     erts_atomic32_t trace_control_word;
     ErtsTracingEvent send_tracing[ERTS_NUM_BP_IX];
@@ -78,6 +78,12 @@ typedef struct ErtsTraceSession_ {
 }ErtsTraceSession;
 
 extern ErtsTraceSession erts_trace_session_0;
+
+void erts_ref_trace_session(ErtsTraceSession*);
+void erts_deref_trace_session(ErtsTraceSession*);
+ErtsTracerRef* get_tracer_ref(ErtsPTabElementCommon*, ErtsTraceSession*);
+ErtsTracerRef* new_tracer_ref(ErtsPTabElementCommon*, ErtsTraceSession*);
+void delete_tracer_ref(ErtsPTabElementCommon*, ErtsTracerRef**);
 
 
 /* erl_bif_trace.c */
@@ -156,7 +162,8 @@ void monitor_large_heap(Process *p);
 void monitor_generic(Process *p, Eterm type, Eterm spec);
 Uint erts_trace_flag2bit(Eterm flag);
 int erts_trace_flags(Eterm List, 
-		 Uint *pMask, ErtsTracer *pTracer, int *pCpuTimestamp);
+                     Uint *pMask, ErtsTracer *pTracer, int *pCpuTimestamp,
+                     ErtsTraceSession** session_p);
 
 void erts_send_pending_trace_msgs(ErtsSchedulerData *esdp);
 #define ERTS_CHK_PEND_TRACE_MSGS(ESDP)				\
@@ -217,6 +224,7 @@ Eterm erts_build_tracer_to_term(Eterm **hpp, ErlOffHeap *ohp, Uint *szp, ErtsTra
 
 ErtsTracer erts_term_to_tracer(Eterm prefix, Eterm term);
 void erts_tracer_replace(ErtsPTabElementCommon *t_p,
+                         ErtsTracerRef *ref,
                          const ErtsTracer new_tracer);
 void erts_tracer_update_impl(ErtsTracer *tracer, const ErtsTracer new_tracer);
 int erts_tracer_nif_clear(void);

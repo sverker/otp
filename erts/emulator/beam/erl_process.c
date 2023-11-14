@@ -12487,6 +12487,9 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
     }
 
     erts_get_default_proc_tracing(&ERTS_TRACE_FLAGS(p), &ERTS_TRACER(p));
+    p->common.tracee.tracers.flags = 0;
+    p->common.tracee.tracers.next = NULL;
+    p->common.tracee.tracers.session = NULL;
 
     p->uniq = 0;
     p->sig_qs.first = NULL;
@@ -12545,18 +12548,21 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
     if (parent && IS_TRACED(parent)) {
 	if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOS) {
 	    ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent) & TRACEE_FLAGS);
-            erts_tracer_replace(&p->common, ERTS_TRACER(parent));
+            erts_tracer_replace(&p->common, &p->common.tracee.tracers,
+                                ERTS_TRACER(parent));
 	}
         if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOS1) {
 	    /* Overrides TRACE_CHILDREN */
 	    ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent) & TRACEE_FLAGS);
-            erts_tracer_replace(&p->common, ERTS_TRACER(parent));
+            erts_tracer_replace(&p->common,  &p->common.tracee.tracers,
+                                ERTS_TRACER(parent));
 	    ERTS_TRACE_FLAGS(p) &= ~(F_TRACE_SOS1 | F_TRACE_SOS);
 	    ERTS_TRACE_FLAGS(parent) &= ~(F_TRACE_SOS1 | F_TRACE_SOS);
 	}
         if (so->flags & SPO_LINK && ERTS_TRACE_FLAGS(parent) & (F_TRACE_SOL|F_TRACE_SOL1)) {
             ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent)&TRACEE_FLAGS);
-            erts_tracer_replace(&p->common, ERTS_TRACER(parent));
+            erts_tracer_replace(&p->common, &p->common.tracee.tracers,
+                                ERTS_TRACER(parent));
             if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOL1) {/*maybe override*/
                 ERTS_TRACE_FLAGS(p) &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
                 ERTS_TRACE_FLAGS(parent) &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
