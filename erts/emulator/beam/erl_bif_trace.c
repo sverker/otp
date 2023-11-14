@@ -565,8 +565,11 @@ start_trace(Process *c_p,
 
     ErtsTracerRef* ref = get_tracer_ref(common, session);
 
-    if (!ref && on) {
-	ref = new_tracer_ref(common, session);
+    if (!ref) {
+	if (on)
+	    ref = new_tracer_ref(common, session);
+	else
+	    return 0;
     }
 
     if (on && !ERTS_TRACER_IS_NIL(ref->tracer)) {
