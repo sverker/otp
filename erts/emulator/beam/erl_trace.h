@@ -62,7 +62,10 @@ typedef struct
     struct binary* match_spec;
 } ErtsTracingEvent;
 
-#include "beam_bp.h"    // ERTS_NUM_BP_IX
+#ifndef ERTS_NUM_BP_IX
+//#  include "beam_bp.h"
+#  define ERTS_NUM_BP_IX 2   // ToDo FIXME UGLY
+#endif
 
 typedef struct ErtsTraceSession_ {
     struct ErtsTraceSession_* next;   // in global list
