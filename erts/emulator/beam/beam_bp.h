@@ -67,7 +67,7 @@ typedef struct {
     erts_refc_t refc;
 } BpMetaTracer;
 
-typedef struct generic_bp_data {
+typedef struct GenericBpData {
     Uint flags;
     Binary* local_ms;		/* Match spec for local call trace */
     Binary* meta_ms;		/* Match spec for meta trace */
@@ -79,10 +79,18 @@ typedef struct generic_bp_data {
 
 #define ERTS_NUM_BP_IX 2
 
-typedef struct generic_bp {
+typedef struct GenericBp {
     BeamInstr orig_instr;
     GenericBpData data[ERTS_NUM_BP_IX];
+    
+    ErtsTraceSession *session;
+    struct GenericBp *next;
+    // ToDo make union
+    struct GenericBp *next_to_free;
+    struct GenericBp *to_insert;
 } GenericBp;
+
+extern ErtsTraceSession* erts_curr_trace_session;
 
 #define ERTS_BP_CALL_TIME_SCHEDULE_IN      (0)
 #define ERTS_BP_CALL_TIME_SCHEDULE_OUT     (1)
@@ -130,6 +138,7 @@ void erts_uninstall_breakpoints(BpFunctions* f);
 
 void erts_consolidate_local_bp_data(BpFunctions* f);
 void erts_consolidate_export_bp_data(BpFunctions* f);
+void erts_free_breakpoints(void);
 
 void erts_set_trace_break(BpFunctions *f, Binary *match_spec);
 void erts_clear_trace_break(BpFunctions *f);
@@ -137,13 +146,13 @@ void erts_clear_trace_break(BpFunctions *f);
 void erts_set_export_trace(ErtsCodeInfo *ci, Binary *match_spec, int local);
 void erts_clear_export_trace(ErtsCodeInfo *ci, int local);
 
-void erts_set_mtrace_break(BpFunctions *f, Binary *match_spec,
-			  ErtsTracer tracer);
+void erts_set_mtrace_break(BpFunctions *f, Binary *match_spec, ErtsTracer tracer);
 void erts_clear_mtrace_break(BpFunctions *f);
 
 void erts_set_debug_break(BpFunctions *f);
 void erts_clear_debug_break(BpFunctions *f);
-void erts_set_count_break(BpFunctions *f, enum erts_break_op);
+void erts_set_count_break(BpFunctions *f,
+                          enum erts_break_op);
 void erts_clear_count_break(BpFunctions *f);
 
 

@@ -69,6 +69,7 @@ typedef struct ErtsTracee_ {
 #define IS_SESSION_TRACED_FL(ref,tf) \
     ((ref)->tracer != NIL && (ref->flags & (tf|F_SENSITIVE)) == (tf))
 
+
 typedef struct {
     Eterm id;
     union {

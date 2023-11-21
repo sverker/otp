@@ -125,7 +125,7 @@ void erts_send_sys_msg_proc(Eterm, Eterm, Eterm, ErlHeapFragment *);
 void trace_send(Process*, Eterm, Eterm);
 void trace_receive(Process*, Eterm, Eterm, ErtsTracingEvent*);
 Uint32 erts_call_trace(Process *p, ErtsCodeInfo *info, struct binary *match_spec,
-                       Eterm* args, int local, ErtsTracer *tracer);
+                       Eterm* args, int local, ErtsTracerRef*, ErtsTracer *tracer);
 void erts_trace_return(Process* p, ErtsCodeMFA *mfa, Eterm retval,
                        ErtsTracer tracer);
 void erts_trace_exception(Process* p, ErtsCodeMFA *mfa, Eterm class_, Eterm value,

@@ -185,6 +185,7 @@ static void debug_bp_finisher(void *ignored)
         erts_proc_unlock(p, ERTS_PROC_LOCK_STATUS);
         erts_proc_dec_refc(p);
 
+        erts_free_breakpoints();
         return;
     }
 

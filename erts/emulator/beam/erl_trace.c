@@ -1076,7 +1076,9 @@ erts_trace_exception(Process* p, ErtsCodeMFA *mfa, Eterm class, Eterm value,
  */
 Uint32
 erts_call_trace(Process* p, ErtsCodeInfo *info, Binary *match_spec,
-		Eterm* args, int local, ErtsTracer *tracer)
+		Eterm* args, int local,
+                ErtsTracerRef *ref,
+                ErtsTracer *tracer)
 {
     Eterm* hp;
     Eterm mfa_tuple;
@@ -1097,24 +1099,24 @@ erts_call_trace(Process* p, ErtsCodeInfo *info, Binary *match_spec,
         /* Breakpoint trace enabled without specifying tracer =>
 	 *   use process tracer and flags
 	 */
-        tracer = &ERTS_TRACER(p);
+        tracer = &ref->tracer;
     }
     if (ERTS_TRACER_IS_NIL(*tracer)) {
 	/* Trace disabled */
 	return 0;
     }
     ASSERT(IS_TRACER_VALID(*tracer));
-    if (tracer == &ERTS_TRACER(p)) {
+    if (tracer == &ref->tracer) {
 	/* Tracer specified in process structure =>
 	 *   non-breakpoint trace =>
 	 *     use process flags
 	 */
-	tracee_flags = &ERTS_TRACE_FLAGS(p);
+        tracee_flags = &ref->flags;
         /* It is not ideal at all to call this check twice,
            it should be optimized so that only one call is made. */
-        if (!is_tracer_enabled(p, ERTS_PROC_LOCK_MAIN, &p->common, &tnif,
+        if (!is_tracer_ref_enabled(p, ERTS_PROC_LOCK_MAIN, &p->common, ref, &tnif,
                                TRACE_FUN_ENABLED, am_trace_status)
-            || !is_tracer_enabled(p, ERTS_PROC_LOCK_MAIN, &p->common, &tnif,
+            || !is_tracer_ref_enabled(p, ERTS_PROC_LOCK_MAIN, &p->common, ref, &tnif,
                     TRACE_FUN_E_CALL, am_call)) {
             return 0;
         }
@@ -1124,7 +1126,7 @@ erts_call_trace(Process* p, ErtsCodeInfo *info, Binary *match_spec,
 	 *     meta trace =>
 	 *       use fixed flag set instead of process flags
 	 */
-        if (ERTS_TRACE_FLAGS(p) & F_SENSITIVE) {
+        if (ref->flags & F_SENSITIVE) {
             /* No trace messages for sensitive processes. */
             return 0;
         }

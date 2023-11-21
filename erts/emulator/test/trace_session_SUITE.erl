@@ -24,6 +24,7 @@
 
 -export([
          basic/1,
+         call/1,
          end_of_list/1]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -36,14 +37,15 @@ suite() ->
 all() ->
     [
      basic,
+     call,
      end_of_list].
 
 
 basic(_Config) ->
     Tester = self(),
-    Tracer0 = spawn_link(fun() -> tracer(Tester) end),
-    Tracer1 = spawn_link(fun() -> tracer(Tester) end),
-    Tracer2 = spawn_link(fun() -> tracer(Tester) end),
+    Tracer0 = spawn_link(fun() -> tracer("Tracer0",Tester) end),
+    Tracer1 = spawn_link(fun() -> tracer("Tracer1",Tester) end),
+    Tracer2 = spawn_link(fun() -> tracer("Tracer2",Tester) end),
 
     basic_do1(Tracer0, [{tracer, Tracer0}]),
 
@@ -131,12 +133,146 @@ basic_do2(Tracer1, Opts1, Tracer2, Opts2) ->
     ok.
 
 
-tracer(Tester) ->
+call(_Config) ->
+    Tester = self(),
+    Tracer0 = spawn_link(fun() -> tracer("Tracer0",Tester) end),
+    Tracer1 = spawn_link(fun() -> tracer("Tracer1",Tester) end),
+    Tracer2 = spawn_link(fun() -> tracer("Tracer2",Tester) end),
+
+    call_do1(Tracer0, [{tracer, Tracer0}]),
+
+    S0 = erlang:trace_session_create([]),
+    S1 = erlang:trace_session_create([{tracer,Tracer1}]),
+    S2 = erlang:trace_session_create([{tracer,Tracer2}]),
+
+    call_do2(Tracer1, [{session,S1}],
+              Tracer2, [{session,S2}]),
+    call_do2(Tracer0, [{tracer,Tracer0}],
+              Tracer2, [{session,S2}]),
+    call_do2(Tracer2, [{session,S2}],
+              Tracer0, [{tracer,Tracer0}]),
+
+    call_do2(Tracer1, [{session,S1}],
+              Tracer0, [{tracer,Tracer0},{session,S0}]),
+    call_do2(Tracer0, [{tracer,Tracer0},{session,S0}],
+              Tracer1, [{session,S1}]),
+
+    ok = erlang:trace_session_destroy(S0),
+    ok = erlang:trace_session_destroy(S1),
+    ok = erlang:trace_session_destroy(S2),
+
+    unlink(Tracer0),
+    exit(Tracer0, die),
+    unlink(Tracer1),
+    exit(Tracer1, die),
+    unlink(Tracer2),
+    exit(Tracer2, die),
+
+    ok.
+
+call_do1(Tracer, Opts) ->
+    MFArity = {?MODULE,foo,0},
+    MFArgs = {?MODULE,foo,[]},
+    Tracee = self(),
+    1 = erlang:trace(Tracee, true, [call | Opts]),
+    1 = erlang:trace_pattern(MFArity, true, add_session([local], Opts)),
+
+    foo(),
+
+    {Tracer, {trace, Tracee, call, MFArgs}} = receive_any(),
+
+    1 = erlang:trace(self(), false, [call | Opts]),
+
+    foo(),
+    timeout = receive_any(),
+
+    ok.
+
+call_do2(Tracer1, Opts1, Tracer2, Opts2) ->
+    MFArity = {?MODULE,foo,0},
+    MFArgs = {?MODULE,foo,[]},
+    Tracee = self(),
+    1 = erlang:trace(Tracee, true, [call | Opts1]),
+    1 = erlang:trace(Tracee, true, [call | Opts2]),
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace_pattern(MFArity, true, add_session([local], Opts1)),
+    foo(),
+    {Tracer1, {trace, Tracee, call, MFArgs}} = receive_any(),
+    timeout = receive_any(),
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace_pattern(MFArity, true, add_session([local], Opts2)),
+    foo(),
+    {Ta, {trace, Tracee, call, MFArgs}} = receive_any(),
+    {Tb, {trace, Tracee, call, MFArgs}} = receive_any(),
+    timeout = receive_any(),
+    #{Tracer1 := v, Tracer2 := v} = #{Ta => v, Tb => v},
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace_pattern(MFArity, false, add_session([local], Opts2)),
+    foo(),
+    {Tracer1, {trace, Tracee, call, MFArgs}} = receive_any(),
+    timeout = receive_any(),
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace_pattern(MFArity, true, add_session([local], Opts2)),
+    foo(),
+    {Tc, {trace, Tracee, call, MFArgs}} = receive_any(),
+    {Td, {trace, Tracee, call, MFArgs}} = receive_any(),
+    timeout = receive_any(),
+    #{Tracer1 := v, Tracer2 := v} = #{Tc => v, Td => v},
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace_pattern(MFArity, false, add_session([local], Opts1)),
+    foo(),
+    {Tracer2, {trace, Tracee, call, MFArgs}} = receive_any(),
+    timeout = receive_any(),
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace_pattern(MFArity, true, add_session([local], Opts1)),
+    foo(),
+    {Te, {trace, Tracee, call, MFArgs}} = receive_any(),
+    {Tf, {trace, Tracee, call, MFArgs}} = receive_any(),
+    timeout = receive_any(),
+    #{Tracer1 := v, Tracer2 := v} = #{Te => v, Tf => v},
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace(self(), false, [call | Opts1]),
+    foo(),
+    {Tracer2, {trace, Tracee, call, MFArgs}} = receive_any(),
+    timeout = receive_any(),
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace_pattern(MFArity, false, add_session([local], Opts2)),
+    foo(),
+    timeout = receive_any(),
+
+    io:format("line ~p\n", [?LINE]),
+    1 = erlang:trace_pattern(MFArity, false, add_session([local], Opts1)),
+    1 = erlang:trace(self(), false, [call | Opts2]),
+    foo(),
+    timeout = receive_any(),
+
+    ok.
+
+foo() ->
+    ok.
+
+add_session(DstOpts, SrcOpts) ->
+    case lists:keyfind(session, 1, SrcOpts) of
+        {session, _}=S ->
+            [S | DstOpts];
+        false ->
+            DstOpts
+    end.
+
+tracer(Name, Tester) ->
     receive M ->
-            io:format("Tracer ~p got message: ~p\n", [self(), M]),
+            io:format("~p ~p got message: ~p\n", [Name, self(), M]),
             Tester ! {self(), M}
     end,
-    tracer(Tester).
+    tracer(Name, Tester).
 
 
 receive_any() ->

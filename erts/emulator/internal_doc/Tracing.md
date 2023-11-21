@@ -208,11 +208,13 @@ and removing breakpoints.
 8. Wait for thread progress.
 
 
-9. Restore original beam instruction for disabled breakpoints.
+9. Uninstall.
+   Restore original beam instruction for disabled breakpoints.
 
 10. Wait for thread progress.
 
-11. Prepare for next call to `trace_pattern` by updating the new
+11. Consolidate.
+    Prepare for next call to `trace_pattern` by updating the new
     staging area (the old active) for all enabled breakpoints.
 
 12. Deallocate disabled breakpoint structures.
