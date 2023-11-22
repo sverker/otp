@@ -400,7 +400,7 @@ is_tracer_enabled(Process* c_p, ErtsProcLocks c_p_locks,
 static int
 is_tracer_ref_enabled(Process* c_p, ErtsProcLocks c_p_locks,
                       ErtsPTabElementCommon *t_p,
-                      ErtsTracerRef **ref_p,
+                      ErtsTracerRef *ref,
                       ErtsTracerNif **tnif_ret,
                       enum ErtsTracerOpt topt, Eterm tag);
 
@@ -1283,16 +1283,20 @@ trace_proc(Process *c_p, ErtsProcLocks c_p_locks,
 {
     ErtsTracerRef *ref;
 
-    for (ref = &t_p->common.tracee.tracers; ref; ) {
+    for (ref = &t_p->common.tracee.tracers; ref; ref = ref->next) {
         ErtsTracerNif *tnif = NULL;
-        if (is_tracer_ref_enabled(NULL, 0, &t_p->common, &ref, &tnif,
-                                  TRACE_FUN_E_PROCS, what)) {
-            send_to_tracer_nif(NULL, &t_p->common, ref, t_p->common.id, tnif,
-                               TRACE_FUN_T_PROCS,
-                               what, data, THE_NON_VALUE, am_true);
-            ref = ref->next;
+
+        if (IS_SESSION_TRACED_FL(ref, F_TRACE_PROCS)) {
+            if (is_tracer_ref_enabled(NULL, 0, &t_p->common, ref, &tnif,
+                                      TRACE_FUN_E_PROCS, what)) {
+                send_to_tracer_nif(NULL, &t_p->common, ref, t_p->common.id, tnif,
+                                   TRACE_FUN_T_PROCS,
+                                   what, data, THE_NON_VALUE, am_true);
+
+            }
         }
     }
+    delete_cleared_tracer_refs(&t_p->common);
 }
 
 
@@ -2866,15 +2870,14 @@ call_enabled_tracer(const ErtsTracer tracer,
 static int
 is_tracer_ref_enabled(Process* c_p, ErtsProcLocks c_p_locks,
                       ErtsPTabElementCommon *t_p,
-                      ErtsTracerRef **ref_p,
+                      ErtsTracerRef *ref,
                       ErtsTracerNif **tnif_ret,
                       enum ErtsTracerOpt topt, Eterm tag)
 {
     Eterm nif_result;
-    ErtsTracerRef* ref = *ref_p;
 
     ASSERT(t_p);
-    ASSERT(ref_p && *ref_p);
+    ASSERT(ref);
 
 #if defined(ERTS_ENABLE_LOCK_CHECK)
     if (c_p)
@@ -2894,7 +2897,7 @@ is_tracer_ref_enabled(Process* c_p, ErtsProcLocks c_p_locks,
     nif_result = call_enabled_tracer(ref->tracer, tnif_ret,
                                      topt, tag, t_p->id);
     switch (nif_result) {
-    case am_discard: *ref_p = ref->next; return 0;
+    case am_discard: return 0;
     case am_trace: return 1;
     case THE_NON_VALUE:
     case am_remove: ASSERT(tag == am_trace_status); break;
@@ -2921,14 +2924,13 @@ is_tracer_ref_enabled(Process* c_p, ErtsProcLocks c_p_locks,
                 }
             }
 
-            delete_tracer_ref(t_p, ref_p);
+            clear_tracer_ref(t_p, ref);
 
             if (c_p_xlocks)
                 erts_proc_unlock(c_p, c_p_xlocks);
             return 0;
         }
     }
-    *ref_p = ref->next;
     return 0;
 }
 
@@ -2939,8 +2941,7 @@ is_tracer_enabled(Process* c_p, ErtsProcLocks c_p_locks,
                   ErtsTracerNif **tnif_ret,
                   enum ErtsTracerOpt topt, Eterm tag)
 {
-    ErtsTracerRef *ref = &t_p->tracee.tracers;
-    return is_tracer_ref_enabled(c_p, c_p_locks, t_p, &ref,
+    return is_tracer_ref_enabled(c_p, c_p_locks, t_p, &t_p->tracee.tracers,
                                  tnif_ret, topt, tag);
 }
 
@@ -3223,14 +3224,23 @@ ErtsTracerRef* new_tracer_ref(ErtsPTabElementCommon* t_p,
     return ref;
 }
 
-void delete_tracer_ref(ErtsPTabElementCommon* t_p,
-                       ErtsTracerRef **ref_p)
+void clear_tracer_ref(ErtsPTabElementCommon* t_p,
+                      ErtsTracerRef *ref)
 {
-    ErtsTracerRef* ref = *ref_p;
+    erts_tracer_replace(t_p, ref, erts_tracer_nil);
+    ref->flags = 0;
+    erts_deref_trace_session(ref->session);
+    ref->session = NULL;
+}
+
+ErtsTracerRef* delete_tracer_ref(ErtsPTabElementCommon* t_p,
+                                 ErtsTracerRef *ref)
+{
     ErtsTracerRef* next;
 
-    erts_tracer_replace(t_p, ref, erts_tracer_nil);
-    erts_deref_trace_session(ref->session);
+    ASSERT(ref->tracer == NIL);
+    ASSERT(ref->flags == 0);
+    ASSERT(ref->session == NULL);
 
     if (ref == &t_p->tracee.tracers) {
         if (ref->next) {
@@ -3242,7 +3252,6 @@ void delete_tracer_ref(ErtsPTabElementCommon* t_p,
             ref->session = NULL;
             next = NULL;
         }
-
     }
     else {
 	ErtsTracerRef* prev = &t_p->tracee.tracers;
@@ -3256,5 +3265,22 @@ void delete_tracer_ref(ErtsPTabElementCommon* t_p,
 	// ToDo: Schedule with later op?
 	erts_free(ERTS_ALC_T_HEAP_FRAG, ref);  // ToDo: type?
     }
-    *ref_p = next;
+    return next;
 }
+
+void delete_cleared_tracer_refs(ErtsPTabElementCommon* t_p)
+{
+    ErtsTracerRef* ref = &t_p->tracee.tracers;
+
+    // Todo: Should we optimize this with some CLEARED_TRACER-flag
+    //       to avoid expensive traversals in vain.
+    do {
+        if (ERTS_TRACER_IS_NIL(ref->tracer)) {
+            ref = delete_tracer_ref(t_p, ref);
+        }
+        else {
+            ref = ref->next;
+        }
+    } while (ref);
+}
+

@@ -83,7 +83,9 @@ void erts_ref_trace_session(ErtsTraceSession*);
 void erts_deref_trace_session(ErtsTraceSession*);
 ErtsTracerRef* get_tracer_ref(ErtsPTabElementCommon*, ErtsTraceSession*);
 ErtsTracerRef* new_tracer_ref(ErtsPTabElementCommon*, ErtsTraceSession*);
-void delete_tracer_ref(ErtsPTabElementCommon*, ErtsTracerRef**);
+void clear_tracer_ref(ErtsPTabElementCommon*, ErtsTracerRef*);
+ErtsTracerRef* delete_tracer_ref(ErtsPTabElementCommon*, ErtsTracerRef*);
+void delete_cleared_tracer_refs(ErtsPTabElementCommon* t_p);
 
 
 /* erl_bif_trace.c */

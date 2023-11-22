@@ -603,7 +603,8 @@ start_trace(Process *c_p,
     }
 
     if ((ref->flags & TRACEE_FLAGS) == 0) {
-	delete_tracer_ref(common, &ref);
+        clear_tracer_ref(common, ref);
+	delete_tracer_ref(common, ref);
     } else if (!ERTS_TRACER_IS_NIL(tracer))
         erts_tracer_replace(common, ref, tracer);
 
