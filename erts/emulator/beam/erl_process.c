@@ -12278,6 +12278,9 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
     ErtsProcLocks locks = ERTS_PROC_LOCKS_ALL;
     Eterm node_token_heap[6];
     Eterm group_leader, parent_id, spawn_ref, token;
+    ErtsTracerRef *parent_ref;
+    ErtsTracerRef *child_ref;
+    Uint32 parent_new_all_trace_flags;
 #ifdef SHCOPY_SPAWN
     erts_shcopy_t info;
     INITIALIZE_SHCOPY(info);
@@ -12546,27 +12549,31 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
     p->scheduler_data = NULL;
 
     if (parent && IS_TRACED(parent)) {
-	if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOS) {
-	    ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent) & TRACEE_FLAGS);
-            erts_tracer_replace(&p->common, &p->common.tracee.tracers,
-                                ERTS_TRACER(parent));
-	}
-        if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOS1) {
-	    /* Overrides TRACE_CHILDREN */
-	    ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent) & TRACEE_FLAGS);
-            erts_tracer_replace(&p->common,  &p->common.tracee.tracers,
-                                ERTS_TRACER(parent));
-	    ERTS_TRACE_FLAGS(p) &= ~(F_TRACE_SOS1 | F_TRACE_SOS);
-	    ERTS_TRACE_FLAGS(parent) &= ~(F_TRACE_SOS1 | F_TRACE_SOS);
-	}
-        if (so->flags & SPO_LINK && ERTS_TRACE_FLAGS(parent) & (F_TRACE_SOL|F_TRACE_SOL1)) {
-            ERTS_TRACE_FLAGS(p) |= (ERTS_TRACE_FLAGS(parent)&TRACEE_FLAGS);
-            erts_tracer_replace(&p->common, &p->common.tracee.tracers,
-                                ERTS_TRACER(parent));
-            if (ERTS_TRACE_FLAGS(parent) & F_TRACE_SOL1) {/*maybe override*/
-                ERTS_TRACE_FLAGS(p) &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
-                ERTS_TRACE_FLAGS(parent) &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
+        if (ERTS_TRACE_FLAGS(parent) & (F_TRACE_SOS|F_TRACE_SOS1) ||
+          (so->flags & SPO_LINK && ERTS_TRACE_FLAGS(parent) & (F_TRACE_SOL|F_TRACE_SOL1))) {
+
+            parent_ref = &parent->common.tracee.tracers;
+            parent_new_all_trace_flags = 0;
+            for (; parent_ref;) {
+                if(parent_ref->flags & (F_TRACE_SOS|F_TRACE_SOS1) ||
+                  (so->flags & SPO_LINK && parent_ref->flags & (F_TRACE_SOL|F_TRACE_SOL1))){
+                    child_ref = new_tracer_ref(&p->common, parent_ref->session);
+                    child_ref->flags = parent_ref->flags & TRACEE_FLAGS;
+                    erts_tracer_update(&child_ref->tracer, parent_ref->tracer);
+                    if(parent_ref->flags & F_TRACE_SOS1){
+	                    child_ref->flags &= ~(F_TRACE_SOS1 | F_TRACE_SOS);
+	                    parent_ref->flags &= ~(F_TRACE_SOS1 | F_TRACE_SOS);
+                    }
+                    if(so->flags & SPO_LINK && parent_ref->flags & F_TRACE_SOL1){
+                        child_ref->flags &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
+                        parent_ref->flags &= ~(F_TRACE_SOL1 | F_TRACE_SOL);
+                    }
+                    ERTS_TRACE_FLAGS(p) |= (child_ref->flags & TRACEE_FLAGS);
+                }
+                parent_new_all_trace_flags |= parent_ref->flags & TRACEE_FLAGS;
+                parent_ref = parent_ref->next;
             }
+            ERTS_TRACE_FLAGS(parent) = parent_new_all_trace_flags;
         }
     }
 
@@ -12670,7 +12677,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
         }
     }
 
-    if (parent && IS_TRACED_FL(parent, F_TRACE_PROCS)) {
+    if (parent && (ERTS_TRACE_FLAGS(parent) & F_TRACE_PROCS)) {
         /* The locks may already be released if seq_trace is enabled as well. */
         if ((locks & (ERTS_PROC_LOCK_STATUS|ERTS_PROC_LOCK_TRACE))
             == (ERTS_PROC_LOCK_STATUS|ERTS_PROC_LOCK_TRACE)) {
@@ -12683,7 +12690,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
             trace_proc(parent, locks, parent, am_link, p->common.id);
     }
 
-    if (IS_TRACED_FL(p, F_TRACE_PROCS)) {
+    if (ERTS_TRACE_FLAGS(p) & F_TRACE_PROCS) {
         if ((locks & (ERTS_PROC_LOCK_STATUS|ERTS_PROC_LOCK_TRACE))
               == (ERTS_PROC_LOCK_STATUS|ERTS_PROC_LOCK_TRACE)) {
             /* This happens when parent was not traced, but child is */
@@ -13976,7 +13983,7 @@ erts_do_exit_process(Process* p, Eterm reason)
 
     erts_proc_unlock(p, ERTS_PROC_LOCKS_ALL_MINOR);
 
-    if (IS_TRACED_FL(p, F_TRACE_PROCS))
+    if (ERTS_TRACE_FLAGS(p) & F_TRACE_PROCS)
         trace_proc(p, ERTS_PROC_LOCK_MAIN, p, am_exit, reason);
 
     /*

@@ -1313,18 +1313,23 @@ void
 trace_proc_spawn(Process *p, Eterm what, Eterm pid,
 		 Eterm mod, Eterm func, Eterm args)
 {
-    ErtsTracerNif *tnif = NULL;
-    if (is_tracer_enabled(NULL, 0,
-			  &p->common, &tnif, TRACE_FUN_E_PROCS, what)) {
-        Eterm mfa;
-        Eterm* hp;
+    ErtsTracerRef *ref;
+    Eterm mfa;
+    Eterm* hp = NULL;
+    for (ref = &p->common.tracee.tracers; ref; ref = ref->next) {
+        ErtsTracerNif *tnif = NULL;
+        if (is_tracer_ref_enabled(NULL, 0,
+                &p->common, ref, &tnif, TRACE_FUN_E_PROCS, what)) {
 
-        hp = HAlloc(p, 4);
-        mfa = TUPLE3(hp, mod, func, args);
-        hp += 4;
-        send_to_tracer_nif(NULL, &p->common, NULL, p->common.id, tnif, TRACE_FUN_T_PROCS,
-                           what, pid, mfa, am_true);
+            if(!hp){
+                hp = HAlloc(p, 4);
+                mfa = TUPLE3(hp, mod, func, args);
+            }
+            send_to_tracer_nif(NULL, &p->common, ref, p->common.id, tnif, TRACE_FUN_T_PROCS,
+                            what, pid, mfa, am_true);
+        }
     }
+    delete_cleared_tracer_refs(&p->common);
 }
 
 void save_calls(Process *p, Export *e)

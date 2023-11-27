@@ -108,7 +108,7 @@ BIF_RETTYPE spawn_3(BIF_ALIST_3)
 /* create a link to the process */
 BIF_RETTYPE link_1(BIF_ALIST_1)
 {
-    if (IS_TRACED_FL(BIF_P, F_TRACE_PROCS)) {
+    if (ERTS_TRACE_FLAGS(BIF_P) & F_TRACE_PROCS) {
 	trace_proc(BIF_P, ERTS_PROC_LOCK_MAIN, BIF_P, am_link, BIF_ARG_1);
     }
     /* check that the pid or port which is our argument is OK */
@@ -1066,7 +1066,7 @@ BIF_RETTYPE spawn_request_abandon_1(BIF_ALIST_1)
 /* remove a link from a process */
 BIF_RETTYPE unlink_1(BIF_ALIST_1)
 {
-    if (IS_TRACED_FL(BIF_P, F_TRACE_PROCS)) {
+    if (ERTS_TRACE_FLAGS(BIF_P) & F_TRACE_PROCS) {
         trace_proc(BIF_P, ERTS_PROC_LOCK_MAIN,
                    BIF_P, am_unlink, BIF_ARG_1);
     }
