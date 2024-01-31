@@ -803,6 +803,7 @@ do_major_collection:
         /* We have to make sure that we have space for need on the heap */
         res = delay_garbage_collection(p, live_hf_end, need, fcalls);
         ERTS_MSACC_POP_STATE();
+        ERTS_CHK_MBUF_SZ(p);
         return res;
     }
 
@@ -877,6 +878,7 @@ do_major_collection:
     ASSERT(!p->mbuf);
     ASSERT(!ERTS_IS_GC_DESIRED(p));
     ASSERT(need <= HEAP_LIMIT(p) - HEAP_TOP(p));
+    ERTS_CHK_MBUF_SZ(p);
 
     return reds;
 }

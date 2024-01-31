@@ -633,14 +633,17 @@ ERTS_GLB_INLINE Uint erts_msg_attached_data_size(ErtsMessage *msg)
 #endif
 
 Uint erts_mbuf_size(Process *p);
+void erts_check_circular_offheap(Process *p);
+
 #if defined(DEBUG) || 0
 #  define ERTS_CHK_MBUF_SZ(P)				\
     do {						\
 	Uint actual_mbuf_sz__ = erts_mbuf_size((P));	\
 	ERTS_ASSERT((P)->mbuf_sz >= actual_mbuf_sz__);	\
+        erts_check_circular_offheap(P);                 \
     } while (0)
 #else
-#  define ERTS_CHK_MBUF_SZ(P) ((void) 1)
+#  define ERTS_CHK_MBUF_SZ(P) erts_check_circular_offheap(P)
 #endif
 
 #define ERTS_FOREACH_SIG_PRIVQS(PROC, MVAR, CODE)                       \
