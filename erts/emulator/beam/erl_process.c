@@ -14008,6 +14008,8 @@ erts_continue_exit_process(Process *p)
     int yield_allowed = 1;
 #endif
 
+    erts_check_circular_offheap(p);
+
     if (p->u.terminate) {
         trap_state = p->u.terminate;
         /* Re-set the reason as it may have been gc:ed */
@@ -14496,6 +14498,8 @@ restart:
 
     ERTS_TRACER_CLEAR(&ERTS_TRACER(p));
 
+    erts_check_circular_offheap(p);
+
     if (!delay_del_proc)
 	delete_process(p);
 
@@ -14539,6 +14543,8 @@ restart:
     ERTS_LC_ASSERT(ERTS_PROC_LOCK_MAIN == erts_proc_lc_my_proc_locks(p));
 
     BUMP_ALL_REDS(p);
+
+    erts_check_circular_offheap(p);
 }
 
 Process *
