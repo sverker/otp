@@ -1676,6 +1676,8 @@ erts_check_circular_offheap(Process *p)
     slow = fast = p->off_heap.first;
 
     while (fast) {
+        ERTS_ASSERT(!ErtsInBetween(fast, p->htop, p->hend));
+
         fast = fast->next;
         ERTS_ASSERT(fast != slow);
 
