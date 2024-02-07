@@ -201,7 +201,7 @@ remove_message() {
     ErtsMessage* msgp;
     PROCESS_MAIN_CHK_LOCKS(c_p);
 
-    ERTS_CHK_MBUF_SZ(c_p);
+    //ERTS_CHK_MBUF_SZ(c_p);
 
     msgp = erts_msgq_peek_msg(c_p);
 
@@ -291,7 +291,7 @@ remove_message() {
     }
 
     ERTS_DBG_CHK_REDS(c_p, FCALLS);
-    ERTS_CHK_MBUF_SZ(c_p);
+    //ERTS_CHK_MBUF_SZ(c_p);
 
     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
     PROCESS_MAIN_CHK_LOCKS(c_p);

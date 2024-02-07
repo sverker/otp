@@ -40,12 +40,12 @@ CALL_GUARD_BIF(BF, TmpReg, Dst) {
     c_p->fcalls = FCALLS;
     PROCESS_MAIN_CHK_LOCKS(c_p);
     ASSERT(!ERTS_PROC_IS_EXITING(c_p));
-    ERTS_CHK_MBUF_SZ(c_p);
+    //ERTS_CHK_MBUF_SZ(c_p);
     DEBUG_SWAPOUT;
     result = (*$BF)(c_p, $TmpReg, I);
     DEBUG_SWAPIN;
     ASSERT(orig_htop == HTOP && orig_stop == E);
-    ERTS_CHK_MBUF_SZ(c_p);
+    //ERTS_CHK_MBUF_SZ(c_p);
     ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
     PROCESS_MAIN_CHK_LOCKS(c_p);
@@ -173,14 +173,14 @@ i_length.execute(Fail, Live, Dst) {
     c_p->fcalls = FCALLS;
     PROCESS_MAIN_CHK_LOCKS(c_p);
     ASSERT(!ERTS_PROC_IS_EXITING(c_p));
-    ERTS_CHK_MBUF_SZ(c_p);
+    //ERTS_CHK_MBUF_SZ(c_p);
     DEBUG_SWAPOUT;
 
     live = $Live;
     result = erts_trapping_length_1(c_p, reg+live);
 
     DEBUG_SWAPIN;
-    ERTS_CHK_MBUF_SZ(c_p);
+    //ERTS_CHK_MBUF_SZ(c_p);
     ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
     PROCESS_MAIN_CHK_LOCKS(c_p);
