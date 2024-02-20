@@ -132,11 +132,18 @@
         <c><![CDATA['/=']]></c> | <c><![CDATA[self]]></c> |
         <c><![CDATA[get_tcw]]></c>
       </item>
-      <item>MatchBody ::= [ ActionTerm ]
+      <item>MatchBody ::= [ BodyTerm, ... ]
       </item>
-      <item>ActionTerm ::= ConditionExpression | ActionCall
+      <item>BodyTerm ::= BodyExpression | ActionCall
       </item>
-      <item>ActionCall ::= {ActionFunction} | {ActionFunction, ActionTerm, ...}
+      <item>BodyExpression ::= ExprMatchVariable | { BodyFunction } |
+        { BodyFunction, ConditionExpression, ... } | TermConstruct
+      </item>
+      <item>BodyFunction ::= GuardFunction |
+        <c><![CDATA[map_put]]></c> |
+        <c><![CDATA[map_remove]]></c>
+      </item>
+      <item>ActionCall ::= {ActionFunction} | {ActionFunction, BodyTerm, ...}
       </item>
       <item>ActionFunction ::= <c><![CDATA[set_seq_token]]></c> |
         <c><![CDATA[get_seq_token]]></c> | <c><![CDATA[message]]></c> |
@@ -219,7 +226,14 @@
         <c><![CDATA['==']]></c> | <c><![CDATA['=/=']]></c> |
         <c><![CDATA['/=']]></c> | <c><![CDATA[self]]></c>
       </item>
-      <item>MatchBody ::= [ ConditionExpression, ... ]
+      <item>MatchBody ::= [ BodyExpression, ... ]
+      </item>
+      <item>BodyExpression ::= ExprMatchVariable | { BodyFunction } |
+        { BodyFunction, ConditionExpression, ... } | TermConstruct
+      </item>
+      <item>BodyFunction ::= GuardFunction |
+        <c><![CDATA[map_put]]></c> |
+        <c><![CDATA[map_remove]]></c>
       </item>
     </list>
   </section>
@@ -296,11 +310,18 @@
           <c>'=:='</c>, <c>'=='</c>, <c>'=/='</c>, <c>'/='</c>,
           <c>self</c></tag>
         <item>
-          <p>Same as the corresponding Erlang BIFs (or operators). In case of
+          <p>Same as the corresponding Erlang BIFs (or operators),
+            allowed in both match guards and match bodies. In case of
             bad arguments, the result depends on the context. In the
             <c><![CDATA[MatchConditions]]></c> part of the expression, the test
             fails immediately (like in an Erlang guard). In the
             <c><![CDATA[MatchBody]]></c> part, exceptions are implicitly caught
+            and the call results in the atom <c><![CDATA['EXIT']]></c>.</p>
+        </item>
+        <tag><c>map_put</c>, <c>map_remove</c>
+        <item>
+          <p>Same as the corresponding Erlang maps functions,
+            only allowed in match bodies. Exceptions are implicitly caught
             and the call results in the atom <c><![CDATA['EXIT']]></c>.</p>
         </item>
       </taglist>

@@ -60,6 +60,8 @@
 #define DBIF_TRACE_BODY  (1 << (DCOMP_TRACE + DBIF_BODY))
 #define DBIF_ALL \
 DBIF_TABLE_GUARD | DBIF_TABLE_BODY | DBIF_TRACE_GUARD | DBIF_TRACE_BODY
+#define DBIF_ALL_BODY \
+DBIF_TABLE_BODY | DBIF_TRACE_BODY
 
 
 #define HEAP_XTRA 100
@@ -697,16 +699,16 @@ static DMCGuardBif guard_tab[] =
         DBIF_ALL
     },
     {
-        am_maps_put,
+        am_map_put,
         &maps_put_3,
         3,
-        DBIF_TABLE_BODY
+        DBIF_ALL_BODY
     },
     {
-        am_maps_remove,
+        am_map_remove,
         &maps_remove_2,
         2,
-        DBIF_TABLE_BODY
+        DBIF_ALL_BODY
     },
     {
         am_is_map_key,
