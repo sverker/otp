@@ -1001,6 +1001,10 @@ pseudo_guard_function(_,_) -> false.
 guard_function(X,A) ->
     real_guard_function(X,A) or pseudo_guard_function(X,A).
 
+body_function(map_put,3) -> true;
+body_function(map_remove,2) -> true;
+body_function(_,_) -> false.
+
 action_function(set_seq_token,2) -> true;
 action_function(get_seq_token,0) -> true;
 action_function(message,1) -> true;
@@ -1020,8 +1024,6 @@ action_function(trace,3) -> true;
 action_function(caller_line,0) -> true;
 action_function(current_stacktrace,0) -> true;
 action_function(current_stacktrace,1) -> true;
-action_function(maps_put,3) -> true;
-action_function(maps_remove,2) -> true;
 action_function(_,_) -> false.
 
 bool_operator('and',2) ->
@@ -1097,7 +1099,7 @@ is_imported_from_erlang(X,A,_) ->
     arith_operator(X,A) or cmp_operator(X,A).
 
 is_ms_function(X,A,body) ->
-    action_function(X,A) or guard_function(X,A) or bool_test(X,A);
+    action_function(X,A) or body_function(X,A) or guard_function(X,A) or bool_test(X,A);
 
 is_ms_function(X,A,guard) ->
     guard_function(X,A) or bool_test(X,A).
