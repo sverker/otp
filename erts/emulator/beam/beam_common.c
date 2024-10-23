@@ -770,12 +770,13 @@ expand_error_value(Process* c_p, Uint freason, Eterm Value) {
 
 
 static void
-gather_stacktrace(Process* p, struct StackTrace* s, int depth)
+gather_stacktrace(Process* p, struct StackTrace* s)
 {
     ErtsCodePtr prev;
     Eterm *ptr;
 
-    if (depth == 0) {
+    if (s->depth >= s->max_depth) {
+        ASSERT(s->depth == s->max_depth);
         return;
     }
 
@@ -791,7 +792,7 @@ gather_stacktrace(Process* p, struct StackTrace* s, int depth)
 
     ASSERT(ptr >= STACK_TOP(p) && ptr <= STACK_START(p));
 
-    while (ptr < STACK_START(p) && depth > 0) {
+    while (ptr < STACK_START(p) && s->depth < s->max_depth) {
         if (is_CP(*ptr)) {
             ErtsCodePtr return_address;
 
@@ -822,7 +823,6 @@ gather_stacktrace(Process* p, struct StackTrace* s, int depth)
 #endif
 
                     s->trace[s->depth++] = adjusted_address;
-                    depth--;
                 }
 
                 ptr += CP_SIZE;
@@ -872,22 +872,23 @@ save_stacktrace(Process* c_p, ErtsCodePtr pc, Eterm* reg,
                 const ErtsCodeMFA *bif_mfa, Eterm args) {
     struct StackTrace* s;
     int sz;
-    int depth = erts_backtrace_depth;    /* max depth (never negative) */
+    int max_depth = erts_backtrace_depth;    /* max depth (never negative) */
     Eterm error_info = THE_NON_VALUE;
 
-    if (depth > 0) {
+    if (max_depth > 0) {
 	/* There will always be a current function */
-	depth --;
+	max_depth --;
     }
 
     /* Create a container for the exception data */
-    sz = (offsetof(struct StackTrace, trace) + sizeof(ErtsCodePtr) * depth
+    sz = (offsetof(struct StackTrace, trace) + sizeof(ErtsCodePtr) * max_depth
           + sizeof(Eterm) - 1) / sizeof(Eterm);
     s = (struct StackTrace *) HAlloc(c_p, sz);
     /* The following fields are inside the bignum */
     s->header = make_pos_bignum_header(sz - 1);
     s->freason = c_p->freason;
     s->depth = 0;
+    s->max_depth = max_depth;
 
     /*
      * If the failure was in a BIF other than 'error/1', 'error/2',
@@ -919,9 +920,8 @@ save_stacktrace(Process* c_p, ErtsCodePtr pc, Eterm* reg,
 	s->current = bif_mfa;
 	/* Save first stack entry */
 	ASSERT(pc);
-	if (depth > 0) {
+	if (s->depth < max_depth) {
 	    s->trace[s->depth++] = pc;
-	    depth--;
 	}
 	s->pc = NULL;
 
@@ -1047,13 +1047,13 @@ save_stacktrace(Process* c_p, ErtsCodePtr pc, Eterm* reg,
     }
 
     /* Save the actual stack trace */
-    gather_stacktrace(c_p, s, depth);
+    gather_stacktrace(c_p, s);
 }
 
 void
-erts_save_stacktrace(Process* p, struct StackTrace* s, int depth)
+erts_save_stacktrace(Process* p, struct StackTrace* s)
 {
-    gather_stacktrace(p, s, depth);
+    gather_stacktrace(p, s);
 }
 
 /*
