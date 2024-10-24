@@ -875,15 +875,11 @@ save_stacktrace(Process* c_p, ErtsCodePtr pc, Eterm* reg,
                 const ErtsCodeMFA *bif_mfa, Eterm args) {
     struct StackTrace* s;
     int sz;
-    int max_depth = erts_backtrace_depth;    /* max depth (never negative) */
+    /* Max depth (never negative), -1 as there is always a current function. */
+    const int max_depth = MAX(erts_backtrace_depth - 1, 0);
     Eterm error_info = THE_NON_VALUE;
 
-    if (max_depth > 0) {
-	/* There will always be a current function */
-	max_depth --;
-    }
-
-    /* Create a container for the exception data */
+    /* Create a bignum container for the stack trace */
     sz = (offsetof(struct StackTrace, trace) + sizeof(ErtsCodePtr) * max_depth
           + sizeof(Eterm) - 1) / sizeof(Eterm);
     s = (struct StackTrace *) HAlloc(c_p, sz);

@@ -2908,6 +2908,7 @@ restart:
             ASSERT(c_p == self);
 
             max_depth = unsigned_val(esp[-1]);
+            ASSERT(max_depth >= 0 && max_depth <= MAX_BACKTRACE_SIZE);
             esp--;
 
             sz = offsetof(struct StackTrace, trace) + sizeof(ErtsCodePtr) * max_depth;
