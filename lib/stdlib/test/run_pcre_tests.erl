@@ -89,13 +89,14 @@ test([{RE0,Line,Options0,Tests}|T],PreCompile,XMode,REAsList) ->
 		   end,
     case Cres of
 	{ok,P} ->
-	    case (catch testrun(RE,P,Tests,ExecOptions,Xopt,XMode)) of
+	    try testrun(RE,P,Tests,ExecOptions,Xopt,XMode) of
 		N when is_integer(N) ->
-		    N + test(T,PreCompile,XMode,REAsList);
-		limit ->
+		    N + test(T,PreCompile,XMode,REAsList)
+            catch
+		throw:limit ->
 		    io:format("Error limit reached.~n"),
 		    1;
-		skip ->
+		throw:skip ->
 		    case get(skipped) of
 			N when is_integer(N) ->
 			    put(skipped,N+1);
