@@ -416,14 +416,10 @@ ctest(_,RE,Options,false,_) ->
 	    ok
     end;
 ctest(Subject,RE,Options,true,Result) ->
-    try
-	{ok, Prog} = re:compile(RE,Options),
-	Result = re:run(Subject,Prog,[]),
-	ok
-    catch
-	_:_ ->
-	    error
-    end.
+    {ok, Prog} = re:compile(RE,Options),
+    Result = re:run(Subject,Prog,[]),
+    ok.
+
 crtest(_,RE,Options,false,_) ->
     case (catch re:run("",RE,Options)) of
 	{'EXIT',{badarg,_}} ->

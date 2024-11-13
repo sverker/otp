@@ -33,8 +33,10 @@ test(RootDir) ->
     erts_debug:set_internal_state(available_internal_state,false),
     put(verbose,true),
     Res2.
+
 t(OneFile) ->
     t(OneFile,infinite).
+
 t(OneFile,Num) ->
     {ok,Bin} = file:read_file(OneFile),
     Lines = splitfile(0,Bin,1),
@@ -404,7 +406,7 @@ stru([{Line,<<Ch,Re0/binary>>}|T0]) ->
 		    TmpT = skip_debug(Con),
 		    {NewT,Matches} = stru2(TmpT,U),
 		    [{NewRe,Line,Olist,Matches}|stru(NewT)];
-		[{_,<<$C,$a,$p,$t,$u,$r,$i,$n,$g,_/binary>>}|_] ->
+		[{_,<<"Capturing",_/binary>>}|_] ->
 		    NewT0 = skip_extra_info(T),
 		    {NewT,Matches} = stru2(NewT0,U),
 		    [{NewRe,Line,Olist,Matches}|stru(NewT)];
@@ -437,11 +439,11 @@ stru([{Line,<<Ch,Re0/binary>>}|T0]) ->
 
 contains_lang_sens(<<>>) ->
     false;
-contains_lang_sens(<<$\\,$W,_/binary>>) ->
+contains_lang_sens(<<"\\W",_/binary>>) ->
     true;
-contains_lang_sens(<<$\\,$w,_/binary>>) ->
+contains_lang_sens(<<"\\w",_/binary>>) ->
     true;
-contains_lang_sens(<<$\\,$b,_/binary>>) ->
+contains_lang_sens(<<"\\b",_/binary>>) ->
     true;
 contains_lang_sens(<<_,R/binary>>) ->
     contains_lang_sens(R).
@@ -539,7 +541,7 @@ backslash_end(<<_,R/binary>>) ->
 
 stru2([{Line,<<$ ,Rest/binary>>} | T],U) ->
     %% A challenge
-    case  (catch responses(T,U)) of
+    try responses(T,U) of
 	{NewT,Rlist} ->
 	    {NewNewT,StrList} = stru2(NewT,U),
 	    %% Hack...
@@ -560,15 +562,16 @@ stru2([{Line,<<$ ,Rest/binary>>} | T],U) ->
 	    case find_unsupported(ExecOpts) of
 		[] ->
 		    {NewNewT,[{NFS,Line,ExecOpts,
-			       case 
-				   Rlist of nomatch -> nomatch; 
-				   RR -> {match,RR} 
+			       case Rlist of
+                                   nomatch -> nomatch;
+				   RR -> {match,RR}
 			       end} | StrList]};
 		UList ->
 		    info("WARNING(~w): the exec-option(s) ~p are unsupported, skipping challenge.~n",[Line,UList]),
 		    {NewNewT,StrList}
-	    end;
-	fail ->
+	    end
+
+    catch throw:fail ->
 	    NewT = skip_until_empty(T),
 	    {NewT,[]}
     end;
@@ -578,13 +581,13 @@ stru2(X,_) ->
 
 responses([{_Line,<< X:2/binary,$:,$ ,Resp/binary>>}|T],U) ->
     {NT,R2} = responses(T,U),
-    NX=list_to_integer(binary_to_list(frontstrip(X))),
+    NX = binary_to_integer(frontstrip(X)),
     {NT,[{NX,escape2(Resp,U)} | R2]};
 responses([{_Line,<< X:3/binary,$:,$ ,Resp/binary>>}|T],U) ->
     {NT,R2} = responses(T,U),
-    NX=list_to_integer(binary_to_list(frontstrip(X))),
+    NX = binary_to_integer(frontstrip(X)),
     {NT,[{NX,escape2(Resp,U)} | R2]};
-responses([{_Line,<<$N,$o,$ ,$m,$a,$t,$c,$h,_/binary>>}|T],_) ->
+responses([{_Line,<<"No match",_/binary>>}|T],_) ->
     {T,nomatch};
 responses([{Line,<<$ ,No,Ch,_/binary>>}|T],U) when No >= $0, No =< $9, Ch >= $A, Ch =< $Z ->
     info("Skipping strange debug response at line ~p~n",[Line]),
@@ -648,27 +651,27 @@ eopt($B) ->
 eopt(X) ->
     [{not_supported,X}].
 
-pinch_cr(<<$c,$r,$>,Rest/binary>>) ->
+pinch_cr(<<"cr>",Rest/binary>>) ->
     {{newline,cr},Rest};
-pinch_cr(<<$l,$f,$>,Rest/binary>>) ->
+pinch_cr(<<"lf>",Rest/binary>>) ->
     {{newline,lf},Rest};
-pinch_cr(<<$c,$r,$l,$f,$>,Rest/binary>>) ->
+pinch_cr(<<"crlf>",Rest/binary>>) ->
     {{newline,crlf},Rest};
-pinch_cr(<<$C,$R,$>,Rest/binary>>) ->
+pinch_cr(<<"CR>",Rest/binary>>) ->
     {{newline,cr},Rest};
-pinch_cr(<<$L,$F,$>,Rest/binary>>) ->
+pinch_cr(<<"LF>",Rest/binary>>) ->
     {{newline,lf},Rest};
-pinch_cr(<<$C,$R,$L,$F,$>,Rest/binary>>) ->
+pinch_cr(<<"CRLF>",Rest/binary>>) ->
     {{newline,crlf},Rest};
-pinch_cr(<<$a,$n,$y,$c,$r,$l,$f,$>,Rest/binary>>) ->
+pinch_cr(<<"anycrlf>",Rest/binary>>) ->
     {{newline,anycrlf},Rest};
-pinch_cr(<<$b,$s,$r,$_,$a,$n,$y,$c,$r,$l,$f,$>,Rest/binary>>) ->
+pinch_cr(<<"bsr_anycrlf>",Rest/binary>>) ->
     {bsr_anycrlf,Rest};
-pinch_cr(<<$b,$s,$r,$_,$u,$n,$i,$c,$o,$d,$e,$>,Rest/binary>>) ->
+pinch_cr(<<"bsr_unicode>",Rest/binary>>) ->
     {bsr_unicode,Rest};
-pinch_cr(<<$a,$n,$y,$>,Rest/binary>>) ->
+pinch_cr(<<"any>",Rest/binary>>) ->
     {{newline,any},Rest};
-pinch_cr(<<$A,$N,$Y,$>,Rest/binary>>) ->
+pinch_cr(<<"ANY>",Rest/binary>>) ->
     {{newline,any},Rest};
 pinch_cr(Other) ->
     case splitby($>,Other,<<>>) of
@@ -731,6 +734,7 @@ escape(<<Ch,Rest/binary>>,U) ->
     {X,<<Ch,RR/binary>>};
 escape(Any,_) ->
     {[],Any}.
+
 escape2(<<>>,_) ->
     <<>>;
 escape2(<<$\\, Ch, Rest/binary>>,U) ->
