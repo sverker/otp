@@ -579,6 +579,9 @@ stru2([{Line,<<$ ,Rest/binary>>} | T],U) ->
 stru2(X,_) ->
     {X,[]}.
 
+responses([{Line,<<"MK: ",_/binary>>}|T],U) ->
+    info("Skipping mark response at line ~p~n",[Line]),
+    responses(T,U);
 responses([{_Line,<< X:2/binary,$:,$ ,Resp/binary>>}|T],U) ->
     {NT,R2} = responses(T,U),
     NX = binary_to_integer(frontstrip(X)),
