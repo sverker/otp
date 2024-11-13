@@ -497,10 +497,19 @@ interpret_options(<<$<,Rest0/binary>>) ->
 	    {Olist,NRest} = interpret_options(Rest),
 	    {[Option | Olist], NRest}
     end;
-interpret_options(<<$L,$f,$r,$_,$F,$R,Rest/binary>>) ->
+interpret_options(<<"locale=fr_FR",Rest/binary>>) ->
     info("Accepting (and ignoring) french locale~n",[]),
     {Olist,NRest} = interpret_options(Rest),
     {[{exec_option, accept_nonascii}|Olist],NRest};
+interpret_options(<<"aftertext",Rest/binary>>) ->
+    {Olist,NRest} = interpret_options(Rest),
+    {Olist, ["aftertext", NRest]};
+interpret_options(<<"mark",Rest/binary>>) ->
+    {Olist,NRest} = interpret_options(Rest),
+    {Olist, ["mark", NRest]};
+interpret_options(<<"dupnames",Rest/binary>>) ->
+    {Olist,NRest} = interpret_options(Rest),
+    {[dupnames | Olist], NRest};
 interpret_options(<<Ch,Rest/binary>>) ->
     {Olist,NRest} = interpret_options(Rest),
     case tr_option(Ch, Rest) of
