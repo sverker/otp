@@ -23,7 +23,7 @@
 -define(is_hex_char(C),(((C >= $0) and (C =< $9)) or ((C >= $A) and (C =< $F)) or ((C >= $a) and (C =< $f)))).
 
 test(RootDir) ->
-    put(verbose,false),
+    put(verbose,true),
     erts_debug:set_internal_state(available_internal_state,true),
     io:format("oldlimit: ~p~n",[ erts_debug:set_internal_state(re_loop_limit,10)]),
     Testfiles0 = ["testoutput1",
@@ -89,6 +89,7 @@ test([{RE0,Line,Options0,Tests}|T],PreCompile,XMode,REAsList) ->
 		 RE0
 	 end,
     {Options,ExecOptions} = pick_exec_options(Options0),
+    io:format("~p: RE = ~p, Options = ~p\n", [Line, RE, Options]),
     {Cres, Xopt} = case PreCompile of
 		       true ->
 			   {re:compile(RE,Options),[]};
@@ -193,7 +194,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 	    true ->
 		case XMode of
 		    binary ->
-			case re:run(Chal,P,ExecOpt++Xopt++
+			case re_run(Chal,P,ExecOpt++Xopt++
 				    [global,{capture,all,binary}]) of
 			    nomatch ->
 				nomatch;
@@ -201,7 +202,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 				{match,press([bfix(R)|| R <- Reslist])}
 			end;
 		    list ->
-			case re:run(Chal,P,ExecOpt++Xopt++
+			case re_run(Chal,P,ExecOpt++Xopt++
 				    [global,{capture,all,list}]) of
 			    nomatch ->
 				nomatch;
@@ -210,7 +211,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 				{match,press([bfix([if UFix =:= true -> list_to_utf8(L); true -> list_to_binary(L) end || L <- R]) || R <- Reslist])}
 			end;
 		    index ->
-			case re:run(Chal,P,ExecOpt++Xopt++[global]) of
+			case re_run(Chal,P,ExecOpt++Xopt++[global]) of
 			    nomatch ->
 				nomatch;
 			    {match, Reslist} ->
@@ -231,7 +232,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 
 			case XMode of
 			    binary ->
-				case re:run(Chal,P,ExecOpt++Xopt++
+				case re_run(Chal,P,ExecOpt++Xopt++
 					    [{capture,all,binary}]) of
 				    nomatch ->
 					nomatch;
@@ -239,7 +240,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 					{match,bfix(Reslist)}
 				end;
 			    list ->
-				case re:run(Chal,P,ExecOpt++Xopt++
+				case re_run(Chal,P,ExecOpt++Xopt++
 					    [{capture,all,list}]) of
 				    nomatch ->
 					nomatch;
@@ -251,7 +252,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 						     end || L <- Reslist])}
 				end;
 			    index ->
-				case re:run(Chal,P,ExecOpt++Xopt) of
+				case re_run(Chal,P,ExecOpt++Xopt) of
 				    nomatch ->
 					nomatch;
 				    {match, Reslist} ->
@@ -261,7 +262,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 		    _LesserOpt ->
 			case XMode of
 			    binary ->
-				case re:run(Chal,P,ExecOpt++Xopt++
+				case re_run(Chal,P,ExecOpt++Xopt++
 					    [{capture,all,binary}]) of
 				    nomatch ->
 					nomatch;
@@ -269,7 +270,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 					{match,bfix(Reslist)}
 				end;
 			    list ->
-				case re:run(Chal,P,ExecOpt++Xopt++
+				case re_run(Chal,P,ExecOpt++Xopt++
 					    [{capture,all,list}]) of
 				    nomatch ->
 					nomatch;
@@ -281,7 +282,7 @@ testrun(RE,P,[{Chal,Line,ExecOpt,Responses}|T],EO,Xopt0,XMode) ->
 						     end || L <- Reslist])}
 				end;
 			    index ->
-				case re:run(Chal,P,ExecOpt++Xopt) of
+				case re_run(Chal,P,ExecOpt++Xopt) of
 				    nomatch ->
 					nomatch;
 				    {match, Reslist} ->
@@ -412,6 +413,7 @@ stru([{_Line,<<$#, _/binary>>=_Bin}|T0]) ->
     io:format("~p: stru skip comment: ~p\n", [_Line, _Bin]),
     stru(T0);
 stru([{Line,<<Ch,Re0/binary>>}|T0]) ->
+    %%io:format("~p: stru Re0 = ~p\n", [Line, Re0]),
     {T,Re} = find_rest_re(Ch,[{Line,Re0}|T0]),
     {NewRe,<< Ch, Options/binary >>} = end_of_re(Ch,Re),
     case interpret_options_x(backstrip(frontstrip(Options)),NewRe) of
@@ -1244,3 +1246,6 @@ ranchar() ->
 ranstring() ->
     iolist_to_binary([ranchar() || _ <- lists:duplicate(rand:uniform(20),0) ]).
 
+re_run(Subj, RE, Opts) ->
+    %%io:format("re:run(~p, ~p, ~p)\n", [Subj, RE, Opts]),
+    re:run(Subj, RE, Opts).
