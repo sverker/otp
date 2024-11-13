@@ -396,7 +396,7 @@ stru([{Line,<<Ch,Re0/binary>>}|T0]) ->
     {T,Re} = find_rest_re(Ch,[{Line,Re0}|T0]),
     {NewRe,<< Ch, Options/binary >>} = end_of_re(Ch,Re),
     case interpret_options_x(backstrip(frontstrip(Options)),NewRe) of
-	{Olist,<<>>} -> 
+	{Olist,[]} ->
 	    U = lists:member(unicode,Olist),
 	    case T of
 		[{_,<<$-,_/binary>>}|Con] ->
@@ -425,7 +425,7 @@ stru([{Line,<<Ch,Re0/binary>>}|T0]) ->
 	    end;
 	{_,Rest} ->
 	    NewT = skip_until_empty(T),
-	    info("Skipping options ~s for now (~w)~n",[binary_to_list(Rest),Line]),
+	    info("Skipping options ~p for now (~p)~n", [Rest,Line]),
 	    case NewT of
 		[{Li,_}|_] ->
 		    info("Skip to line ~p~n",[Li]);
@@ -492,7 +492,7 @@ interpret_options(<<$<,Rest0/binary>>) ->
     {Option,Rest} = pinch_cr(Rest0),
     case Option of
 	{not_supported,{newline,_Offender}} ->
-	    {[],<<$<,Rest0/binary>>};
+	    {[],[<<$<,Rest0/binary>>]};
 	_ ->
 	    {Olist,NRest} = interpret_options(Rest),
 	    {[Option | Olist], NRest}
@@ -503,14 +503,14 @@ interpret_options(<<$L,$f,$r,$_,$F,$R,Rest/binary>>) ->
     {[{exec_option, accept_nonascii}|Olist],NRest};
 interpret_options(<<Ch,Rest/binary>>) ->
     {Olist,NRest} = interpret_options(Rest),
-    case tr_option(Ch) of
+    case tr_option(Ch, Rest) of
 	false ->
-	    {Olist,<<Ch,NRest/binary>>};
+	    {Olist, [Ch | NRest]};
 	Option ->
 	     {Option ++ Olist, NRest}
     end;
 interpret_options(<<>>) ->
-    {[],<<>>}.
+    {[], []}.
 
 find_unsupported([{not_supported,X}|T]) ->
     [X | find_unsupported(T)];
