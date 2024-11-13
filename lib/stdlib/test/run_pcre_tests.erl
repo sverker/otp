@@ -462,31 +462,35 @@ interpret_options_x(Options,RE) ->
 		    {O,R}
 	    end
     end.
-tr_option($i) ->
+tr_option($i, _) ->
     [caseless];
-tr_option($I) ->
+tr_option($I, _) ->
     [];
-tr_option($B) ->
+tr_option($B, _) ->
     [];
-tr_option($Z) ->
+tr_option($Z, _) ->
     [];
-tr_option($x) ->
+tr_option($x, <<$x,_/binary>>) ->
+    false; % xx (PCRE2_EXTENDED_MORE) notsup
+tr_option($x, _) ->
     [extended];
-tr_option($s) ->
+tr_option($s, _) ->
     [dotall];
-tr_option($m) ->
+tr_option($m, _) ->
     [multiline];
-tr_option($J) ->
+tr_option($J, _) ->
     [dupnames];
-tr_option($N) ->
+tr_option($N, _) ->
     [no_auto_capture];
-tr_option($8) ->
+tr_option($8, _) ->
     [unicode];
-tr_option($U) ->
+tr_option($U, _) ->
     [ungreedy];
-tr_option($g) ->
+tr_option($g, _) ->
     [{exec_option,g}];
-tr_option(_) ->
+tr_option($,, _) ->
+    [];
+tr_option(_, _) ->
     false.
 
 
