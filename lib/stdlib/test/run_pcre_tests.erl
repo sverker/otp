@@ -335,19 +335,26 @@ splitfile(N,Bin,_Line) when N >= size(Bin) ->
     [];
 splitfile(N,Bin,Line) ->
     {Res,NewN} = pickline(N,N,Bin),
-    case emptyline(Res) of
-	true ->
+    case linetype(Res,first) of
+	empty ->
 	    [{Line,<<>>}|splitfile(NewN,Bin,Line+1)];
-	false ->
+        comment ->
+	    splitfile(NewN,Bin,Line+1);
+        content ->
 	    [{Line,Res}|splitfile(NewN,Bin,Line+1)]
     end.
 
-emptyline(<<>>) ->
-    true;
-emptyline(<<$ ,R/binary>>) ->
-    emptyline(R);
-emptyline(_) ->
-    false.
+linetype(<<>>, _) ->
+    empty;
+linetype(<<$ ,R/binary>>, _) ->
+    linetype(R, space);
+linetype(<<$#, _/binary>>, first) ->
+    comment;
+linetype(<<"\\=", _/binary>>, first) ->
+    comment;
+linetype(_, _) ->
+    content.
+
 pickline(Start,Stop,Bin) when Stop >= size(Bin) ->
     Len = Stop - Start - 1,
     <<_:Start/binary,Res:Len/binary,_/binary>> = Bin,
