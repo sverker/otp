@@ -348,8 +348,6 @@ linetype(<<>>, _) ->
     empty;
 linetype(<<$ ,R/binary>>, _) ->
     linetype(R, space);
-linetype(<<$#, _/binary>>, first) ->
-    comment;
 linetype(<<"\\=", _/binary>>, first) ->
     comment;
 linetype(_, _) ->
@@ -398,8 +396,11 @@ stru([]) ->
     [];
 stru([{_,<<>>}|T]) ->
     stru(T);
-stru([{_Line,<<"< forbid ", _Rest/binary>>}|T0]) ->
-    %% We do not handle lockout of modifiers from the tests...
+%%stru([{_Line,<<"< forbid ", _Rest/binary>>}|T0]) ->
+%%    %% We do not handle lockout of modifiers from the tests...
+%%    stru(T0);
+stru([{_Line,<<$#, _/binary>>=_Bin}|T0]) ->
+    io:format("~p: stru skip comment: ~p\n", [_Line, _Bin]),
     stru(T0);
 stru([{Line,<<Ch,Re0/binary>>}|T0]) ->
     {T,Re} = find_rest_re(Ch,[{Line,Re0}|T0]),
