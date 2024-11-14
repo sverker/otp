@@ -753,15 +753,17 @@ escape(Any,_) ->
 
 escape2(<<>>,_) ->
     <<>>;
-escape2(<<$\\, Ch, Rest/binary>>,U) ->
-    {C,NR} = case multi_esc(<<Ch,Rest/binary>>,U) of
-		 {CharBin,NewRest} ->
-		     {CharBin,NewRest};
-		 no ->
-		     {<<$\\>>,<<Ch,Rest/binary>>}
-	     end,
-    Tail = escape2(NR,U),
-    <<C/binary,Tail/binary>>;
+escape2(<<$\\, Rest/binary>>,U) ->
+    {CharBin,NewRest} =
+        case multi_hex_esc(Rest,U) of
+            {Ch, _} when (Ch =:= no) or ((Ch >= 32) and (Ch =< 126)) ->
+                {<<$\\>>, Rest};
+
+            {_, Tpl} ->
+                Tpl
+        end,
+    Tail = escape2(NewRest, U),
+    <<CharBin/binary, Tail/binary>>;
 escape2(<<Ch,Rest/binary>>,U) ->
     RR = escape2(<<Rest/binary>>,U),
     <<Ch,RR/binary>>;
@@ -822,9 +824,11 @@ multi_esc(<<O,Rest/binary>>,_)
    when O  >= $0, O =< $7 ->
     Cha = (O - $0),
     {<<Cha>>,Rest};
+multi_esc(Bin, Unicode) ->
+    {_Cha, Tpl} = multi_hex_esc(Bin, Unicode),
+    Tpl.
 
-
-multi_esc(<<$x,${,N,O,$},Rest/binary>>,Unicode) 
+multi_hex_esc(<<$x,${,N,O,$},Rest/binary>>,Unicode)
     when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
 	 ((N >= $a) and (N =< $f))) and 
 	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
@@ -832,11 +836,11 @@ multi_esc(<<$x,${,N,O,$},Rest/binary>>,Unicode)
     Cha = (trx(N) bsl 4) bor trx(O),
     case Unicode of
 	false ->
-	    {<<Cha:8>>,Rest};
+	    {Cha, {<<Cha:8>>,Rest}};
 	_ ->
-	    {int_to_utf8(Cha),Rest}
+	    {Cha, {int_to_utf8(Cha),Rest}}
     end;
-multi_esc(<<$x,${,N,O,P,$},Rest/binary>>,_) 
+multi_hex_esc(<<$x,${,N,O,P,$},Rest/binary>>,_)
     when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
 	 ((N >= $a) and (N =< $f))) and 
 	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
@@ -844,8 +848,8 @@ multi_esc(<<$x,${,N,O,P,$},Rest/binary>>,_)
 	(((P >= $0) and (P =< $9)) or ((P >= $A) and (P =< $F)) or 
 	 ((P >= $a) and (P =< $f)))) -> 
     Cha = (trx(N) bsl 8) bor (trx(O) bsl 4) bor trx(P),
-    {int_to_utf8(Cha),Rest};
-multi_esc(<<$x,${,N,O,P,Q,$},Rest/binary>>,_) 
+    {Cha, {int_to_utf8(Cha),Rest}};
+multi_hex_esc(<<$x,${,N,O,P,Q,$},Rest/binary>>,_)
     when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
 	 ((N >= $a) and (N =< $f))) and 
 	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
@@ -855,8 +859,8 @@ multi_esc(<<$x,${,N,O,P,Q,$},Rest/binary>>,_)
 	(((Q >= $0) and (Q =< $9)) or ((Q >= $A) and (Q =< $F)) or 
 	 ((Q >= $a) and (Q =< $f)))) -> 
     Cha = (trx(N) bsl 12) bor (trx(O) bsl 8) bor (trx(P) bsl 4) bor trx(Q),
-    {int_to_utf8(Cha),Rest};
-multi_esc(<<$x,${,N,O,P,Q,R,$},Rest/binary>>,_) 
+    {Cha, {int_to_utf8(Cha),Rest}};
+multi_hex_esc(<<$x,${,N,O,P,Q,R,$},Rest/binary>>,_)
     when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
 	 ((N >= $a) and (N =< $f))) and 
 	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
@@ -868,8 +872,8 @@ multi_esc(<<$x,${,N,O,P,Q,R,$},Rest/binary>>,_)
 	(((R >= $0) and (R =< $9)) or ((R >= $A) and (R =< $F)) or 
 	 ((R >= $a) and (R =< $f)))) -> 
     Cha = (trx(N) bsl 16) bor (trx(O) bsl 12) bor (trx(P) bsl 8) bor (trx(Q) bsl 4) bor trx(R),
-    {int_to_utf8(Cha),Rest};
-multi_esc(<<$x,${,N,O,P,Q,R,S,$},Rest/binary>>,_) 
+    {Cha, {int_to_utf8(Cha),Rest}};
+multi_hex_esc(<<$x,${,N,O,P,Q,R,S,$},Rest/binary>>,_)
     when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
 	 ((N >= $a) and (N =< $f))) and 
 	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
@@ -883,21 +887,21 @@ multi_esc(<<$x,${,N,O,P,Q,R,S,$},Rest/binary>>,_)
 	(((S >= $0) and (S =< $9)) or ((S >= $A) and (S =< $F)) or 
 	 ((S >= $a) and (S =< $f)))) -> 
     Cha = (trx(N) bsl 20) bor (trx(O) bsl 16) bor (trx(P) bsl 12) bor (trx(Q) bsl 8) bor (trx(R) bsl 4) bor trx(S),
-    {int_to_utf8(Cha),Rest};
-multi_esc(<<$x,N,O,Rest/binary>>,_) 
+    {Cha, {int_to_utf8(Cha),Rest}};
+multi_hex_esc(<<$x,N,O,Rest/binary>>,_)
   when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
 	 ((N >= $a) and (N =< $f))) and 
 	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
 	 ((O >= $a) and (O =< $f)))) -> 
     Cha = (trx(N) bsl 4) bor trx(O),
-    {<<Cha>>,Rest};
-multi_esc(<<$x,N,Rest/binary>>,_) 
+    {Cha, {<<Cha>>,Rest}};
+multi_hex_esc(<<$x,N,Rest/binary>>,_)
   when (((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
 	 ((N >= $a) and (N =< $f)))  -> 
     Cha = trx(N),
-    {<<Cha>>,Rest};
-multi_esc(_,_) ->
-    no.
+    {Cha, {<<Cha>>,Rest}};
+multi_hex_esc(_,_) ->
+    {no, no}.
 
 single_esc($") ->
     $";
