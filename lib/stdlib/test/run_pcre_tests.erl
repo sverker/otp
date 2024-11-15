@@ -660,13 +660,6 @@ find_rest_re(Ch,[{_,H}|T]) ->
 	    {T,H}
     end.
 
-eopt($A) ->
-    [anchored];
-eopt($B) ->
-    [notbol];
-eopt(X) ->
-    [{not_supported,X}].
-
 pinch_cr(<<"cr>",Rest/binary>>) ->
     {{newline,cr},Rest};
 pinch_cr(<<"lf>",Rest/binary>>) ->
@@ -704,33 +697,48 @@ splitby(Ch,<<Ch,Rest/binary>>,Acc) ->
 splitby(Ch,<<OCh,Rest/binary>>,Acc) ->
     splitby(Ch,Rest,<<Acc/binary,OCh>>).
 
+pick_number(Bin) ->
+    pick_number(0, Bin).
+
 pick_number(N,<<Ch:8,Rest/binary>>) when Ch >= $0, Ch =< $9 ->
     pick_number(N*10+(Ch - $0),Rest);
 pick_number(N,Rest) ->
     {N,Rest}.
 
-pick_offset(Rest) ->
-    {Int,NRest} = pick_number(0,Rest),
-    {{offset,Int},NRest}.
-	    
+get_modifier(Len, Bin) ->
+    io:format("get_modifier(~p, ~p)\n", [Len, Bin]),
+    case Bin of
+        <<_:Len/binary>> ->
+            {Bin, <<>>};
+        <<Mod:Len/binary, $,, Rest/binary>> ->
+            {Mod, Rest};
+        _ when Len < byte_size(Bin) ->
+            get_modifier(Len+1, Bin)
+    end.
+
+modifier(<<"anchored">>) ->
+    anchored;
+modifier(<<"notbol">>) ->
+    notbol;
+modifier(<<"offset=", Rest/binary>>) ->
+    {Offs, <<>>} = pick_number(Rest),
+    {offset, Offs};
+%% modifier(<<"ovector=", Rest/binary>>) ->
+%%     {Sz, <<>>} = pick_number(Rest),
+%%     {ovector,Sz};
+modifier(Unknown) ->
+    {not_supported, Unknown}.
+
+subject_modifiers(<<>>) ->
+    [];
+subject_modifiers(Bin) ->
+    {ModBin, Rest} = get_modifier(1, Bin),
+    [modifier(ModBin) | subject_modifiers(Rest)].
 
 escape(<<>>,_) ->
     {[],<<>>};
-escape(<<$\\, Ch, Rest/binary>>,U) when Ch >= $A, Ch =< $Z; Ch =:= $? ->
-    %%Options in the string...
-    NewOpts = eopt(Ch),
-    {MoreOpts,Tail} = escape(Rest,U),
-    {NewOpts ++ MoreOpts,Tail};
-escape(<<$\\, $>, Rest/binary>>,U) ->
-    %%Offset Options in the string...
-    {NewOpt,NewRest} = pick_offset(Rest),
-    {MoreOpts,Tail} = escape(NewRest,U),
-    {[NewOpt|MoreOpts],Tail};
-escape(<<$\\, $<, Rest/binary>>,U) ->
-    %%CR Options in the string...
-    {NewOpt,NewRest} = pinch_cr(Rest),
-    {MoreOpts,Tail} = escape(NewRest,U),
-    {[NewOpt|MoreOpts],Tail};
+escape(<<"\\=", Modifiers/binary>>, _U) ->
+    {subject_modifiers(Modifiers), <<>>};
 escape(<<$\\, Ch, Rest/binary>>,U) ->
     {C,NR} = case single_esc(Ch) of
 		 no ->
