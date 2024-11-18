@@ -40,6 +40,10 @@
 #define DEFAULT_EXEC_OPTS 0
 #define LOOP_FACTOR 10
 
+#define NEWLINE_OPT_ALL_MASK \
+  (PCRE2_NEWLINE_CR | PCRE2_NEWLINE_LF | PCRE2_NEWLINE_CRLF | \
+   PCRE2_NEWLINE_ANYCRLF | PCRE2_NEWLINE_ANY | PCRE2_NEWLINE_NUL)
+
 #define SVERKER_SKIP_TRAP
 
 #ifndef SVERKER_SKIP_TRAP
@@ -237,7 +241,8 @@ static Eterm make_signed_integer(int x, Process *p)
 static int /* 0 == ok, < 0 == error */ 
 parse_options(Eterm listp, /* in */
 	      uint32_t *compile_options, /* out */
-	      int *exec_options, /* out */
+              pcre2_compile_context **compile_context, /* out */
+              uint32_t *match_options, /* out */
 	      int *flags,/* out */
 	      int *startoffset, /* out */
 	      Eterm *capture_spec, /* capture_spec[CAPSPEC_SIZE] */ /* out */
@@ -245,7 +250,7 @@ parse_options(Eterm listp, /* in */
 	      int *match_limit_recursion)  /* out */
 {
     uint32_t copt;
-    int eopt,fl;
+    uint32_t eopt,fl;
     Eterm item;
 
     if (listp  == NIL) {
@@ -320,34 +325,26 @@ parse_options(Eterm listp, /* in */
 			   PARSE_FLAG_MATCH_LIMIT_RECURSION);
 		    break;
 		case am_newline:
-		    if (!is_atom(tp[2])) {
-			return -1; 
-		    }
 		    switch (tp[2]) {
 		    case am_cr: 
 			copt |= PCRE2_NEWLINE_CR;
-			eopt |= PCRE2_NEWLINE_CR;
 			break;
 		    case am_crlf: 
 			copt |= PCRE2_NEWLINE_CRLF;
-			eopt |= PCRE2_NEWLINE_CRLF;
 			break;
 		    case am_lf: 
 			copt |= PCRE2_NEWLINE_LF;
-			eopt |= PCRE2_NEWLINE_LF;
 			break;
 		    case am_anycrlf: 
 			copt |= PCRE2_NEWLINE_ANYCRLF;
-			eopt |= PCRE2_NEWLINE_ANYCRLF;
 			break;
 		    case am_any: 
-			eopt |= PCRE2_NEWLINE_ANY;
 			copt |= PCRE2_NEWLINE_ANY;
 			break;
 		    default:
 			return -1; 
 			break;
-		    }    
+		    }
 		    break;
 		default:
 		    return -1; 
@@ -453,10 +450,20 @@ parse_options(Eterm listp, /* in */
 	}
     }
     if (compile_options != NULL) {
-	*compile_options = copt;
+        const uint32_t newline_options = copt & NEWLINE_OPT_ALL_MASK;
+
+        ASSERT(compile_context);
+        if (newline_options) {
+            *compile_context = pcre2_compile_context_create(NULL);
+            pcre2_set_newline(*compile_context, newline_options);
+        }
+        else {
+            *compile_context = NULL;
+        }
+        *compile_options = copt;
     }
-   if (exec_options != NULL) {
-	*exec_options = eopt;
+    if (match_options != NULL) {
+        *match_options = eopt;
     }
     if (flags != NULL) {
 	*flags = fl;
@@ -552,8 +559,11 @@ re_compile(Process* p, Eterm arg1, Eterm arg2)
     int pflags = 0;
     int unicode = 0;
     int buffres;
+    pcre2_compile_context* compile_context;
 
-    if (parse_options(arg2,&options,NULL,&pflags,NULL,NULL,NULL,NULL) < 0) {
+
+    if (parse_options(arg2, &options, &compile_context, NULL, &pflags,
+                      NULL, NULL, NULL, NULL) < 0) {
     opt_error:
         p->fvalue = am_badopt;
 	BIF_ERROR(p, BADARG | EXF_HAS_EXT_INFO);
@@ -577,12 +587,17 @@ re_compile(Process* p, Eterm arg1, Eterm arg2)
     ASSERT(buffres >= 0); (void)buffres;
 
     expr[slen]='\0';
-    result = pcre2_compile((PCRE2_UCHAR8*)expr, slen, options,
+
+    result = pcre2_compile((PCRE2_UCHAR8 *)expr, slen, options,
 			   &errcode, &errofset,
-			   NULL/*pcre2_compile_context*/);
+                           compile_context);
+    if (compile_context) {
+        pcre2_compile_context_free(compile_context);
+    }
 
     ret = build_compile_result(p, am_error, result, errcode,
 			       errofset, unicode, 1, NIL);
+
     erts_free(ERTS_ALC_T_RE_TMP_BUF, expr);
     BIF_RET(ret);
 }
@@ -1127,8 +1142,9 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     RestartContext restart;
     ErlDrvSizeT slength;
     int startoffset = 0;
-    int options = 0;
+    uint32_t match_options = 0;
     uint32_t comp_options = 0;
+    pcre2_compile_context* compile_context;
     int ovsize;
     int pflags;
     Eterm *tp;
@@ -1144,8 +1160,8 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     int match_limit = 0;
     int match_limit_recursion = 0;
 
-    if (parse_options(arg3,&comp_options,&options,&pflags,&startoffset,capture,
-		      &match_limit,&match_limit_recursion)
+    if (parse_options(arg3, &comp_options, &compile_context, &match_options, &pflags,
+                      &startoffset, capture, &match_limit,&match_limit_recursion)
 	< 0) {
         p->fvalue = am_badopt;
 	BIF_ERROR(p, BADARG | EXF_HAS_EXT_INFO);
@@ -1156,7 +1172,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
          * with the same subject; i.e., no need to do yet another validation of
          * the subject regarding utf8 encoding...
          */
-        options |= PCRE2_NO_UTF_CHECK;
+        match_options |= PCRE2_NO_UTF_CHECK;
     }
     is_list_cap = ((pflags & PARSE_FLAG_CAPTURE_OPT) && 
 		   (capture[CAPSPEC_TYPE] == am_list));
@@ -1190,8 +1206,11 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 	    expr[slen]='\0';
 	    result = pcre2_compile((PCRE2_UCHAR8*)expr, slen, comp_options,
                                    &errcode, &errofset,
-                                   NULL/*pcre2_compile_context*/);
-	    if (!result) {
+                                   compile_context);
+            if (compile_context) {
+                pcre2_compile_context_free(compile_context);
+            }
+            if (!result) {
 		/* Compilation error gives badarg except in the compile 
 		   function or if we have PARSE_FLAG_REPORT_ERRORS */
 		if (pflags &  PARSE_FLAG_REPORT_ERRORS) {
@@ -1276,6 +1295,24 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 	sys_memcpy(restart.code, code_tmp, code_size);
 	erts_free_aligned_binary_bytes(temp_alloc);
 
+        {
+            const uint32_t newline_arg_opt = comp_options & NEWLINE_OPT_ALL_MASK;
+            /*
+             * Old PCRE did support newline options at both "compile" and "match",
+             * PCRE2 do only support newline options to "compile" function.
+             * To be nice we only fail with badarg if (old) user passes
+             * different newline option to re:run vs re:compile.
+             */
+            if (newline_arg_opt) {
+                uint32_t newline_compiled_opt;
+                if (pcre2_pattern_info(restart.code, PCRE2_INFO_NEWLINE,
+                                       &newline_compiled_opt) != 0
+                    || newline_compiled_opt != newline_arg_opt) {
+                    erts_free(ERTS_ALC_T_RE_SUBJECT, restart.code);
+                    BIF_ERROR(p, BADARG);
+                }
+            }
+        }
     }
 
     restart.match_data = pcre2_match_data_create(ovsize, NULL/*ToDo*/);
@@ -1362,7 +1399,7 @@ handle_iodata:
 
     rc = pcre2_match(restart.code, restart.subject,
                      slength, startoffset,
-                     options,
+                     match_options,
                      restart.match_data,
                      NULL/*ToDo: pcre2_match_context*/);
     if (rc < 0) {

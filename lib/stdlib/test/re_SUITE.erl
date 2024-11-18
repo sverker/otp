@@ -21,6 +21,7 @@
 
 -export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
 	 init_per_group/2,end_per_group/2, pcre/1,compile_options/1,
+         pcre2_incompat/1,
 	 run_options/1,combined_options/1,replace_autogen/1,
 	 global_capture/1,replace_input_types/1,replace_with_fun/1,replace_return/1,
 	 split_autogen/1,split_options/1,split_specials/1,
@@ -41,6 +42,7 @@ suite() ->
 
 all() -> 
     [pcre, compile_options, run_options, combined_options,
+     pcre2_incompat,
      replace_autogen, global_capture, replace_input_types,
      replace_with_fun, replace_return, split_autogen, split_options,
      split_specials, error_handling, pcre_cve_2008_2371,
@@ -115,45 +117,34 @@ compile_options(Config) when is_list(Config) ->
 
 %% Test all documented run specific options.
 run_options(Config) when is_list(Config) ->
-    rtest("ABCabcdABC","abc",[],[],true),
-    rtest("ABCabcdABC","abc",[anchored],[],false),
+    rtest("ABCabcdABC","abc",[],[], match),
+    rtest("ABCabcdABC","abc",[anchored],[], nomatch),
     %% Anchored in run overrides unanchored in compilation
-    rtest("ABCabcdABC","abc",[],[anchored],false),
+    rtest("ABCabcdABC","abc",[],[anchored], nomatch),
 
-    rtest("","a?b?",[],[],true),
-    rtest("","a?b?",[],[notempty],false),
+    rtest("","a?b?",[],[], match),
+    rtest("","a?b?",[],[notempty], nomatch),
 
-    rtest("abc","^a",[],[],true),
-    rtest("abc","^a",[],[notbol],false),
-    rtest("ab\nc","^a",[multiline],[],true),
-    rtest("ab\nc","^a",[multiline],[notbol],false),
-    rtest("ab\nc","^c",[multiline],[notbol],true),
+    rtest("abc","^a",[],[], match),
+    rtest("abc","^a",[],[notbol], nomatch),
+    rtest("ab\nc","^a",[multiline],[], match),
+    rtest("ab\nc","^a",[multiline],[notbol], nomatch),
+    rtest("ab\nc","^c",[multiline],[notbol], match),
 
-    rtest("abc","c$",[],[],true),
-    rtest("abc","c$",[],[noteol],false),
+    rtest("abc","c$",[],[], match),
+    rtest("abc","c$",[],[noteol], nomatch),
 
-    rtest("ab\nc","b$",[multiline],[],true),
-    rtest("ab\nc","c$",[multiline],[],true),
-    rtest("ab\nc","b$",[multiline],[noteol],true),
-    rtest("ab\nc","c$",[multiline],[noteol],false),
+    rtest("ab\nc","b$",[multiline],[], match),
+    rtest("ab\nc","c$",[multiline],[], match),
+    rtest("ab\nc","b$",[multiline],[noteol], match),
+    rtest("ab\nc","c$",[multiline],[noteol], nomatch),
 
-    rtest("abc","ab",[],[{offset,0}],true),
-    rtest("abc","ab",[],[{offset,1}],false),
+    rtest("abc","ab",[],[{offset,0}], match),
+    rtest("abc","ab",[],[{offset,1}], nomatch),
 
-    rtest("abcdABCabcABC\nD","abcd.*D",[],[],false),
-    rtest("abcdABCabcABC\nD","abcd.*D",[],[{newline,cr}],true),
-    rtest("abcdABCabcABC\rD","abcd.*D",[],[],true),
-    rtest("abcdABCabcABC\rD","abcd.*D",[{newline,cr}],[{newline,lf}],true),
-    rtest("abcdABCabcd\r\n","abcd$",[],[{newline,lf}],false),
-    rtest("abcdABCabcd\r\n","abcd$",[],[{newline,cr}],false),
-    rtest("abcdABCabcd\r\n","abcd$",[],[{newline,crlf}],true),
-
-    rtest("abcdABCabcd\r","abcd$",[],[{newline,crlf}],false),
-    rtest("abcdABCabcd\n","abcd$",[],[{newline,crlf}],false),
-    rtest("abcdABCabcd\r\n","abcd$",[],[{newline,anycrlf}],true),
-
-    rtest("abcdABCabcd\r","abcd$",[],[{newline,anycrlf}],true),
-    rtest("abcdABCabcd\n","abcd$",[],[{newline,anycrlf}],true),
+    rtest("abcdABCabcABC\nD","abcd.*D",[],[], nomatch),
+    rtest("abcdABCabcABC\rD","abcd.*D",[],[], match),
+    rtest("abcdABCabcd\r\n","abcd$",[],[{newline,lf}], nomatch),
 
     {ok,MP} = re:compile(".*(abcd).*"),
     {match,[{0,10},{3,4}]} = re:run("ABCabcdABC",MP,[]),
@@ -197,6 +188,24 @@ run_options(Config) when is_list(Config) ->
     ok.
 
 
+pcre2_incompat(Config) when is_list(Config) ->
+    %% Not allowed to pass changed newline option to re:run/3
+    rtest("abcdABCabcABC\nD", "abcd.*D", [], [{newline,cr}],  badarg),
+    rtest("abcdABCabcd\r\n", "abcd$", [], [{newline,crlf}],  badarg),
+    rtest("abcdABCabcd\r\n", "abcd$", [], [{newline,anycrlf}],  badarg),
+    rtest("abcdABCabcd\r", "abcd$", [], [{newline,any}],  badarg),
+
+    [rtest("abcdABCabcd\r", "abcd$", [{newline,C}], [{newline,R}],  badarg)
+     || C <- [lf, cr, crlf, anycrlf, any],
+        R <- [lf, cr, crlf, anycrlf, any],
+        C =/= R],
+
+    %% But we do allowed to pass an unchanged newline option to re:run/3
+    rtest("abcdABCabcABC\rD", "abcd.*D", [], [{newline,lf}],  match),
+
+    [rtest("abcABC", "abc", [{newline,NL}], [{newline,NL}],  match)
+     || NL <- [lf, cr, crlf, anycrlf, any]],
+    ok.
 
 %% Test the version is retorned correctly
 re_version(_Config) ->
@@ -399,14 +408,22 @@ replace_return(Config) when is_list(Config) ->
     ok = replacetest("a\x{400}bcd","Z","X",[global,{return,binary},unicode],<<"a",208,128,"bcd">>),
     ok.
 
-rtest(Subj, RE, Copt, Ropt, true) ->
+rtest(Subj, RE, Copt, Ropt, match) ->
     {ok,MP} = re:compile(RE,Copt), 
     {match,_} = re:run(Subj,MP,Ropt),
     ok;
-rtest(Subj, RE, Copt, Ropt, false) ->
+rtest(Subj, RE, Copt, Ropt, nomatch) ->
     {ok,MP} = re:compile(RE,Copt), 
     nomatch = re:run(Subj,MP,Ropt),
-    ok.
+    ok;
+rtest(Subj, RE, Copt, Ropt, badarg) ->
+    {ok,MP} = re:compile(RE,Copt),
+    ok = try
+             re:run(Subj,MP,Ropt),
+             error
+         catch
+             error:badarg -> ok
+         end.
 
 ctest(_,RE,Options,false,_) ->
     case re:compile(RE,Options) of
