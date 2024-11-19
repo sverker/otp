@@ -735,10 +735,24 @@ subject_modifiers(Bin) ->
     {ModBin, Rest} = get_modifier(1, Bin),
     [modifier(ModBin) | subject_modifiers(Rest)].
 
+repeat_bin(Bin, 1) ->
+    Bin;
+repeat_bin(Bin, N) when N > 1 ->
+    Prefix = repeat_bin(Bin, N-1),
+    <<Prefix/binary, Bin/binary>>.
+
 subject(<<>>,_) ->
     {[],<<>>};
 subject(<<"\\=", Modifiers/binary>>, _U) ->
     {subject_modifiers(Modifiers), <<>>};
+subject(<<"\\[", Rest0/binary>>, U) ->
+    %% Repeat string. Ex: "\[abc]{4}" is "abcabcabcabc"
+    {StrLen, 2} = binary:match(Rest0, <<"]{">>),
+    <<Str:StrLen/binary, "]{", Rest1/binary>> = Rest0,
+    {Count, <<$}, Rest2/binary>>} = pick_number(Rest1),
+    Result = repeat_bin(Str, Count),
+    {Opts, Tail} = subject(Rest2, U),
+    {Opts, <<Result/binary, Tail/binary>>};
 subject(<<$\\, Ch, Rest/binary>>,U) ->
     {C,NR} = case single_esc(Ch) of
 		 no ->
