@@ -571,7 +571,7 @@ stru2([{Line,<<$ ,Rest/binary>>} | T],U) ->
 				 OFS
 			 end
 		 end,
-	    {ExecOpts,NFS} = escape(FS,U),
+	    {ExecOpts,NFS} = subject(FS,U),
 	    case find_unsupported(ExecOpts) of
 		[] ->
 		    {NewNewT,[{NFS,Line,ExecOpts,
@@ -735,11 +735,11 @@ subject_modifiers(Bin) ->
     {ModBin, Rest} = get_modifier(1, Bin),
     [modifier(ModBin) | subject_modifiers(Rest)].
 
-escape(<<>>,_) ->
+subject(<<>>,_) ->
     {[],<<>>};
-escape(<<"\\=", Modifiers/binary>>, _U) ->
+subject(<<"\\=", Modifiers/binary>>, _U) ->
     {subject_modifiers(Modifiers), <<>>};
-escape(<<$\\, Ch, Rest/binary>>,U) ->
+subject(<<$\\, Ch, Rest/binary>>,U) ->
     {C,NR} = case single_esc(Ch) of
 		 no ->
 		     case multi_esc(<<Ch,Rest/binary>>,U) of
@@ -751,12 +751,12 @@ escape(<<$\\, Ch, Rest/binary>>,U) ->
 		 CCC ->
 		     {<<CCC>>,Rest}
 	     end,
-    {MoreOpts,Tail} = escape(NR,U),
+    {MoreOpts,Tail} = subject(NR,U),
     {MoreOpts,<<C/binary,Tail/binary>>};
-escape(<<Ch,Rest/binary>>,U) ->
-    {X,RR} = escape(<<Rest/binary>>,U),
+subject(<<Ch,Rest/binary>>,U) ->
+    {X,RR} = subject(<<Rest/binary>>,U),
     {X,<<Ch,RR/binary>>};
-escape(Any,_) ->
+subject(Any,_) ->
     {[],Any}.
 
 escape2(<<>>,_) ->
