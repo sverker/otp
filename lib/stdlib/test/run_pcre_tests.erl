@@ -949,6 +949,7 @@ gen_split_test(OneFile) ->
     ErlModule = "re_"++filename:basename(OneFile)++"_split_test",
     ErlFileName = ErlModule++".erl",
     {ok,F}= file:open(ErlFileName,[write]),
+    file:write(F, copyright_generator:erlang()),
     io:format(F,"-module(~s).~n",[ErlModule]),
     io:format(F,"-export([run/0]).~n",[]),
     io:format(F,"-compile(no_native).~n",[]),
@@ -961,6 +962,7 @@ gen_split_test(OneFile) ->
     [ io:format(F,"    ~s(),~n",[FunName]) || FunName <- FunList ],
     file:close(F),
     os:cmd("sh "++ PerlShellScript++" 2>/dev/null >> "++ErlFileName),
+    convert_file_to_utf8(ErlFileName),
     io:format("~s~n",[os:cmd("wc -l "++ErlFileName)]),
     ok.
 
@@ -983,42 +985,42 @@ dodumpsplit(F,[H|T],N,Acc,FunNum) ->
     dodumpsplit(F,T,N-1,Acc,FunNum).
 
 dumponesplit(F,{RE,Line,O,TS}) ->
+    %% ScriptFormat is verbatim, however
+    %% ~~ ~s ~w ~n is for io:format and \\ \" \n is for perl.
+    ScriptFormat = """
+        perl -e '
+        $x = join(":",split(/~s/~s,"~s",~w));
+        $x =~~ s/\\/\\\\/g;
+        $x =~~ s/\"/\\"/g;
+        print "    <<\"$x\">> = iolist_to_binary(join(re:split(\"~s\",\"~s\",~w))),\n";'~n
+        """,
     [begin
 	 {NO,_} = pick_exec_options(O++Op),
 	 SSS = opt_to_string(NO),
 	 LLL = unicode:characters_to_list(RE),
 	 case (catch iolist_to_binary(LLL)) of
-	     X when is_binary(X) -> 
-		 io:format(F,"perl -e '$x = join(\":\",split(/~s/~s,\"~s\")); "
-			   "$x =~~ s/\\\\/\\\\\\\\/g; $x =~~ s/\\\"/\\\\\"/g; "
-			   "print \"    <<\\\"$x\\\">> = "
-			   "iolist_to_binary(join(re:split(\\\"~s\\\","
-			   "\\\"~s\\\",~p))),\\n\";'~n",
+	     X when is_binary(X) ->
+		 io:format(F, ScriptFormat,
 			   [zsafe(safe(RE)),
 			    SSS,
 			    ysafe(safe(Str)),
+                            0,
 			    dsafe(safe(Str)),
 			    dsafe2(safe(RE)),
 			    NO++[trim]]),
-		 io:format(F,"perl -e '$x = join(\":\",split(/~s/~s,\"~s\",2)); "
-			   "$x =~~ s/\\\\/\\\\\\\\/g; $x =~~ s/\\\"/\\\\\"/g; "
-			   "print \"    <<\\\"$x\\\">> = "
-			   "iolist_to_binary(join(re:split(\\\"~s\\\","
-			   "\\\"~s\\\",~p))),\\n\";'~n",
+		 io:format(F, ScriptFormat,
 			   [zsafe(safe(RE)),
 			    SSS,
 			    ysafe(safe(Str)),
+                            2,
 			    dsafe(safe(Str)),
 			    dsafe2(safe(RE)),
 			    NO++[{parts,2}]]),
-		 io:format(F,"perl -e '$x = join(\":\",split(/~s/~s,\"~s\",-1)); "
-			   "$x =~~ s/\\\\/\\\\\\\\/g; $x =~~ s/\\\"/\\\\\"/g; "
-			   "print \"    <<\\\"$x\\\">> = "
-			   "iolist_to_binary(join(re:split(\\\"~s\\\","
-			   "\\\"~s\\\",~p))),\\n\";'~n",
+		 io:format(F, ScriptFormat,
 			   [zsafe(safe(RE)),
 			    SSS,
 			    ysafe(safe(Str)),
+                            -1,
 			    dsafe(safe(Str)),
 			    dsafe2(safe(RE)),
 			    NO]);
@@ -1039,6 +1041,7 @@ gen_repl_test(OneFile) ->
     ErlModule = "re_"++filename:basename(OneFile)++"_replacement_test",
     ErlFileName = ErlModule++".erl",
     {ok,F}= file:open(ErlFileName,[write]),
+    file:write(F, copyright_generator:erlang()),
     io:format(F,"-module(~s).~n",[ErlModule]),
     io:format(F,"-export([run/0]).~n",[]),
     io:format(F,"-compile(no_native).~n",[]),
@@ -1048,8 +1051,22 @@ gen_repl_test(OneFile) ->
     [ io:format(F,"    ~s(),~n",[FunName]) || FunName <- FunList ],
     file:close(F),
     os:cmd("sh "++ PerlShellScript++" 2>/dev/null >> "++ErlFileName),
+    convert_file_to_utf8(ErlFileName),
     io:format("~s~n",[os:cmd("wc -l "++ErlFileName)]),
     ok.
+
+convert_file_to_utf8(FileName) ->
+    TmpFile = FileName ++ ".tmp",
+    case os:cmd("iconv -f ISO-8859-1 -t UTF-8 " ++ FileName ++ " > " ++ TmpFile) of
+        [] ->
+            ok = file:rename(TmpFile, FileName);
+        Error ->
+            io:format("ERROR: Convertion from Latin1 to UTF-8 seems to have failed:\n"
+                      "~s\nFile ~w (probably) still in Latin1 format.",
+                      Error, FileName)
+    end.
+
+
 dump(S,Fname) ->
     {ok,F}= file:open(Fname,[write]),
     Res = dodump(F,S,0,[],0),
@@ -1069,14 +1086,40 @@ dodump(F,[H|T],N,Acc,FunNum) ->
     dodump(F,T,N-1,Acc,FunNum).
 
 dumpone(F,{RE,Line,O,TS}) ->
+    %% ScriptFormat is verbatim, however
+    %% ~~ ~s ~w ~n is for io:format and \\ \" \n is for perl.
+    ScriptFormat = """
+        perl -e '
+        $x = "~s";
+        $x =~~ s/~s/~s/~s;
+        $x =~~ s/\\/\\\\/g;
+        $x =~~ s/\"/\\"/g;
+        print "    <<\"$x\">> = iolist_to_binary(re:replace(\"~s\",\"~s\",\"~s\",~w)),\n";'~n
+        """,
     [begin
 	 {NO,_} = pick_exec_options(O++Op),
 	 SSS = opt_to_string(NO),
 	 RS = ranstring(),
 	 LLL = unicode:characters_to_list(RE),
 	 case (catch iolist_to_binary(LLL)) of
-	     X when is_binary(X) -> io:format(F,"perl -e '$x = \"~s\"; $x =~~ s/~s/~s/~s; $x =~~ s/\\\\/\\\\\\\\/g; $x =~~ s/\\\"/\\\\\"/g; print \"    <<\\\"$x\\\">> = iolist_to_binary(re:replace(\\\"~s\\\",\\\"~s\\\",\\\"~s\\\",~p)), \\n\";'~n",[ysafe(safe(Str)),zsafe(safe(RE)),perlify(binary_to_list(RS)),SSS,dsafe(safe(Str)),dsafe(safe(RE)),xsafe(RS),NO]),
-	 io:format(F,"perl -e '$x = \"~s\"; $x =~~ s/~s/~s/g~s; $x =~~ s/\\\\/\\\\\\\\/g; $x =~~ s/\\\"/\\\\\"/g; print \"    <<\\\"$x\\\">> = iolist_to_binary(re:replace(\\\"~s\\\",\\\"~s\\\",\\\"~s\\\",~p)), \\n\";'~n",[ysafe(safe(Str)),zsafe(safe(RE)),perlify(binary_to_list(RS)),SSS,dsafe(safe(Str)),dsafe(safe(RE)),xsafe(RS),NO++[global]]);
+	     X when is_binary(X) ->
+                 io:format(F, ScriptFormat, [ysafe(safe(Str)),
+                                             zsafe(safe(RE)),
+                                             perlify(binary_to_list(RS)),
+                                             SSS,
+                                             dsafe(safe(Str)),
+                                             dsafe(safe(RE)),
+                                             xsafe(RS),
+                                             NO]),
+                 %% Same again but with global replace
+                 io:format(F, ScriptFormat, [ysafe(safe(Str)),
+                                             zsafe(safe(RE)),
+                                             perlify(binary_to_list(RS)),
+                                             [$g | SSS],
+                                             dsafe(safe(Str)),
+                                             dsafe(safe(RE)),
+                                             xsafe(RS),
+                                             NO++[global]]);
 	     _ -> io:format("Found fishy character at line ~w~n",[Line])
 	 end
      end ||
