@@ -20,6 +20,8 @@
 -module(run_pcre_tests).
 -export([test/1,gen_split_test/1,gen_repl_test/1]).
 
+-define(is_hex_char(C),(((C >= $0) and (C =< $9)) or ((C >= $A) and (C =< $F)) or ((C >= $a) and (C =< $f)))).
+
 test(RootDir) ->
     put(verbose,false),
     erts_debug:set_internal_state(available_internal_state,true),
@@ -850,11 +852,8 @@ multi_esc(Bin, Unicode) ->
     {_Cha, Tpl} = multi_hex_esc(Bin, Unicode),
     Tpl.
 
-multi_hex_esc(<<$x,${,N,O,$},Rest/binary>>,Unicode)
-    when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
-	 ((N >= $a) and (N =< $f))) and 
-	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
-	 ((O >= $a) and (O =< $f)))) -> 
+multi_hex_esc(<<"x{",N,O,$},Rest/binary>>,Unicode) when (?is_hex_char(N) and
+                                                         ?is_hex_char(O)) ->
     Cha = (trx(N) bsl 4) bor trx(O),
     case Unicode of
 	false ->
@@ -862,64 +861,37 @@ multi_hex_esc(<<$x,${,N,O,$},Rest/binary>>,Unicode)
 	_ ->
 	    {Cha, {int_to_utf8(Cha),Rest}}
     end;
-multi_hex_esc(<<$x,${,N,O,P,$},Rest/binary>>,_)
-    when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
-	 ((N >= $a) and (N =< $f))) and 
-	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
-	 ((O >= $a) and (O =< $f)))and 
-	(((P >= $0) and (P =< $9)) or ((P >= $A) and (P =< $F)) or 
-	 ((P >= $a) and (P =< $f)))) -> 
+multi_hex_esc(<<"x{",N,O,P,$},Rest/binary>>,_) when (?is_hex_char(N) and
+                                                     ?is_hex_char(O) and
+                                                     ?is_hex_char(P)) ->
     Cha = (trx(N) bsl 8) bor (trx(O) bsl 4) bor trx(P),
     {Cha, {int_to_utf8(Cha),Rest}};
-multi_hex_esc(<<$x,${,N,O,P,Q,$},Rest/binary>>,_)
-    when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
-	 ((N >= $a) and (N =< $f))) and 
-	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
-	 ((O >= $a) and (O =< $f))) and 
-	(((P >= $0) and (P =< $9)) or ((P >= $A) and (P =< $F)) or 
-	 ((P >= $a) and (P =< $f))) and 
-	(((Q >= $0) and (Q =< $9)) or ((Q >= $A) and (Q =< $F)) or 
-	 ((Q >= $a) and (Q =< $f)))) -> 
+multi_hex_esc(<<"x{",N,O,P,Q,$},Rest/binary>>,_) when (?is_hex_char(N) and
+                                                       ?is_hex_char(O) and
+                                                       ?is_hex_char(P) and
+                                                       ?is_hex_char(Q)) ->
     Cha = (trx(N) bsl 12) bor (trx(O) bsl 8) bor (trx(P) bsl 4) bor trx(Q),
     {Cha, {int_to_utf8(Cha),Rest}};
-multi_hex_esc(<<$x,${,N,O,P,Q,R,$},Rest/binary>>,_)
-    when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
-	 ((N >= $a) and (N =< $f))) and 
-	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
-	 ((O >= $a) and (O =< $f))) and 
-	(((P >= $0) and (P =< $9)) or ((P >= $A) and (P =< $F)) or 
-	 ((P >= $a) and (P =< $f))) and 
-	(((Q >= $0) and (Q =< $9)) or ((Q >= $A) and (Q =< $F)) or 
-	 ((Q >= $a) and (Q =< $f))) and 
-	(((R >= $0) and (R =< $9)) or ((R >= $A) and (R =< $F)) or 
-	 ((R >= $a) and (R =< $f)))) -> 
+multi_hex_esc(<<"x{",N,O,P,Q,R,$},Rest/binary>>,_) when (?is_hex_char(N) and
+                                                         ?is_hex_char(O) and
+                                                         ?is_hex_char(P) and
+                                                         ?is_hex_char(Q) and
+                                                         ?is_hex_char(R)) ->
     Cha = (trx(N) bsl 16) bor (trx(O) bsl 12) bor (trx(P) bsl 8) bor (trx(Q) bsl 4) bor trx(R),
     {Cha, {int_to_utf8(Cha),Rest}};
-multi_hex_esc(<<$x,${,N,O,P,Q,R,S,$},Rest/binary>>,_)
-    when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
-	 ((N >= $a) and (N =< $f))) and 
-	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
-	 ((O >= $a) and (O =< $f))) and 
-	(((P >= $0) and (P =< $9)) or ((P >= $A) and (P =< $F)) or 
-	 ((P >= $a) and (P =< $f))) and 
-	(((Q >= $0) and (Q =< $9)) or ((Q >= $A) and (Q =< $F)) or 
-	 ((Q >= $a) and (Q =< $f))) and 
-	(((R >= $0) and (R =< $9)) or ((R >= $A) and (R =< $F)) or 
-	 ((R >= $a) and (R =< $f))) and 
-	(((S >= $0) and (S =< $9)) or ((S >= $A) and (S =< $F)) or 
-	 ((S >= $a) and (S =< $f)))) -> 
+multi_hex_esc(<<"x{",N,O,P,Q,R,S,$},Rest/binary>>,_) when (?is_hex_char(N) and
+                                                           ?is_hex_char(O) and
+                                                           ?is_hex_char(P) and
+                                                           ?is_hex_char(Q) and
+                                                           ?is_hex_char(R) and
+                                                           ?is_hex_char(S)) ->
     Cha = (trx(N) bsl 20) bor (trx(O) bsl 16) bor (trx(P) bsl 12) bor (trx(Q) bsl 8) bor (trx(R) bsl 4) bor trx(S),
     {Cha, {int_to_utf8(Cha),Rest}};
-multi_hex_esc(<<$x,N,O,Rest/binary>>,_)
-  when ((((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
-	 ((N >= $a) and (N =< $f))) and 
-	(((O >= $0) and (O =< $9)) or ((O >= $A) and (O =< $F)) or 
-	 ((O >= $a) and (O =< $f)))) -> 
+multi_hex_esc(<<$x,N,O,Rest/binary>>,_) when (?is_hex_char(N) and
+                                              ?is_hex_char(O)) ->
     Cha = (trx(N) bsl 4) bor trx(O),
     {Cha, {<<Cha>>,Rest}};
-multi_hex_esc(<<$x,N,Rest/binary>>,_)
-  when (((N >= $0) and (N =< $9)) or ((N >= $A) and (N =< $F)) or 
-	 ((N >= $a) and (N =< $f)))  -> 
+multi_hex_esc(<<$x,N,Rest/binary>>,_) when ?is_hex_char(N) ->
     Cha = trx(N),
     {Cha, {<<Cha>>,Rest}};
 multi_hex_esc(_,_) ->
