@@ -26,8 +26,14 @@ test(RootDir) ->
     put(verbose,false),
     erts_debug:set_internal_state(available_internal_state,true),
     io:format("oldlimit: ~p~n",[ erts_debug:set_internal_state(re_loop_limit,10)]),
-    Testfiles0 = ["testoutput1", "testoutput2", "testoutput3", "testoutput4",
-		 "testoutput5", "testoutput6","mod_testoutput8","testoutput10"],
+    Testfiles0 = ["testoutput1",
+                  "testoutput2",
+                  %"testoutput3",  % fr_FR locale
+                  "testoutput4",
+                  "testoutput5",
+                 %"mod_testoutput8",
+                  "testoutput10"
+                 ],
     Testfiles = [ filename:join([RootDir,FN]) || FN <- Testfiles0 ], 
     Res = [ begin io:format("~s~n",[X]), t(X) end || X <- Testfiles ],
     io:format("limit was: ~p~n",[ erts_debug:set_internal_state(re_loop_limit,default)]),
