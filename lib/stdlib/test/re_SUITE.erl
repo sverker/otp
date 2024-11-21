@@ -207,10 +207,12 @@ pcre2_incompat(Config) when is_list(Config) ->
      || NL <- [lf, cr, crlf, anycrlf, any]],
     ok.
 
-%% Test the version is retorned correctly
+%% Test the version is returned correctly
 re_version(_Config) ->
     Version = re:version(),
-    {match,[Version]} = re:run(Version,"^[0-9]\\.[0-9]{2} 20[0-9]{2}-[0-9]{2}-[0-9]{2}",[{capture,all,binary}]),
+    {match,[Version]} = re:run(Version,
+                               ~B"^\d{2}\.\d{2} 20\d{2}-\d{2}-\d{2}",
+                               [{capture,all,binary}]),
     ok.
 
 global_unicode_validation(Config) when is_list(Config) ->
@@ -697,7 +699,7 @@ pcre_compile_workspace_overflow(Config) when is_list(Config) ->
     case re:compile([lists:duplicate(N, $(), lists:duplicate(N, $))]) of
         {error, {"regular expression is too complicated" = Str,799}} ->
             {comment, ExpStr ++ Str};
-        {error, {"parentheses are too deeply nested (stack check)" = Str, _No}} ->
+        {error, {"parentheses are too deeply nested" = Str, _No}} ->
             {comment, ExpStr ++ Str};
         Other ->
             ct:fail({unexpected, Other})
@@ -1041,7 +1043,7 @@ error_info(_Config) ->
     BadErr = "neither an iodata term",
     {ok,GoodRegexp} = re:compile(".*"),
     InvalidRegexp = <<"(.*))">>,
-    InvalidErr = "could not parse regular expression\n.*unmatched parentheses.*",
+    InvalidErr = "could not parse regular expression\n.*unmatched closing parenthesis.*",
 
     L = [{compile, [not_iodata]},
          {compile, [not_iodata, not_list],[{1,".*"},{2,".*"}]},
