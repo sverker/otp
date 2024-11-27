@@ -444,6 +444,39 @@ static bool parse_options(Eterm listp, struct parsed_options* po)
 }
 
 /*
+ * Regex compile helper
+ */
+static pcre2_code *compile(const char* expr,
+                           ErlDrvSizeT slen,
+			   const struct parsed_options *opts,
+                           int *errcode,
+                           PCRE2_SIZE *errofset)
+{
+    pcre2_compile_context* compile_context;
+    pcre2_code *result;
+
+    if (opts->newline | opts->bsr) {
+        compile_context = pcre2_compile_context_create(the_general_ctx);
+        if (opts->newline) {
+            pcre2_set_newline(compile_context, opts->newline);
+        }
+        if (opts->bsr) {
+            pcre2_set_bsr(compile_context, opts->bsr);
+        }
+    }
+    else {
+        compile_context = NULL;
+    }
+    result = pcre2_compile((const PCRE2_UCHAR8 *)expr, slen, opts->compile,
+                           errcode, errofset, compile_context);
+    if (compile_context) {
+        pcre2_compile_context_free(compile_context);
+    }
+    return result;
+}
+
+
+/*
  * Build Erlang term result from compilation
  */
 
@@ -550,34 +583,11 @@ re_compile(Process* p, Eterm arg1, Eterm arg2)
     if (erts_iolist_size(arg1, &slen)) {
         BIF_ERROR(p,BADARG);
     }
-    expr = erts_alloc(ERTS_ALC_T_RE_TMP_BUF, slen + 1);
+    expr = erts_alloc(ERTS_ALC_T_RE_TMP_BUF, slen);
     buffres = erts_iolist_to_buf(arg1, expr, slen);
     ASSERT(buffres >= 0); (void)buffres;
 
-    expr[slen]='\0';
-
-    {
-        pcre2_compile_context* compile_context;
-
-        if (opts.newline | opts.bsr) {
-            compile_context = pcre2_compile_context_create(the_general_ctx);
-            if (opts.newline) {
-                pcre2_set_newline(compile_context, opts.newline);
-            }
-            if (opts.bsr) {
-                pcre2_set_bsr(compile_context, opts.bsr);
-            }
-        }
-        else {
-            compile_context = NULL;
-        }
-        result = pcre2_compile((PCRE2_UCHAR8 *)expr, slen, opts.compile,
-                               &errcode, &errofset,
-                               compile_context);
-        if (compile_context) {
-            pcre2_compile_context_free(compile_context);
-        }
-    }
+    result = compile(expr, slen, &opts, &errcode, &errofset);
 
     ret = build_compile_result(p, am_error, result, errcode,
 			       errofset, unicode, 1, NIL);
@@ -1181,35 +1191,12 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 		BIF_ERROR(p,BADARG);
 	    }
 	    
-	    expr = erts_alloc(ERTS_ALC_T_RE_TMP_BUF, slen + 1);
+	    expr = erts_alloc(ERTS_ALC_T_RE_TMP_BUF, slen);
 	    
 	    buffres = erts_iolist_to_buf(arg2, expr, slen);
 	    ASSERT(buffres >= 0); (void)buffres;
 
-	    expr[slen]='\0';
-
-            {
-                pcre2_compile_context* compile_context;
-
-                if (opts.newline | opts.bsr) {
-                    compile_context = pcre2_compile_context_create(the_general_ctx);
-                    if (opts.newline) {
-                        pcre2_set_newline(compile_context, opts.newline);
-                    }
-                    if (opts.bsr) {
-                        pcre2_set_bsr(compile_context, opts.bsr);
-                    }
-                }
-                else {
-                    compile_context = NULL;
-                }
-                result = pcre2_compile((PCRE2_UCHAR8 *)expr, slen, opts.compile,
-                                       &errcode, &errofset,
-                                       compile_context);
-                if (compile_context) {
-                    pcre2_compile_context_free(compile_context);
-                }
-            }
+            result = compile(expr, slen, &opts, &errcode, &errofset);
 
             if (!result) {
 		/* Compilation error gives badarg except in the compile 
