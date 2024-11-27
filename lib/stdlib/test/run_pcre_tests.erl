@@ -31,7 +31,7 @@ test(RootDir) ->
                   "testoutput2",
                   "testoutput4",
                   "testoutput5",
-                  %"mod_testoutput8"
+                  "mod_testoutput8",
                   "testoutput10"
                  ],
     Testfiles = [ filename:join([RootDir,FN]) || FN <- Testfiles0 ], 
