@@ -1281,20 +1281,31 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 	sys_memcpy(restart.code, code_tmp, code_size);
 	erts_free_aligned_binary_bytes(temp_alloc);
 
-        if (opts.newline) {
+	if (opts.newline | opts.bsr) {
             /*
-             * Old PCRE did support newline options at both "compile" and "match".
-             * PCRE2 do only support newline options to "compile" function.
+	     * Old PCRE did support newline and bsr options at both "compile"
+	     * and "match". PCRE2 do only support them to "compile" function.
              * To be nice we only fail with badarg if (old) user passes
-             * different newline option to re:run vs re:compile.
+             * different newline or bsr option to re:run vs re:compile.
              */
-            uint32_t newline_compiled;
-            if (pcre2_pattern_info(restart.code, PCRE2_INFO_NEWLINE,
-                                   &newline_compiled) != 0
-                || newline_compiled != opts.newline) {
-                erts_free(ERTS_ALC_T_RE_SUBJECT, restart.code);
-                BIF_ERROR(p, BADARG);
-            }
+	    if (opts.newline) {
+		uint32_t newline_compiled;
+		if (pcre2_pattern_info(restart.code, PCRE2_INFO_NEWLINE,
+				       &newline_compiled) != 0
+		    || newline_compiled != opts.newline) {
+		    erts_free(ERTS_ALC_T_RE_SUBJECT, restart.code);
+		    BIF_ERROR(p, BADARG);
+		}
+	    }
+	    if (opts.bsr) {
+		uint32_t bsr_compiled;
+		if (pcre2_pattern_info(restart.code, PCRE2_INFO_BSR,
+				       &bsr_compiled) != 0
+		    || bsr_compiled != opts.bsr) {
+		    erts_free(ERTS_ALC_T_RE_SUBJECT, restart.code);
+		    BIF_ERROR(p, BADARG);
+		}
+	    }
         }
     }
 

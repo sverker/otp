@@ -205,6 +205,16 @@ pcre2_incompat(Config) when is_list(Config) ->
 
     [rtest("abcABC", "abc", [{newline,NL}], [{newline,NL}],  match)
      || NL <- [lf, cr, crlf, anycrlf, any]],
+
+    %% Not allowed to pass changed BSR option to re:run/3
+    rtest("abcdABCabcABC\nD", "abcd.*D", [], [bsr_anycrlf],  badarg),
+    rtest("abcdABCabcd\r", "abcd$", [bsr_unicode], [bsr_anycrlf], badarg),
+    rtest("abcdABCabcd\r", "abcd$", [bsr_anycrlf], [bsr_unicode], badarg),
+
+    %% But we do allowed an unchanged BSR option to re:run/3
+    rtest("abcd\x{85}D", "abcd\\RD", [], [bsr_unicode],  match),
+    rtest("abcd\x{85}D", "abcd\\RD", [bsr_unicode], [bsr_unicode],  match),
+    rtest("abcd\r\nD", "abcd\\RD", [bsr_anycrlf], [bsr_anycrlf],  match),
     ok.
 
 %% Test the version is returned correctly
