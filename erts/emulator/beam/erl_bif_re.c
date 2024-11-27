@@ -103,10 +103,12 @@ stack_guard_upwards(void)
 
 void erts_init_bif_re(void)
 {
-    /* We use value 0 as newline option not specified */
+    /* We use value 0 as newline/bsr option not specified */
     ERTS_CT_ASSERT(PCRE2_NEWLINE_CR && PCRE2_NEWLINE_LF && PCRE2_NEWLINE_CRLF
                    && PCRE2_NEWLINE_ANY && PCRE2_NEWLINE_ANYCRLF
                    && PCRE2_NEWLINE_NUL);
+    ERTS_CT_ASSERT(PCRE2_BSR_ANYCRLF && PCRE2_BSR_UNICODE);
+
 
     the_general_ctx = pcre2_general_context_create(our_pcre2_malloc, our_pcre2_free, NULL);
     // ToDo:
@@ -245,13 +247,14 @@ static int /* 0 == ok, < 0 == error */
 parse_options(Eterm listp, /* in */
 	      uint32_t *compile_options, /* out */
               uint32_t *newline_option, /* out */
+              uint32_t *bsr_option, /* out */
               uint32_t *match_options, /* out */
 	      int *flags,/* out */
 	      int *startoffset, /* out */
 	      Eterm *capture_spec, /* capture_spec[CAPSPEC_SIZE] */ /* out */
 	      uint32_t *match_limit, /* out */
               uint32_t *match_limit_recursion)  /* out */
-              {
+{
     uint32_t copt;
     uint32_t eopt,fl;
     Eterm item;
@@ -431,13 +434,11 @@ parse_options(Eterm listp, /* in */
 		case am_global:
 		    fl |= (PARSE_FLAG_UNIQUE_EXEC_OPT | PARSE_FLAG_GLOBAL);
 		    break;
-		case am_bsr_anycrlf: 
-		    eopt |= PCRE2_BSR_ANYCRLF;
-		    copt |= PCRE2_BSR_ANYCRLF;
+                case am_bsr_anycrlf:
+                    *bsr_option = PCRE2_BSR_ANYCRLF;
 		    break;
 		case am_bsr_unicode: 
-		    eopt |= PCRE2_BSR_UNICODE;
-		    copt |= PCRE2_BSR_UNICODE;
+                    *bsr_option = PCRE2_BSR_UNICODE;
 		    break;
 		default:
 		    return -1;
@@ -545,11 +546,12 @@ re_compile(Process* p, Eterm arg1, Eterm arg2)
     Eterm ret;
     uint32_t options = 0;
     uint32_t newline_option = 0;
+    uint32_t bsr_option = 0;
     int pflags = 0;
     int unicode = 0;
     int buffres;
 
-    if (parse_options(arg2, &options, &newline_option, NULL, &pflags,
+    if (parse_options(arg2, &options, &newline_option, &bsr_option, NULL, &pflags,
                       NULL, NULL, NULL, NULL) < 0) {
     opt_error:
         p->fvalue = am_badopt;
@@ -578,9 +580,14 @@ re_compile(Process* p, Eterm arg1, Eterm arg2)
     {
         pcre2_compile_context* compile_context;
 
-        if (newline_option) {
+        if (newline_option | bsr_option) {
             compile_context = pcre2_compile_context_create(the_general_ctx);
-            pcre2_set_newline(compile_context, newline_option);
+            if (newline_option) {
+                pcre2_set_newline(compile_context, newline_option);
+            }
+            if (bsr_option) {
+                pcre2_set_bsr(compile_context, bsr_option);
+            }
         }
         else {
             compile_context = NULL;
@@ -1148,6 +1155,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     uint32_t match_options = 0;
     uint32_t comp_options = 0;
     uint32_t newline_option = 0;
+    uint32_t bsr_option = 0;
     int ovsize;
     int pflags;
     Eterm *tp;
@@ -1163,8 +1171,9 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     uint32_t match_limit = 0;
     uint32_t match_limit_recursion = 0;
 
-    if (parse_options(arg3, &comp_options, &newline_option, &match_options, &pflags,
-                      &startoffset, capture, &match_limit,&match_limit_recursion)
+    if (parse_options(arg3, &comp_options, &newline_option, &bsr_option,
+                      &match_options, &pflags, &startoffset, capture,
+                      &match_limit,&match_limit_recursion)
 	< 0) {
         p->fvalue = am_badopt;
 	BIF_ERROR(p, BADARG | EXF_HAS_EXT_INFO);
@@ -1214,9 +1223,14 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
             {
                 pcre2_compile_context* compile_context;
 
-                if (newline_option) {
+                if (newline_option | bsr_option) {
                     compile_context = pcre2_compile_context_create(the_general_ctx);
-                    pcre2_set_newline(compile_context, newline_option);
+                    if (newline_option) {
+                        pcre2_set_newline(compile_context, newline_option);
+                    }
+                    if (bsr_option) {
+                        pcre2_set_bsr(compile_context, bsr_option);
+                    }
                 }
                 else {
                     compile_context = NULL;
