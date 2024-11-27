@@ -243,221 +243,204 @@ static Eterm make_signed_integer(int x, Process *p)
 #define CAPSPEC_SIZE 2
 #define CAPSPEC_INIT {0,0}
 
-static int /* 0 == ok, < 0 == error */ 
-parse_options(Eterm listp, /* in */
-	      uint32_t *compile_options, /* out */
-              uint32_t *newline_option, /* out */
-              uint32_t *bsr_option, /* out */
-              uint32_t *match_options, /* out */
-	      int *flags,/* out */
-	      int *startoffset, /* out */
-	      Eterm *capture_spec, /* capture_spec[CAPSPEC_SIZE] */ /* out */
-	      uint32_t *match_limit, /* out */
-              uint32_t *match_limit_recursion)  /* out */
-{
-    uint32_t copt;
-    uint32_t eopt,fl;
-    Eterm item;
 
-    copt = 0;
-    eopt = 0;
-    fl = 0;
+struct parsed_options {
+    uint32_t compile;   // Option arg to pcre2_compile
+    uint32_t newline;   // PCRE2_NEWLINE_*
+    uint32_t bsr;       // PCRE2_BSR_*
+    uint32_t match;     // Option arg to pcre2_match
+    int flags;
+    int startoffset;
+    Eterm capture[CAPSPEC_SIZE];
+    uint32_t match_limit;
+    uint32_t match_limit_recursion;
+};
+
+static bool parse_options(Eterm listp, struct parsed_options* po)
+{
+    po->compile  = 0;
+    po->newline = 0;
+    po->bsr = 0;
+    po->match = 0;
+    po->flags = 0;
+    po->startoffset = 0;
+    po->capture[0] = 0;
+    po->capture[1] = 0;
 
     for (;is_list(listp); listp = CDR(list_val(listp))) {
-	    item = CAR(list_val(listp));
+	    Eterm item = CAR(list_val(listp));
 	    if (is_tuple(item)) {
 		Eterm *tp = tuple_val(item);
 		if (arityval(*tp) != 2 || is_not_atom(tp[1])) {
 		    if (arityval(*tp) == 3 && tp[1] == am_capture) {
-			if (capture_spec != NULL) {
-			    capture_spec[CAPSPEC_VALUES] = tp[2];
-			    capture_spec[CAPSPEC_TYPE] = tp[3];
-			}
-			fl |= (PARSE_FLAG_CAPTURE_OPT | 
+                        po->capture[CAPSPEC_VALUES] = tp[2];
+                        po->capture[CAPSPEC_TYPE] = tp[3];
+			po->flags |= (PARSE_FLAG_CAPTURE_OPT |
 			       PARSE_FLAG_UNIQUE_EXEC_OPT);
-			continue;
+                        continue;
 		    } else {
-			return -1;
-		    } 
-		}
+                        return false;
+                    }
+                }
 		switch(tp[1]) {
 		case am_capture:
-		    if (capture_spec != NULL) {
-			capture_spec[CAPSPEC_VALUES] = tp[2];
-			capture_spec[CAPSPEC_TYPE] = am_index;
-		    }
-		    fl |= (PARSE_FLAG_CAPTURE_OPT | 
+                    po->capture[CAPSPEC_VALUES] = tp[2];
+                    po->capture[CAPSPEC_TYPE] = am_index;
+		    po->flags |= (PARSE_FLAG_CAPTURE_OPT |
 			   PARSE_FLAG_UNIQUE_EXEC_OPT);
 		    break;
 		case am_offset:
 		    { 
 			int tmp;
 			if (!term_to_int(tp[2],&tmp) || tmp < 0) {
-			    return -1; 
+			    return false;
 			}
-			if (startoffset != NULL) {
-			    *startoffset = tmp;
-			}
+                        po->startoffset = tmp;
 		    }
-		    fl |= (PARSE_FLAG_UNIQUE_EXEC_OPT|PARSE_FLAG_STARTOFFSET);
+		    po->flags |= (PARSE_FLAG_UNIQUE_EXEC_OPT|PARSE_FLAG_STARTOFFSET);
 		    break;
 		case am_match_limit:
 		    { 
 			int tmp;
 			if (!term_to_int(tp[2],&tmp) || tmp < 0) {
-			    return -1; 
+			    return false;
 			}
-			if (match_limit != NULL) {
-			    *match_limit = tmp;
-			}
+                        po->match_limit = tmp;
 		    }
-		    fl |= (PARSE_FLAG_UNIQUE_EXEC_OPT|PARSE_FLAG_MATCH_LIMIT);
+		    po->flags |= (PARSE_FLAG_UNIQUE_EXEC_OPT|PARSE_FLAG_MATCH_LIMIT);
 		    break;
 		case am_match_limit_recursion:
 		    { 
 			int tmp;
 			if (!term_to_int(tp[2],&tmp) || tmp < 0) {
-			    return -1; 
+			    return false;
 			}
-			if (match_limit_recursion != NULL) {
-			    *match_limit_recursion = tmp;
-			}
+                        po->match_limit_recursion = tmp;
 		    }
-		    fl |= (PARSE_FLAG_UNIQUE_EXEC_OPT|
+		    po->flags |= (PARSE_FLAG_UNIQUE_EXEC_OPT|
 			   PARSE_FLAG_MATCH_LIMIT_RECURSION);
 		    break;
 		case am_newline:
 		    switch (tp[2]) {
 		    case am_cr: 
-                        *newline_option = PCRE2_NEWLINE_CR;
+                        po->newline = PCRE2_NEWLINE_CR;
 			break;
-		    case am_crlf: 
-                        *newline_option = PCRE2_NEWLINE_CRLF;
+                    case am_crlf:
+                        po->newline = PCRE2_NEWLINE_CRLF;
 			break;
 		    case am_lf: 
-			*newline_option = PCRE2_NEWLINE_LF;
+                        po->newline = PCRE2_NEWLINE_LF;
 			break;
 		    case am_anycrlf: 
-                        *newline_option = PCRE2_NEWLINE_ANYCRLF;
+                        po->newline = PCRE2_NEWLINE_ANYCRLF;
 			break;
 		    case am_any: 
-                        *newline_option = PCRE2_NEWLINE_ANY;
+                        po->newline = PCRE2_NEWLINE_ANY;
 			break;
 		    default:
-			return -1; 
+			return false;
 			break;
 		    }
 		    break;
 		default:
-		    return -1; 
+		    return false;
 		}
-	    } else if (is_not_atom(item)) {
-		return -1;
 	    } else {
 		switch(item) {
 		case am_anchored:
-		    copt |= PCRE2_ANCHORED;
-		    eopt |= PCRE2_ANCHORED;
+		    po->compile  |= PCRE2_ANCHORED;
+		    po->match |= PCRE2_ANCHORED;
 		    break;
 		case am_notempty:
-		    eopt |= PCRE2_NOTEMPTY;
-		    fl |= PARSE_FLAG_UNIQUE_EXEC_OPT;
+		    po->match |= PCRE2_NOTEMPTY;
+		    po->flags |= PARSE_FLAG_UNIQUE_EXEC_OPT;
 		    break;
 		case am_notempty_atstart:
-		    eopt |= PCRE2_NOTEMPTY_ATSTART;
-		    fl |= PARSE_FLAG_UNIQUE_EXEC_OPT;
+		    po->match |= PCRE2_NOTEMPTY_ATSTART;
+		    po->flags |= PARSE_FLAG_UNIQUE_EXEC_OPT;
 		    break;
 		case am_notbol:
-		    eopt |= PCRE2_NOTBOL;
-		    fl |= PARSE_FLAG_UNIQUE_EXEC_OPT;
+		    po->match |= PCRE2_NOTBOL;
+		    po->flags |= PARSE_FLAG_UNIQUE_EXEC_OPT;
 		    break;
 		case am_noteol:
-		    eopt |= PCRE2_NOTEOL;
-		    fl |= PARSE_FLAG_UNIQUE_EXEC_OPT;
+		    po->match |= PCRE2_NOTEOL;
+		    po->flags |= PARSE_FLAG_UNIQUE_EXEC_OPT;
 		    break;
 		case am_no_start_optimize:
-		    copt |= PCRE2_NO_START_OPTIMIZE;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_NO_START_OPTIMIZE;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_caseless:
-		    copt |= PCRE2_CASELESS;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_CASELESS;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_dollar_endonly:
-		    copt |= PCRE2_DOLLAR_ENDONLY;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_DOLLAR_ENDONLY;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_dotall:
-		    copt |= PCRE2_DOTALL;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_DOTALL;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_extended:
-		    copt |= PCRE2_EXTENDED;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_EXTENDED;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_firstline:
-		    copt |= PCRE2_FIRSTLINE;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_FIRSTLINE;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_multiline:
-		    copt |= PCRE2_MULTILINE;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_MULTILINE;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_no_auto_capture:
-		    copt |= PCRE2_NO_AUTO_CAPTURE;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_NO_AUTO_CAPTURE;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_dupnames:
-		    copt |= PCRE2_DUPNAMES;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_DUPNAMES;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_ungreedy:
-		    copt |= PCRE2_UNGREEDY;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_UNGREEDY;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_ucp:
-		    copt |= PCRE2_UCP;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_UCP;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_never_utf:
-		    copt |= PCRE2_NEVER_UTF;
-		    fl |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
+		    po->compile |= PCRE2_NEVER_UTF;
+		    po->flags |= PARSE_FLAG_UNIQUE_COMPILE_OPT;
 		    break;
 		case am_report_errors:
-		    fl |= (PARSE_FLAG_UNIQUE_EXEC_OPT | 
+		    po->flags |= (PARSE_FLAG_UNIQUE_EXEC_OPT |
 			   PARSE_FLAG_REPORT_ERRORS);
 		    break;
 		case am_unicode:
-		    copt |= PCRE2_UTF;
-		    fl |= (PARSE_FLAG_UNIQUE_COMPILE_OPT | PARSE_FLAG_UNICODE);
+		    po->compile |= PCRE2_UTF;
+		    po->flags |= (PARSE_FLAG_UNIQUE_COMPILE_OPT | PARSE_FLAG_UNICODE);
 		    break;
 		case am_global:
-		    fl |= (PARSE_FLAG_UNIQUE_EXEC_OPT | PARSE_FLAG_GLOBAL);
+		    po->flags |= (PARSE_FLAG_UNIQUE_EXEC_OPT | PARSE_FLAG_GLOBAL);
 		    break;
                 case am_bsr_anycrlf:
-                    *bsr_option = PCRE2_BSR_ANYCRLF;
+                    po->bsr = PCRE2_BSR_ANYCRLF;
 		    break;
 		case am_bsr_unicode: 
-                    *bsr_option = PCRE2_BSR_UNICODE;
+                    po->bsr = PCRE2_BSR_UNICODE;
 		    break;
 		default:
-		    return -1;
+		    return false;
 		}
 	    }
     }
     if (is_not_nil(listp)) {
-        return -1;
+        return false;
     }
-
-    *compile_options = copt;
-
-    if (match_options != NULL) {
-        *match_options = eopt;
-    }
-    if (flags != NULL) {
-	*flags = fl;
-    }
-    return 0;
+    return true;
 }
 
 /*
@@ -544,27 +527,23 @@ re_compile(Process* p, Eterm arg1, Eterm arg2)
     int errcode = 0;
     PCRE2_SIZE errofset = 0;
     Eterm ret;
-    uint32_t options = 0;
-    uint32_t newline_option = 0;
-    uint32_t bsr_option = 0;
-    int pflags = 0;
     int unicode = 0;
     int buffres;
+    struct parsed_options opts;
 
-    if (parse_options(arg2, &options, &newline_option, &bsr_option, NULL, &pflags,
-                      NULL, NULL, NULL, NULL) < 0) {
+    if (!parse_options(arg2, &opts)) {
     opt_error:
         p->fvalue = am_badopt;
 	BIF_ERROR(p, BADARG | EXF_HAS_EXT_INFO);
     }
 
-    if (pflags & PARSE_FLAG_UNIQUE_EXEC_OPT) {
+    if (opts.flags & PARSE_FLAG_UNIQUE_EXEC_OPT) {
         goto opt_error;
     }
 
-    unicode = (pflags & PARSE_FLAG_UNICODE) ? 1 : 0;
+    unicode = (opts.flags & PARSE_FLAG_UNICODE) ? 1 : 0;
 
-    if (pflags & PARSE_FLAG_UNICODE && !is_bitstring(arg1)) {
+    if (opts.flags & PARSE_FLAG_UNICODE && !is_bitstring(arg1)) {
 	BIF_TRAP2(ucompile_trap_exportp, p, arg1, arg2);
     }
 
@@ -580,19 +559,19 @@ re_compile(Process* p, Eterm arg1, Eterm arg2)
     {
         pcre2_compile_context* compile_context;
 
-        if (newline_option | bsr_option) {
+        if (opts.newline | opts.bsr) {
             compile_context = pcre2_compile_context_create(the_general_ctx);
-            if (newline_option) {
-                pcre2_set_newline(compile_context, newline_option);
+            if (opts.newline) {
+                pcre2_set_newline(compile_context, opts.newline);
             }
-            if (bsr_option) {
-                pcre2_set_bsr(compile_context, bsr_option);
+            if (opts.bsr) {
+                pcre2_set_bsr(compile_context, opts.bsr);
             }
         }
         else {
             compile_context = NULL;
         }
-        result = pcre2_compile((PCRE2_UCHAR8 *)expr, slen, options,
+        result = pcre2_compile((PCRE2_UCHAR8 *)expr, slen, opts.compile,
                                &errcode, &errofset,
                                compile_context);
         if (compile_context) {
@@ -1151,13 +1130,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     const pcre2_code *code_tmp;
     RestartContext restart;
     ErlDrvSizeT slength;
-    int startoffset = 0;
-    uint32_t match_options = 0;
-    uint32_t comp_options = 0;
-    uint32_t newline_option = 0;
-    uint32_t bsr_option = 0;
     int ovsize;
-    int pflags;
     Eterm *tp;
     int rc;
     Eterm res;
@@ -1166,15 +1139,10 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     Uint loop_limit_tmp;
     unsigned long loop_count;
 #endif
-    Eterm capture[CAPSPEC_SIZE] = CAPSPEC_INIT;
     int is_list_cap;
-    uint32_t match_limit = 0;
-    uint32_t match_limit_recursion = 0;
+    struct parsed_options opts;
 
-    if (parse_options(arg3, &comp_options, &newline_option, &bsr_option,
-                      &match_options, &pflags, &startoffset, capture,
-                      &match_limit,&match_limit_recursion)
-	< 0) {
+    if (!parse_options(arg3, &opts)) {
         p->fvalue = am_badopt;
 	BIF_ERROR(p, BADARG | EXF_HAS_EXT_INFO);
     }
@@ -1184,10 +1152,10 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
          * with the same subject; i.e., no need to do yet another validation of
          * the subject regarding utf8 encoding...
          */
-        match_options |= PCRE2_NO_UTF_CHECK;
+        opts.match |= PCRE2_NO_UTF_CHECK;
     }
-    is_list_cap = ((pflags & PARSE_FLAG_CAPTURE_OPT) && 
-		   (capture[CAPSPEC_TYPE] == am_list));
+    is_list_cap = ((opts.flags & PARSE_FLAG_CAPTURE_OPT) &&
+		   (opts.capture[CAPSPEC_TYPE] == am_list));
 
     if (!is_tuple_arity(arg2, 5)) {
         if (!is_bitstring(arg2) && !is_list(arg2) && !is_nil(arg2)) {
@@ -1203,9 +1171,9 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 	    uint32_t capture_count;
 	    int buffres;
 
-	    if (pflags & PARSE_FLAG_UNICODE && 
+	    if (opts.flags & PARSE_FLAG_UNICODE &&
 		(!is_bitstring(arg2) || !is_bitstring(arg1) ||
-		 (is_list_cap && !(pflags & PARSE_FLAG_GLOBAL)))) { 
+		 (is_list_cap && !(opts.flags & PARSE_FLAG_GLOBAL)))) {
 		BIF_TRAP3(urun_trap_exportp, p, arg1, arg2, arg3);
 	    }
 	    
@@ -1223,19 +1191,19 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
             {
                 pcre2_compile_context* compile_context;
 
-                if (newline_option | bsr_option) {
+                if (opts.newline | opts.bsr) {
                     compile_context = pcre2_compile_context_create(the_general_ctx);
-                    if (newline_option) {
-                        pcre2_set_newline(compile_context, newline_option);
+                    if (opts.newline) {
+                        pcre2_set_newline(compile_context, opts.newline);
                     }
-                    if (bsr_option) {
-                        pcre2_set_bsr(compile_context, bsr_option);
+                    if (opts.bsr) {
+                        pcre2_set_bsr(compile_context, opts.bsr);
                     }
                 }
                 else {
                     compile_context = NULL;
                 }
-                result = pcre2_compile((PCRE2_UCHAR8*)expr, slen, comp_options,
+                result = pcre2_compile((PCRE2_UCHAR8 *)expr, slen, opts.compile,
                                        &errcode, &errofset,
                                        compile_context);
                 if (compile_context) {
@@ -1246,10 +1214,10 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
             if (!result) {
 		/* Compilation error gives badarg except in the compile 
 		   function or if we have PARSE_FLAG_REPORT_ERRORS */
-		if (pflags &  PARSE_FLAG_REPORT_ERRORS) {
+		if (opts.flags &  PARSE_FLAG_REPORT_ERRORS) {
 		    res = build_compile_result(p, am_error, result, errcode,
 					       errofset,
-					       (pflags & 
+					       (opts.flags &
 						PARSE_FLAG_UNICODE) ? 1 : 0, 
 					       1, am_compile);
 		    erts_free(ERTS_ALC_T_RE_TMP_BUF, expr);
@@ -1259,12 +1227,12 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 		    BIF_ERROR(p,BADARG);
 		}
 	    }
-	    if (pflags & PARSE_FLAG_GLOBAL) {
+	    if (opts.flags & PARSE_FLAG_GLOBAL) {
 		Eterm precompiled = 
 		    build_compile_result(p, am_error,
 					 result, errcode, 
 					 errofset,
-					 (pflags & 
+					 (opts.flags &
 					  PARSE_FLAG_UNICODE) ? 1 : 0,
 					 0, NIL);
 		Eterm *hp,r;
@@ -1272,7 +1240,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 		hp = HAlloc(p,4);
 		/* arg2 is in the tuple just to make exceptions right */
 		r = TUPLE3(hp,arg3,
-			   ((pflags & PARSE_FLAG_UNIQUE_COMPILE_OPT) ? 
+			   ((opts.flags & PARSE_FLAG_UNIQUE_COMPILE_OPT) ?
 			    am_true : 
 			    am_false), arg2);
 		BIF_TRAP3(grun_trap_exportp, p, arg1, precompiled, r);
@@ -1285,10 +1253,10 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 	    sys_memcpy(restart.code, result, code_size);
 	    pcre2_code_free(result);
 	    erts_free(ERTS_ALC_T_RE_TMP_BUF, expr);
-	    /*unicode = (pflags & PARSE_FLAG_UNICODE) ? 1 : 0;*/
+	    /*unicode = (opts.flags & PARSE_FLAG_UNICODE) ? 1 : 0;*/
         }
     } else {
-	if (pflags & PARSE_FLAG_UNIQUE_COMPILE_OPT) {
+	if (opts.flags & PARSE_FLAG_UNIQUE_COMPILE_OPT) {
 	    BIF_ERROR(p,BADARG);
 	}
 
@@ -1301,12 +1269,12 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 
 	if (unsigned_val(tp[3]) && 
 	    (!is_bitstring(arg1) ||
-	     (is_list_cap && !(pflags & PARSE_FLAG_GLOBAL)))) { /* unicode */
+	     (is_list_cap && !(opts.flags & PARSE_FLAG_GLOBAL)))) { /* unicode */
 	    BIF_TRAP3(urun_trap_exportp, p, arg1, arg2,
 		      arg3);
 	}
 
-	if (pflags & PARSE_FLAG_GLOBAL) {
+	if (opts.flags & PARSE_FLAG_GLOBAL) {
 	    Eterm *hp,r;
 	    hp = HAlloc(p,3);
 	    r = TUPLE2(hp,arg3,am_false);
@@ -1326,7 +1294,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 	sys_memcpy(restart.code, code_tmp, code_size);
 	erts_free_aligned_binary_bytes(temp_alloc);
 
-        if (newline_option) {
+        if (opts.newline) {
             /*
              * Old PCRE did support newline options at both "compile" and "match".
              * PCRE2 do only support newline options to "compile" function.
@@ -1336,7 +1304,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
             uint32_t newline_compiled;
             if (pcre2_pattern_info(restart.code, PCRE2_INFO_NEWLINE,
                                    &newline_compiled) != 0
-                || newline_compiled != newline_option) {
+                || newline_compiled != opts.newline) {
                 erts_free(ERTS_ALC_T_RE_SUBJECT, restart.code);
                 BIF_ERROR(p, BADARG);
             }
@@ -1362,21 +1330,21 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 
 
     restart.ret_info = NULL;
-    if (pflags & PARSE_FLAG_CAPTURE_OPT) {
-	if ((restart.ret_info = build_capture(capture,restart.code)) == NULL) {
+    if (opts.flags & PARSE_FLAG_CAPTURE_OPT) {
+	if ((restart.ret_info = build_capture(opts.capture, restart.code)) == NULL) {
             pcre2_match_data_free(restart.match_data);
 	    erts_free(ERTS_ALC_T_RE_SUBJECT, restart.code);
 	    BIF_ERROR(p,BADARG);
 	}
     }
 
-    if (pflags & (PARSE_FLAG_MATCH_LIMIT | PARSE_FLAG_MATCH_LIMIT_RECURSION)) {
+    if (opts.flags & (PARSE_FLAG_MATCH_LIMIT | PARSE_FLAG_MATCH_LIMIT_RECURSION)) {
         restart.match_ctx = pcre2_match_context_create(the_general_ctx);
-        if (pflags & PARSE_FLAG_MATCH_LIMIT) {
-            pcre2_set_match_limit(restart.match_ctx, match_limit);
+        if (opts.flags & PARSE_FLAG_MATCH_LIMIT) {
+            pcre2_set_match_limit(restart.match_ctx, opts.match_limit);
         }
-        if (pflags & PARSE_FLAG_MATCH_LIMIT_RECURSION) {
-            pcre2_set_depth_limit(restart.match_ctx, match_limit_recursion);
+        if (opts.flags & PARSE_FLAG_MATCH_LIMIT_RECURSION) {
+            pcre2_set_depth_limit(restart.match_ctx, opts.match_limit_recursion);
         }
     }
     else {
@@ -1424,7 +1392,7 @@ handle_iodata:
 	ASSERT(buffres >= 0); (void)buffres;
     }
 
-    if (pflags & PARSE_FLAG_REPORT_ERRORS) {
+    if (opts.flags & PARSE_FLAG_REPORT_ERRORS) {
 	restart.flags |= RESTART_FLAG_REPORT_MATCH_LIMIT;
     }
 
@@ -1433,8 +1401,8 @@ handle_iodata:
 #endif
 
     rc = pcre2_match(restart.code, restart.subject,
-                     slength, startoffset,
-                     match_options,
+                     slength, opts.startoffset,
+                     opts.match,
                      restart.match_data,
                      restart.match_ctx);
     if (rc < 0) {
