@@ -13,10 +13,10 @@ included here.
 
 > #### Note {: .info }
 >
-> The Erlang literal syntax for strings uses the `\\` (backslash) character as
+> The Erlang literal syntax for strings uses the `\` (backslash) character as
 > an escape code. You need to escape backslashes in literal strings, both in
-> your code and in the shell, with an extra backslash, that is, `"\\\\"` or
-> `<<"\\\\">>`.
+> your code and in the shell, with an extra backslash, that is, `"\\"` or
+> `<<"\\">>`.
 >
 > Since Erlang/OTP 27 you can use [verbatim sigils](`e:system:data_types.md#sigil`)
 > to write literal strings. The example above would be written as `~S"\"` or `~B"\"`.
