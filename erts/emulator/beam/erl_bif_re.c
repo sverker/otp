@@ -652,7 +652,7 @@ static void cleanup_restart_context(RestartContext *rc)
 {
 #ifndef SVERKER_SKIP_TRAP
     if (rc->restart_data != NULL) {
-	//pcre2_free_restart_data(rc->match_ctx);
+	//pcre2_free_restart_data(rc->match_data);
 	rc->restart_data = NULL;
     }
 #endif
@@ -1310,21 +1310,20 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
 
     restart.match_data = pcre2_match_data_create(ovsize, the_general_ctx);
     restart.ovector = pcre2_get_ovector_pointer(restart.match_data);
-	restart.match_ctx = pcre2_match_context_create(the_general_ctx);
 
 #ifndef SVERKER_SKIP_TRAP
 //    restart.extra.flags = PCRE2_EXTRA_TABLES | PCRE2_EXTRA_LOOP_LIMIT;
     loop_limit_tmp = ERTS_BIF_REDS_LEFT(p) * LOOP_FACTOR;
     if (loop_limit_tmp > max_loop_limit) {
 		/* To lesser probability of race in debug situation (erts_debug) */
-		pcre2_set_loop_limit(restart.match_ctx, max_loop_limit);
+		pcre2_set_loop_limit(restart.match_data, max_loop_limit);
 	}else{
-		pcre2_set_loop_limit(restart.match_ctx, loop_limit_tmp);
+		pcre2_set_loop_limit(restart.match_data, loop_limit_tmp);
     }
     restart.restart_data = NULL;
-    pcre2_set_restart_data(restart.match_ctx, &restart.restart_data);
-    pcre2_set_restart_flags(restart.match_ctx, 0);
-    pcre2_set_loop_counter_return(restart.match_ctx, &loop_count);
+    pcre2_set_restart_data(restart.match_data, &restart.restart_data);
+    pcre2_set_restart_flags(restart.match_data, 0);
+    pcre2_set_loop_counter_return(restart.match_data, &loop_count);
 #endif
 
 
@@ -1338,7 +1337,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     }
 
     if (opts.flags & (PARSE_FLAG_MATCH_LIMIT | PARSE_FLAG_MATCH_LIMIT_RECURSION)) {
-
+        restart.match_ctx = pcre2_match_context_create(the_general_ctx);
         if (opts.flags & PARSE_FLAG_MATCH_LIMIT) {
             pcre2_set_match_limit(restart.match_ctx, opts.match_limit);
         }
@@ -1347,7 +1346,7 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
         }
     }
     else {
-        //restart.match_ctx = NULL;
+        restart.match_ctx = NULL;
     }
 
     /* Optimized - if already in binary off heap, keep that and avoid copying,
@@ -1551,19 +1550,19 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
     restartp = (RestartContext *) ERTS_MAGIC_BIN_DATA(mbp);
 	loop_limit_tmp = ERTS_BIF_REDS_LEFT(BIF_P) * LOOP_FACTOR;
     if (loop_limit_tmp > max_loop_limit) {
-		/* To lesser probability of race in debug situation (erts_debug) */
-		pcre2_set_loop_limit(restartp->match_ctx, max_loop_limit);
+        /* To lesser probability of race in debug situation (erts_debug) */
+        pcre2_set_loop_limit(restartp->match_data, max_loop_limit);
     }else{
-		pcre2_set_loop_limit(restartp->match_ctx, loop_limit_tmp);
-	}
-    pcre2_set_loop_counter_return(restartp->match_ctx, &loop_count);
-    pcre2_set_restart_data(restartp->match_ctx, &restartp->restart_data);
-    pcre2_set_restart_flags(restartp->match_ctx,  0);
+        pcre2_set_loop_limit(restartp->match_data, loop_limit_tmp);
+    }
+    pcre2_set_loop_counter_return(restartp->match_data, &loop_count);
+    pcre2_set_restart_data(restartp->match_data, &restartp->restart_data);
+    pcre2_set_restart_flags(restartp->match_data,  0);
     
 #ifdef DEBUG
     loop_count = 0xFFFFFFFF;
 #endif
-    rc = pcre2_match(NULL, NULL, 0, 0, 0, NULL, restartp->match_ctx);
+    rc = pcre2_match(NULL, NULL, 0, 0, 0, restartp->match_data, NULL);
 
     //ASSERT(loop_count != 0xFFFFFFFF);
     BUMP_REDS(BIF_P, loop_count / LOOP_FACTOR);
