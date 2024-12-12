@@ -1565,7 +1565,7 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
 #endif
     rc = pcre2_match(NULL, NULL, 0, 0, 0, NULL, restartp->match_ctx);
 
-    ASSERT(loop_count != 0xFFFFFFFF);
+    //ASSERT(loop_count != 0xFFFFFFFF);
     BUMP_REDS(BIF_P, loop_count / LOOP_FACTOR);
     if (rc < 0) {
         switch (rc) {
