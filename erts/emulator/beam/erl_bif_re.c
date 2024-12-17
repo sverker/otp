@@ -652,7 +652,7 @@ static void cleanup_restart_context(RestartContext *rc)
 {
 #ifndef SVERKER_SKIP_TRAP
     if (rc->restart_data != NULL) {
-	//pcre2_free_restart_data(rc->match_data);
+	pcre2_free_restart_data(rc->match_data);
 	rc->restart_data = NULL;
     }
 #endif
