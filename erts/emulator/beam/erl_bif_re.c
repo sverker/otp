@@ -1126,10 +1126,11 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     int rc;
     Eterm res;
     size_t code_size;
-    Uint loop_limit_tmp;
-    unsigned long loop_count;
+    Sint32 loop_limit;
     int is_list_cap;
     struct parsed_options opts;
+    const Sint32 reds_initial = ERTS_BIF_REDS_LEFT(p);
+    Sint32 reds_consumed;
 
     if (!parse_options(arg3, &opts)) {
         p->fvalue = am_badopt;
@@ -1292,17 +1293,11 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     restart.ovector = pcre2_get_ovector_pointer(restart.match_data);
 
 //    restart.extra.flags = PCRE2_EXTRA_TABLES | PCRE2_EXTRA_LOOP_LIMIT;
-    loop_limit_tmp = ERTS_BIF_REDS_LEFT(p) * LOOP_FACTOR;
-    if (loop_limit_tmp > max_loop_limit) {
-        /* To lesser probability of race in debug situation (erts_debug) */
-        pcre2_set_loop_limit(restart.match_data, max_loop_limit);
-    }else{
-        pcre2_set_loop_limit(restart.match_data, loop_limit_tmp);
-    }
+    loop_limit = MIN(reds_initial * LOOP_FACTOR, max_loop_limit);
+    pcre2_set_loops_left(restart.match_data, loop_limit);
     restart.restart_data = NULL;
     pcre2_set_restart_data(restart.match_data, &restart.restart_data);
     pcre2_set_restart_flags(restart.match_data, 0);
-    pcre2_set_loop_counter_return(restart.match_data, &loop_count);
 
     restart.ret_info = NULL;
     if (opts.flags & PARSE_FLAG_CAPTURE_OPT) {
@@ -1371,15 +1366,14 @@ handle_iodata:
 	restart.flags |= RESTART_FLAG_REPORT_MATCH_LIMIT;
     }
 
-#if defined(DEBUG)
-    loop_count = 0xFFFFFFFF;
-#endif
-
     rc = pcre2_match(restart.code, restart.subject,
                      slength, opts.startoffset,
                      opts.match,
                      restart.match_data,
                      restart.match_ctx);
+
+    reds_consumed = (loop_limit - pcre2_get_loops_left(restart.match_data)) / LOOP_FACTOR;
+
     if (rc < 0) {
         switch (rc) {
             /* No match... */
@@ -1397,8 +1391,7 @@ handle_iodata:
             RestartContext *restartp = ERTS_MAGIC_BIN_DATA(mbp);
             Eterm magic_ref;
             Eterm *hp;
-            ASSERT(loop_count != 0xFFFFFFFF);
-            BUMP_REDS(p, loop_count / LOOP_FACTOR);
+            BUMP_REDS(p, reds_consumed);
             sys_memcpy(restartp,&restart,sizeof(RestartContext));
             ERTS_VBUMP_ALL_REDS(p);
             hp = HAlloc(p, ERTS_MAGIC_REF_THING_SIZE);
@@ -1413,7 +1406,7 @@ handle_iodata:
             /* Recursive loop detected in pattern... */
         case PCRE2_ERROR_RECURSELOOP:
 #if 1
-            loop_count = CONTEXT_REDS*LOOP_FACTOR; /* Unknown amount of work done... */
+            reds_consumed = CONTEXT_REDS; /* Unknown amount of work done... */
             break; /* nomatch for backwards compatibility reasons for now... */
 #else
             BUMP_ALL_REDS(p); /* Unknown amount of work done... */
@@ -1462,8 +1455,7 @@ handle_iodata:
         }
     }
     
-    ASSERT(loop_count != 0xFFFFFFFF);
-    BUMP_REDS(p, loop_count / LOOP_FACTOR);
+    BUMP_REDS(p, reds_consumed);
 
     res = build_exec_return(p, rc, &restart, arg1);
  
@@ -1508,9 +1500,10 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
     Binary *mbp;
     RestartContext *restartp;
     int rc;
-    unsigned long loop_count;
-    Uint loop_limit_tmp;
+    Sint32 loop_limit;
     Eterm res;
+    const Sint32 reds_initial = ERTS_BIF_REDS_LEFT(BIF_P);
+    Sint32 reds_consumed;
 
     mbp = erts_magic_ref2bin(BIF_ARG_3);
 
@@ -1518,24 +1511,15 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
 	   == cleanup_restart_context_bin);
 
     restartp = (RestartContext *) ERTS_MAGIC_BIN_DATA(mbp);
-	loop_limit_tmp = ERTS_BIF_REDS_LEFT(BIF_P) * LOOP_FACTOR;
-    if (loop_limit_tmp > max_loop_limit) {
-        /* To lesser probability of race in debug situation (erts_debug) */
-        pcre2_set_loop_limit(restartp->match_data, max_loop_limit);
-    }else{
-        pcre2_set_loop_limit(restartp->match_data, loop_limit_tmp);
-    }
-    pcre2_set_loop_counter_return(restartp->match_data, &loop_count);
+    loop_limit = MIN(reds_initial * LOOP_FACTOR, max_loop_limit);
+    pcre2_set_loops_left(restartp->match_data, loop_limit);
     pcre2_set_restart_data(restartp->match_data, &restartp->restart_data);
     pcre2_set_restart_flags(restartp->match_data,  0);
     
-#ifdef DEBUG
-    loop_count = 0xFFFFFFFF;
-#endif
     rc = pcre2_match(NULL, NULL, 0, 0, 0, restartp->match_data, NULL);
 
-    //ASSERT(loop_count != 0xFFFFFFFF);
-    BUMP_REDS(BIF_P, loop_count / LOOP_FACTOR);
+    reds_consumed = (loop_limit - pcre2_get_loops_left(restartp->match_data)) / LOOP_FACTOR;
+
     if (rc < 0) {
         switch (rc) {
             /* No match... */
@@ -1545,7 +1529,8 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
             break;
         case PCRE2_ERROR_LOOP_LIMIT:
             /* Trap */
-            BUMP_ALL_REDS(BIF_P);
+            BUMP_REDS(BIF_P, reds_consumed);
+            ERTS_VBUMP_ALL_REDS(BIF_P);
             BIF_TRAP3(&re_exec_trap_export, BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3);
             /* Bad utf8 in subject... */
         case PCRE2_ERROR_BADUTFOFFSET:
@@ -1584,6 +1569,8 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
             BIF_ERROR(BIF_P, EXC_INTERNAL_ERROR);
         }
     }
+    BUMP_REDS(BIF_P, reds_consumed);
+
     res = build_exec_return(BIF_P, rc, restartp, BIF_ARG_1);
  
     cleanup_restart_context(restartp);
