@@ -38,14 +38,10 @@
 
 #define LOOP_FACTOR 10
 
-//#define SVERKER_SKIP_TRAP
-
-#ifndef SVERKER_SKIP_TRAP
 static const unsigned char *default_table;
 static Uint max_loop_limit;
 static Export re_exec_trap_export;
 static BIF_RETTYPE re_exec_trap(BIF_ALIST_3);
-#endif
 static Export *grun_trap_exportp = NULL;
 static Export *urun_trap_exportp = NULL;
 static Export *ucompile_trap_exportp = NULL;
@@ -119,12 +115,10 @@ void erts_init_bif_re(void)
     //    erts_pcre_stack_guard = stack_guard_downwards;
     //else
     //    erts_pcre_stack_guard = stack_guard_upwards;
-#ifndef SVERKER_SKIP_TRAP
     default_table = NULL; /* ISO8859-1 default, forced into pcre */
     max_loop_limit = CONTEXT_REDS * LOOP_FACTOR;
     erts_init_trap_export(&re_exec_trap_export, am_erlang, am_re_run_trap, 3,
 			  &re_exec_trap);
-#endif
     grun_trap_exportp =  erts_export_put(am_re,am_grun,3);
     urun_trap_exportp =  erts_export_put(am_re,am_urun,3);
     ucompile_trap_exportp =  erts_export_put(am_re,am_ucompile,2);
@@ -134,7 +128,6 @@ void erts_init_bif_re(void)
 
 Sint erts_re_set_loop_limit(Sint limit) 
 {
-#ifndef SVERKER_SKIP_TRAP
     Sint save = (Sint) max_loop_limit;
     if (limit <= 0) {
 	max_loop_limit = CONTEXT_REDS * LOOP_FACTOR;
@@ -142,9 +135,6 @@ Sint erts_re_set_loop_limit(Sint limit)
 	max_loop_limit = (Uint) limit;
     }
     return save;
-#else
-    return 666;
-#endif
 }
 
 /*
@@ -633,9 +623,7 @@ typedef struct _return_info {
 #define RESTART_FLAG_REPORT_MATCH_LIMIT 0x2
 
 typedef struct _restart_context {
-#ifndef SVERKER_SKIP_TRAP
     void *restart_data;
-#endif
     Uint32 flags;
     PCRE2_UCHAR8* subject; /* to be able to free it when done */
     pcre2_code *code; /* Keep a copy */
@@ -650,12 +638,10 @@ typedef struct _restart_context {
 
 static void cleanup_restart_context(RestartContext *rc) 
 {
-#ifndef SVERKER_SKIP_TRAP
     if (rc->restart_data != NULL) {
 	pcre2_free_restart_data(rc->match_data);
 	rc->restart_data = NULL;
     }
-#endif
     if (rc->match_data != NULL) {
         pcre2_match_data_free(rc->match_data);
         rc->match_data = NULL;
@@ -679,16 +665,12 @@ static void cleanup_restart_context(RestartContext *rc)
     }
 }
 
-#ifndef SVERKER_SKIP_TRAP
-
 static int cleanup_restart_context_bin(Binary *bp)
 {
     RestartContext *rc = ERTS_MAGIC_BIN_DATA(bp);
     cleanup_restart_context(rc);
     return 1;
 }
-#endif // SVERKER_SKIP_TRAP
-
 
 /*
  * Build the return value for Erlang from result and restart context
@@ -1144,10 +1126,8 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     int rc;
     Eterm res;
     size_t code_size;
-#ifndef SVERKER_SKIP_TRAP
     Uint loop_limit_tmp;
     unsigned long loop_count;
-#endif
     int is_list_cap;
     struct parsed_options opts;
 
@@ -1311,21 +1291,18 @@ re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first)
     restart.match_data = pcre2_match_data_create(ovsize, the_general_ctx);
     restart.ovector = pcre2_get_ovector_pointer(restart.match_data);
 
-#ifndef SVERKER_SKIP_TRAP
 //    restart.extra.flags = PCRE2_EXTRA_TABLES | PCRE2_EXTRA_LOOP_LIMIT;
     loop_limit_tmp = ERTS_BIF_REDS_LEFT(p) * LOOP_FACTOR;
     if (loop_limit_tmp > max_loop_limit) {
-		/* To lesser probability of race in debug situation (erts_debug) */
-		pcre2_set_loop_limit(restart.match_data, max_loop_limit);
-	}else{
-		pcre2_set_loop_limit(restart.match_data, loop_limit_tmp);
+        /* To lesser probability of race in debug situation (erts_debug) */
+        pcre2_set_loop_limit(restart.match_data, max_loop_limit);
+    }else{
+        pcre2_set_loop_limit(restart.match_data, loop_limit_tmp);
     }
     restart.restart_data = NULL;
     pcre2_set_restart_data(restart.match_data, &restart.restart_data);
     pcre2_set_restart_flags(restart.match_data, 0);
     pcre2_set_loop_counter_return(restart.match_data, &loop_count);
-#endif
-
 
     restart.ret_info = NULL;
     if (opts.flags & PARSE_FLAG_CAPTURE_OPT) {
@@ -1394,7 +1371,7 @@ handle_iodata:
 	restart.flags |= RESTART_FLAG_REPORT_MATCH_LIMIT;
     }
 
-#if !defined(SVERKER_SKIP_TRAP) && defined(DEBUG)
+#if defined(DEBUG)
     loop_count = 0xFFFFFFFF;
 #endif
 
@@ -1412,7 +1389,6 @@ handle_iodata:
         case PCRE2_ERROR_HEAPLIMIT:
             break;
 
-#ifndef SVERKER_SKIP_TRAP
             /* Yield... */
         case PCRE2_ERROR_LOOP_LIMIT: {
             /* Trap */
@@ -1444,8 +1420,6 @@ handle_iodata:
             cleanup_restart_context(&restart);
             BIF_ERROR(p, BADARG);
 #endif
-
-#endif // SVERKER_SKIP_TRAP
             
             /* Bad utf8 in subject... */
         case PCRE2_ERROR_BADUTFOFFSET:
@@ -1488,10 +1462,8 @@ handle_iodata:
         }
     }
     
-#ifndef SVERKER_SKIP_TRAP
     ASSERT(loop_count != 0xFFFFFFFF);
     BUMP_REDS(p, loop_count / LOOP_FACTOR);
-#endif
 
     res = build_exec_return(p, rc, &restart, arg1);
  
@@ -1525,8 +1497,6 @@ re_run_2(BIF_ALIST_2)
     return re_run(BIF_P,BIF_ARG_1, BIF_ARG_2, NIL, !0);
 }
 
-
-#ifndef SVERKER_SKIP_TRAP
 /*
  * The "magic" trap target, continue a re:run
  */
@@ -1573,15 +1543,13 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
         case PCRE2_ERROR_MATCHLIMIT:
         case PCRE2_ERROR_RECURSIONLIMIT:
             break;
-#ifndef SVERKER_SKIP_TRAP
         case PCRE2_ERROR_LOOP_LIMIT:
             /* Trap */
             BUMP_ALL_REDS(BIF_P);
             BIF_TRAP3(&re_exec_trap_export, BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3);
-#endif
             /* Bad utf8 in subject... */
         case PCRE2_ERROR_BADUTFOFFSET:
-		case PCRE2_ERROR_UTF8_ERR1:
+        case PCRE2_ERROR_UTF8_ERR1:
         case PCRE2_ERROR_UTF8_ERR2:
         case PCRE2_ERROR_UTF8_ERR3:
         case PCRE2_ERROR_UTF8_ERR4:
@@ -1604,9 +1572,9 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
         case PCRE2_ERROR_UTF8_ERR21:
             BUMP_ALL_REDS(BIF_P); /* Unknown amount of work done... */
             /* Fall through for badarg... */
-		case PCRE2_ERROR_BADOFFSET:
-		case PCRE2_ERROR_BADMAGIC:
-		case PCRE2_ERROR_BADMODE:
+        case PCRE2_ERROR_BADOFFSET:
+        case PCRE2_ERROR_BADMAGIC:
+        case PCRE2_ERROR_BADMODE:
             cleanup_restart_context(restartp);
             BIF_ERROR(BIF_P, BADARG);
         default:
@@ -1623,8 +1591,6 @@ static BIF_RETTYPE re_exec_trap(BIF_ALIST_3)
     BIF_RET(res);
 }
     
-#endif // SVERKER_SKIP_TRAP
-
 BIF_RETTYPE
 re_inspect_2(BIF_ALIST_2) 
 {
