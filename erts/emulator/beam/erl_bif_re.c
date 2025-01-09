@@ -47,6 +47,7 @@ static Export *urun_trap_exportp = NULL;
 static Export *ucompile_trap_exportp = NULL;
 
 static pcre2_general_context* the_general_ctx;
+static pcre2_compile_context* the_default_compile_ctx;
 
 static BIF_RETTYPE re_run(Process *p, Eterm arg1, Eterm arg2, Eterm arg3, int first);
 
@@ -60,22 +61,11 @@ static void our_pcre2_free(void *ptr, void* null)
     erts_free(ERTS_ALC_T_RE_HEAP, ptr);
 }
 
-#if 0  // ToDo: Do we need to care about stack use?
-
-static void *erts_erts_pcre_stack_malloc(size_t size) {
-    return erts_alloc(ERTS_ALC_T_RE_STACK,size);
-}
-
-static void erts_erts_pcre_stack_free(void *ptr) {
-    erts_free(ERTS_ALC_T_RE_STACK,ptr);
-}
-
 #define ERTS_PCRE_STACK_MARGIN (10*1024)
-
-#  define ERTS_STACK_LIMIT ((char *) erts_get_stacklimit())
+#define ERTS_STACK_LIMIT ((char *) erts_get_stacklimit())
 
 static int
-stack_guard_downwards(void)
+stack_guard_downwards(uint32_t depth, void* null)
 {
     char *limit = ERTS_STACK_LIMIT;
     char c;
@@ -86,7 +76,7 @@ stack_guard_downwards(void)
 }
 
 static int
-stack_guard_upwards(void)
+stack_guard_upwards(uint32_t depth, void* null)
 {
     char *limit = ERTS_STACK_LIMIT;
     char c;
@@ -95,10 +85,12 @@ stack_guard_upwards(void)
 
     return erts_check_above_limit(&c, limit - ERTS_PCRE_STACK_MARGIN);
 }
-#endif
 
 void erts_init_bif_re(void)
 {
+    char c;
+    int (*stack_guard)(uint32_t, void *);
+
     /* We use value 0 as newline/bsr option not specified */
     ERTS_CT_ASSERT(PCRE2_NEWLINE_CR && PCRE2_NEWLINE_LF && PCRE2_NEWLINE_CRLF
                    && PCRE2_NEWLINE_ANY && PCRE2_NEWLINE_ANYCRLF
@@ -106,15 +98,16 @@ void erts_init_bif_re(void)
     ERTS_CT_ASSERT(PCRE2_BSR_ANYCRLF && PCRE2_BSR_UNICODE);
 
 
-    the_general_ctx = pcre2_general_context_create(our_pcre2_malloc, our_pcre2_free, NULL);
-    // ToDo:
-    //char c;
-    //erts_pcre_stack_malloc = &erts_erts_pcre_stack_malloc;
-    //erts_pcre_stack_free = &erts_erts_pcre_stack_free;
-    //if (erts_check_if_stack_grows_downwards(&c))
-    //    erts_pcre_stack_guard = stack_guard_downwards;
-    //else
-    //    erts_pcre_stack_guard = stack_guard_upwards;
+    the_general_ctx = pcre2_general_context_create(our_pcre2_malloc,
+                                                   our_pcre2_free,
+                                                   NULL);
+    if (erts_check_if_stack_grows_downwards(&c))
+        stack_guard = stack_guard_downwards;
+    else
+        stack_guard = stack_guard_upwards;
+    the_default_compile_ctx = pcre2_compile_context_create(the_general_ctx);
+    pcre2_set_compile_recursion_guard(the_default_compile_ctx, stack_guard, NULL);
+
     default_table = NULL; /* ISO8859-1 default, forced into pcre */
     max_loop_limit = CONTEXT_REDS * LOOP_FACTOR;
     erts_init_trap_export(&re_exec_trap_export, am_erlang, am_re_run_trap, 3,
@@ -442,25 +435,25 @@ static pcre2_code *compile(const char* expr,
                            int *errcode,
                            PCRE2_SIZE *errofset)
 {
-    pcre2_compile_context* compile_context;
+    pcre2_compile_context* compile_ctx;
     pcre2_code *result;
 
     if (opts->newline | opts->bsr) {
-        compile_context = pcre2_compile_context_create(the_general_ctx);
+        compile_ctx = pcre2_compile_context_copy(the_default_compile_ctx);
         if (opts->newline) {
-            pcre2_set_newline(compile_context, opts->newline);
+            pcre2_set_newline(compile_ctx, opts->newline);
         }
         if (opts->bsr) {
-            pcre2_set_bsr(compile_context, opts->bsr);
+            pcre2_set_bsr(compile_ctx, opts->bsr);
         }
     }
     else {
-        compile_context = NULL;
+        compile_ctx = the_default_compile_ctx;
     }
     result = pcre2_compile((const PCRE2_UCHAR8 *)expr, slen, opts->compile,
-                           errcode, errofset, compile_context);
-    if (compile_context) {
-        pcre2_compile_context_free(compile_context);
+                           errcode, errofset, compile_ctx);
+    if (compile_ctx != the_default_compile_ctx) {
+        pcre2_compile_context_free(compile_ctx);
     }
     return result;
 }
