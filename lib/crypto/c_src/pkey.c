@@ -97,12 +97,6 @@ static int check_pkey_algorithm_type(ErlNifEnv *env,
 #endif
         0)
         assign_goto(*err_return, err,  EXCP_NOTSUP_N(env, alg_arg_num, "Unsupported algorithm"));
-        
-
-#ifdef HAVE_EDDSA
-    if (FIPS_MODE() && algorithm == atom_eddsa)
-        assign_goto(*err_return, err, EXCP_NOTSUP_N(env, alg_arg_num, "Unsupported algorithm in FIPS mode"));
-#endif    
 
     if ((algorithm != atom_rsa) &&
         (algorithm != atom_dss) &&
@@ -366,11 +360,8 @@ static int get_pkey_private_key(ErlNifEnv *env,
 
     } else if (argv[algorithm_arg_num] == atom_eddsa) {
 #ifdef HAVE_EDDSA
-        if (!FIPS_MODE()) {
             if (!get_eddsa_key(env, 0, argv[key_arg_num], pkey))
                 assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get EDDSA private key"));
-        } else
-            assign_goto(*err_return, err, EXCP_NOTSUP_N(env, algorithm_arg_num, "EDDSA not supported in FIPS mode"));
 #else
         assign_goto(*err_return, err, EXCP_NOTSUP_N(env, algorithm_arg_num, "EDDSA not supported"));
 #endif        
@@ -444,11 +435,8 @@ static int get_pkey_public_key(ErlNifEnv *env,
 
     } else if (argv[algorithm_arg_num] == atom_eddsa) {
 #ifdef HAVE_EDDSA
-        if (!FIPS_MODE()) {
             if (!get_eddsa_key(env, 1, argv[key_arg_num], pkey))
                 assign_goto(*err_return, err, EXCP_BADARG_N(env, key_arg_num, "Couldn't get EDDSA public key"));
-        } else
-            assign_goto(*err_return, err, EXCP_NOTSUP_N(env, algorithm_arg_num, "EDDSA not supported in FIPS mode"));
 #else
         assign_goto(*err_return, err, EXCP_NOTSUP_N(env, algorithm_arg_num, "EDDSA not supported"));
 #endif
@@ -557,7 +545,6 @@ ERL_NIF_TERM pkey_sign_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
         if (argv[0] == atom_eddsa) {
 # ifdef HAVE_EDDSA
-            if (!FIPS_MODE()) {
                 EVP_MD_CTX *mdctx = NULL;
                 if ((mdctx = EVP_MD_CTX_new()) == NULL)
                     assign_goto(ret, err, EXCP_ERROR(env, "Can't EVP_MD_CTX_new"));
@@ -577,10 +564,9 @@ ERL_NIF_TERM pkey_sign_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
                 }
                 if (mdctx)
                     EVP_MD_CTX_free(mdctx);
-            }
-            else
-# endif
+# else
                 assign_goto(ret, err, EXCP_NOTSUP_N(env, 0, "eddsa not supported"));
+# endif
         } else {
             if (EVP_PKEY_sign(ctx, NULL, &siglen, tbs, tbslen) != 1)
                 assign_goto(ret, err, EXCP_ERROR(env, "Can't EVP_PKEY_sign"));
@@ -794,7 +780,6 @@ ERL_NIF_TERM pkey_verify_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]
         if (argv[0] == atom_eddsa) {
 # ifdef HAVE_EDDSA
             EVP_MD_CTX *mdctx = NULL;
-            if (!FIPS_MODE()) {
                 if ((mdctx = EVP_MD_CTX_new()) == NULL)
                      assign_goto(ret, err, EXCP_ERROR(env, "Can't EVP_MD_CTX_new"));
 
@@ -804,10 +789,9 @@ ERL_NIF_TERM pkey_verify_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]
                 result = EVP_DigestVerify(mdctx, sig_bin.data, sig_bin.size, tbs, tbslen);
                 if (mdctx)
                     EVP_MD_CTX_free(mdctx);
-            }
-            else
-# endif /* HAVE_EDDSA */
+# else
                 assign_goto(ret, err, EXCP_NOTSUP_N(env, 0, "eddsa not supported"));
+# endif /* HAVE_EDDSA */
         } else {
             /* RSA or DSS */
             if (md != NULL) {
