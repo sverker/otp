@@ -352,7 +352,7 @@ ERL_NIF_TERM ec_generate_key_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
 { /* (Curve, PrivKey|undefined)  */
     ERL_NIF_TERM ret = atom_undefined;
     int i = 0;
-    OSSL_PARAM params[15];
+    OSSL_PARAM params[16];
     struct get_curve_def_ctx gcd;
     EVP_PKEY_CTX *pctx = NULL;
     EVP_PKEY *pkey = NULL, *peer_pkey = NULL;
@@ -387,7 +387,9 @@ ERL_NIF_TERM ec_generate_key_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
                                       &order_size, &gcd))
                 // INSERT "ret" parameter in get_curve_definition !!
                 assign_goto(ret, err, EXCP_BADARG_N(env, 0, "Couldn't get Curve definition"));
-    
+
+            params[i++] = OSSL_PARAM_construct_utf8_string("point-format", "compressed", 0);
+
             params[i++] = OSSL_PARAM_construct_end();
 
             if (EVP_PKEY_keygen_init(pctx) <= 0)
@@ -405,15 +407,49 @@ ERL_NIF_TERM ec_generate_key_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
                 assign_goto(ret, err, EXCP_ERROR(env, "Couldn't generate EC key"));
             }
 
+            {
+                OSSL_PARAM *params_out, *p;
+                ErlNifBinary privkey_bin;
+                int got = 0;
+
+                if (!EVP_PKEY_todata(pkey, EVP_PKEY_KEYPAIR, &params_out)) {
+                    assign_goto(ret, err, EXCP_ERROR(env, "Couldn't EVP_PKEY_todata"));
+                }
+
+                for (p = params_out; p->key; p++) {
+                    fprintf(stderr, "SVERKER: key = \"%s\"", p->key);
+                    if (p->data_type == OSSL_PARAM_UTF8_STRING)
+                        fprintf(stderr, ", data = \"%s\"", (char*)p->data);
+                    fprintf(stderr, "\r\n");
+
+                    if (strcmp(p->key, "pub") == 0) {
+                        enif_alloc_binary(p->data_size, &pubkey_bin);
+                        memcpy(pubkey_bin.data, p->data, p->data_size);
+                        got |= 1;
+                    }
+                    if (strcmp(p->key, "priv") == 0) {
+                        enif_alloc_binary(p->data_size, &privkey_bin);
+                        memcpy(privkey_bin.data, p->data, p->data_size);
+                        got |= 2;
+                    }
+                }
+                if (got != 3) {
+                    assign_goto(ret, err, EXCP_ERROR(env, "Did not get both pub and priv"));
+                }
+                ret = enif_make_tuple2(env,
+                                       enif_make_binary(env, &pubkey_bin),
+                                       enif_make_binary(env, &privkey_bin));
+                goto err; // Ok
+            }
 
             /* Get the two keys, pub as binary and priv as BN */
-            if (!EVP_PKEY_get_octet_string_param(pkey, "encoded-pub-key", NULL, 0, &sz))
+            if (!EVP_PKEY_get_octet_string_param(pkey, "pub" /*"encoded-pub-key"*/, NULL, 0, &sz))
                 assign_goto(ret, err, EXCP_ERROR(env, "Can't get pub octet string size"));
 
             if (!enif_alloc_binary(sz, &pubkey_bin))
                 assign_goto(ret, err, EXCP_ERROR(env, "Can't allocate pub octet string"));
 
-            if (!EVP_PKEY_get_octet_string_param(pkey, "encoded-pub-key",
+            if (!EVP_PKEY_get_octet_string_param(pkey, "pub" /*"encoded-pub-key"*/,
                                                  pubkey_bin.data,
                                                  sz,
                                                  &pubkey_bin.size))
