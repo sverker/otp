@@ -22,6 +22,8 @@
 #ifndef _EI_INTERNAL_H
 #define _EI_INTERNAL_H
 
+#undef EI_HIDE_REAL_ERRNO
+
 #ifdef EI_HIDE_REAL_ERRNO
 #  define EI_CONN_SAVE_ERRNO__(E) \
     ((E) == ETIMEDOUT ? (erl_errno = ETIMEDOUT) : (erl_errno = EIO))
@@ -152,6 +154,10 @@
                                                          ARG5,ARG6,ARG7);}
 
 extern int ei_tracelevel;
+
+#define SVERKER_ERROR(ARG) \
+    EI_TRACE_ERR6("SVERKER_ERROR","%s:%d: %s=%d erl_errno=%d errno=%d", \
+        __FILE__, __LINE__, #ARG, (int)ARG, erl_errno, errno)
 
 int ei_init_connect(void);
 

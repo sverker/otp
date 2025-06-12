@@ -2079,9 +2079,12 @@ static int read_hs_package(ei_socket_callbacks *cbs, void *ctx,
 
     len = (ssize_t) pkt_sz;
     err = ei_read_fill_ctx_t__(cbs, ctx, (char *)nbuf, &len, ms);
-    if (!err && len != (ssize_t) pkt_sz)
+    if (!err && len != (ssize_t) pkt_sz) {
+        SVERKER_ERROR(len);
         err = EIO;
+    }
     if (err) {
+        SVERKER_ERROR(err);
         EI_CONN_SAVE_ERRNO__(err);
 	return -1;
     }
@@ -2094,6 +2097,7 @@ static int read_hs_package(ei_socket_callbacks *cbs, void *ctx,
         len = get32be(x);
         break;
     default:
+        SVERKER_ERROR(pkt_sz);
         return -1;
     }
     
@@ -2101,6 +2105,7 @@ static int read_hs_package(ei_socket_callbacks *cbs, void *ctx,
 	if (*is_static) {
 	    char *tmp = malloc(len);
 	    if (!tmp) {
+                SVERKER_ERROR(len);
 		erl_errno = ENOMEM;
 		return -1;
 	    }
@@ -2110,6 +2115,7 @@ static int read_hs_package(ei_socket_callbacks *cbs, void *ctx,
 	} else {
 	    char *tmp = realloc(*buf, len);
 	    if (!tmp) {
+                SVERKER_ERROR(len);
 		erl_errno = ENOMEM;
 		return -1;
 	    }
@@ -2119,9 +2125,12 @@ static int read_hs_package(ei_socket_callbacks *cbs, void *ctx,
     }
     need = len;
     err = ei_read_fill_ctx_t__(cbs, ctx, *buf, &len, ms);
-    if (!err && len != need)
+    if (!err && len != need) {
+        SVERKER_ERROR(len);
         err = EIO;
+    }
     if (err) {
+        SVERKER_ERROR(err);
         EI_CONN_SAVE_ERRNO__(err);
 	return -1;
     }
@@ -2188,8 +2197,8 @@ static int recv_status(ei_cnode *ec, void *ctx,
     
     if ((rlen = read_hs_package(ec->cbs, ctx, pkt_sz,
                                 &buf, &buflen, &is_static, ms)) <= 0) {
-	EI_TRACE_ERR1("recv_status",
-		      "<- RECV_STATUS socket read failed (%d)", rlen);
+	EI_TRACE_ERR2("recv_status",
+		      "<- RECV_STATUS socket read failed (%d,%d)", rlen, erl_errno);
 	goto error;
     }
 

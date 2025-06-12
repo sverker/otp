@@ -295,12 +295,16 @@ static int tcp_read(void *ctx, char* buf, ssize_t *len, unsigned unused)
     ssize_t res;
 
     error = EI_DFLT_CTX_TO_FD__(ctx, &fd);
-    if (error)
+    if (error) {
+        SVERKER_ERROR(error);
         return error;
+    }
 
     res = readsocket(fd, buf, *len);
-    if (MEANS_SOCKET_ERROR(res))
+    if (MEANS_SOCKET_ERROR(res)) {
+        SVERKER_ERROR(res);
         return get_error();
+    }
     *len = res;
     return 0;
 }
@@ -619,8 +623,10 @@ static int read_ctx_t__(ei_socket_callbacks *cbs, void *ctx,
         int fd;
 
         error = EI_GET_FD__(cbs, ctx, &fd);
-        if (error)
+        if (error) {
+            SVERKER_ERROR(error);
             return error;
+        }
         
         do {
             fd_set readmask;
@@ -634,13 +640,17 @@ static int read_ctx_t__(ei_socket_callbacks *cbs, void *ctx,
             switch (select(fd+1, &readmask, NULL, NULL, &tv)) {
             case -1 :
                 error = get_error();
-                if (error != EINTR)
+                if (error != EINTR) {
+                    SVERKER_ERROR(error);
                     return error;
+                }
                 break;
             case 0:
+                SVERKER_ERROR(0);
                 return ETIMEDOUT; /* timeout */
             default:
                 if (!FD_ISSET(fd, &readmask)) {
+                    SVERKER_ERROR(EIO);
                     return EIO; /* Other error */
                 }
                 error = 0;
@@ -712,9 +722,12 @@ int ei_read_fill_ctx_t__(ei_socket_callbacks *cbs, void *ctx, char* buf, ssize_t
         do {
             error = read_ctx_t__(cbs, ctx, buf+got, &read_len, ms);
         } while (error == EINTR);
-        if (error)
+        if (error) {
+            SVERKER_ERROR(error);
             return error;
+        }
         if (read_len == 0) {
+            SVERKER_ERROR(got);
             *len = got;
             return 0;
         }
