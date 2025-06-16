@@ -1270,6 +1270,33 @@ static int ei_connect_helper(ei_cnode* ec,
         goto error;
     }
 
+    {
+        struct sockaddr_in this_addr;
+        struct sockaddr_in peer_addr;
+        socklen_t this_addr_sz = sizeof(this_addr);
+        socklen_t peer_addr_sz = sizeof(peer_addr);
+
+        if (getsockname(sockd, &this_addr, &this_addr_sz) < 0) {
+            EI_TRACE_ERR1("ei_xconnect", "getsockname failed errno=%d", errno);
+        }
+        else {
+            EI_TRACE_CONN3("ei_xconnect","-> getsockname family=%d ip=%s port=%d",
+                           (int) this_addr.sin_family,
+                           inet_ntoa(this_addr.sin_addr),
+                           (int) ntohs(this_addr.sin_port));
+        }
+
+        if (getpeername(sockd, &peer_addr, &peer_addr_sz) < 0) {
+            EI_TRACE_ERR1("ei_xconnect", "getpeername failed errno=%d", errno);
+        }
+        else {
+            EI_TRACE_CONN3("ei_xconnect","-> getpeername family=%d ip=%s port=%d",
+                           (int) peer_addr.sin_family,
+                           inet_ntoa(peer_addr.sin_addr),
+                           (int) ntohs(peer_addr.sin_port));
+        }
+    }
+
     err = cbs->handshake_packet_header_size(ctx, &pkt_sz);
     if (err) {
         EI_CONN_SAVE_ERRNO__(err);
