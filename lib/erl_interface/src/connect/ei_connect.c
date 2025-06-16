@@ -1295,6 +1295,14 @@ static int ei_connect_helper(ei_cnode* ec,
                            inet_ntoa(peer_addr.sin_addr),
                            (int) ntohs(peer_addr.sin_port));
         }
+
+        if (this_addr.sin_addr.s_addr == peer_addr.sin_addr.s_addr &&
+            this_addr.sin_port == peer_addr.sin_port) {
+            EI_TRACE_ERR0("ei_xconnect","-> SELF CONNECT");
+            abort_connection(cbs, ctx);
+            return ERL_CONNECT_FAIL;
+
+        }
     }
 
     err = cbs->handshake_packet_header_size(ctx, &pkt_sz);
