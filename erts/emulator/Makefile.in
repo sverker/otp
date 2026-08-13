@@ -37,8 +37,8 @@ Z_LIB=@Z_LIB@
 NO_INLINE_FUNCTIONS=false
 OPCODE_TABLES = $(ERL_TOP)/lib/compiler/src/genop.tab beam/ops.tab
 
-DEBUG_CFLAGS = @DEBUG_CFLAGS@
-CONFIGURE_CFLAGS = @CFLAGS@
+DEBUG_CFLAGS = -fcommon @DEBUG_CFLAGS@
+CONFIGURE_CFLAGS = -fcommon @CFLAGS@
 
 #
 # Run this make file with TYPE set to the type of emulator you want.
