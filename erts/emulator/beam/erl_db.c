@@ -184,8 +184,6 @@ static int db_max_tabs;
 static DbTable *meta_pid_to_tab; /* Pid mapped to owned tables */
 static DbTable *meta_pid_to_fixed_tab; /* Pid mapped to fixed tables */
 static Eterm ms_delete_all;
-static Eterm ms_delete_all_buff[8]; /* To compare with for deletion 
-				       of all objects */
 
 /* 
 ** Forward decls, static functions 
@@ -3054,7 +3052,7 @@ void init_db(ErtsDbSpinCount db_spin_count)
 			  am_ets, am_atom_put("delete_trap",11), 1,
 			  &ets_delete_trap);
 
-    hp = ms_delete_all_buff;
+    hp = erts_alloc(ERTS_ALC_T_DB_MS_PSDO_PROC, 8*sizeof(Eterm)); // SVERKER: Literal alloc?
     ms_delete_all = CONS(hp, am_true, NIL);
     hp += 2;
     ms_delete_all = TUPLE3(hp,am_Underscore,NIL,ms_delete_all);
