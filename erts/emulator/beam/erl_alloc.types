@@ -163,7 +163,11 @@ type	MSG_REF		FIXED_SIZE	PROCESSES	msg_ref
 type	MSG_ROOTS	TEMPORARY	PROCESSES	msg_roots
 type	ROOTSET		TEMPORARY	PROCESSES	root_set
 type	LOADER_TMP	TEMPORARY	CODE		loader_tmp
++if halfword
+type	PREPARED_CODE	STANDARD_LOW	CODE		prepared_code
++else
 type	PREPARED_CODE	SHORT_LIVED	CODE		prepared_code
++endif
 type	TIMER_SERVICE	LONG_LIVED	SYSTEM		timer_service
 type    LL_PTIMER	FIXED_SIZE	PROCESSES	ll_ptimer
 type    HL_PTIMER	FIXED_SIZE	PROCESSES	hl_ptimer
