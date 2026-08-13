@@ -2102,6 +2102,10 @@ static void init_atoms(void)
 static void hard_dbg_mseg_init(void);
 #endif
 
+#if HALFWORD_HEAP
+UWord erts_halfword_start_addr;
+#endif
+
 void
 erts_mmap_init(ErtsMMapInit *init)
 {
@@ -2153,10 +2157,14 @@ erts_mmap_init(ErtsMMapInit *init)
 	ptr = (char *) ERTS_PAGEALIGNED_CEILING(init->virtual_range.start);
 	end = (char *) ERTS_PAGEALIGNED_FLOOR(init->virtual_range.end);
 	sz = end - ptr;
+        fprintf(stderr, "mmap %p to %p\r\n", ptr, end);
 	start = os_mmap_virtual(ptr, sz);
-	if (!start || start > ptr || start >= end)
+        if (!start || start >= end) {
+            fprintf(stderr, "mmap start = %p\r\n", start);
+
 	    erts_exit(1,
-		     "erts_mmap: Failed to create virtual range for super carrier\n");
+                     "erts_mmap: Failed to create virtual range for super carrier\n");
+        }
 	sz = start - ptr;
 	if (sz)
 	    os_munmap(end, sz);
@@ -2303,6 +2311,10 @@ erts_mmap_init(ErtsMMapInit *init)
 
 #ifdef HARD_DEBUG_MSEG
     hard_dbg_mseg_init();
+#endif
+
+#if HALFWORD_HEAP
+    erts_halfword_start_addr = mmap_state.sa.bot;
 #endif
 }
 

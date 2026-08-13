@@ -1492,8 +1492,9 @@ erts_mseg_init(ErtsMsegInit_t *init)
     if (sizeof(void *) != 8)
 	erts_exit(1,"Halfword emulator cannot be run in 32bit mode");
 
-    init->mmap.virtual_range.start = (char *) sbrk(0);
-    init->mmap.virtual_range.end = (char *) 0x100000000UL;
+    //init->mmap.virtual_range.start = (char *) 0x1000;
+    //init->mmap.virtual_range.end = (char *) 0x100000000UL;
+    init->mmap.scs = 1UL << 32;
     init->mmap.sco = 0;
 #endif
 

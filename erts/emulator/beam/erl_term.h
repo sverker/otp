@@ -35,8 +35,9 @@ typedef UWord Wterm;  /* Full word terms */
 #  endif
 #  if 1
 #    define CHECK_POINTER_MASK 0xFFFFFFFF00000000UL
-#    define COMPRESS_POINTER(APointer) ((Eterm) (UWord) (APointer))
-#    define EXPAND_POINTER(AnEterm) ((UWord) (AnEterm))
+extern UWord erts_halfword_start_addr;
+#    define COMPRESS_POINTER(APointer) ((Eterm) ((UWord) (APointer) - erts_halfword_start_addr))
+#    define EXPAND_POINTER(AnEterm) ((UWord) (AnEterm) + erts_halfword_start_addr)
 #  else
 #    define CHECK_POINTER_MASK 0x0UL
 #    define COMPRESS_POINTER(AnUint) (AnUint)
@@ -191,7 +192,7 @@ struct erl_node_; /* Declared in erl_node_tables.h */
 
 /* boxed object access methods */
 #if HALFWORD_HEAP
-#define _is_taggable_pointer(x)	 (((UWord)(x) & (CHECK_POINTER_MASK | 0x3)) == 0)
+#define _is_taggable_pointer(x)	 ((((UWord)(x) - erts_halfword_start_addr) & (CHECK_POINTER_MASK | 0x3)) == 0)
 #define _boxed_precond(x)        (is_boxed(x))
 #else
 #define _is_taggable_pointer(x)	 (((Uint)(x) & 0x3) == 0)
