@@ -2252,6 +2252,11 @@ erts_mmap_init(ErtsMMapInit *init)
 	     + ERTS_PAGEALIGNED_SIZE) > end - start)
 	    erts_exit(1, "erts_mmap: No space for segments in super carrier\n");
 
+#if HALFWORD_HEAP
+        // Set halfword start to the very bottom only used by free descriptors
+        // to ensure no Eterm is placed at offset 0.
+        erts_halfword_start_addr = (UWord) start;
+#endif
 	mmap_state.sa.bot = start;
 	mmap_state.sa.bot += desc_size;
 	mmap_state.sa.bot = (char *) ERTS_SUPERALIGNED_CEILING(mmap_state.sa.bot);
@@ -2311,10 +2316,6 @@ erts_mmap_init(ErtsMMapInit *init)
 
 #ifdef HARD_DEBUG_MSEG
     hard_dbg_mseg_init();
-#endif
-
-#if HALFWORD_HEAP
-    erts_halfword_start_addr = mmap_state.sa.bot;
 #endif
 }
 

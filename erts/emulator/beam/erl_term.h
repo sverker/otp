@@ -35,9 +35,22 @@ typedef UWord Wterm;  /* Full word terms */
 #  endif
 #  if 1
 #    define CHECK_POINTER_MASK 0xFFFFFFFF00000000UL
+#    define COMPRESS_POINTER(X) COMPRESS_POINTER_impl((UWord)(X))
+ERTS_GLB_INLINE Eterm COMPRESS_POINTER_impl(UWord);
+ERTS_GLB_INLINE UWord EXPAND_POINTER(Eterm);
 extern UWord erts_halfword_start_addr;
-#    define COMPRESS_POINTER(APointer) ((Eterm) ((UWord) (APointer) - erts_halfword_start_addr))
-#    define EXPAND_POINTER(AnEterm) ((UWord) (AnEterm) + erts_halfword_start_addr)
+
+#    if ERTS_GLB_INLINE_INCL_FUNC_DEF
+ERTS_GLB_INLINE Eterm COMPRESS_POINTER_impl(UWord word)
+{
+    return !word ? (Eterm)word : (Eterm)(word - erts_halfword_start_addr);
+}
+ERTS_GLB_INLINE UWord EXPAND_POINTER(Eterm term)
+{
+    return !term ? (UWord)term : ((UWord)term + erts_halfword_start_addr);
+}
+#    endif
+
 #  else
 #    define CHECK_POINTER_MASK 0x0UL
 #    define COMPRESS_POINTER(AnUint) (AnUint)
