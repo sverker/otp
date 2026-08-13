@@ -148,7 +148,7 @@ do {                                     \
    (p)->cp = (ip)
 
 #define SET_I(ip) \
-   ASSERT(VALID_INSTR(* (Eterm *)(ip))); \
+   ASSERT(VALID_INSTR(* (UWord*)(ip))); \
    I = (ip)
 
 #define FetchArgs(S1, S2) tmp_arg1 = (S1); tmp_arg2 = (S2)
