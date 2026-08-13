@@ -1,0 +1,2 @@
+./otp_build autoconf
+./otp_build setup --enable-halfword-emulator
