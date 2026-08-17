@@ -308,16 +308,16 @@ lookup_loc(FunctionInfo* fi, BeamInstr* orig_pc, BeamInstr* modp, int idx)
     }
 
     pc = (Eterm) (BeamInstr) orig_pc;
-    fi->fname_ptr = (Eterm *) (BeamInstr) line[MI_LINE_FNAME_PTR];
-    low = (Eterm *) (BeamInstr) line[MI_LINE_FUNC_TAB+idx];
-    high = (Eterm *) (BeamInstr) line[MI_LINE_FUNC_TAB+idx+1];
+    fi->fname_ptr = (Eterm*) EXPAND_POINTER(line[MI_LINE_FNAME_PTR]);
+    low = (Eterm*) EXPAND_POINTER(line[MI_LINE_FUNC_TAB+idx]);
+    high = (Eterm*) EXPAND_POINTER(line[MI_LINE_FUNC_TAB + idx + 1]);
     while (high > low) {
 	mid = low + (high-low) / 2;
 	if (pc < mid[0]) {
 	    high = mid;
 	} else if (pc < mid[1]) {
 	    int file;
-	    int index = mid - (Eterm *) (BeamInstr) line[MI_LINE_FUNC_TAB];
+            int index = mid - (Eterm *) EXPAND_POINTER(line[MI_LINE_FUNC_TAB]);
 
 	    if (line[MI_LINE_LOC_SIZE] == 2) {
 		Uint16* loc_table =

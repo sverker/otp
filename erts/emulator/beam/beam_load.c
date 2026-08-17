@@ -4454,16 +4454,16 @@ freeze_code(LoaderState* stp)
 
 	first_line_item = (p + ftab_size + 1);
 	for (i = 0; i < ftab_size; i++) {
-	     *p++ = (Eterm) (BeamInstr) (first_line_item + stp->func_line[i]);
+             *p++ = COMPRESS_POINTER((BeamInstr) (first_line_item + stp->func_line[i]));
 	}
-	*p++ = (Eterm) (BeamInstr) (first_line_item + num_instrs);
+        *p++ = COMPRESS_POINTER((BeamInstr) (first_line_item + num_instrs));
 	ASSERT(p == first_line_item);
 	for (i = 0; i < num_instrs; i++) {
-		*p++ = (Eterm) (BeamInstr) (code + stp->line_instr[i].pos);
+                *p++ = COMPRESS_POINTER((BeamInstr) (code + stp->line_instr[i].pos));
 	}
-	*p++ = (Eterm) (BeamInstr) (code + stp->ci - 1);
+        *p++ = COMPRESS_POINTER((BeamInstr) (code + stp->ci - 1));
 
-	line_tab[MI_LINE_FNAME_PTR] = (Eterm) (BeamInstr) p;
+        line_tab[MI_LINE_FNAME_PTR] = COMPRESS_POINTER((BeamInstr) p);
 	memcpy(p, stp->fname, stp->num_fnames*sizeof(Eterm));
 	p += stp->num_fnames;
 
