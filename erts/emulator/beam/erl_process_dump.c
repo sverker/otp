@@ -54,10 +54,15 @@ static void dump_externally(int to, void *to_arg, Eterm term);
 
 static Binary* all_binaries;
 
+#ifdef HALFWORD_HEAP
+extern BeamInstr* beam_apply;
+extern BeamInstr* beam_exit;
+extern BeamInstr* beam_continue_exit;
+#else
 extern BeamInstr beam_apply[];
 extern BeamInstr beam_exit[];
 extern BeamInstr beam_continue_exit[];
-
+#endif
 
 void
 erts_deep_process_dump(int to, void *to_arg)

@@ -214,9 +214,15 @@ do {                                     \
  * Special Beam instructions.
  */
 
+#if HALFWORD_HEAP
+BeamInstr* beam_apply;
+BeamInstr* beam_exit;
+BeamInstr* beam_continue_exit;
+#else
 BeamInstr beam_apply[2];
 BeamInstr beam_exit[1];
 BeamInstr beam_continue_exit[1];
+#endif
 
 BeamInstr* em_call_error_handler;
 BeamInstr* em_apply_bif;
@@ -5286,6 +5292,11 @@ do {								\
      em_apply_bif = OpCode(apply_bif);
      em_call_nif = OpCode(call_nif);
 
+#if HALFWORD_HEAP
+     beam_apply = erts_alloc(ERTS_ALC_T_CODE, (2+1+1) * sizeof(BeamInstr));
+     beam_exit = beam_apply + 2;
+     beam_continue_exit = beam_exit + 1;
+#endif
      beam_apply[0]             = (BeamInstr) OpCode(i_apply);
      beam_apply[1]             = (BeamInstr) OpCode(normal_exit);
      beam_exit[0]              = (BeamInstr) OpCode(error_action_code);

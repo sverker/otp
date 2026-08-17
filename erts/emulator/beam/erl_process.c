@@ -148,9 +148,15 @@ do { \
 
 const Process erts_invalid_process = {{ERTS_INVALID_PID}};
 
+#if HALFWORD_HEAP
+extern BeamInstr* beam_apply;
+extern BeamInstr* beam_exit;
+extern BeamInstr* beam_continue_exit;
+#else
 extern BeamInstr beam_apply[];
 extern BeamInstr beam_exit[];
 extern BeamInstr beam_continue_exit[];
+#endif
 
 #ifdef __OSE__
 /* Eager check I/O not supported on OSE yet. */
