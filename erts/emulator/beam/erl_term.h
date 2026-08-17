@@ -1178,15 +1178,19 @@ extern unsigned tag_val_def(Wterm);
 #define ptr2rel(PTR,BASE) ((Eterm*)((char*)(PTR) - (char*)(BASE)))
 #define rterm2wterm(REL,BASE) ((Wterm)(REL) + (Wterm)(BASE))
 
+#define make_list_rel(PTR, BASE) _unchecked_make_list(ptr2rel(PTR,BASE))
+#define make_boxed_rel(PTR, BASE) _unchecked_make_boxed(ptr2rel(PTR,BASE))
+
 #else /* HALFWORD_HEAP */
 
 #define ptr2rel(PTR,BASE) (PTR)
 #define rterm2wterm(REL,BASE) (REL)
 
+#define make_list_rel(PTR, BASE) make_list(PTR)
+#define make_boxed_rel(PTR, BASE) make_boxed(PTR)
+
 #endif /* !HALFWORD_HEAP */
 
-#define make_list_rel(PTR, BASE) make_list(ptr2rel(PTR,BASE))
-#define make_boxed_rel(PTR, BASE) make_boxed(ptr2rel(PTR,BASE))
 #define make_fun_rel make_boxed_rel
 #define make_binary_rel make_boxed_rel
 #define make_tuple_rel make_boxed_rel
