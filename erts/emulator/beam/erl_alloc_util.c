@@ -5765,15 +5765,6 @@ erts_alcu_start(Allctr_t *allctr, AllctrInit_t *init)
 	allctr->t			= 0;
 
     allctr->ramv			= init->ramv;
-#if HALFWORD_HEAP
-    if (init->low_mem) {
-        /*
-         * SVERKER: Disable main carrier
-         * ToDo: Allocate main carrier in low memory instead
-         */
-        init->mmbcs = 0;
-    }
-#endif
     allctr->main_carrier_size		= init->mmbcs;
 
 #if HAVE_ERTS_MSEG
