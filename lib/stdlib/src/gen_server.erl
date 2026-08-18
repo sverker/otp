@@ -212,7 +212,7 @@ call(Name, Request, Timeout) ->
     erlang:display({?MODULE, self(), ?LINE, call, Name, Request}),
     case catch gen:call(Name, '$gen_call', Request, Timeout) of
 	{ok,Res} ->
-            erlang:display({?MODULE, self(), ?LINE}),
+            erlang:display({?MODULE, self(), ?LINE, reply, Res}),
 	    Res;
 	{'EXIT',Reason} ->
             erlang:display({?MODULE, self(), ?LINE}),
