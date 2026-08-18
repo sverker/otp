@@ -166,15 +166,19 @@
 %%%          {error, Reason}
 %%% -----------------------------------------------------------------
 start(Mod, Args, Options) ->
+    erlang:display({?MODULE, self(), ?LINE, start, Mod}),
     gen:start(?MODULE, nolink, Mod, Args, Options).
 
 start(Name, Mod, Args, Options) ->
+    erlang:display({?MODULE, self(), ?LINE, start, Mod}),
     gen:start(?MODULE, nolink, Name, Mod, Args, Options).
 
 start_link(Mod, Args, Options) ->
+    erlang:display({?MODULE, self(), ?LINE, start_link, Mod}),
     gen:start(?MODULE, link, Mod, Args, Options).
 
 start_link(Name, Mod, Args, Options) ->
+    erlang:display({?MODULE, self(), ?LINE, start_link, Mod}),
     gen:start(?MODULE, link, Name, Mod, Args, Options).
 
 
@@ -205,10 +209,13 @@ call(Name, Request) ->
     end.
 
 call(Name, Request, Timeout) ->
+    erlang:display({?MODULE, self(), ?LINE}),
     case catch gen:call(Name, '$gen_call', Request, Timeout) of
 	{ok,Res} ->
+            erlang:display({?MODULE, self(), ?LINE}),
 	    Res;
 	{'EXIT',Reason} ->
+            erlang:display({?MODULE, self(), ?LINE}),
 	    exit({Reason, {?MODULE, call, [Name, Request, Timeout]}})
     end.
 

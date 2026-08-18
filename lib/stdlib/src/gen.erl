@@ -148,10 +148,12 @@ call(Process, Label, Request) ->
 
 call(Process, Label, Request, Timeout)
   when Timeout =:= infinity; is_integer(Timeout), Timeout >= 0 ->
+    erlang:display({?MODULE,self(),?LINE, call, Process}),
     Fun = fun(Pid) -> do_call(Pid, Label, Request, Timeout) end,
     do_for_proc(Process, Fun).
 
 do_call(Process, Label, Request, Timeout) ->
+    erlang:display({?MODULE,self(),?LINE, do_call, Process, Label, Request}),
     try erlang:monitor(process, Process) of
 	Mref ->
 	    %% If the monitor/2 call failed to set up a connection to a
@@ -163,18 +165,24 @@ do_call(Process, Label, Request, Timeout) ->
 	    %% will fail immediately if there is no connection to the
 	    %% remote node.
 
+            erlang:display({?MODULE,self(),?LINE, Mref}),
+
 	    catch erlang:send(Process, {Label, {self(), Mref}, Request},
 		  [noconnect]),
 	    receive
 		{Mref, Reply} ->
+                    erlang:display({?MODULE,self(),?LINE}),
 		    erlang:demonitor(Mref, [flush]),
 		    {ok, Reply};
 		{'DOWN', Mref, _, _, noconnection} ->
+                    erlang:display({?MODULE,self(),?LINE}),
 		    Node = get_node(Process),
 		    exit({nodedown, Node});
 		{'DOWN', Mref, _, _, Reason} ->
+                    erlang:display({?MODULE,self(),?LINE, Reason}),
 		    exit(Reason)
 	    after Timeout ->
+                    erlang:display({?MODULE,self(),?LINE,timeout}),
 		    erlang:demonitor(Mref, [flush]),
 		    exit(timeout)
 	    end
@@ -255,8 +263,10 @@ do_for_proc(Pid, Fun) when is_pid(Pid) ->
 do_for_proc(Name, Fun) when is_atom(Name) ->
     case whereis(Name) of
 	Pid when is_pid(Pid) ->
+            erlang:display({?MODULE,self(),?LINE, Pid}),
 	    Fun(Pid);
 	undefined ->
+            erlang:display({?MODULE,self(),?LINE, undefined}),
 	    exit(noproc)
     end;
 %% Global by name
