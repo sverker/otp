@@ -148,7 +148,7 @@ call(Process, Label, Request) ->
 
 call(Process, Label, Request, Timeout)
   when Timeout =:= infinity; is_integer(Timeout), Timeout >= 0 ->
-    erlang:display({?MODULE,self(),?LINE, call, Process}),
+    erlang:display({?MODULE,self(),?LINE, call, Process, Request}),
     Fun = fun(Pid) -> do_call(Pid, Label, Request, Timeout) end,
     do_for_proc(Process, Fun).
 

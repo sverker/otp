@@ -453,6 +453,7 @@ which(File, Base, [Directory|Tail]) ->
       Filename :: file:filename(),
       Absname :: file:filename().
 where_is_file(File) when is_list(File) ->
+    erlang:display({?MODULE,self(),?LINE, where_is_file, File}),
     case call({is_cached,File}) of
 	no ->
 	    Path = get_path(),
