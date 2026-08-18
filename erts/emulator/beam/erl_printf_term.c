@@ -473,7 +473,13 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount,
 		Uint bitoffs;
 		Uint bitsize;
 		byte octet;
+                int trunc = 0;
 		ERTS_GET_BINARY_BYTES_REL(obj, bytep, bitoffs, bitsize, obj_base);
+
+                if (bytesize > 50) {
+                    bytesize = 50;
+                    trunc = 1;
+                }
 
 		if (bitsize || !bytesize
 		    || !is_printable_ascii(bytep, bytesize, bitoffs)) {
@@ -492,7 +498,10 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount,
 			++bytep;
 			--bytesize;
 		    }
-		    if (bitsize) {
+                    if (trunc) {
+                        PRINT_STRING(res, fn, arg, " ... ");
+                    }
+                    if (bitsize) {
 			Uint bits = bitoffs + bitsize;
 			octet = bytep[0];
 			if (bits < 8)
@@ -526,6 +535,9 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount,
 			++bytep;
 			--bytesize;
 		    }
+                    if (trunc) {
+                        PRINT_STRING(res, fn, arg, " ... ");
+                    }
 		    PRINT_STRING(res, fn, arg, "\">>");
 		}
 	    }
