@@ -463,11 +463,16 @@ void** beam_ops;
 
 static void SVERK_DISPATCH(const char* label, BeamInstr* I, Eterm x0, Eterm* reg)
 {
+    static BeamInstr* prev_I;
     static FILE* sverkout = NULL;
     int arity = (int) (I[-1]);
 
     if (!sverkout) {
         sverkout = fopen("SVERKER.log", "w");
+    }
+
+    if (I == prev_I) {
+        return;
     }
 
     erts_fprintf(sverkout, "%s %T:%T/%d (", label, I[-3], I[-2], arity);
@@ -479,6 +484,8 @@ static void SVERK_DISPATCH(const char* label, BeamInstr* I, Eterm x0, Eterm* reg
         }
     }
     erts_fprintf(sverkout, ")\n", x0);
+
+    prev_I = I;
 }
 
 
