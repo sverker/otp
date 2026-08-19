@@ -2903,6 +2903,8 @@ do {								\
 	Eterm result;
 	BeamInstr *next;
 
+        SVERK_DISPATCH("CALL_BIF", ((Export*) Arg(0))->code+3, r(0), reg);
+
 	PRE_BIF_SWAPOUT(c_p);
 	c_p->fcalls = FCALLS - 1;
 	if (FCALLS <= 0) {
