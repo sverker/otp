@@ -472,7 +472,6 @@ open(Item, ModeList) when is_list(ModeList) ->
 		    case check_args(Args) of 
 			ok ->
 			    [FileName | _] = Args,
-                            erlang:display({?MODULE,self(),?LINE}),
 			    call(open, [FileName, ModeList]);
 			Error ->
 			    Error
@@ -1051,7 +1050,6 @@ path_eval(Path, File) ->
               | {Line :: integer(), Mod :: module(), Term :: term()}.
 
 path_eval(Path, File, Bs) ->
-    erlang:display({?MODULE,self(),?LINE}),
     case path_open(Path, File, [read]) of
 	{ok, Fd, Full} ->
 	    case eval_stream(Fd, ignore, Bs) of
@@ -1147,7 +1145,6 @@ path_script(Path, File, Bs) ->
       Reason :: posix() | badarg | system_limit.
 
 path_open(PathList, Name, Mode) ->
-    erlang:display({?MODULE,self(),?LINE}),
     case file_name(Name) of
 	{error, _} = Error ->
 	    Error;
@@ -1156,7 +1153,6 @@ path_open(PathList, Name, Mode) ->
 		relative ->
 		    path_open_first(PathList, FileName, Mode, enoent);
 		_ ->
-                    erlang:display({?MODULE,self(),?LINE}),
 		    case open(Name, Mode) of
 			{ok, Fd} ->
 			    {ok, Fd, Name};
@@ -1488,10 +1484,8 @@ mode_list(_) ->
 
 call(Command, Args) when is_list(Args) ->
     X = erlang:dt_spread_tag(true),
-    erlang:display({?MODULE,self(),?LINE}),
     Y = gen_server:call(?FILE_SERVER, list_to_tuple([Command | Args]), 
 			infinity),
-    erlang:display({?MODULE,self(),?LINE}),
     erlang:dt_restore_tag(X),
     Y.
 

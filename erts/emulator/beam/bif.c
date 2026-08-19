@@ -3871,10 +3871,7 @@ BIF_RETTYPE throw_1(BIF_ALIST_1)
  */
 BIF_RETTYPE display_1(BIF_ALIST_1)
 {
-    extern FILE* sverkout;
-    FILE* out = sverkout ? sverkout : stdout;
-
-    erts_fprintf(out, "%.*T\n", INT_MAX, BIF_ARG_1);
+    erts_printf("%.*T\n", INT_MAX, BIF_ARG_1);
     BIF_RET(am_true);
 }
 

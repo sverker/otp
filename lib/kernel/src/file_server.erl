@@ -76,7 +76,6 @@ stop() ->
 -spec init([]) -> {'ok', state()} | {'stop', term()}.
 
 init([]) ->
-    erlang:display({?MODULE,self(),?LINE,init}),
     process_flag(trap_exit, true),
     case ?PRIM_FILE:start() of
 	{ok, Handle} ->
@@ -281,10 +280,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Start = start | start_link
 do_start(Start) ->
-    erlang:display({?MODULE,self(),?LINE,do_start}),
     case init:get_argument(master) of
 	error ->
-            erlang:display({?MODULE,self(),?LINE,do_start}),
 	    gen_server:Start({local,?FILE_SERVER}, ?MODULE, [], []);
 	{ok, [[Node]]} ->
 	    do_start(Start, list_to_atom(Node), ?FILE_SERVER);

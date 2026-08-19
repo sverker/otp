@@ -461,39 +461,9 @@ void** beam_ops;
  * the I register.  If we are out of reductions, do a context switch.
  */
 
-FILE* sverkout = NULL;
-
-static void SVERK_DISPATCH(const char* label, BeamInstr* I, Eterm x0, Eterm* reg)
-{
-    static BeamInstr* prev_I;
-    int arity = (int) (I[-1]);
-
-    if (!sverkout) {
-        sverkout = fopen("SVERKER.log", "w");
-    }
-
-    if (I == prev_I) {
-        return;
-    }
-
-    erts_fprintf(sverkout, "%s %T:%T/%d (", label, I[-3], I[-2], arity);
-
-    if (arity > 0) {
-        erts_fprintf(sverkout, "%T", x0);
-        for (int ix = 1; ix < arity; ix++) {
-            erts_fprintf(sverkout, ", %T", reg[ix]);
-        }
-    }
-    erts_fprintf(sverkout, ")\n", x0);
-
-    prev_I = I;
-}
-
-
 #define DispatchMacro()				\
   do {						\
      BeamInstr* dis_next;				\
-     SVERK_DISPATCH("DISPATCH", I, r(0), reg);\
      dis_next = (BeamInstr *) *I;			\
      CHECK_ARGS(I);				\
      if (FCALLS > 0 || FCALLS > neg_o_reds) {	\
@@ -507,7 +477,6 @@ static void SVERK_DISPATCH(const char* label, BeamInstr* I, Eterm x0, Eterm* reg
 #define DispatchMacroFun()			\
   do {						\
      BeamInstr* dis_next;				\
-     SVERK_DISPATCH("DISPATCH_FUN", I, r(0), reg);\
      dis_next = (BeamInstr *) *I;			\
      CHECK_ARGS(I);				\
      if (FCALLS > 0 || FCALLS > neg_o_reds) {	\
@@ -523,7 +492,6 @@ static void SVERK_DISPATCH(const char* label, BeamInstr* I, Eterm x0, Eterm* reg
      if (FCALLS > 0) {						\
         Eterm* dis_next;					\
         SET_I(((Export *) Arg(0))->addressv[erts_active_code_ix()]); \
-        SVERK_DISPATCH("DISPATCH_X", I, r(0), reg);\
         dis_next = (Eterm *) *I;				\
         FCALLS--;						\
         CHECK_ARGS(I);						\
@@ -533,7 +501,6 @@ static void SVERK_DISPATCH(const char* label, BeamInstr* I, Eterm x0, Eterm* reg
         goto save_calls1;					\
      } else {							\
         SET_I(((Export *) Arg(0))->addressv[erts_active_code_ix()]); \
-        SVERK_DISPATCH("DISPATCH_X_CS", I, r(0), reg);\
         CHECK_ARGS(I);						\
 	goto context_switch;					\
      }								\
@@ -2902,8 +2869,6 @@ do {								\
 	Eterm (*bf)(Process*, Eterm*, BeamInstr*) = GET_BIF_ADDRESS(Arg(0));
 	Eterm result;
 	BeamInstr *next;
-
-        SVERK_DISPATCH("CALL_BIF", ((Export*) Arg(0))->code+3, r(0), reg);
 
 	PRE_BIF_SWAPOUT(c_p);
 	c_p->fcalls = FCALLS - 1;

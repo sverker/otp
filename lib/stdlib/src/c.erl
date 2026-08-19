@@ -464,7 +464,6 @@ mformat(A1, A2) ->
 %%  else in home directory.
 
 erlangrc() ->
-    erlang:display({?MODULE,self(),?LINE,erlangrc}),
     case init:get_argument(home) of
 	{ok,[[Home]]} ->
 	    erlangrc([Home]);
@@ -473,25 +472,20 @@ erlangrc() ->
     end.
 
 erlangrc([Home]) ->
-    erlang:display({?MODULE,self(),?LINE,erlangrc,Home}),
     f_p_e([".",Home], ".erlang").
 
 error(Fmt, Args) ->
     error_logger:error_msg(Fmt, Args).
 
 f_p_e(P, F) ->
-    erlang:display({?MODULE,self(),?LINE}),
     case file:path_eval(P, F) of
 	{error, enoent} = Enoent ->
-            erlang:display({?MODULE,self(),?LINE}),
 	    Enoent;
 	{error, E={Line, _Mod, _Term}} ->
-            erlang:display({?MODULE,self(),?LINE}),
 	    error("file:path_eval(~tp,~tp): error on line ~p: ~ts~n",
 		  [P, F, Line, file:format_error(E)]),
 	    ok;
 	{error, E} ->
-            erlang:display({?MODULE,self(),?LINE}),
 	    error("file:path_eval(~tp,~tp): ~ts~n",
 		  [P, F, file:format_error(E)]),
 	    ok;

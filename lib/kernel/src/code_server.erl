@@ -143,11 +143,9 @@ split_paths([], _S, Path, Paths) ->
     lists:reverse(Paths, [lists:reverse(Path)]).
 
 call(Name, Req) ->
-    erlang:display({?MODULE,self(),?LINE, call, Name, Req}),
     Name ! {code_call, self(), Req},
     receive 
 	{?MODULE, Reply} ->
-            erlang:display({?MODULE,self(),?LINE, reply, Reply}),
 	    Reply
     end.
 

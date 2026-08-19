@@ -733,46 +733,30 @@ do_boot(Flags,Start) ->
     spawn_link(fun() -> do_boot(Self,Flags,Start) end).
 
 do_boot(Init,Flags,Start) ->
-    erlang:display({?MODULE,self(),?LINE}),
     process_flag(trap_exit,true),
-    erlang:display({?MODULE,self(),?LINE}),
     {Pgm0,Nodes,Id,Path} = prim_load_flags(Flags),
-    erlang:display({?MODULE,self(),?LINE}),
     Root = b2s(get_flag('-root',Flags)),
-    erlang:display({?MODULE,self(),?LINE}),
     PathFls = path_flags(Flags),
-    erlang:display({?MODULE,self(),?LINE}),
     Pgm = b2s(Pgm0),
-    erlang:display({?MODULE,self(),?LINE}),
     _Pid = start_prim_loader(Init,b2a(Id),Pgm,bs2as(Nodes),
 			     bs2ss(Path),PathFls),
-    erlang:display({?MODULE,self(),?LINE}),
     BootFile = bootfile(Flags,Root),
-    erlang:display({?MODULE,self(),?LINE}),
     BootList = get_boot(BootFile,Root),
-    erlang:display({?MODULE,self(),?LINE}),
     LoadMode = b2a(get_flag('-mode',Flags,false)),
-    erlang:display({?MODULE,self(),?LINE}),
     Deb = b2a(get_flag('-init_debug',Flags,false)),
-    erlang:display({?MODULE,self(),?LINE}),
     catch ?ON_LOAD_HANDLER ! {init_debug_flag,Deb},
-    erlang:display({?MODULE,self(),?LINE}),
     BootVars = get_flag_args('-boot_var',Flags),
-    erlang:display({?MODULE,self(),?LINE}),
     ParallelLoad = 
 	(Pgm =:= "efile") and (erlang:system_info(thread_pool_size) > 0),
-    erlang:display({?MODULE,self(),?LINE}),
+
     PathChoice = code_path_choice(),
-    erlang:display({?MODULE,self(),?LINE}),
-    erlang:display(BootList),
     eval_script(BootList,Init,PathFls,{Root,BootVars},Path,
 		{true,LoadMode,ParallelLoad},Deb,PathChoice),
-    erlang:display({?MODULE,self(),?LINE}),
 
     %% To help identifying Purify windows that pop up,
     %% print the node name into the Purify log.
     (catch erlang:system_info({purify, "Node: " ++ atom_to_list(node())})),
-    erlang:display({?MODULE,self(),?LINE}),
+
     start_em(Start).
 
 bootfile(Flags,Root) ->
@@ -824,32 +808,25 @@ get_boot(BootFile) ->
 %%
 
 eval_script([{progress,Info}|CfgL],Init,PathFs,Vars,P,Ph,Deb,PathChoice) ->
-    erlang:display({?MODULE,self(),?LINE}),
     debug(Deb,{progress,Info}),
     init ! {self(),progress,Info},
     eval_script(CfgL,Init,PathFs,Vars,P,Ph,Deb,PathChoice);
 eval_script([{preLoaded,_}|CfgL],Init,PathFs,Vars,P,Ph,Deb,PathChoice) ->
-    erlang:display({?MODULE,self(),?LINE}),
     eval_script(CfgL,Init,PathFs,Vars,P,Ph,Deb,PathChoice);
 eval_script([{path,Path}|CfgL],Init,{Pa,Pz},Vars,false,Ph,Deb,PathChoice) ->
-    erlang:display({?MODULE,self(),?LINE}),
     RealPath0 = make_path(Pa, Pz, Path, Vars),
     RealPath = patch_path(RealPath0, PathChoice),
     erl_prim_loader:set_path(RealPath),
     eval_script(CfgL,Init,{Pa,Pz},Vars,false,Ph,Deb,PathChoice);
 eval_script([{path,_}|CfgL],Init,PathFs,Vars,P,Ph,Deb,PathChoice) ->
-    erlang:display({?MODULE,self(),?LINE}),
     %% Ignore, use the command line -path flag.
     eval_script(CfgL,Init,PathFs,Vars,P,Ph,Deb,PathChoice);
 eval_script([{kernel_load_completed}|CfgL],Init,PathFs,Vars,P,{_,embedded,Par},Deb,PathChoice) ->
-    erlang:display({?MODULE,self(),?LINE}),
     eval_script(CfgL,Init,PathFs,Vars,P,{true,embedded,Par},Deb,PathChoice);
 eval_script([{kernel_load_completed}|CfgL],Init,PathFs,Vars,P,{_,E,Par},Deb,PathChoice) ->
-    erlang:display({?MODULE,self(),?LINE}),
     eval_script(CfgL,Init,PathFs,Vars,P,{false,E,Par},Deb,PathChoice);
 eval_script([{primLoad,Mods}|CfgL],Init,PathFs,Vars,P,{true,E,Par},Deb,PathChoice)
   when is_list(Mods) ->
-    erlang:display({?MODULE,self(),?LINE}),
     if 
 	Par =:= true ->
 	    par_load_modules(Mods,Init);
@@ -858,25 +835,20 @@ eval_script([{primLoad,Mods}|CfgL],Init,PathFs,Vars,P,{true,E,Par},Deb,PathChoic
     end,
     eval_script(CfgL,Init,PathFs,Vars,P,{true,E,Par},Deb,PathChoice);
 eval_script([{primLoad,_Mods}|CfgL],Init,PathFs,Vars,P,{false,E,Par},Deb,PathChoice) ->
-    erlang:display({?MODULE,self(),?LINE}),
     %% Do not load now, code_server does that dynamically!
     eval_script(CfgL,Init,PathFs,Vars,P,{false,E,Par},Deb,PathChoice);
 eval_script([{kernelProcess,Server,{Mod,Fun,Args}}|CfgL],Init,
 	    PathFs,Vars,P,Ph,Deb,PathChoice) ->
-    erlang:display({?MODULE,self(),?LINE}),
     debug(Deb,{start,Server}),
     start_in_kernel(Server,Mod,Fun,Args,Init),
     eval_script(CfgL,Init,PathFs,Vars,P,Ph,Deb,PathChoice);
 eval_script([{apply,{Mod,Fun,Args}}|CfgL],Init,PathFs,Vars,P,Ph,Deb,PathChoice) ->
-    erlang:display({{?MODULE,self(),?LINE}, apply, {Mod,Fun,Args}}),
     debug(Deb,{apply,{Mod,Fun,Args}}),
     apply(Mod,Fun,Args),
     eval_script(CfgL,Init,PathFs,Vars,P,Ph,Deb,PathChoice);
 eval_script([],_,_,_,_,_,_,_) ->
-    erlang:display({?MODULE,self(),?LINE}),
     ok;
 eval_script(What,_,_,_,_,_,_,_) ->
-    erlang:display({{?MODULE,self(),?LINE}, What}),
     exit({'unexpected command in bootfile',What}).
 
 load_modules([Mod|Mods]) ->
