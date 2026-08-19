@@ -1175,11 +1175,22 @@ extern unsigned tag_val_def(Wterm);
 #define FLOAT_FLOAT	_NUMBER_CODE(FLOAT_DEF,FLOAT_DEF)
 
 #if HALFWORD_HEAP
-#define ptr2rel(PTR,BASE) ((Eterm*)((char*)(PTR) - (char*)(BASE)))
+#define ptr2rel(PTR,BASE) ((Eterm)((char*)(PTR) - (char*)(BASE)))
 #define rterm2wterm(REL,BASE) ((Wterm)(REL) + (Wterm)(BASE))
 
-#define make_list_rel(PTR, BASE) _unchecked_make_list(ptr2rel(PTR,BASE))
-#define make_boxed_rel(PTR, BASE) _unchecked_make_boxed(ptr2rel(PTR,BASE))
+ERTS_GLB_INLINE Eterm make_list_rel(Eterm* ptr, Eterm* base);
+ERTS_GLB_INLINE Eterm make_boxed_rel(Eterm* ptr, Eterm* base);
+
+#  if ERTS_GLB_INLINE_INCL_FUNC_DEF
+ERTS_GLB_INLINE Eterm make_list_rel(Eterm* ptr, Eterm* base)
+{
+    return base ? ptr2rel(ptr, base) + TAG_PRIMARY_LIST : make_list(ptr);
+}
+ERTS_GLB_INLINE Eterm make_boxed_rel(Eterm* ptr, Eterm* base)
+{
+    return base ? ptr2rel(ptr, base) + TAG_PRIMARY_BOXED : make_boxed(ptr);
+}
+#  endif
 
 #else /* HALFWORD_HEAP */
 
