@@ -1248,8 +1248,12 @@ del_cntrl([], _Pid) ->
 get_loaded(App) ->
     AppName = get_appl_name(App),
     case ets:lookup(ac_tab, {loaded, AppName}) of 
-	[{_Key, Appl}] -> {true, Appl};
-	_  -> false
+        [{_Key, Appl}] ->
+            erlang:display({?MODULE, self(), ?LINE, yes, AppName}),
+            {true, Appl};
+        _  ->
+            erlang:display({?MODULE, self(), ?LINE, no, AppName}),
+            false
     end.
     
 do_load_application(Application, S) ->
