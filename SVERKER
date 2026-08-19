@@ -1,2 +1,14 @@
+# Build
 ./otp_build autoconf
 ./otp_build setup --enable-halfword-emulator
+
+# Ask for beam args
+bin/erl -emu_args_exit +S1
+
+# Run beam directly
+export ROOTDIR=$ERL_TOP
+export BINDIR=$ROOTDIR/bin/x86_64-unknown-linux-gnu
+export EMU=beam
+export PROGNAME=erl
+
+bin/x86_64-unknown-linux-gnu/beam.debug.smp -S1 -- -root /home/uabseri/src/otp2 -progname erl -- -home /home/uabseri --
