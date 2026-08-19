@@ -287,12 +287,14 @@ __decl_noreturn void __noreturn erl_assert_error(const char* expr, const char *f
 #endif
 #if defined(ARCH_64) && defined(HALFWORD_HEAP_EMULATOR)
 #    define HALFWORD_HEAP 1
+#    define HALFWORD_REL_TERM 0  // TEST TEST TEST
 #    define HALFWORD_ASSERT 0
 #    define ASSERT_HALFWORD(COND) ASSERT(COND)
 #    undef ERTS_SIZEOF_TERM
 #    define ERTS_SIZEOF_TERM 4
 #else
 #    define HALFWORD_HEAP 0
+#    define HALFWORD_REL_TERM 0
 #    define HALFWORD_ASSERT 0
 #    define ASSERT_HALFWORD(COND)
 #endif

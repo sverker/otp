@@ -157,7 +157,7 @@ void erts_init_utils_mem(void);
 erts_dsprintf_buf_t *erts_create_tmp_dsbuf(Uint);
 void erts_destroy_tmp_dsbuf(erts_dsprintf_buf_t *);
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 int eq_rel(Eterm a, Eterm* a_base, Eterm b, Eterm* b_base);
 #  define eq(A,B) eq_rel(A,NULL,B,NULL)
 #else
@@ -167,7 +167,7 @@ int eq(Eterm, Eterm);
 
 #define EQ(x,y) (((x) == (y)) || (is_not_both_immed((x),(y)) && eq((x),(y))))
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 Sint erts_cmp_rel_opt(Eterm, Eterm*, Eterm, Eterm*, int, int);
 #define cmp_rel(A,A_BASE,B,B_BASE)       erts_cmp_rel_opt(A,A_BASE,B,B_BASE,0,0)
 #define cmp_rel_term(A,A_BASE,B,B_BASE)  erts_cmp_rel_opt(A,A_BASE,B,B_BASE,1,0)

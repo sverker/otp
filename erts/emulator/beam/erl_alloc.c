@@ -393,6 +393,11 @@ set_default_ets_alloc_opts(struct au_init *ip)
 #endif
     ip->init.util.ts 		= ERTS_ALC_MTA_ETS;
     ip->init.util.acul		= ERTS_ALC_DEFAULT_ACUL;
+#if HALFWORD_HEAP && !HALFWORD_REL_TERM
+    ip->init.util.force         = 1;
+    ip->init.util.low_mem       = 1;
+#endif
+
 }
 
 static void

@@ -105,7 +105,7 @@ Eterm  erts_hashmap_from_ks_and_vs_extra(Process *p, Eterm *ks, Eterm *vs, Uint 
 					 Eterm k, Eterm v);
 
 const Eterm *
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 erts_maps_get_rel(Eterm key, Eterm map, Eterm *map_base);
 #  define erts_maps_get(A, B) erts_maps_get_rel(A, B, NULL)
 #else
@@ -114,7 +114,7 @@ erts_maps_get(Eterm key, Eterm map);
 #endif
 
 const Eterm *
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 erts_hashmap_get_rel(Uint32 hx, Eterm key, Eterm node, Eterm *map_base);
 #  define erts_hashmap_get(Hx, K, M) erts_hashmap_get_rel(Hx, K, M, NULL)
 #else

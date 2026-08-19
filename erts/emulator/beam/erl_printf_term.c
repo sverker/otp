@@ -344,7 +344,7 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount,
 	    PRINT_CHAR(res, fn, arg, '>');
 	    goto L_done;
 	}
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 	wobj = is_immed(obj) ? (Wterm)obj : rterm2wterm(obj, obj_base);
 #else
 	wobj = (Wterm)obj;

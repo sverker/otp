@@ -69,7 +69,7 @@ copy_object(Eterm obj, Process* to)
  * Return the "flat" size of the object.
  */
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 Uint size_object_rel(Eterm obj, Eterm* base)
 #else
 Uint size_object(Eterm obj)
@@ -227,7 +227,7 @@ Uint size_object(Eterm obj)
 /*
  *  Copy a structure to a heap.
  */
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 Eterm copy_struct_rel(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap,
                       Eterm* src_base, Eterm* dst_base)
 #else
@@ -287,9 +287,9 @@ Eterm copy_struct(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap)
 	    break;
 	case TAG_PRIMARY_LIST:
 	    objp = list_val_rel(obj,src_base);
-	#if !HALFWORD_HEAP || defined(DEBUG)
+        #if !HALFWORD_REL_TERM || defined(DEBUG)
 	    if (in_area(objp,hstart,hsize)) {
-		ASSERT(!HALFWORD_HEAP);
+                ASSERT(!HALFWORD_REL_TERM);
 		hp++;
 		break;
 	    }
@@ -309,7 +309,7 @@ Eterm copy_struct(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap)
 		}
 		else {
 		    CAR(htop) = elem;
-		#if HALFWORD_HEAP
+                #if HALFWORD_REL_TERM
 		    CDR(htop) = CDR(objp);
 		    *tailp = make_list_rel(htop,dst_base);
 		    htop += 2;
@@ -319,7 +319,7 @@ Eterm copy_struct(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap)
 		    htop += 2;
 		#endif
 		}
-		ASSERT(!HALFWORD_HEAP || tp < hp || tp >= hbot);
+                ASSERT(!HALFWORD_REL_TERM || tp < hp || tp >= hbot);
 		*tp = make_list_rel(tailp - 1, dst_base);
 		obj = CDR(objp);
 		if (!is_list(obj)) {
@@ -337,9 +337,9 @@ Eterm copy_struct(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap)
 	    }
 	    
 	case TAG_PRIMARY_BOXED:
-	#if !HALFWORD_HEAP || defined(DEBUG)
+        #if !HALFWORD_REL_TERM || defined(DEBUG)
 	    if (in_area(boxed_val_rel(obj,src_base),hstart,hsize)) {
-		ASSERT(!HALFWORD_HEAP);
+                ASSERT(!HALFWORD_REL_TERM);
 		hp++;
 		break;
 	    }
@@ -563,7 +563,7 @@ Eterm copy_struct(Eterm obj, Uint sz, Eterm** hpp, ErlOffHeap* off_heap)
  *
  * NOTE: Assumes that term is a tuple (ptr is an untagged tuple ptr).
  */
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 Eterm copy_shallow_rel(Eterm* ptr, Uint sz, Eterm** hpp, ErlOffHeap* off_heap,
 		       Eterm* src_base)
 #else
@@ -573,7 +573,7 @@ Eterm copy_shallow(Eterm* ptr, Uint sz, Eterm** hpp, ErlOffHeap* off_heap)
     Eterm* tp = ptr;
     Eterm* hp = *hpp;
     const Eterm res = make_tuple(hp);
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     const Sint offs = COMPRESS_POINTER(hp - (tp - src_base));
 #else
     const Sint offs = (hp - tp) * sizeof(Eterm);

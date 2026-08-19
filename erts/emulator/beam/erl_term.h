@@ -1174,7 +1174,8 @@ extern unsigned tag_val_def(Wterm);
 #define FLOAT_BIG 	_NUMBER_CODE(FLOAT_DEF,BIG_DEF)
 #define FLOAT_FLOAT	_NUMBER_CODE(FLOAT_DEF,FLOAT_DEF)
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
+
 #define ptr2rel(PTR,BASE) ((Eterm)((char*)(PTR) - (char*)(BASE)))
 #define rterm2wterm(REL,BASE) ((Wterm)(REL) + (Wterm)(BASE))
 
@@ -1192,7 +1193,7 @@ ERTS_GLB_INLINE Eterm make_boxed_rel(Eterm* ptr, Eterm* base)
 }
 #  endif
 
-#else /* HALFWORD_HEAP */
+#else /* HALFWORD_REL_TERM */
 
 #define ptr2rel(PTR,BASE) (PTR)
 #define rterm2wterm(REL,BASE) (REL)
@@ -1200,7 +1201,7 @@ ERTS_GLB_INLINE Eterm make_boxed_rel(Eterm* ptr, Eterm* base)
 #define make_list_rel(PTR, BASE) make_list(PTR)
 #define make_boxed_rel(PTR, BASE) make_boxed(PTR)
 
-#endif /* !HALFWORD_HEAP */
+#endif /* !HALFWORD_REL_TERM */
 
 #define make_fun_rel make_boxed_rel
 #define make_binary_rel make_boxed_rel
@@ -1247,7 +1248,7 @@ ERTS_GLB_INLINE Eterm make_boxed_rel(Eterm* ptr, Eterm* base)
 #define external_node_rel(RTERM,BASE) external_node(rterm2wterm(RTERM,BASE))
 
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 ERTS_GLB_INLINE int is_same(Eterm a, Eterm* a_base, Eterm b, Eterm* b_base);
 
 #if ERTS_GLB_INLINE_INCL_FUNC_DEF
@@ -1262,7 +1263,7 @@ ERTS_GLB_INLINE int is_same(Eterm a, Eterm* a_base, Eterm b, Eterm* b_base)
 }
 #endif
 
-#else /* !HALFWORD_HEAP */
+#else /* !HALFWORD_REL_TERM */
 #define is_same(A,A_BASE,B,B_BASE) ((A)==(B))
 #endif
 

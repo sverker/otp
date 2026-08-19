@@ -2594,7 +2594,7 @@ erts_destroy_tmp_dsbuf(erts_dsprintf_buf_t *dsbufp)
  * Test for equality of two terms.
  * Returns 0 if not equal, or a non-zero value otherwise.
  */
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 int eq_rel(Eterm a, Eterm* a_base, Eterm b, Eterm* b_base)
 #else
 int eq(Eterm a, Eterm b)
@@ -2988,7 +2988,7 @@ static int cmp_atoms(Eterm a, Eterm b)
 		    bb->name+3, bb->len-3);
 }
 
-#if !HALFWORD_HEAP
+#if !HALFWORD_REL_TERM
 /* cmp(Eterm a, Eterm b)
  *  For compatibility with HiPE - arith-based compare.
  */
@@ -2998,7 +2998,7 @@ Sint cmp(Eterm a, Eterm b)
 }
 #endif
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 static Sint erts_cmp_compound_rel_opt(Eterm a, Eterm* a_base,
                                       Eterm b, Eterm* b_base,
                                       int exact, int eq_only);
@@ -3006,7 +3006,7 @@ static Sint erts_cmp_compound_rel_opt(Eterm a, Eterm* a_base,
 static Sint erts_cmp_compound(Eterm a, Eterm b, int exact, int eq_only);
 #endif
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 Sint erts_cmp_rel_opt(Eterm a, Eterm* a_base,
                       Eterm b, Eterm* b_base,
                       int exact, int eq_only)
@@ -3024,7 +3024,7 @@ Sint erts_cmp(Eterm a, Eterm b, int exact, int eq_only)
         GET_DOUBLE_REL(b, bf, b_base);
         return float_comp(af.fd, bf.fd);
     }
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     return erts_cmp_compound_rel_opt(a,a_base,b,b_base,exact,eq_only);
 #else
     return erts_cmp_compound(a,b,exact,eq_only);
@@ -3036,7 +3036,7 @@ Sint erts_cmp(Eterm a, Eterm b, int exact, int eq_only)
  * exact = 1 -> term-based compare
  * exact = 0 -> arith-based compare
  */
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 static Sint erts_cmp_compound_rel_opt(Eterm a, Eterm* a_base,
                                       Eterm b, Eterm* b_base,
                                       int exact, int eq_only)
@@ -3547,7 +3547,7 @@ tailrecur_ne:
     {
 	FloatDef f1, f2;
 	Eterm big;
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 	Wterm aw = is_immed(a) ? a : rterm2wterm(a,a_base);
 	Wterm bw = is_immed(b) ? b : rterm2wterm(b,b_base);
 #else

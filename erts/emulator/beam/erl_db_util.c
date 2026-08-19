@@ -239,7 +239,7 @@ typedef enum {
     matchCall2,
     matchCall3,
     matchPushV,
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     matchPushVGuard,    /* First guard-only variable reference */
 #endif
     matchPushVResult, /* First variable reference in result, or (if HALFWORD)
@@ -310,7 +310,7 @@ DMC_DECLARE_STACK_TYPE(unsigned);
 typedef struct DMCVariable {
     int is_bound;
     int is_in_body;
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     int first_guard_label;  /* to maybe change from PushVGuard to PushVResult */
 #endif
 } DMCVariable;
@@ -1756,7 +1756,7 @@ static Eterm dpm_array_to_list(Process *psp, Eterm *arr, int arity)
 }
 
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 struct heap_checkpoint_t
 {
     Process *p;
@@ -1855,7 +1855,7 @@ Eterm db_prog_match(Process *c_p, Binary *bprog,
     Eterm bif_args[3];
     int fail_label;
     int atomic_trace;
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     struct heap_checkpoint_t c_p_checkpoint = {};
 #endif
 #ifdef DMC_DEBUG
@@ -1864,7 +1864,7 @@ Eterm db_prog_match(Process *c_p, Binary *bprog,
     Uint save_op;
 #endif /* DMC_DEBUG */
 
-    ASSERT(base==NULL || HALFWORD_HEAP);
+    ASSERT(base==NULL || HALFWORD_REL_TERM);
 
     mpsp = get_match_pseudo_process(c_p, prog->heap_size);
     psp = &mpsp->process;
@@ -1918,7 +1918,7 @@ Eterm db_prog_match(Process *c_p, Binary *bprog,
     *return_flags = 0U;
 
     variables = mpsp->u.variables;
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     c_p_checkpoint.p = NULL;
 #endif
 
@@ -1931,7 +1931,9 @@ restart:
     fail_label = -1;
     build_proc = psp;
     esdp->current_process = psp;
-    ASSERT_HALFWORD(!c_p_checkpoint.p);
+#if HALFWORD_REL_TERM
+    ASSERT(!c_p_checkpoint.p);
+#endif
 
 #ifdef DEBUG
     ASSERT(variables == mpsp->u.variables);
@@ -2237,7 +2239,7 @@ restart:
 	    esp[-1] = t;
 	    break;
 
-	#if HALFWORD_HEAP
+        #if HALFWORD_REL_TERM
 	case matchPushVGuard:
 	    if (!base) goto case_matchPushV;
 	    /* Build NULL-based copy on pseudo heap for easy disposal */
@@ -2256,7 +2258,7 @@ restart:
 	    if (!(in_flags & ERTS_PAM_COPY_RESULT)) goto case_matchPushV;
 
 	    /* Build (NULL-based) copy on callers heap */
-	#if HALFWORD_HEAP
+        #if HALFWORD_REL_TERM
 	    if (!do_catch && !c_p_checkpoint.p) {
 		heap_checkpoint_init(c_p, &c_p_checkpoint);
 	    }
@@ -2298,8 +2300,10 @@ restart:
 		*esp = term;
 	    }
 	    break;
-	case matchPushArrayAsList:
-	    ASSERT_HALFWORD(base == NULL);
+        case matchPushArrayAsList:
+#if HALFWORD_REL_TERM
+            ASSERT(base == NULL);
+#endif
 	    n = arity; /* Only happens when 'term' is an array */
 	    tp = termp;
 	    ehp = HAllocX(build_proc, n*2, HEAP_XTRA);
@@ -2315,7 +2319,9 @@ restart:
 	    break;
 	case matchPushArrayAsListU:
 	    /* This instruction is NOT efficient. */
-	    ASSERT_HALFWORD(base == NULL);
+#if HALFWORD_REL_TERM
+            ASSERT(base == NULL);
+#endif
 	    *esp++  = dpm_array_to_list(build_proc, termp, arity);
 	    break;
 	case matchTrue:
@@ -2619,7 +2625,7 @@ restart:
 	}
     }
 fail:
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     if (c_p_checkpoint.p) {
 	/* Dispose garbage built by guards on caller heap */
 	heap_checkpoint_revert(&c_p_checkpoint);
@@ -2788,7 +2794,7 @@ Wterm db_do_read_element(DbUpdateHandle* handle, Sint position)
 {
     Eterm elem = handle->dbterm->tpl[position];
     if (!is_header(elem)) {
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
 	if (!is_immed(elem)
 	    && !handle->tb->common.compress
 	    && !(handle->abs_vec && handle->abs_vec[position])) {
@@ -2822,7 +2828,7 @@ void db_do_update_element(DbUpdateHandle* handle,
     Eterm* oldp;
     Uint newval_sz;
     Uint oldval_sz;
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     Eterm* old_base;
 #endif
 
@@ -2841,12 +2847,12 @@ void db_do_update_element(DbUpdateHandle* handle,
 						       handle->dbterm);
 	    handle->flags |= DB_MUST_RESIZE;
 	    oldval = handle->dbterm->tpl[position];
-        #if HALFWORD_HEAP
+        #if HALFWORD_REL_TERM
 	    old_base = NULL;
 	#endif
 	}
 	else {
-	#if HALFWORD_HEAP
+        #if HALFWORD_REL_TERM
 	    ASSERT(!handle->abs_vec);
 	    old_base = handle->dbterm->tpl;
 	#endif
@@ -2879,7 +2885,7 @@ void db_do_update_element(DbUpdateHandle* handle,
 	    }
 	}
     }
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     else {
 	old_base = (handle->tb->common.compress
 		    || (handle->abs_vec && handle->abs_vec[position])) ?
@@ -2901,7 +2907,7 @@ both_size_set:
     handle->dbterm->tpl[position] = newval;
     handle->flags |= DB_MUST_RESIZE;
 
-#if HALFWORD_HEAP
+#if HALFWORD_REL_TERM
     if (old_base && newval_sz > 0) {
 	ASSERT(!handle->tb->common.compress);
 	if (!handle->abs_vec) {
@@ -3160,7 +3166,7 @@ void db_finalize_resize(DbUpdateHandle* handle, Uint offset)
 
 	tmp_offheap.first = NULL;
 
-    #if HALFWORD_HEAP
+    #if HALFWORD_REL_TERM
 	if (handle->abs_vec) {
 	    int i, arity = header_arity(handle->dbterm->tpl[0]);
 
@@ -3998,7 +4004,7 @@ static void dmc_add_pushv_variant(DMCContext *context, DMCHeap *heap,
 
     ASSERT(n < heap->vars_used && v->is_bound);
     if (context->is_guard) {
-	#if HALFWORD_HEAP
+        #if HALFWORD_REL_TERM
 	if (!v->first_guard_label) {
 	    v->first_guard_label = DMC_STACK_NUM(*text);
 	    ASSERT(v->first_guard_label);
@@ -4007,7 +4013,7 @@ static void dmc_add_pushv_variant(DMCContext *context, DMCHeap *heap,
 	#endif
     }
     else { /* body */
-	#if HALFWORD_HEAP
+        #if HALFWORD_REL_TERM
 	if (v->first_guard_label) {
 	    /* Avoid double-copy, copy to result heap at first encounter in guard */
 	    DMC_POKE(*text, v->first_guard_label, matchPushVResult);
@@ -5450,7 +5456,7 @@ Eterm db_match_dbterm(DbTableCommon* tb, Process* c_p, Binary* bprog,
 	obj = db_alloc_tmp_uncompressed(tb, obj);
 	base = NULL;
     }
-    else base = HALFWORD_HEAP ? obj->tpl : NULL;
+    else base = HALFWORD_REL_TERM ? obj->tpl : NULL;
 
     res = db_prog_match(c_p, bprog, make_tuple_rel(obj->tpl,base), base, NULL, 0,
 			ERTS_PAM_COPY_RESULT|ERTS_PAM_CONTIGUOUS_TUPLE, &dummy);
@@ -5720,7 +5726,7 @@ void db_match_dis(Binary *bp)
 	    ++t;
 	    erts_printf("PushV\t%beu\n", n);
 	    break;
-    #if HALFWORD_HEAP
+    #if HALFWORD_REL_TERM
 	case matchPushVGuard:
 	    n = (Uint) *++t;
 	    ++t;
