@@ -461,10 +461,11 @@ void** beam_ops;
  * the I register.  If we are out of reductions, do a context switch.
  */
 
+FILE* sverkout = NULL;
+
 static void SVERK_DISPATCH(const char* label, BeamInstr* I, Eterm x0, Eterm* reg)
 {
     static BeamInstr* prev_I;
-    static FILE* sverkout = NULL;
     int arity = (int) (I[-1]);
 
     if (!sverkout) {
