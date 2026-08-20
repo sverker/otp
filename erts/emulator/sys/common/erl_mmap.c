@@ -2610,6 +2610,7 @@ Eterm erts_mmap_debug_info(Process* p)
         UWord values[4];
         Eterm *hp, *hp_end;
         Uint may_need;
+        const Uint PTR_BIG_SZ = HALFWORD_HEAP ? 3 : 2;
 
         erts_mtx_lock(&mm->mtx);
         values[0] = (UWord)mm->sa.bot;
@@ -2620,7 +2621,7 @@ Eterm erts_mmap_debug_info(Process* p)
         sua_list = build_free_seg_list(p, &mm->sua.map);
         erts_mtx_unlock(&mm->mtx);
 
-        may_need = 4*(2+3+2) + 2*(2+3);
+        may_need = 4*(2+3+PTR_BIG_SZ) + 2*(2+3);
         hp = HAlloc(p, may_need);
         hp_end = hp + may_need;
 

@@ -2286,8 +2286,20 @@ Eterm uint_to_big(Uint x, Eterm *y)
 
 Eterm uword_to_big(UWord x, Eterm *y)
 {
+#if HALFWORD_HEAP
+    Uint upper = x >> 32;
+    Uint lower = x & 0xFFFFFFFFUL;
+    if (upper == 0) {
+        *y = make_pos_bignum_header(1);
+    } else {
+        *y = make_pos_bignum_header(2);
+        BIG_DIGIT(y, 1) = upper;
+    }
+    BIG_DIGIT(y, 0) = lower;
+#else
     *y = make_pos_bignum_header(1);
     BIG_DIGIT(y, 0) = x;
+#endif
     return make_big(y);
 }
 
@@ -2312,7 +2324,7 @@ Eterm small_to_big(Sint x, Eterm *y)
 Eterm erts_uint64_to_big(Uint64 x, Eterm **hpp)
 {
     Eterm *hp = *hpp;
-#if defined(ARCH_32)
+#if defined(ARCH_32) || HALFWORD_HEAP
     if (x >= (((Uint64) 1) << 32)) {
 	*hp = make_pos_bignum_header(2);
 	BIG_DIGIT(hp, 0) = (Uint) (x & ((Uint) 0xffffffff));
@@ -2342,7 +2354,7 @@ Eterm erts_sint64_to_big(Sint64 x, Eterm **hpp)
 	neg = 1;
 	ux = -(Uint64)x;
     }
-#if defined(ARCH_32)
+#if defined(ARCH_32) || HALFWORD_HEAP
     if (ux >= (((Uint64) 1) << 32)) {
 	if (neg)
 	    *hp = make_neg_bignum_header(2);
@@ -2375,7 +2387,7 @@ erts_uint64_array_to_big(Uint **hpp, int neg, int len, Uint64 *array)
 
     pot_digits = digits = 0;
     for (i = 0; i < len; i++) {
-#if defined(ARCH_32)
+#if defined(ARCH_32) || HALFWORD_HEAP
 	Uint low_val = array[i] & ((Uint) 0xffffffff);
 	Uint high_val = (array[i] >> 32) & ((Uint) 0xffffffff);
 	BIG_DIGIT(headerp, pot_digits) = low_val;
