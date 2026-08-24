@@ -250,7 +250,7 @@ erts_bs_get_integer_2(Process *p, Uint num_bits,
          * Simply shift whole bytes into the result.
          */
         switch (BYTE_OFFSET(n)) {
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
         case 7: w = (w << 8) | *bp++; ERTS_FALLTHROUGH();
         case 6: w = (w << 8) | *bp++; ERTS_FALLTHROUGH();
         case 5: w = (w << 8) | *bp++; ERTS_FALLTHROUGH();
@@ -360,7 +360,7 @@ erts_bs_get_integer_2(Process *p, Uint num_bits,
 
         ASSERT(1 <= bytes && bytes <= sizeof(Uint));
         switch (bytes) {
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
         case 8: w = (w << 8) | *MSB--; ERTS_FALLTHROUGH();
         case 7: w = (w << 8) | *MSB--; ERTS_FALLTHROUGH();
         case 6: w = (w << 8) | *MSB--; ERTS_FALLTHROUGH();
