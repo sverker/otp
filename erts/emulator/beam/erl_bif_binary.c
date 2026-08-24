@@ -2526,7 +2526,8 @@ BIF_RETTYPE binary_referenced_byte_size_1(BIF_ALIST_1)
     ERTS_DECLARE_DUMMY(Uint offset);
     ERTS_DECLARE_DUMMY(Eterm br_flags);
     const BinRef *br;
-    Uint size;
+    UWord size;
+    Eterm res;
 
     if (is_not_bitstring(BIF_ARG_1)) {
         BIF_ERROR(BIF_P, BADARG);
@@ -2545,7 +2546,15 @@ BIF_RETTYPE binary_referenced_byte_size_1(BIF_ALIST_1)
         size = BYTE_SIZE(size);
     }
 
-    BIF_RET(erts_make_integer(size, BIF_P));
+    {
+        Uint hsz = 0;
+        Eterm* hp;
+
+        erts_bld_uword(NULL, &hsz, size);
+        hp = HAlloc(BIF_P, hsz);
+        res = erts_bld_uword(&hp, NULL, size);
+    }
+    BIF_RET(res);
 }
 
 #define END_BIG 0
@@ -2558,7 +2567,7 @@ BIF_RETTYPE binary_referenced_byte_size_1(BIF_ALIST_1)
 #endif
 
 static int get_need(Uint u) {
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
     if (u > 0xFFFFFFFFUL) {
 	if (u > 0xFFFFFFFFFFFFUL) {
 	    if (u > 0xFFFFFFFFFFFFFFUL) {
