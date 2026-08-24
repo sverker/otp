@@ -2397,7 +2397,7 @@ mbc_alloc_block(Allctr_t *allctr, Uint size, Uint *blk_szp)
 
     if (!blk) {
 	blk = create_carrier(allctr, get_blk_sz, CFLG_MBC);
-#if !ERTS_SUPER_ALIGNED_MSEG_ONLY
+#if !HALFWORD_HEAP && !ERTS_SUPER_ALIGNED_MSEG_ONLY
 	if (!blk) {
 	    /* Emergency! We couldn't create the carrier as we wanted.
 	       Try to place it in a sys_alloced sbc. */
@@ -4136,7 +4136,8 @@ create_carrier(Allctr_t *allctr, Uint umem_sz, UWord flags)
     int is_mseg = 0;
 #endif
 
-    if ((ERTS_SUPER_ALIGNED_MSEG_ONLY && (flags & CFLG_MBC))
+    if (HALFWORD_HEAP
+        || (ERTS_SUPER_ALIGNED_MSEG_ONLY && (flags & CFLG_MBC))
 	|| !allow_sys_alloc_carriers) {
 	flags |= CFLG_FORCE_MSEG;
 	flags &= ~CFLG_FORCE_SYS_ALLOC;
@@ -4403,8 +4404,14 @@ resize_carrier(Allctr_t *allctr, Block_t *old_blk, Uint umem_sz, UWord flags)
 		DEBUG_SAVE_ALIGNMENT(new_crr);
 		return new_blk;
 	    }
+#if HALFWORD_HEAP
+            /* Old carrier unchanged; restore stat */
+            STAT_MSEG_SBC_ALLOC(allctr, old_crr_sz, old_blk_sz);
+            return NULL;
+#else
 	    create_flags |= CFLG_FORCE_SYS_ALLOC; /* since mseg_realloc()
 						     failed */
+#endif
 	}
 
 	new_blk = create_carrier(allctr, umem_sz, create_flags);
@@ -4596,6 +4603,9 @@ static struct {
     Eterm e;
     Eterm t;
     Eterm ramv;
+#if HALFWORD_HEAP
+    Eterm low;
+#endif
     Eterm atags;
 #if HAVE_ERTS_MSEG
     Eterm asbcst;
@@ -4707,6 +4717,9 @@ init_atoms(Allctr_t *allctr)
 	AM_INIT(e);
 	AM_INIT(t);
 	AM_INIT(ramv);
+#if HALFWORD_HEAP
+        AM_INIT(low);
+#endif
 	AM_INIT(atags);
 #if HAVE_ERTS_MSEG
 	AM_INIT(asbcst);
@@ -5531,6 +5544,9 @@ info_options(Allctr_t *allctr,
 		   "option e: true\n"
 		   "option t: %s\n"
 		   "option ramv: %s\n"
+#if HALFWORD_HEAP
+                   "option low: %s\n"
+#endif
 		   "option atags: %s\n"
 		   "option sbct: %beu\n"
 #if HAVE_ERTS_MSEG
@@ -5554,6 +5570,9 @@ info_options(Allctr_t *allctr,
 		   "option cp: %s\n",
 		   topt,
 		   allctr->ramv ? "true" : "false",
+#if HALFWORD_HEAP
+                   allctr->mseg_opt.low_mem ? "true" : "false",
+#endif
 		   allctr->atags ? "true" : "false",
 		   allctr->sbc_threshold,
 #if HAVE_ERTS_MSEG
@@ -5631,6 +5650,9 @@ info_options(Allctr_t *allctr,
 	add_2tup(hpp, szp, &res,
 		 am_sbct,
 		 bld_uint(hpp, szp, allctr->sbc_threshold));
+#if HALFWORD_HEAP
+        add_2tup(hpp, szp, &res, am.low, allctr->mseg_opt.low_mem ? am_true : am_false);
+#endif
 	add_2tup(hpp, szp, &res, am.ramv, allctr->ramv ? am_true : am_false);
 	add_2tup(hpp, szp, &res, am.atags, allctr->atags ? am_true : am_false);
 	add_2tup(hpp, szp, &res, am.t, (allctr->t ? am_true : am_false));
@@ -6338,7 +6360,11 @@ do_erts_alcu_realloc(ErtsAlcType_t type,
 	Block_t *new_blk;
 	if(IS_SBC_BLK(blk)) {
 	do_carrier_resize:
-	    new_blk = resize_carrier(allctr, blk, size, CFLG_SBC);
+#if HALFWORD_HEAP
+            new_blk = resize_carrier(allctr, blk, size, CFLG_SBC | CFLG_FORCE_MSEG);
+#else
+            new_blk = resize_carrier(allctr, blk, size, CFLG_SBC);
+#endif
 	    res = new_blk ? BLK2UMEM(new_blk) : NULL;
 	}
 	else if (alcu_flgs & ERTS_ALCU_FLG_FAIL_REALLOC_MOVE)
@@ -6726,6 +6752,9 @@ erts_alcu_start(Allctr_t *allctr, AllctrInit_t *init)
 	       sizeof(ErtsMsegOpt_t));
     if (init->tspec || init->tpref)
 	allctr->mseg_opt.sched_spec = 1;
+# if HALFWORD_HEAP
+    allctr->mseg_opt.low_mem = init->low_mem;
+# endif
 #endif /* HAVE_ERTS_MSEG */
 
     allctr->name_prefix			= init->name_prefix;
@@ -6929,7 +6958,7 @@ erts_alcu_start(Allctr_t *allctr, AllctrInit_t *init)
 
 	blk = create_carrier(allctr,
 			     allctr->main_carrier_size,
-                             (ERTS_SUPER_ALIGNED_MSEG_ONLY
+                             (!HALFWORD_HEAP && ERTS_SUPER_ALIGNED_MSEG_ONLY
                               ? CFLG_FORCE_MSEG : CFLG_FORCE_SYS_ALLOC)
                              | CFLG_MBC
 			     | CFLG_FORCE_SIZE

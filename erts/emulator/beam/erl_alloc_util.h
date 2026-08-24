@@ -55,6 +55,7 @@ typedef struct {
     int tspec;
     int tpref;
     int ramv;
+    int low_mem;   /* HALFWORD only */
     int atags;
     int cp;
     int mmbc0;     /* create main mbc for instance 0 */
@@ -117,6 +118,7 @@ typedef struct {
     0,			/* (bool)   tspec:  thread specific              */\
     0,			/* (bool)   tpref:  thread preferred             */\
     0,			/* (bool)   ramv:   realloc always moves         */\
+    0,			/* (bool)   low_mem: HALFWORD only               */\
     0,			/* (bool)   atags:  tagged allocations           */\
     -1,		        /* (ix)     cp:     carrier pool                 */\
     1,                  /* (bool)   mmbc0:  main mbc in instance 0       */\
@@ -159,6 +161,7 @@ typedef struct {
     0,			/* (bool)   tspec:  thread specific              */\
     0,			/* (bool)   tpref:  thread preferred             */\
     0,			/* (bool)   ramv:   realloc always moves         */\
+    0,			/* (bool)   low_mem: HALFWORD only               */\
     0,			/* (bool)   atags:  tagged allocations           */\
     -1,		        /* (ix)     cp:     carrier pool                 */\
     1,                  /* (bool)   mmbc0:  main mbc in instance 0       */\
