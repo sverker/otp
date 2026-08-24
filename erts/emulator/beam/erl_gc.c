@@ -176,7 +176,7 @@ static void disallow_heap_frag_ref_in_heap(Process *p, Eterm *heap, Eterm *htop)
 static void disallow_heap_frag_ref_in_old_heap(Process* p);
 #endif
 
-#if defined(ARCH_64)
+#if defined(ARCH_64) && !HALFWORD_HEAP
 # define MAX_HEAP_SIZES 154
 #else
 # define MAX_HEAP_SIZES 59
@@ -229,10 +229,25 @@ gc_cost(Uint gc_moved_live_words, Uint resize_moved_words)
     return (int) reds;
 }
 
+#if !HALFWORD_HEAP
 ERTS_SCHED_PREF_QUICK_ALLOC_IMPL(gcireq,
                                  ErtsGCInfoReq,
                                  5,
                                  ERTS_ALC_T_GC_INFO_REQ)
+#else
+static ERTS_INLINE ErtsGCInfoReq *
+gcireq_alloc(void)
+{
+    return erts_alloc(ERTS_ALC_T_GC_INFO_REQ,
+                      sizeof(ErtsGCInfoReq));
+}
+
+static ERTS_INLINE void
+gcireq_free(ErtsGCInfoReq *ptr)
+{
+    erts_free(ERTS_ALC_T_GC_INFO_REQ, ptr);
+}
+#endif
 
 /*
  * Initialize GC global data.
@@ -299,7 +314,9 @@ erts_init_gc(void)
         ERTS_LOCK_FLAGS_PROPERTY_STATIC | ERTS_LOCK_FLAGS_CATEGORY_GENERIC);
     init_gc_info(&dirty_gc.info);
 
+#if !HALFWORD_HEAP
     init_gcireq_alloc();
+#endif
 }
 
 /*
