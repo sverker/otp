@@ -259,7 +259,7 @@ _ET_DECLARE_CHECKED(Eterm*,list_val,Eterm)
 
 
 /* fixnum ("small") access methods */
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 #define SMALL_BITS	(64-4)
 #define SMALL_DIGITS	(17)
 #else
