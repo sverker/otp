@@ -99,7 +99,9 @@ static char erts_system_version[] = ("Erlang/OTP " ERLANG_OTP_RELEASE
 				     " [source]"
 #endif
 #endif	
-#if defined(ARCH_64)
+#if HALFWORD_HEAP
+                                     " [64-bit halfword]"
+#elif defined(ARCH_64)
 				     " [64-bit]"
 #elif defined(ARCH_32)
                                      " [32-bit]"
