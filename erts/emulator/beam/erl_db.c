@@ -3074,9 +3074,15 @@ BIF_RETTYPE ets_delete_1(BIF_ALIST_1)
 	 * (it looks like an continuation pointer), but that is will crash the
 	 * emulator if this BIF is call traced.
 	 */
+#if HALFWORD_HEAP
+	Eterm *hp = HAlloc(BIF_P, 3);
+	hp[0] = make_pos_bignum_header(2);
+	*((UWord *) (UWord) (hp+1)) = (UWord) tb;
+#else
 	Eterm *hp = HAlloc(BIF_P, 2);
 	hp[0] = make_pos_bignum_header(1);
 	hp[1] = (Eterm) tb;
+#endif
         BUMP_ALL_REDS(BIF_P);
 	BIF_TRAP1(&ets_delete_continue_exp, BIF_P, make_big(hp));
     }
@@ -5388,7 +5394,11 @@ static BIF_RETTYPE ets_delete_trap(BIF_ALIST_1)
     Eterm* ptr = big_val(cont);
     DbTable *tb = *((DbTable **) (UWord) (ptr + 1));
 
+#if HALFWORD_HEAP
+    ASSERT(*ptr == make_pos_bignum_header(2));
+#else
     ASSERT(*ptr == make_pos_bignum_header(1));
+#endif
 
     reds = free_table_continue(BIF_P, tb, reds);
     if (reds < 0) {
