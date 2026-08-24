@@ -403,11 +403,9 @@ __decl_noreturn void __noreturn erl_assert_error(const char* expr, const char *f
 #if SIZEOF_VOID_P == 8
 #undef  ARCH_32
 #define ARCH_64
-#define ERTS_SIZEOF_TERM 8
 #elif SIZEOF_VOID_P == 4
 #define ARCH_32
 #undef  ARCH_64
-#define ERTS_SIZEOF_TERM 4
 #else
 #error Neither 32 nor 64 bit architecture
 #endif
@@ -416,8 +414,6 @@ __decl_noreturn void __noreturn erl_assert_error(const char* expr, const char *f
 #    define HALFWORD_HEAP 1
 #    define HALFWORD_ASSERT 0
 #    define ASSERT_HALFWORD(COND) ASSERT(COND)
-#    undef ERTS_SIZEOF_TERM
-#    define ERTS_SIZEOF_TERM 4
 #else
 #    define HALFWORD_HEAP 0
 #    define HALFWORD_ASSERT 0
@@ -606,12 +602,12 @@ typedef unsigned char byte;
 #  define ERTS_HUINT_HVAL_HIGH 1
 #  define ERTS_HUINT_HVAL_LOW 0
 #endif
-#if ERTS_SIZEOF_TERM == 8
+#if ERTS_SIZEOF_ETERM == 8
 typedef union {
     Uint val;
     Uint32 hval[2];
 } HUint;
-#elif ERTS_SIZEOF_TERM == 4
+#elif ERTS_SIZEOF_ETERM == 4
 typedef union {
     Uint val;
     Uint16 hval[2];
