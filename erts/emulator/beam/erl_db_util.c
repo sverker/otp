@@ -472,11 +472,7 @@ cleanup_match_pseudo_process(ErtsMatchPseudoProcess *mpsp, bool keep_heap)
 	else {
 	    int i;
 	    for (i = 0; i < ERTS_DEFAULT_MS_HEAP_SIZE; i++) {
-#if defined(ARCH_64)
 		mpsp->default_heap[i] = (Eterm) 0xdeadbeefdeadbeef;
-#else
-		mpsp->default_heap[i] = (Eterm) 0xdeadbeef;
-#endif
 	    }
 	}
 #endif
@@ -4147,10 +4143,26 @@ static DMCRet dmc_one_term(DMCContext *context,
 	{
 	    Eterm* ref_val = internal_ref_val(c);
 	    DMC_PUSH(*text, matchEqRef);
+#if HALFWORD_HEAP
+            {
+                union {
+                    UWord u;
+                    Uint t[2];
+                } fiddle;
+                ASSERT(thing_arityval(ref_val[0]) == 3);
+                fiddle.t[0] = ref_val[0];
+                fiddle.t[1] = ref_val[1];
+                DMC_PUSH(*text, fiddle.u);
+                fiddle.t[0] = ref_val[2];
+                fiddle.t[1] = ref_val[3];
+                DMC_PUSH(*text, fiddle.u);
+            }
+#else
 	    n = thing_arityval(ref_val[0]);
 	    for (i = 0; i <= n; ++i) {
 		DMC_PUSH(*text, ref_val[i]);
 	    }
+#endif
 	    break;
 	}
 	case (_TAG_HEADER_POS_BIG >> _TAG_PRIMARY_SIZE):
@@ -4159,15 +4171,50 @@ static DMCRet dmc_one_term(DMCContext *context,
 	    Eterm* bval = big_val(c);
 	    n = thing_arityval(bval[0]);
 	    DMC_PUSH(*text, matchEqBig);
+#if HALFWORD_HEAP
+            {
+                union {
+                    UWord u;
+                    Uint t[2];
+                } fiddle;
+                ASSERT(n >= 1);
+                fiddle.t[0] = bval[0];
+                fiddle.t[1] = bval[1];
+                DMC_PUSH(*text, fiddle.u);
+                for (i = 2; i <= n; ++i) {
+                    fiddle.t[0] = bval[i];
+                    if (++i <= n) {
+                        fiddle.t[1] = bval[i];
+                    } else {
+                        fiddle.t[1] = (Uint) 0;
+                    }
+                    DMC_PUSH(*text, fiddle.u);
+                }
+            }
+#else
 	    for (i = 0; i <= n; ++i) {
 		DMC_PUSH(*text, (Uint) bval[i]);
 	    }
+#endif
 	    break;
 	}
 	case (_TAG_HEADER_FLOAT >> _TAG_PRIMARY_SIZE):
-	    DMC_PUSH2(*text, matchEqFloat, (Uint) float_val(c)[1]);
-#ifdef ARCH_32
+            DMC_PUSH(*text, matchEqFloat);
+#if HALFWORD_HEAP
+            {
+                union {
+                    UWord u;
+                    Uint t[2];
+                } fiddle;
+                fiddle.t[0] = float_val(c)[1];
+                fiddle.t[1] = float_val(c)[2];
+                DMC_PUSH(*text, fiddle.u);
+            }
+#else
+            DMC_PUSH(*text, (Uint) float_val(c)[1]);
+# ifdef ARCH_32
 	    DMC_PUSH(*text, (Uint) float_val(c)[2]);
+# endif
 #endif
 	    break;
 	default: /* BINARY, FUN, VECTOR, or EXTERNAL */
@@ -6349,11 +6396,7 @@ void db_match_dis(Binary *bp)
 			first = false;
 		    else
 			erts_printf(", ");
-#if defined(ARCH_64)
-		    erts_printf("0x%016bex", num[ri]);
-#else
 		    erts_printf("0x%08bex", num[ri]);
-#endif
 		}
 	    }
 	    erts_printf("}\n");
@@ -6372,7 +6415,7 @@ void db_match_dis(Binary *bp)
 			first = false;
 		    else
 			erts_printf(", ");
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		    erts_printf("0x%016bex", *et);
 #else
 		    erts_printf("0x%08bex", *et);
