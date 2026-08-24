@@ -1194,15 +1194,45 @@ typedef struct {
 } ErtsSystemCheckReq;
 
 
+#if !HALFWORD_HEAP
 ERTS_SCHED_PREF_QUICK_ALLOC_IMPL(swtreq,
 				 ErtsSchedWallTimeReq,
 				 5,
 				 ERTS_ALC_T_SCHED_WTIME_REQ)
+#else
+static ERTS_INLINE ErtsSchedWallTimeReq *
+swtreq_alloc(void)
+{
+    return erts_alloc(ERTS_ALC_T_SCHED_WTIME_REQ,
+                      sizeof(ErtsSchedWallTimeReq));
+}
 
+static ERTS_INLINE void
+swtreq_free(ErtsSchedWallTimeReq *ptr)
+{
+    erts_free(ERTS_ALC_T_SCHED_WTIME_REQ, ptr);
+}
+#endif
+
+#if !HALFWORD_HEAP
 ERTS_SCHED_PREF_QUICK_ALLOC_IMPL(screq,
 				 ErtsSystemCheckReq,
 				 5,
 				 ERTS_ALC_T_SYS_CHECK_REQ)
+#else
+static ERTS_INLINE ErtsSystemCheckReq *
+screq_alloc(void)
+{
+    return erts_alloc(ERTS_ALC_T_SCHED_WTIME_REQ,
+                      sizeof(ErtsSystemCheckReq));
+}
+
+static ERTS_INLINE void
+screq_free(ErtsSystemCheckReq *ptr)
+{
+    erts_free(ERTS_ALC_T_SCHED_WTIME_REQ, ptr);
+}
+#endif
 
 
 static void
@@ -6316,8 +6346,10 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online, int no_poll_th
     }
 
     init_misc_aux_work();
+#if !HALFWORD_HEAP
     init_swtreq_alloc();
     init_screq_alloc();
+#endif
 
     erts_atomic32_init_nob(&debug_wait_completed_count, 0); /* debug only */
     debug_wait_completed_flags = 0;
