@@ -371,6 +371,9 @@ void process_main(ErtsSchedulerData *esdp)
 
     PROCESS_MAIN_CHK_LOCKS(c_p);
     ERTS_UNREQ_PROC_MAIN_LOCK(c_p);
+#if HALFWORD_HEAP
+    ASSERT(erts_get_scheduler_data()->num_tmp_heap_used == 0);
+#endif
     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
     c_p = erts_schedule(NULL, c_p, reds_used);
     ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);

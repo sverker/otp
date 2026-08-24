@@ -73,7 +73,7 @@ gen.get_integer2(Fail, Ms, Live, Size, Unit, Flags, Dst) {
             op->a[0] = Ms;
             op->a[1] = Fail;
             op->a[2] = Dst;
-#ifdef ARCH_64
+#if ERTS_SIZEOF_TERM == 8
         } else if (bits == 32 && (Flags.val & BSF_LITTLE) == 0) {
             $BeamOpNameArity(op, i_bs_get_integer_32, 3);
             op->a[0] = Ms;

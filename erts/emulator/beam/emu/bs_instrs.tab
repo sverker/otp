@@ -825,7 +825,7 @@ i_bs_get_integer_16.execute(Fail, Dst) {
     $Dst = _result;
 }
 
-%if ARCH_64
+%if ETERM_64
 i_bs_get_integer_32 := i_bs_get_integer_32.fetch.execute;
 
 i_bs_get_integer_32.head() {
@@ -1059,7 +1059,7 @@ bs_get_tail.execute(Dst, Live) {
 }
 
 
-%if ARCH_64
+%if ETERM_64
 
 i_bs_start_match3_gp := i_bs_start_match3_gp.fetch.execute;
 
