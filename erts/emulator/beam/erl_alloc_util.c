@@ -883,7 +883,7 @@ internal_free(void *ptr)
 
 #endif
 
-#ifdef ARCH_32
+#if defined(ARCH_32) || HALFWORD_HEAP
 
 /*
  * Bit vector for the entire 32-bit virtual address space
@@ -922,10 +922,15 @@ UWord erts_literal_vspace_map[VSPACE_MAP_SZ];
 
 static void set_literal_range(void* start, Uint size)
 {
-    Uint ix = (UWord)start >> ERTS_MMAP_SUPERALIGNED_BITS;
+#if HALFWORD_HEAP
+    const UWord offset = (UWord)start - erts_halfword_start_addr;
+#else
+    const UWord offset = (UWord)start;
+#endif
+    Uint ix = offset >> ERTS_MMAP_SUPERALIGNED_BITS;
     Uint n = size >> ERTS_MMAP_SUPERALIGNED_BITS;
 
-    ASSERT(!((UWord)start & ERTS_INV_SUPERALIGNED_MASK));
+    ASSERT(!(offset & ERTS_INV_SUPERALIGNED_MASK));
     ASSERT(!((UWord)size & ERTS_INV_SUPERALIGNED_MASK));
     ASSERT(n);
     while (n--) {
@@ -937,10 +942,15 @@ static void set_literal_range(void* start, Uint size)
 
 static void clear_literal_range(void* start, Uint size)
 {
-    Uint ix = (UWord)start >> ERTS_MMAP_SUPERALIGNED_BITS;
+#if HALFWORD_HEAP
+    const UWord offset = (UWord)start - erts_halfword_start_addr;
+#else
+    const UWord offset = (UWord)start;
+#endif
+    Uint ix = offset >> ERTS_MMAP_SUPERALIGNED_BITS;
     Uint n = size >> ERTS_MMAP_SUPERALIGNED_BITS;
 
-    ASSERT(!((UWord)start & ERTS_INV_SUPERALIGNED_MASK));
+    ASSERT(!(offset & ERTS_INV_SUPERALIGNED_MASK));
     ASSERT(!((UWord)size & ERTS_INV_SUPERALIGNED_MASK));
     ASSERT(n);
     while (n--) {
@@ -950,7 +960,7 @@ static void clear_literal_range(void* start, Uint size)
     }
 }
 
-#endif /* ARCH_32 */
+#endif /* ARCH_32 || HALFWORD_HEAP */
 
 /* mseg ... */
 
@@ -988,7 +998,7 @@ erts_alcu_mseg_dealloc(Allctr_t *allctr, void *seg, Uint size, Uint flags)
 }
 
 
-#if defined(ARCH_32)
+#if defined(ARCH_32) || HALFWORD_HEAP
 
 void*
 erts_alcu_literal_32_mseg_alloc(Allctr_t *allctr, Uint *size_p, Uint flags)

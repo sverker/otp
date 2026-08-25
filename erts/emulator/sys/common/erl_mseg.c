@@ -1475,20 +1475,15 @@ erts_mseg_init(ErtsMsegInit_t *init)
     erts_mtx_init(&init_atoms_mutex, "mseg_init_atoms", NIL,
         ERTS_LOCK_FLAGS_PROPERTY_STATIC | ERTS_LOCK_FLAGS_CATEGORY_GENERIC);
 
+#if HALFWORD_HEAP
+    // Hijack THE supercarrier for halfword
+    init->dflt_mmap.scs = 1UL << 32;
+    init->dflt_mmap.sco = 0;
+#endif
     erts_mmap_init(&erts_dflt_mmapper, &init->dflt_mmap);
-#if defined(ARCH_64)
-# if HALFWORD_HEAP
-    if (sizeof(void *) != 8)
-        erl_exit(-1,"Halfword emulator cannot be run in 32bit mode");
 
-    init->halfword_mmap.scs = 1UL << 32;
-    init->halfword_mmap.sco = 0;  // ???
-    erts_mmap_init(&erts_halfword_mmapper, &init->halfword_mmap);
-    // and use 4G bit array for literals
-
-# elif defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
+#if defined(ARCH_64) && !HALFWORD_HEAP && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
     erts_mmap_init(&erts_literal_mmapper, &init->literal_mmap);
-# endif
 #endif
 
     if (!IS_2POW(sys_page_size))

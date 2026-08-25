@@ -216,13 +216,13 @@ void    erts_alcu_foreign_size(Allctr_t *, ErtsAlcType_t, AllctrSize_t *);
 void    erts_alcu_check_delayed_dealloc(Allctr_t *, int, int *, ErtsThrPrgrVal *, int *);
 erts_aint32_t erts_alcu_fix_alloc_shrink(Allctr_t *, erts_aint32_t);
 
-#ifdef ARCH_32
+#if defined(ARCH_32) || HALFWORD_HEAP
 extern UWord erts_literal_vspace_map[];
 # define ERTS_VSPACE_WORD_BITS (sizeof(UWord)*8)
 #endif
 
 #if HAVE_ERTS_MSEG
-# if defined(ARCH_32)
+# if defined(ARCH_32) || HALFWORD_HEAP
 void* erts_alcu_literal_32_mseg_alloc(Allctr_t*, Uint *size_p, Uint flags);
 void* erts_alcu_literal_32_mseg_realloc(Allctr_t*, void *seg, Uint old_size, Uint *new_size_p);
 void  erts_alcu_literal_32_mseg_dealloc(Allctr_t*, void *seg, Uint size, Uint flags);

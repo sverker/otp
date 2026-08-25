@@ -342,7 +342,13 @@ set_default_literal_alloc_opts(struct au_init *ip)
     ip->init.util.acul		= 0;
     ip->init.util.acful		= 0;
 
-#if defined(ARCH_32)
+#if HALFWORD_HEAP
+    ERTS_CT_ASSERT(HAVE_ERTS_MSEG);
+    ip->init.util.mseg_alloc   = &erts_alcu_literal_32_mseg_alloc;
+    ip->init.util.mseg_realloc = &erts_alcu_literal_32_mseg_realloc;
+    ip->init.util.mseg_dealloc = &erts_alcu_literal_32_mseg_dealloc;
+
+#elif defined(ARCH_32)
 # if HAVE_ERTS_MSEG
     ip->init.util.mseg_alloc   = &erts_alcu_literal_32_mseg_alloc;
     ip->init.util.mseg_realloc = &erts_alcu_literal_32_mseg_realloc;
@@ -351,6 +357,7 @@ set_default_literal_alloc_opts(struct au_init *ip)
     ip->init.util.sys_alloc    = &erts_alcu_literal_32_sys_alloc;
     ip->init.util.sys_realloc  = &erts_alcu_literal_32_sys_realloc;
     ip->init.util.sys_dealloc  = &erts_alcu_literal_32_sys_dealloc;
+
 #elif defined(ARCH_64)
 # ifdef ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION
     ip->init.util.mseg_alloc    = &erts_alcu_mmapper_mseg_alloc;
@@ -3017,7 +3024,7 @@ erts_allocator_info(fmtfn_t to, void *arg)
 	}
 	erts_print(to, arg, "=allocator:erts_mmap.default_mmap\n");
 	erts_mmap_info(&erts_dflt_mmapper, &to, arg, NULL, NULL, &emis);
-#if defined(ARCH_64) && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
+#if defined(ARCH_64) && !HALFWORD_HEAP && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
         erts_print(to, arg, "=allocator:erts_mmap.literal_mmap\n");
         erts_mmap_info(&erts_literal_mmapper, &to, arg, NULL, NULL, &emis);
 #endif
@@ -3153,7 +3160,7 @@ erts_allocator_options(void *proc)
 #if ERTS_HAVE_ERTS_SYS_ALIGNED_ALLOC
     terms[length++] = ERTS_MAKE_AM("sys_aligned_alloc");
 #endif
-#if defined(ARCH_64) && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
+#if defined(ARCH_64) && !HALFWORD_HEAP && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
     terms[length++] = ERTS_MAKE_AM("literal_mmap");
 #endif
     features = length ? erts_bld_list(hpp, szp, length, terms) : NIL;
@@ -3246,7 +3253,7 @@ reply_alloc_info(void *vair)
     ErtsMessage *mp = NULL;
 #if HAVE_ERTS_MMAP
     struct erts_mmap_info_struct mmap_info_dflt;
-# if defined(ARCH_64) && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
+# if defined(ARCH_64) && !HALFWORD_HEAP && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
     struct erts_mmap_info_struct mmap_info_literal;
 # endif
 #endif
@@ -3366,7 +3373,7 @@ reply_alloc_info(void *vair)
                                             alloc_atom,
                                             erts_bld_atom(hpp,szp,"default_mmap"),
                                             ainfo);
-#  if defined(ARCH_64) && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
+#if defined(ARCH_64) && !HALFWORD_HEAP && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
                     ai_list = erts_bld_cons(hpp, szp,
                                             ainfo, ai_list);
                     ainfo = (air->only_sz ? NIL :

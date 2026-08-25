@@ -403,7 +403,7 @@ struct ErtsMemMapper_ {
 
 ErtsMemMapper erts_dflt_mmapper;
 
-#if defined(ARCH_64) && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
+#if defined(ARCH_64) && !HALFWORD_HEAP && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
 ErtsMemMapper erts_literal_mmapper;
 char* erts_literals_start;
 UWord erts_literals_size;
@@ -2232,6 +2232,10 @@ static void init_atoms(void)
 static void hard_dbg_mseg_init(void);
 #endif
 
+#if HALFWORD_HEAP
+UWord erts_halfword_start_addr;
+#endif
+
 void
 erts_mmap_init(ErtsMemMapper* mm, ErtsMMapInit *init)
 {
@@ -2383,6 +2387,14 @@ erts_mmap_init(ErtsMemMapper* mm, ErtsMMapInit *init)
 	     + ERTS_PAGEALIGNED_SIZE) > end - start)
 	    erts_exit(1, "erts_mmap: No space for segments in super carrier\n");
 
+#if HALFWORD_HEAP
+        if (mm == &erts_dflt_mmapper) {
+            // Set halfword start address to the very bottom that is reserved
+            // for free descriptors. This will ensure no Eterm is placed
+            // at offset 0 which is sometimes used as a NULL value.
+            erts_halfword_start_addr = (UWord) start;
+        }
+#endif
 	mm->sa.bot = start;
 	mm->sa.bot += desc_size;
 	mm->sa.bot = (char *) ERTS_SUPERALIGNED_CEILING(mm->sa.bot);
@@ -2443,7 +2455,7 @@ erts_mmap_init(ErtsMemMapper* mm, ErtsMMapInit *init)
     hard_dbg_mseg_init();
 #endif
 
-#if defined(ARCH_64) && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
+#if defined(ARCH_64) && !HALFWORD_HEAP && defined(ERTS_HAVE_OS_PHYSICAL_MEMORY_RESERVATION)
    if (mm == &erts_literal_mmapper) {
        erts_literals_start = erts_literal_mmapper.sa.bot;
        erts_literals_size  = erts_literal_mmapper.sua.top - erts_literals_start;

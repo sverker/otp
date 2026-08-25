@@ -336,8 +336,13 @@ int erts_get_thr_alloc_ix(void)
 ERTS_ALC_FORCE_INLINE
 int erts_is_in_literal_range(void* ptr)
 {
-#if defined(ARCH_32)
-    Uint ix = (UWord)ptr >> ERTS_MMAP_SUPERALIGNED_BITS;
+#if defined(ARCH_32) || HALFWORD_HEAP
+# if HALFWORD_HEAP
+    const UWord offset = (UWord)ptr - erts_halfword_start_addr;
+# else
+    const UWord offset = (UWord)ptr;
+# endif
+    Uint ix = offset >> ERTS_MMAP_SUPERALIGNED_BITS;
 
     return erts_literal_vspace_map[ix / ERTS_VSPACE_WORD_BITS]
                   & ((UWord)1 << (ix % ERTS_VSPACE_WORD_BITS));

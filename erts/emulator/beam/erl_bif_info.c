@@ -3535,7 +3535,7 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
     }
     else if (ERTS_IS_ATOM_STR("literal_test",BIF_ARG_1)) {
 #ifdef ERTS_HAVE_IS_IN_LITERAL_RANGE
-#ifdef ARCH_64
+#if defined(ARCH_64) && !HALFWORD_HEAP
 	DECL_AM(range);
 	BIF_RET(AM_range);
 #else /* ARCH_32 */
