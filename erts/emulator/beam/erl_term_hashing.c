@@ -223,7 +223,7 @@ tail_recur:
             Uint y2 = y1 < 0 ? -(Uint)y1 : y1;
 
             UINT32_HASH_STEP(y2, FUNNY_NUMBER2);
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
             if (y2 >> 32)
                 UINT32_HASH_STEP(y2 >> 32, FUNNY_NUMBER2);
 #endif
@@ -352,7 +352,7 @@ tail_recur:
             }
             d = BIG_DIGIT(ptr, k);
             k = sizeof(ErtsDigit);
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
             if (!(d >> 32))
                 k /= 2;
 #endif
@@ -930,12 +930,6 @@ make_hash2_helper(Eterm term_param, const int can_trap, Eterm* state_mref_write_
         UINT32_HASH_2(x, y, con);                                             \
     } while(0)
     
-#ifdef ARCH_64
-#  define POINTER_HASH(Ptr, AConst) UINT32_HASH_2((Uint32)(UWord)(Ptr), (((UWord)(Ptr)) >> 32), AConst)
-#else
-#  define POINTER_HASH(Ptr, AConst) UINT32_HASH(Ptr, AConst)
-#endif
-
 #define TRAP_LOCATION_NO_RED(location_name)                                   \
     do {                                                                      \
         if(can_trap && iterations_until_trap <= 0) {                          \
