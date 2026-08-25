@@ -180,11 +180,11 @@ Eterm* erts_set_hole_marker(Eterm* ptr, Uint sz);
  * ERTS_HOLE_MARKER must *not* be mistaken for a valid term
  * on the heap...
  */
-#  ifdef ARCH_64
+#  if ERTS_SIZEOF_ETERM == 8
 #    define ERTS_HOLE_MARKER \
     make_catch(UWORD_CONSTANT(0xdeadbeaf00000000) >> _TAG_IMMED2_SIZE)
 /* Will (at the time of writing) appear as 0xdeadbeaf0000001b */
-#  else
+#  elif ERTS_SIZEOF_ETERM == 4
 #    define ERTS_HOLE_MARKER \
     make_catch(UWORD_CONSTANT(0xdead0000) >> _TAG_IMMED2_SIZE)
 /* Will (at the time of writing) appear as 0xdead001b */

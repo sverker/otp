@@ -3264,11 +3264,13 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
     register Sint r = 0;
     int use_iov = 0;
     byte *lext_hash = NULL; /* initialize to avoid faulty warning... */
-
     /* The following variables are only used during encoding of
      * a map when the `deterministic` option is active. */
     Eterm* map_array = NULL;
     Eterm* next_map_element = NULL;
+#if HALFWORD_HEAP
+    UWord wobj;
+#endif
 
     if (ctx) {
 	WSTACK_CHANGE_ALLOCATOR(s, ERTS_ALC_T_SAVED_ESTACK);
@@ -3320,7 +3322,11 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 
  outer_loop:
     while (!WSTACK_ISEMPTY(s)) {
+#if HALFWORD_HEAP
+        obj = (Eterm) (wobj = WSTACK_POP(s));
+#else
 	obj = WSTACK_POP(s);
+#endif
 
 	switch (val = WSTACK_POP(s)) {
 	case ENC_TERM:
@@ -3349,7 +3355,11 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 	    break;
 	case ENC_PATCH_FUN_SIZE:
 	    {
+#if HALFWORD_HEAP
+                byte* size_p = (byte *) wobj;
+#else
                 byte* size_p = (byte *) obj;
+#endif
                 Sint32 fun_sz;
 
                 if (use_iov && !ErtsInArea(size_p, ctx->cptr, ep - ctx->cptr)) {
@@ -3506,13 +3516,21 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 	case ENC_LAST_ARRAY_ELEMENT:
 	    /* obj is the tuple */
 	    {
+#if HALFWORD_HEAP
+                Eterm* ptr = (Eterm *) wobj;
+#else
 		Eterm* ptr = (Eterm *) obj;
+#endif
 		obj = *ptr;
 	    }
 	    break;
 	default:		/* ENC_LAST_ARRAY_ELEMENT+1 and upwards */
 	    {
+#if HALFWORD_HEAP
+                Eterm* ptr = (Eterm *) wobj;
+#else
 		Eterm* ptr = (Eterm *) obj;
+#endif
 		obj = *ptr++;
 		WSTACK_PUSH2(s, val-1, (UWord)ptr);
 	    }
@@ -4437,7 +4455,7 @@ dec_term(ErtsDistExternal *edep,
 		Sint sn = get_int32(ep);
 
 		ep += 4;
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		*objp = make_small(sn);
 #else
 		if (IS_SSMALL(sn)) {
@@ -4727,7 +4745,7 @@ dec_term_atom_common:
 		    etp->header = make_external_port_header();
 		    etp->next = factory->off_heap->first;
 		    etp->node = node;
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
 		    etp->data.port.id = num;
 #else
 		    etp->data.port.low = (Uint32) (num & 0xffffffff);
@@ -4858,13 +4876,13 @@ dec_term_atom_common:
 		}
 		else {
 		    ExternalThing *etp = (ExternalThing *) hp;
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		    hp += EXTERNAL_THING_HEAD_SIZE + ref_words/2 + 1;
 #else
 		    hp += EXTERNAL_THING_HEAD_SIZE + ref_words;
 #endif
 
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		    etp->header = make_external_ref_header(ref_words/2 + 1);
 #else
 		    etp->header = make_external_ref_header(ref_words);
@@ -4875,7 +4893,7 @@ dec_term_atom_common:
 		    factory->off_heap->first = (struct erl_off_heap_header*)etp;
 		    *objp = make_external_ref(etp);
 		    ref_num = &(etp->data.ui32[0]);
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		    *(ref_num++) = ref_words /* 32-bit arity */;
 #endif
 
@@ -4885,7 +4903,7 @@ dec_term_atom_common:
                         ref_num[i] = get_int32(ep);
                         ep += 4;
                     }
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
                     if ((1 + ref_words) % 2)
                         ref_num[ref_words] = 0;
 #endif
@@ -5266,7 +5284,7 @@ dec_term_atom_common:
                 Uint32 hash;
                 Uint hash_tuple_size;
                 Eterm tagged_hash;
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
                 Eterm *big_buf = hp;
                 *hp++ = NIL;
                 *hp++ = NIL;
@@ -5324,7 +5342,7 @@ dec_term_atom_common:
                 hash_tuple_size = defp->keys - &defp->hash - 1 + num_fields;
                 defp->hash = make_arityval(hash_tuple_size);
                 hash = make_hash2(make_tuple((Eterm *)&defp->hash));
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
                 tagged_hash = make_small(hash);
 #else
                 if (IS_USMALL(0, hash)) {
@@ -6127,7 +6145,7 @@ init_done:
 	switch (tag) {
 	case INTEGER_EXT:
 	    SKIP(4);
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
 	    heap_size += BIG_UINT_HEAP_SIZE;
 #endif
 	    break;
@@ -6232,7 +6250,7 @@ init_done:
 		ep += 2;
 		atom_extra_skip += 4*id_words;
 		/* In case it is an external ref */
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		heap_size += EXTERNAL_THING_HEAD_SIZE + id_words/2 + 1;
 #else
 		heap_size += EXTERNAL_THING_HEAD_SIZE + id_words;
@@ -6308,7 +6326,7 @@ init_done:
                 if (n > 0) {
                     heap_size += 1 + n;
                 }
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
             } else if ((n >> 31) != 0) {
                 /* Avoid overflow by limiting the number of elements in
                  * a map to 2^31-1 (about 2 billions). */
@@ -6449,7 +6467,7 @@ init_done:
                 CHKSIZE(4);
                 n = get_uint32(ep); ep += 4;
                 heap_size += RECORD_INST_SIZE(n) + RECORD_DEF_SIZE(n);
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
                 heap_size += BIG_UINT_HEAP_SIZE;
 #endif
                 if (n > 0) {
