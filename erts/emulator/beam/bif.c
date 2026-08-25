@@ -4684,7 +4684,7 @@ BIF_RETTYPE list_to_port_1(BIF_ALIST_1)
       etp->header = make_external_port_header();
       etp->next = MSO(BIF_P).first;
       etp->node = enp;
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
       etp->data.port.id = num;
 #else
       etp->data.port.low = (Uint32) (num & 0xffffffff);
@@ -4806,7 +4806,7 @@ BIF_RETTYPE list_to_ref_1(BIF_ALIST_1)
 	  goto bad;
       
       hsz = EXTERNAL_THING_HEAD_SIZE;
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
       hsz += n/2 + 1;
 #else
       hsz += n;
@@ -4818,7 +4818,7 @@ BIF_RETTYPE list_to_ref_1(BIF_ALIST_1)
                                      make_boxed(&etp->header));
       ASSERT(enp != erts_this_node);
 
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
       etp->header = make_external_ref_header(n/2 + 1);
 #else
       etp->header = make_external_ref_header(n);
@@ -4826,7 +4826,7 @@ BIF_RETTYPE list_to_ref_1(BIF_ALIST_1)
       etp->next = BIF_P->off_heap.first;
       etp->node = enp;
       i = 0;
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
       etp->data.ui32[i++] = n;
 #endif
       for (j = 0; j < n; j++) {
@@ -5386,7 +5386,7 @@ BIF_RETTYPE phash2_2(BIF_ALIST_2)
     /*
      * Return either a small or a big. Use the heap for bigs if there is room.
      */
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
     BIF_RET(make_small(final_hash));
 #else
     if (IS_USMALL(0, final_hash)) {

@@ -1691,13 +1691,13 @@ static const Uint64 IHASH_C2 = 0x4CF5AD432745937Full;
 #define IHASH_MIX_BETA_2F32(Expr1, Expr2)                                     \
     IHASH_MIX_BETA((Uint64)(Expr1) | ((Uint64)(Expr2) << 32))
 
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
 #   define IHASH_MIX_IMMEDIATE(term)                                          \
         do {                                                                  \
             IHASH_MIX_ALPHA(IHASH_TYPE_IMMEDIATE);                            \
             IHASH_MIX_BETA(term);                                             \
         } while(0)
-#else
+#elif ERTS_SIZEOF_ETERM == 4
 #   define IHASH_MIX_IMMEDIATE(term)                                          \
     IHASH_MIX_ALPHA_2F32(IHASH_TYPE_IMMEDIATE, term);
 #endif
@@ -2128,7 +2128,7 @@ make_internal_hash(Eterm term, erts_ihash_t salt)
                 IHASH_MIX_BETA_2F32(numbers[1], numbers[2]);
 
                 if (is_internal_pid_ref(term)) {
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
                     ASSERT(internal_ref_no_numbers(term) == 5);
                     IHASH_MIX_ALPHA_2F32(numbers[3], numbers[4]);
 #else
@@ -2176,7 +2176,7 @@ make_internal_hash(Eterm term, erts_ihash_t salt)
                 /* See limitation #2 */
                 IHASH_MIX_ALPHA(IHASH_TYPE_EXTERNAL_PORT);
                 IHASH_MIX_BETA((UWord)thing->node);
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
                 IHASH_MIX_ALPHA(thing->data.port.id);
 #else
                 IHASH_MIX_ALPHA_2F32(thing->data.port.low,

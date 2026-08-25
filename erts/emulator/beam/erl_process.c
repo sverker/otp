@@ -11717,13 +11717,7 @@ static void
 flush_dirty_trace_messages(void *vpid)
 {
     Process *proc;
-    Eterm pid;
-#ifdef ARCH_64
-    pid = (Eterm) vpid;
-#else
-    pid = *((Eterm *) vpid);
-    erts_free(ERTS_ALC_T_DIRTY_SL, vpid);
-#endif
+    Eterm pid = (Eterm)(UWord) vpid;
 
     proc = erts_pid2proc_opt(NULL, 0, pid, ERTS_PROC_LOCK_MAIN, 0);
     if (proc) {
@@ -11759,7 +11753,6 @@ erts_schedule_flush_trace_messages(Process *proc, int force_on_proc)
 	state = erts_atomic32_read_mb(&proc->state);
 	if (state & (ERTS_PSFLG_DIRTY_RUNNING
 		     | ERTS_PSFLG_DIRTY_RUNNING_SYS)) {
-	    void *vargp;
 
 	sched_flush_dirty:
 	    /*
@@ -11772,16 +11765,8 @@ erts_schedule_flush_trace_messages(Process *proc, int force_on_proc)
 	     * the flush on the first ordinary scheduler.
 	     */
 
-#ifdef ARCH_64
-	    vargp = (void *) pid;
-#else
-	    {
-		Eterm *argp = erts_alloc(ERTS_ALC_T_DIRTY_SL, sizeof(Eterm));
-		*argp = pid;
-		vargp = (void *) argp;
-	    }
-#endif
-	    erts_schedule_misc_aux_work(1, flush_dirty_trace_messages, vargp);
+            erts_schedule_misc_aux_work(1, flush_dirty_trace_messages,
+                                        (void*)(UWord) pid);
 	}
     }
 }

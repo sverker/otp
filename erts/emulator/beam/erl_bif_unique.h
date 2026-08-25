@@ -265,7 +265,7 @@ erts_pid_ref_lookup(Uint32 *refn, int len)
 	return am_undefined;
 
     pid = (((Eterm) refn[3])
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
            | (((Eterm) refn[4]) << 32)
 #endif
         );
@@ -423,7 +423,7 @@ erts_iref_storage_make_ref(ErtsIRefStorage *iref,
     }
     else if (iref->is_pid_ref) {
         Eterm pid = (Eterm) iref->u.num[3];
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
         pid |= ((Eterm) iref->u.num[4]) << 32;
 #endif
 	write_pid_ref_thing(hp, iref->u.num[0], iref->u.num[1],

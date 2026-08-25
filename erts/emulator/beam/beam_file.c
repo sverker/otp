@@ -1122,7 +1122,7 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
         Uint32 hash;
         Uint hash_tuple_size;
         Eterm tagged_hash;
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
         Eterm tmp_big[BIG_UINT_HEAP_SIZE];
 #endif
 
@@ -1244,7 +1244,7 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
         tmp_def->hash = make_arityval(hash_tuple_size);
         hash = make_hash2(make_tuple((Eterm *)&tmp_def->hash));
 
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
         tagged_hash = make_small(hash);
 #else
         if (IS_USMALL(0, hash)) {

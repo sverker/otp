@@ -607,7 +607,7 @@ BIF_RETTYPE records_create_4(BIF_ALIST_4) {
     Eterm tagged_hash;
     Eterm is_exported;
     struct erl_record_field *fields;
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
     Eterm *big_buf;
 #endif
 
@@ -644,7 +644,7 @@ BIF_RETTYPE records_create_4(BIF_ALIST_4) {
 
     num_words_needed = RECORD_INST_SIZE(field_count) +
         RECORD_DEF_SIZE(field_count);
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
     num_words_needed += BIG_UINT_HEAP_SIZE;
 #endif
 
@@ -656,7 +656,7 @@ BIF_RETTYPE records_create_4(BIF_ALIST_4) {
     hp = HAlloc(BIF_P, num_words_needed);
     hp_end = hp + num_words_needed;
 
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
     big_buf = hp;
     ASSERT(BIG_UINT_HEAP_SIZE == 2);
     *hp++ = NIL;
@@ -730,7 +730,7 @@ BIF_RETTYPE records_create_4(BIF_ALIST_4) {
     defp->hash = make_arityval(hash_tuple_size);
 
     hash = make_hash2(make_tuple((Eterm *)&defp->hash));
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
     tagged_hash = make_small(hash);
 #else
     if (IS_USMALL(0, hash)) {

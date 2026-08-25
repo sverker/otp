@@ -1930,14 +1930,14 @@ get_altact_msg_data(ErtsMessage *sig, void **attachedp,
             Uint low, high;
             low = unsigned_val(tp[++ix]);
             high = unsigned_val(tp[++ix]);
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
             ASSERT((((Uint) 1) << 32) > low);
             ASSERT((((Uint) 1) << 32) > high);
             attached = (void *) ((((Uint) high) << 32) | ((Uint) low));
-#else /* ARCH_32 */
+#else
             ASSERT((((Uint) 1) << 16) > low);
             ASSERT((((Uint) 1) << 16) > high);
-            attached = (void *) ((((Uint) high) << 16) | ((Uint) low));
+            attached = (void *) EXPAND_POINTER((((Uint) high) << 16) | ((Uint) low));
 #endif
             ASSERT(attached != NULL);
             break;
@@ -2255,12 +2255,13 @@ erts_proc_sig_send_altact_msg(Process *c_p, Eterm from, Eterm to, Eterm msg, Ete
         itpl[++ix] = token_copy;
     if (type == ERTS_SIG_Q_TYPE_HEAP_FRAG) {
         Uint low, high;
-#ifdef ARCH_64
-        low = ((UWord) hfrag) & ((UWord) 0xffffffff);
-        high = (((UWord) hfrag) >> 32) & ((UWord) 0xffffffff);
-#else /* ARCH_32 */
-        low = ((UWord) hfrag) & ((UWord) 0xffff);
-        high = (((UWord) hfrag) >> 16) & ((UWord) 0xffff);
+        Uint hfrag_uint = COMPRESS_POINTER(hfrag);
+#if ERTS_SIZEOF_ETERM == 8
+        low = hfrag_uint & ((Uint) 0xffffffff);
+        high = (hfrag_uint >> 32) & ((Uint) 0xffffffff);
+#else
+        low = hfrag_uint & ((Uint) 0xffff);
+        high = (hfrag_uint >> 16) & ((Uint) 0xffff);
 #endif
         itpl[++ix] = make_small(low);
         itpl[++ix] = make_small(high);
