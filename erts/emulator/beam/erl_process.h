@@ -1116,6 +1116,7 @@ struct process {
     union {
         struct process *real_proc;
         void *terminate;
+        Uint32 block_rla_ref;
         ErtsCodeMFA initial;	/* Initial module(0), function(1), arity(2),
                                    often used instead of pointer to funcinfo
                                    instruction. */

@@ -1550,7 +1550,7 @@ insert_offheap(ErlOffHeap *oh, int type, Eterm id)
 		    }
 		if (insert_bin) {
 #if HALFWORD_HEAP
-                    UWord val = (UWord) u.mref.mb;
+                    UWord val = (UWord) u.mref->mb;
                     DeclareTmpHeapNoproc(id_heap,BIG_UINT_HEAP_SIZE*2); /* extra place allocated */
 #else
 		    DeclareTmpHeapNoproc(id_heap,BIG_UINT_HEAP_SIZE);

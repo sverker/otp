@@ -899,7 +899,7 @@ kill_dist_ctrl_proc(void *vpid)
     /* Send a 'kill' exit signal from init process */
     Process *init_proc = erts_proc_lookup_raw(erts_init_process_id);
     erts_proc_sig_send_exit(&init_proc->common, erts_init_process_id,
-                            (Eterm)vpid, am_kill, NIL, 0, 0);
+                            (Eterm)(UWord)vpid, am_kill, NIL, 0, 0);
 }
 
 static void
@@ -1432,7 +1432,7 @@ Eterm erts_dsend_export_trap_context(Process* p, ErtsDSigSendContext* ctx)
 #else
     /* Must put control tuple in low mem */
     sys_memcpy(hp, ctx->ctl_heap,  ctl_size*sizeof(Eterm));
-    dst->ctx.dss.ctl = make_tuple(hp);
+    dst->ctx.ctl = make_tuple(hp);
     hp += ctl_size;
 #endif
     if (ctx->acmp) {

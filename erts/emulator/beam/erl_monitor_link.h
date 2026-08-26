@@ -760,7 +760,7 @@ struct ErtsMonitorSuspend__ {
     ErtsMonitorSuspend *next;
     erts_atomic_t state;
 };
-#define ERTS_MSUSPEND_STATE_FLG_ACTIVE ((erts_aint_t) (((Uint) 1) << (sizeof(Uint)*8 - 1)))
+#define ERTS_MSUSPEND_STATE_FLG_ACTIVE ((erts_aint_t) (((UWord) 1) << (sizeof(UWord)*8 - 1)))
 #define ERTS_MSUSPEND_STATE_COUNTER_MASK (~ERTS_MSUSPEND_STATE_FLG_ACTIVE)
 
 /* 

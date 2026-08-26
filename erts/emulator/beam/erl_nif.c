@@ -4888,7 +4888,7 @@ Eterm erts_load_nif(Process *c_p, ErtsCodePtr I, Eterm filename, Eterm args)
 #endif
 
             ERTS_CT_ASSERT(sizeof(stub->code) <=
-                    BEAM_NATIVE_MIN_FUNC_SZ * sizeof(Eterm));
+                    BEAM_NATIVE_MIN_FUNC_SZ * sizeof(UWord));
 
             stub->code_info_ptr = ci;
             stub->info = *ci;

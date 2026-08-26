@@ -844,7 +844,7 @@ void erl_grow_equeue(ErtsEQueue*, Eterm* def_queue);
 #define EQUE_DEF_QUEUE(q) EQUE_CONCAT(q,_default_equeue)
 
 #define DECLARE_EQUEUE(q)				\
-    UWord EQUE_DEF_QUEUE(q)[DEF_EQUEUE_SIZE];     	\
+    Eterm EQUE_DEF_QUEUE(q)[DEF_EQUEUE_SIZE];     	\
     ErtsEQueue q = {					\
         EQUE_DEF_QUEUE(q), /* start */			\
         EQUE_DEF_QUEUE(q), /* front */			\
