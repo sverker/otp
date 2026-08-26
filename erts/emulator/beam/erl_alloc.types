@@ -82,6 +82,11 @@ allocator	LITERAL 	true		literal_alloc
 allocator	BINARY		true		binary_alloc
 allocator	DRIVER		true		driver_alloc
 
++if halfword
+allocator	LONG_LIVED_LOW	true		ll_low_alloc
+allocator	STANDARD_LOW	true		std_low_alloc
++endif
+
 allocator	TEST            true            test_alloc
 
 # --- Class declarations -----------------------------------------------------
@@ -327,12 +332,8 @@ type    ENO_TAB_BKTS    LONG_LIVED      SYSTEM          errno_table_buckets
 #
 
 type	EXPORT_TABLE	LONG_LIVED	CODE		export_tab
-type	EXPORT		LONG_LIVED	CODE		export_entry
 type	CATCHES		LONG_LIVED	CODE		catches
 
-+ifnot beamasm
-type	CODE		LONG_LIVED	CODE		code
-+endif
 
 +if lcnt
 
@@ -343,15 +344,45 @@ type    LCNT_VECTOR SHORT_LIVED SYSTEM lcnt_sample_vector
 
 type	DEBUG	        SHORT_LIVED	SYSTEM          debugging
 
++if halfword
+
+type	DDLL_PROCESS	STANDARD_LOW	SYSTEM		ddll_processes
+type	MONITOR_EXT	STANDARD_LOW	PROCESSES	monitor_extended
+type	LINK_EXT	STANDARD_LOW	PROCESSES	link_extended
++ifnot beamasm
+type	CODE		LONG_LIVED_LOW	CODE		code
++endif
+type	DB_HEIR_DATA	STANDARD_LOW	ETS		db_heir_data
+type	DB_MS_PSDO_PROC	LONG_LIVED_LOW	ETS		db_match_pseudo_proc
+type	SCHDLR_DATA	LONG_LIVED_LOW	SYSTEM		scheduler_data
+type	EXPORT		LONG_LIVED_LOW	CODE		export_entry
+type	AINFO_REQ	STANDARD_LOW	SYSTEM		alloc_info_request
+type	SCHED_WTIME_REQ	STANDARD_LOW	SYSTEM		sched_wall_time_request
+type	GC_INFO_REQ	STANDARD_LOW	SYSTEM		gc_info_request
+type	PORT_DATA_HEAP	STANDARD_LOW	SYSTEM		port_data_heap
+
++else # "fullword"
+
 type	DDLL_PROCESS	STANDARD	SYSTEM		ddll_processes
 type	MONITOR_EXT	STANDARD	PROCESSES	monitor_extended
 type	LINK_EXT	STANDARD	PROCESSES	link_extended
-type	LITERAL		LITERAL 	CODE		literal
-type	LITERAL_REF	SHORT_LIVED	CODE		literal_area_ref
-type	PURGE_DATA	SHORT_LIVED	CODE		purge_data
++ifnot beamasm
+type	CODE		LONG_LIVED	CODE		code
++endif
 type	DB_HEIR_DATA	STANDARD	ETS		db_heir_data
 type	DB_MS_PSDO_PROC	LONG_LIVED	ETS		db_match_pseudo_proc
 type	SCHDLR_DATA	LONG_LIVED	SYSTEM		scheduler_data
+type	EXPORT		LONG_LIVED	CODE		export_entry
+type	AINFO_REQ	SHORT_LIVED	SYSTEM		alloc_info_request
+type	SCHED_WTIME_REQ	SHORT_LIVED	SYSTEM		sched_wall_time_request
+type	GC_INFO_REQ	SHORT_LIVED	SYSTEM		gc_info_request
+type	PORT_DATA_HEAP	STANDARD	SYSTEM		port_data_heap
+
++endif
+
+type	LITERAL		LITERAL 	CODE		literal
+type	LITERAL_REF	SHORT_LIVED	CODE		literal_area_ref
+type	PURGE_DATA	SHORT_LIVED	CODE		purge_data
 
 type	NFUNC_TRAP_WRAPPER	STANDARD	PROCESSES	nfunc_trap_wrapper
 type	MONITOR		FIXED_SIZE	PROCESSES	monitor
@@ -359,10 +390,6 @@ type	MONITOR_TAG	STANDARD	PROCESSES	monitor_tag
 type	ALIAS		STANDARD	PROCESSES	alias
 type	MONITOR_SUSPEND	STANDARD	PROCESSES	monitor_suspend
 type	LINK		FIXED_SIZE	PROCESSES	link
-type	AINFO_REQ	SHORT_LIVED	SYSTEM		alloc_info_request
-type	SCHED_WTIME_REQ	SHORT_LIVED	SYSTEM		sched_wall_time_request
-type	GC_INFO_REQ	SHORT_LIVED	SYSTEM		gc_info_request
-type	PORT_DATA_HEAP	STANDARD	SYSTEM		port_data_heap
 type    MSACC           DRIVER          SYSTEM          microstate_accounting
 type	SYS_CHECK_REQ	SHORT_LIVED	SYSTEM		system_check_request
 type	ATOMICS		STANDARD	SYSTEM		erl_bif_atomics
