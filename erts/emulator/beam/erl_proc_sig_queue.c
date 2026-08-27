@@ -8191,7 +8191,7 @@ handle_cla(Process *c_p,
             cnt++;
             nmsgs = 0;
         }
-        if (ERTS_SIG_IS_INTERNAL_MSG(msg)) {
+        if (ERTS_SIG_IS_INTERNAL_MSG(msg) && is_not_immed(msg->m[0])) {
             ErlHeapFragment *first_hfrag, *hf, **last_hfrag;
             int in_refs = 0, in_heap_frags = 0;
             Uint scanned = 0, lit_sz = 0;
@@ -8209,7 +8209,7 @@ handle_cla(Process *c_p,
 	     * be able to appear in the first message reference, i.e.,
 	     * the message itself...
 	     */
-	    if (ErtsInArea(msg->m[0], literals, lit_bsize)) {
+            if (ErtsInArea(EXPAND_POINTER(msg->m[0]), literals, lit_bsize)) {
 		in_refs++;
 		lit_sz += size_object(msg->m[0]);
 	    }
@@ -8252,7 +8252,7 @@ handle_cla(Process *c_p,
                 Eterm *hp = new_hfrag->mem;
 
                 if (in_refs) {
-		    if (ErtsInArea(msg->m[0], literals, lit_bsize)) {
+                    if (ErtsInArea(EXPAND_POINTER(msg->m[0]), literals, lit_bsize)) {
 			Uint sz = size_object(msg->m[0]);
 			msg->m[0] = copy_struct(msg->m[0], sz, &hp, ohp);
                     }
