@@ -221,10 +221,10 @@ bool erl_is_native_record(Eterm src, Eterm mod, Eterm name) {
 }
 
 bool erl_get_record_elements(Process* p, Eterm* reg, Eterm src,
-                             Uint size, const Eterm* elems) {
+                             Uint size, const BeamInstr* elems) {
     ErtsRecordDefinition *defp;
     ErtsRecordInstance *instance;
-    const Eterm *elems_end;
+    const BeamInstr *elems_end;
     Eterm *values;
     int field_count;
     Eterm* E = p->stop;
@@ -239,8 +239,8 @@ bool erl_get_record_elements(Process* p, Eterm* reg, Eterm src,
     elems_end = elems + size;
 
     for (int i = 0; i < field_count; i++) {
-        if (elems[0] == defp->keys[i]) {
-            PUT_TERM_REG(values[i], elems[1]);
+        if ((Eterm)elems[0] == defp->keys[i]) {
+            PUT_TERM_REG(values[i], (Eterm)elems[1]);
             elems += 2;
             if (elems >= elems_end) {
                 return true;
@@ -254,7 +254,7 @@ bool erl_get_record_elements(Process* p, Eterm* reg, Eterm src,
 Eterm erl_create_local_native_record(Process* p, Eterm* reg,
                                      Eterm cons, Uint live,
                                      Uint size,
-                                     const Eterm* new_p) {
+                                     const BeamInstr* new_p) {
     Eterm def;
     ErtsRecordDefinition *defp;
     ErtsRecordInstance *instance;
@@ -263,8 +263,8 @@ Eterm erl_create_local_native_record(Process* p, Eterm* reg,
     Eterm* E;
     Uint num_words_needed;
     Eterm res;
-    Eterm sentinel = NIL;
-    const Eterm *new_end = new_p + size;
+    BeamInstr sentinel = (BeamInstr)NIL;
+    const BeamInstr *new_end = new_p + size;
     Eterm *def_values;
 
     def = CAR(list_val(cons));
@@ -295,7 +295,7 @@ Eterm erl_create_local_native_record(Process* p, Eterm* reg,
     p->freason = EXC_NORMAL;
     for (int i = 0; i < field_count; i++) {
         if (new_p[0] == defp->keys[i]) {
-            GetSource(new_p[1], *hp);
+            GetSource((Eterm)new_p[1], *hp);
             hp++;
             new_p += 2;
             if (new_p >= new_end) {
@@ -320,7 +320,7 @@ Eterm erl_create_local_native_record(Process* p, Eterm* reg,
      * `no_value` error. */
     if (new_p != &sentinel) {
         p->freason = EXC_BADFIELD;
-        p->fvalue = new_p[0];
+        p->fvalue = (Eterm)new_p[0];
         res = THE_NON_VALUE;
     }
 
@@ -342,7 +342,7 @@ Eterm erl_create_local_native_record(Process* p, Eterm* reg,
 }
 
 Eterm erl_create_native_record(Process* p, Eterm* reg, Eterm id, Uint live,
-                               Uint size, const Eterm* new_p) {
+                               Uint size, const BeamInstr* new_p) {
     /* Module, Name */
     Eterm module, name;
     const ErtsRecordEntry *entry;
@@ -379,7 +379,7 @@ Eterm erl_create_native_record(Process* p, Eterm* reg, Eterm id, Uint live,
 }
 
 Eterm erl_update_native_record(Process* p, Eterm* reg, Eterm src,
-                               Uint live, Uint size, const Eterm* new_p) {
+                               Uint live, Uint size, const BeamInstr* new_p) {
     ErtsRecordDefinition *defp;
     ErtsRecordInstance *instance, *old_instance;
     Eterm *old_values;
@@ -388,8 +388,8 @@ Eterm erl_update_native_record(Process* p, Eterm* reg, Eterm src,
     Eterm* E;
     Uint num_words_needed;
     Eterm res;
-    Eterm sentinel = NIL;
-    const Eterm *new_end = new_p + size;
+    BeamInstr sentinel = (BeamInstr)NIL;
+    const BeamInstr *new_end = new_p + size;
 
     ASSERT(size != 0);
 
@@ -419,10 +419,10 @@ Eterm erl_update_native_record(Process* p, Eterm* reg, Eterm src,
 
     ASSERT(new_p < new_end);
     for (int i = 0; i < field_count; i++) {
-        if (new_p[0] != defp->keys[i]) {
+        if ((Eterm)new_p[0] != defp->keys[i]) {
             *hp++ = old_values[i];
         } else {
-            GetSource(new_p[1], *hp);
+            GetSource((Eterm)new_p[1], *hp);
             hp++;
             new_p += 2;
             if (new_p >= new_end) {
@@ -437,7 +437,7 @@ Eterm erl_update_native_record(Process* p, Eterm* reg, Eterm src,
         hp = HAlloc(p, 3 + 3);
         tmp = TUPLE2(hp, defp->module, defp->name);
         hp += 3;
-        tmp = TUPLE2(hp, tmp, new_p[0]);
+        tmp = TUPLE2(hp, tmp, (Eterm)new_p[0]);
         hp += 3;
         p->fvalue = tmp;
         p->freason = EXC_BADFIELD;

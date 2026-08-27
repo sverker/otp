@@ -2305,13 +2305,13 @@ sub do_pack_one {
                         if ($args_per_word == 1) {
                             $packed_var = $packed_data;
                         } else {
-                            $pack_prefix .= "Eterm $packed_var = $packed_data;\n";
+                            $pack_prefix .= "BeamInstr $packed_var = $packed_data;\n";
                         }
                         my $pack = chr(ord('#') + $size);
                         $down = "$pack$down";
                     } else {
                         $packed_data = arg_offset($size + $offset);
-                        $pack_prefix .= "Eterm $packed_var = $packed_data;\n";
+                        $pack_prefix .= "BeamInstr $packed_var = $packed_data;\n";
                         $down = "P$down";
                         $up .= "p";
                         $this_size = 1;

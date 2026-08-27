@@ -111,7 +111,7 @@ Eterm erl_get_local_record_field(Process* p, Eterm src, Eterm name, Eterm field)
 Eterm erl_get_record_field(Process* p, Eterm src, Eterm id, Eterm field);
 
 bool erl_get_record_elements(Process* P, Eterm* reg, Eterm src,
-                             Uint size, const Eterm* new_p);
+                             Uint size, const BeamInstr* new_p);
 
 void erts_record_start_staging(void);
 void erts_record_end_staging(int commit);
@@ -119,10 +119,10 @@ void erts_record_end_staging(int commit);
 Eterm erl_create_local_native_record(Process* p, Eterm* reg,
                                      Eterm cons, Uint live,
                                      Uint size,
-                                     const Eterm* new_p);
+                                     const BeamInstr* new_p);
 Eterm erl_create_native_record(Process* p, Eterm* reg, Eterm id,
-                               Uint live, Uint size, const Eterm* new_p);
+                               Uint live, Uint size, const BeamInstr* new_p);
 Eterm erl_update_native_record(Process* c_p, Eterm* reg, Eterm src,
-                               Uint live, Uint size, const Eterm* new_p);
+                               Uint live, Uint size, const BeamInstr* new_p);
 
 #endif /* __ERL_RECORD_H__ */
