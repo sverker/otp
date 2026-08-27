@@ -41,17 +41,23 @@ void erts_term_init(void);
 ERTS_GLB_INLINE Eterm COMPRESS_POINTER_impl(UWord);
 ERTS_GLB_INLINE UWord EXPAND_POINTER(Eterm);
 extern UWord erts_halfword_start_addr;
+#define COMPRESSED_NULL ((Eterm)0)
+#define EXPANDED_NULL ((Eterm*)erts_halfword_start_addr)
 
 #  if ERTS_GLB_INLINE_INCL_FUNC_DEF
 ERTS_GLB_INLINE Eterm COMPRESS_POINTER_impl(UWord word)
 {
-    const UWord ret = !word ? word : word - erts_halfword_start_addr;
-    ERTS_ASSERT(!(ret & CHECK_POINTER_MASK));
-    return ret;
+    //const UWord ret = !word ? word : word - erts_halfword_start_addr;
+
+    const UWord ret = word - erts_halfword_start_addr;
+    ERTS_ASSERT(ret && !(ret & CHECK_POINTER_MASK));
+    return (Eterm)ret;
 }
 ERTS_GLB_INLINE UWord EXPAND_POINTER(Eterm term)
 {
-    return !term ? (UWord)term : ((UWord)term + erts_halfword_start_addr);
+    //return !term ? (UWord)term : ((UWord)term + erts_halfword_start_addr);
+
+    return (UWord)term + erts_halfword_start_addr;
 }
 #  endif
 
@@ -60,6 +66,8 @@ ERTS_GLB_INLINE UWord EXPAND_POINTER(Eterm term)
 #  define CHECK_POINTER_MASK 0x0UL
 #  define COMPRESS_POINTER(APointer) ((Eterm)(APointer))
 #  define EXPAND_POINTER(AnEterm) (AnEterm)
+#  define COMPRESSED_NULL ((Eterm)NULL)
+#  define EXPANDED_NULL NULL
 #endif
 
 struct erl_node_; /* Declared in erl_node_tables.h */

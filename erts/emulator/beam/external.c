@@ -4375,7 +4375,7 @@ dec_term(ErtsDistExternal *edep,
             case B2TDecodeList:
                 objp = next - 2;
                 while (n > 0) {
-                    objp[0] = (Eterm) next;
+                    objp[0] = COMPRESS_POINTER(next);
                     objp[1] = make_list(next);
                     next = objp;
                     objp -= 2;
@@ -4386,7 +4386,7 @@ dec_term(ErtsDistExternal *edep,
             case B2TDecodeTuple:
                 objp = next - 1;
                 while (n-- > 0) {
-                    objp[0] = (Eterm) next;
+                    objp[0] = COMPRESS_POINTER(next);
                     next = objp;
                     objp--;
                 }
@@ -4438,14 +4438,14 @@ dec_term(ErtsDistExternal *edep,
         }
         reds = ERTS_SWORD_MAX;
         next = objp;
-        *next = (Eterm) (UWord) NULL;
+        *next = COMPRESSED_NULL;
     }
     hp = factory->hp;
 
-    while (next != NULL) {
+    while (next != EXPANDED_NULL) {
 
 	objp = next;
-	next = (Eterm *) *objp;
+        next = (Eterm*) EXPAND_POINTER(*objp);
 
     continue_this_obj:
 
@@ -4588,7 +4588,7 @@ dec_term_atom_common:
 		reds -= n;
 	    }
 	    while (n-- > 0) {
-		objp[0] = (Eterm) next;
+                objp[0] = COMPRESS_POINTER(next);
 		next = objp;
 		objp--;
 	    }
@@ -4607,8 +4607,8 @@ dec_term_atom_common:
 	    *objp = make_list(hp);
             hp += 2 * (Uint) nu;
 	    objp = hp - 2;
-	    objp[0] = (Eterm) (objp+1);
-	    objp[1] = (Eterm) next;
+            objp[0] = COMPRESS_POINTER(objp+1);
+            objp[1] = COMPRESS_POINTER(next);
 	    next = objp;
 	    objp -= 2;
             nu--;
@@ -4622,7 +4622,7 @@ dec_term_atom_common:
 		reds -= nu;
 	    }
             while (nu > 0) {
-		objp[0] = (Eterm) next;
+                objp[0] = COMPRESS_POINTER(next);
 		objp[1] = make_list(next);
 		next = objp;
 		objp -= 2;
@@ -5095,8 +5095,8 @@ dec_term_atom_common:
                     *objp          = make_flatmap(mp);
 
                     for (n = size; n; n--) {
-                        *vptr = (Eterm) next;
-                        *kptr = (Eterm) vptr;
+                        *vptr = COMPRESS_POINTER(next);
+                        *kptr = COMPRESS_POINTER(vptr);
                         next  = kptr;
                         vptr--;
                         kptr--;
@@ -5109,8 +5109,8 @@ dec_term_atom_common:
                     map->u.leaf_array = hp;
 
                     for (n = size; n; n--) {
-                        CDR(hp) = (Eterm) next;
-                        CAR(hp) = (Eterm) &CDR(hp);
+                        CDR(hp) = COMPRESS_POINTER(next);
+                        CAR(hp) = COMPRESS_POINTER(&CDR(hp));
                         next = &CAR(hp);
                         hp += 2;
                     }
@@ -5187,7 +5187,7 @@ dec_term_atom_common:
 
 		/* Environment */
 		for (i = num_free-1; i >= 0; i--) {
-		    funp->env[i] = (Eterm) next;
+                    funp->env[i] = COMPRESS_POINTER(next);
 		    next = funp->env + i;
 		}
 		break;
@@ -5389,7 +5389,7 @@ dec_term_atom_common:
                     for (Sint i = num_fields - 1; i >= 0; i--) {
                         int index = unsigned_val(order[i]);
                         ASSERT(index < num_fields);
-                        values[index] = (Eterm)next;
+                        values[index] = COMPRESS_POINTER(next);
                         next = &values[index];
                     }
                 }

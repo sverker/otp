@@ -1006,15 +1006,15 @@ do {								\
     }								\
     *s.sp++ = (x);						\
     *s.sp++ = (y);						\
-    *s.sp++ = (Eterm) NULL;					\
+    *s.sp++ = COMPRESSED_NULL;					\
     *s.sp++ = (Eterm) (b);		                	\
     ESTK_CONCAT(s,_offset) += SHTABLE_INCR;			\
 } while(0)
 #define SHTABLE_X(s,e) (s.start[e])
 #define SHTABLE_Y(s,e) (s.start[(e)+1])
-#define SHTABLE_FWD(s,e) ((Eterm *) (s.start[(e)+2]))
-#define SHTABLE_FWD_UPD(s,e,p) (s.start[(e)+2] = (Eterm) (p))
-#define SHTABLE_REV(s,e) ((Eterm *) (s.start[(e)+3]))
+#define SHTABLE_FWD(s,e) ((Eterm*)EXPAND_POINTER(s.start[(e)+2]))
+#define SHTABLE_FWD_UPD(s,e,p) (s.start[(e)+2] = COMPRESS_POINTER(p))
+#define SHTABLE_REV(s,e) ((Eterm*)EXPAND_POINTER(s.start[(e)+3]))
 
 #define LIST_SHARED_UNPROCESSED ((Eterm) 0)
 #define LIST_SHARED_PROCESSED	((Eterm) 1)
@@ -1176,7 +1176,7 @@ Uint copy_shared_calculate(Eterm obj, erts_shcopy_t *info)
 		if (tail != THE_NON_VALUE) {
 		    e = SHTABLE_NEXT(t);
 		    VERBOSE(DEBUG_SHCOPY, ("[pid=%T] tabling L %p\n", mypid, ptr));
-		    SHTABLE_PUSH(t, head, tail, ptr);
+                    SHTABLE_PUSH(t, head, tail, COMPRESS_POINTER(ptr));
 		    CAR(ptr) = (e << _TAG_PRIMARY_SIZE) | LIST_SHARED_UNPROCESSED;
 		    CDR(ptr) = THE_NON_VALUE;
 		}
@@ -1227,7 +1227,7 @@ Uint copy_shared_calculate(Eterm obj, erts_shcopy_t *info)
 		if (primary_tag(hdr) == BOXED_VISITED) {
 		    e = SHTABLE_NEXT(t);
 		    VERBOSE(DEBUG_SHCOPY, ("[pid=%T] tabling B %p\n", mypid, ptr));
-		    SHTABLE_PUSH(t, hdr, THE_NON_VALUE, ptr);
+                    SHTABLE_PUSH(t, hdr, THE_NON_VALUE, COMPRESS_POINTER(ptr));
 		    *ptr = (e << _TAG_PRIMARY_SIZE) | BOXED_SHARED_UNPROCESSED;
 		}
 		goto pop_next;
@@ -1350,7 +1350,7 @@ Uint copy_shared_calculate(Eterm obj, erts_shcopy_t *info)
 	pop_next:
 	    if (EQUEUE_ISEMPTY(s)) {
                 /* add sentinel to the table */
-                SHTABLE_PUSH(t, THE_NON_VALUE, THE_NON_VALUE, NULL);
+                SHTABLE_PUSH(t, THE_NON_VALUE, THE_NON_VALUE, COMPRESSED_NULL);
                 /* store persistent info */
                 BITSTORE_CLOSE(b);
                 info->queue_start = s.start;
