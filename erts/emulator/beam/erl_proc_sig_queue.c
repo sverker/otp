@@ -8003,7 +8003,7 @@ area_literal_size(Eterm* start, Eterm* end, char* lit_start, Uint lit_size)
         switch (primary_tag(val)) {
         case TAG_PRIMARY_BOXED:
         case TAG_PRIMARY_LIST:
-            if (ErtsInArea(val, lit_start, lit_size)) {
+            if (ErtsInArea(EXPAND_POINTER(val), lit_start, lit_size)) {
                 sz += size_object(val);
             }
             break;
@@ -8012,7 +8012,7 @@ area_literal_size(Eterm* start, Eterm* end, char* lit_start, Uint lit_size)
                 Eterm *new_p;
                 if (val == HEADER_SUB_BITS) {
                     ErlSubBits *sb = (ErlSubBits*) p;
-                    if (ErtsInArea(sb->orig, lit_start, lit_size)) {
+                    if (ErtsInArea(EXPAND_POINTER(sb->orig), lit_start, lit_size)) {
                         sz += size_object(sb->orig);
                     }
                 }
@@ -8038,7 +8038,7 @@ area_literal_copy(Eterm **hpp, ErlOffHeap *ohp,
         switch (primary_tag(val)) {
         case TAG_PRIMARY_BOXED:
         case TAG_PRIMARY_LIST:
-            if (ErtsInArea(val, lit_start, lit_size)) {
+            if (ErtsInArea(EXPAND_POINTER(val), lit_start, lit_size)) {
                 sz = size_object(val);
                 val = copy_struct(val, sz, hpp, ohp);
                 *p = val; 

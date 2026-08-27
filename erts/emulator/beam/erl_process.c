@@ -14999,7 +14999,7 @@ stack_element_dump(fmtfn_t to, void *to_arg, Eterm* sp, Uint yreg)
     }
 
     if (is_CP(x)) {
-        erts_print(to, to_arg, "Return addr %p (", (Eterm *) x);
+        erts_print(to, to_arg, "Return addr %p (", (void*)EXPAND_POINTER(x));
         print_function_from_pc(to, to_arg, cp_val(x));
         erts_print(to, to_arg, ")\n");
         yreg = 0;

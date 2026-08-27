@@ -22,7 +22,7 @@
 //
 
 return_trace() {
-    ErtsCodeMFA* mfa = (ErtsCodeMFA *)(E[1]);
+    ErtsCodeMFA* mfa = (ErtsCodeMFA *)cp_val(E[1]);
 
     SWAPOUT;		/* Needed for shared heap */
     ERTS_UNREQ_PROC_MAIN_LOCK(c_p);
@@ -55,7 +55,7 @@ i_call_trace_return() {
     const ErtsCodeInfo *cinfo;
 
     if (is_CP(E[1])) {
-        cinfo = erts_code_to_codeinfo((BeamInstr*)E[1]);
+        cinfo = erts_code_to_codeinfo(cp_val(E[1]));
     } else {
         cinfo = NULL;
     }

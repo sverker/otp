@@ -3705,13 +3705,13 @@ static int erts_ycf_trap_driver_dtor(Binary* bin)
 
 static void* erts_ycf_trap_driver_alloc(size_t size, void* ctx)
 {
-    ErtsAlcType_t type = (ErtsAlcType_t)(Uint)ctx;
+    ErtsAlcType_t type = (ErtsAlcType_t)(UWord)ctx;
     return erts_alloc(type, size);
 }
 
 static void erts_ycf_trap_driver_free(void* data, void* ctx)
 {
-    ErtsAlcType_t type = (ErtsAlcType_t)(Uint)ctx;
+    ErtsAlcType_t type = (ErtsAlcType_t)(UWord)ctx;
     erts_free(type, data);
 }
 
@@ -3786,7 +3786,7 @@ BIF_RETTYPE erts_ycf_trap_driver(Process* p,
                              NULL,
                              erts_ycf_trap_driver_alloc,
                              erts_ycf_trap_driver_free,
-                             (void*)(Uint)memory_allocation_type,
+                             (void*)(UWord)memory_allocation_type,
                              ycf_stack_alloc_size,
                              NULL,
                              p,

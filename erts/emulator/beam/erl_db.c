@@ -5686,7 +5686,7 @@ db_info_print(DbTable *tb, void *vpdbip)
 {
     ErtsPrintDbInfo *pdbip = (ErtsPrintDbInfo *) vpdbip;
     erts_print(pdbip->to, pdbip->to_arg, "=ets:%T\n", tb->common.owner);
-    erts_print(pdbip->to, pdbip->to_arg, "Slot: %bpu\n", (Uint) tb);
+    erts_print(pdbip->to, pdbip->to_arg, "Slot: %p\n", tb);
     print_table(pdbip->to, pdbip->to_arg, pdbip->show, tb);
 }
 

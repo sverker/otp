@@ -2267,6 +2267,20 @@ erts_make_integer_fact(Uint x, ErtsHeapFactory *hf)
     }
 }
 
+#if HALFWORD_HEAP
+Eterm
+erts_make_uword(UWord x, Process *p)
+{
+    Eterm* hp;
+    if (IS_USMALL(0,x))
+        return make_small(x);
+    else {
+        hp = HAlloc(p, BIG_UWORD_HEAP_SIZE(x));
+        return uword_to_big(x,hp);
+    }
+}
+#endif
+
 /*
 ** convert Uint to bigint
 ** (must only be used if x is to big to be stored as a small)
@@ -4144,14 +4158,14 @@ static const byte digits_per_small_lookup[36-1] = {
  * digits_per_sint_lookup.
  */
 static const Sint largest_power_of_base_lookup[36-1] = {
-#if (SIZEOF_VOID_P == 4)
+#if (ERTS_SIZEOF_ETERM == 4)
     /* Wo.Alpha formula: Table [Pow[n, Trunc[31 / log[2,n]]-1], {n, 2, 36}] */
     1073741824, 387420489, 268435456, 244140625, 60466176, 282475249, 134217728,
     43046721, 100000000, 19487171, 35831808, 62748517, 105413504, 11390625,
     16777216, 24137569, 34012224, 47045881, 64000000, 85766121, 5153632,
     6436343,7962624, 9765625, 11881376, 14348907, 17210368, 20511149, 24300000,
     28629151, 33554432, 39135393, 45435424, 52521875, 1679616
-#elif (SIZEOF_VOID_P == 8)
+#elif (ERTS_SIZEOF_ETERM == 8)
     /* Wo.Alpha formula: Table [Pow[n, Trunc[63 / log[2,n]]-1], {n, 2, 36}]
      * with LL added after each element manually */
     4611686018427387904LL, 1350851717672992089LL, 1152921504606846976LL,

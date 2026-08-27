@@ -1818,7 +1818,7 @@ enum erts_is_line_breakpoint erts_is_line_breakpoint_code(ErtsCodePtr p) {
 }
 
 const Export *
-erts_line_breakpoint_hit__prepare_call(Process* c_p, ErtsCodePtr pc, Uint live, Eterm *regs, UWord *stk) {
+erts_line_breakpoint_hit__prepare_call(Process* c_p, ErtsCodePtr pc, Uint live, Eterm *regs, Eterm *stk) {
     FunctionInfo fi;
     const Export *ep;
 
@@ -1865,7 +1865,7 @@ erts_line_breakpoint_hit__prepare_call(Process* c_p, ErtsCodePtr pc, Uint live, 
 }
 
 Uint
-erts_line_breakpoint_hit__cleanup(Eterm *regs, UWord *stk) {
+erts_line_breakpoint_hit__cleanup(Eterm *regs, Eterm *stk) {
     int i = 0;
 
     /*

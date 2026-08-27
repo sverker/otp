@@ -4996,7 +4996,7 @@ test_multizero_timeout_in_timeout(void *vproc)
 static Eterm
 proc_sig_block(Process *c_p, void *arg, int *redsp, ErlHeapFragment **bpp)
 {
-    ErtsMonotonicTime time, timeout_time, ms = (ErtsMonotonicTime) (Sint) arg;
+    ErtsMonotonicTime time, timeout_time, ms = (ErtsMonotonicTime) (SWord) arg;
 
     if (redsp)
         *redsp = 1;
@@ -5459,7 +5459,7 @@ BIF_RETTYPE erts_debug_set_internal_state_2(BIF_ALIST_2)
                                                          tp[1],
                                                          0,
                                                          proc_sig_block,
-                                                         (void *) (Sint) wait_time);
+                                                         (void *) (SWord) wait_time);
                     if (is_non_value(res))
                         BIF_RET(am_false);
                     BIF_RET(am_true);

@@ -902,7 +902,7 @@ do_get_all(Process* c_p, TrapData* trap_data, Eterm res)
 static BIF_RETTYPE
 persistent_term_info_trap(BIF_ALIST_1)
 {
-    TrapData* trap_data = (TrapData *) BIF_ARG_1;
+    TrapData* trap_data;
     Eterm res;
     Uint bump_reds;
     Binary* mbp;

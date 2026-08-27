@@ -4136,7 +4136,7 @@ store_in_vec_aux(TTBEncodeContext *ctx,
 {
     ErlDrvBinary *dbin = Binary2ErlDrvBinary(bin);
     int vlen = ctx->vlen;
-    Uint iov_len;
+    size_t iov_len;
     ErlIOVec *feiovp;
 
 #ifdef DEBUG
@@ -4194,7 +4194,7 @@ store_in_vec_aux(TTBEncodeContext *ctx,
         ASSERT(iov_len);
         
         do {
-            Uint iov_len_left;
+            size_t iov_len_left;
                 
             if (iov_len <= MAX_SYSIOVEC_IOVLEN)
                 iov_len_left = 0;

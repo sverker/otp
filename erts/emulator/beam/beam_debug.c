@@ -158,7 +158,7 @@ erts_debug_unaligned_bitstring_2(BIF_ALIST_2)
 
     erl_sub_bits_init(sb,
                       br_flags,
-                      ((Eterm)br) | br_flags,
+                      COMPRESS_POINTER(br) | br_flags,
                       base,
                       offset,
                       source_size);
@@ -1118,7 +1118,7 @@ static void print_bif_name(fmtfn_t to, void* to_arg, BifFunction bif)
 	}
     }
     if (i == BIF_SIZE) {
-	erts_print(to, to_arg, "bif(%d)", (Uint) bif);
+        erts_print(to, to_arg, "bif(%p)", bif);
     } else {
 	Eterm module = bif_table[i].module;
 	Eterm name = bif_table[i].name;

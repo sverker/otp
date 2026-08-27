@@ -164,6 +164,11 @@ Eterm uint_to_big(Uint, Eterm*);
 Eterm uword_to_big(UWord, Eterm*);
 Eterm erts_make_integer(Uint, Process *);
 Eterm erts_make_integer_fact(Uint, ErtsHeapFactory *);
+#if HALFWORD_HEAP
+Eterm erts_make_uword(UWord, Process *);
+#else
+# define erts_make_uword erts_make_integer
+#endif
 
 dsize_t big_bytes(Eterm);
 Eterm bytes_to_big(const byte*, dsize_t, int, Eterm*);

@@ -1027,7 +1027,7 @@ do {								\
  */
 
 #define DECLARE_EQUEUE_INIT_INFO(q, info)		\
-    UWord* EQUE_DEF_QUEUE(q) = info->queue_default;	\
+    Eterm* EQUE_DEF_QUEUE(q) = info->queue_default;	\
     ErtsEQueue q = {					\
         EQUE_DEF_QUEUE(q), /* start */			\
         EQUE_DEF_QUEUE(q), /* front */			\
