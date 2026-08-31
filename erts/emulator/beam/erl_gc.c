@@ -545,8 +545,8 @@ delay_garbage_collection(Process *p, int need, int fcalls)
     ssz = orig_hend - orig_stop;
     hsz = ssz + need + ERTS_DELAY_GC_EXTRA_FREE + S_RESERVED;
 
-    /* Allocate one extra word at the end to save the high water mark. */
-    hfrag = new_message_buffer(hsz + 1);
+    /* Allocate one extra (full) word at the end to save the high water mark. */
+    hfrag = new_message_buffer(hsz + sizeof(void*)/sizeof(Eterm));
 
     copy_erlang_stack(p, &hfrag->mem[0], hsz);
 
@@ -556,9 +556,9 @@ delay_garbage_collection(Process *p, int need, int fcalls)
     /* Save the original high water mark at the end of the current
      * heap to make it possible to do a minor GC later. */
     if (p->abandoned_heap) {
-        *hend = (Eterm) (p->hend[0]);
+        sys_memcpy(hend, p->hend, sizeof(Eterm*));
     } else {
-        *hend = (Eterm) p->high_water;
+        sys_memcpy(hend, &p->high_water, sizeof(Eterm*));
     }
 
     p->hend = hend;
@@ -675,6 +675,7 @@ get_orig_heap(Process *p, Eterm **p_htop, Eterm **p_high_water) {
 
     /* See delay_garbage_collection(). */
 
+    ASSERT(p->abandoned_heap);
     ASSERT(aheap != NULL);
 
     if (p->flags & F_ABANDONED_HEAP_USE) {
@@ -688,7 +689,7 @@ get_orig_heap(Process *p, Eterm **p_htop, Eterm **p_high_water) {
     if (p_high_water) {
         Eterm *high_water;
 
-        high_water = (Eterm *)(p->hend[0]);
+        sys_memcpy(&high_water, p->hend, sizeof(Eterm*));
 
         ASSERT(aheap <= high_water);
         ASSERT(high_water <= htop);
@@ -1426,7 +1427,7 @@ minor_collection(Process* p, ErlHeapFragment *live_hf_end,
 
     if (p->abandoned_heap) {
         /* See delay_garbage_collection(). */
-        high_water = (Eterm *)(p->hend[0]);
+        sys_memcpy(&high_water, p->hend, sizeof(Eterm*));
     } else {
         high_water = p->high_water;
     }
@@ -1437,7 +1438,7 @@ minor_collection(Process* p, ErlHeapFragment *live_hf_end,
         ASSERT(high_water - p->abandoned_heap <= size_before);
 
         /* The high water pointer must be aligned to a word boundary. */
-        ASSERT(((UWord) high_water) % sizeof(UWord) == 0);
+        ASSERT(((UWord) high_water) % sizeof(Eterm) == 0);
     }
 #endif
 
