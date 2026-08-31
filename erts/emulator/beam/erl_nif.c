@@ -3957,7 +3957,7 @@ int enif_monitor_process(ErlNifEnv* env, void* obj, const ErlNifPid* target_pid,
     ref = erts_make_ref_in_buffer(tmp);
 
     mdp = erts_monitor_create(ERTS_MON_TYPE_RESOURCE, ref,
-                              (Eterm) rsrc, target_pid->pid,
+                              (UWord) rsrc, target_pid->pid,
                               NIL, THE_NON_VALUE);
     erts_mtx_lock(&rm->lock);
     ASSERT(!rmon_is_dying(rm));

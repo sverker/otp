@@ -1255,7 +1255,7 @@ int erts_monitor_list_foreach_delete_yielding(ErtsMonitor **list,
  * @returns                     A pointer to monitor data structure
  *
  */
-ErtsMonitorData *erts_monitor_create(Uint16 type, Eterm ref, Eterm origin,
+ErtsMonitorData *erts_monitor_create(Uint16 type, Eterm ref, UWord origin,
                                      Eterm target, Eterm name, Eterm tag);
 
 /**
