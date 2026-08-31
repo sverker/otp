@@ -1658,6 +1658,61 @@ extern erts_driver_t fd_driver;
 
 int erts_beam_jump_table(void);
 
+#if !HEAP_ON_C_STACK
+#  if 0 && defined(DEBUG)
+#    define DeclareTmpHeap(VariableName,Size,Process) \
+       Eterm *VariableName = erts_debug_allocate_tmp_heap(Size,Process)
+#    define DeclareTypedTmpHeap(Type,VariableName,Process)		\
+      Type *VariableName = (Type *) erts_debug_allocate_tmp_heap(sizeof(Type)/sizeof(Eterm),Process)
+#    define DeclareTmpHeapNoproc(VariableName,Size) \
+       Eterm *VariableName = erts_debug_allocate_tmp_heap(Size,NULL)
+#    define UseTmpHeap(Size,Proc) \
+       do { \
+         erts_debug_use_tmp_heap((Size),(Proc)); \
+       } while (0)
+#    define UnUseTmpHeap(Size,Proc) \
+       do { \
+         erts_debug_unuse_tmp_heap((Size),(Proc)); \
+       } while (0)
+#    define UseTmpHeapNoproc(Size) \
+       do { \
+         erts_debug_use_tmp_heap(Size,NULL); \
+       } while (0)
+#    define UnUseTmpHeapNoproc(Size) \
+       do { \
+         erts_debug_unuse_tmp_heap(Size,NULL); \
+       } while (0)
+#  else
+#    define DeclareTmpHeap(VariableName,Size,Process) \
+       Eterm * const VariableName = ((Process)->scheduler_data->tmp_heap + \
+                                     (Process)->scheduler_data->num_tmp_heap_used)
+#    define DeclareTypedTmpHeap(Type,VariableName,Process)		\
+      Type * const VariableName = (Type *) ((Process)->scheduler_data->tmp_heap + \
+                                            (Process)->scheduler_data->num_tmp_heap_used)
+#    define DeclareTmpHeapNoproc(VariableName,Size) \
+       Eterm *VariableName = (erts_get_scheduler_data()->tmp_heap + \
+                              erts_get_scheduler_data()->num_tmp_heap_used)
+#    define UseTmpHeap(Size,Proc) \
+       do { \
+         (Proc)->scheduler_data->num_tmp_heap_used += (Size); \
+       } while (0)
+#    define UnUseTmpHeap(Size,Proc) \
+       do { \
+         (Proc)->scheduler_data->num_tmp_heap_used -= (Size); \
+       } while (0)
+#    define UseTmpHeapNoproc(Size) \
+       do { \
+         erts_get_scheduler_data()->num_tmp_heap_used += (Size); \
+       } while (0)
+#    define UnUseTmpHeapNoproc(Size) \
+       do { \
+         erts_get_scheduler_data()->num_tmp_heap_used -= (Size); \
+       } while (0)
+#  endif
+
+#else // HEAP_ON_C_STACK
+
+
 #define DeclareTmpHeap(VariableName,Size,Process) \
      Eterm VariableName[Size]
 #define DeclareTypedTmpHeap(Type,VariableName,Process)	\
@@ -1668,6 +1723,8 @@ int erts_beam_jump_table(void);
 #define UnUseTmpHeap(Size,Proc) /* Nothing */
 #define UseTmpHeapNoproc(Size) /* Nothing */
 #define UnUseTmpHeapNoproc(Size) /* Nothing */
+
+#endif  // HEAP_ON_C_STACK
 
 ERTS_GLB_INLINE void dtrace_pid_str(Eterm pid, char *process_buf);
 ERTS_GLB_INLINE void dtrace_proc_str(Process *process, char *process_buf);

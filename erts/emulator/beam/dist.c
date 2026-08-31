@@ -1856,7 +1856,7 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
                           ref, from, gl, mfa, opts);
     }
     else {
-        Eterm tmp_heap[8];
+        DeclareTmpHeap(tmp_heap, 8, sender);
         Eterm node = ctx->dep ? ctx->dep->sysname : ctx->node;
         Eterm msg;
         Eterm token;
@@ -1867,8 +1867,8 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
          * will become an actual message). For more info see
          * handling of seq-trace token in erl_create_process().
          */
-        
-	seq_trace_update_serial(sender);
+        UseTmpHeap(8, sender);
+        seq_trace_update_serial(sender);
 	token = SEQ_TRACE_TOKEN(sender);
         msg = TUPLE6(&tmp_heap[0], am_spawn_request,
                      ref, from, gl, mfa, opts);
@@ -1880,6 +1880,7 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
         
         ctx->ctl = TUPLE7(&ctx->ctl_heap[0], make_small(DOP_SPAWN_REQUEST_TT),
                           ref, from, gl, mfa, opts, token);
+        UnUseTmpHeap(8, sender);
     }
     ctx->msg = alist;
     return erts_dsig_send(ctx);

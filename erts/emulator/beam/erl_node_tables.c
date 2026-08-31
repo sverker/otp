@@ -1553,7 +1553,7 @@ insert_offheap(ErlOffHeap *oh, int type, Eterm id)
                     UWord val = (UWord) u.mref->mb;
                     DeclareTmpHeapNoproc(id_heap,BIG_UINT_HEAP_SIZE*2); /* extra place allocated */
 #else
-		    DeclareTmpHeapNoproc(id_heap,BIG_UINT_HEAP_SIZE);
+                    Eterm id_heap[BIG_UINT_HEAP_SIZE];
 #endif
 		    Uint *hp = &id_heap[0];
 		    InsertedBin *nib;
@@ -1563,7 +1563,6 @@ insert_offheap(ErlOffHeap *oh, int type, Eterm id)
                     UseTmpHeapNoproc(actual_need);
                     a.id = erts_bld_uword(&hp, NULL, (UWord) val);
 #else
-		    UseTmpHeapNoproc(BIG_UINT_HEAP_SIZE);
 		    a.id = erts_bld_uint(&hp, NULL, (Uint) u.mref->mb);
 #endif
 		    erts_match_prog_foreach_offheap((Binary *) u.mref->mb,
@@ -1576,8 +1575,6 @@ insert_offheap(ErlOffHeap *oh, int type, Eterm id)
 		    inserted_bins = nib;
 #if HALFWORD_HEAP
                     UnUseTmpHeapNoproc(actual_need);
-#else
-		    UnUseTmpHeapNoproc(BIG_UINT_HEAP_SIZE);
 #endif
 		}
 	    }
