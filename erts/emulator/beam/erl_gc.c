@@ -3400,7 +3400,7 @@ offset_stack(Eterm *stack, Uint sz,
 
             switch (primary_tag(val)) {
             case TAG_PRIMARY_HEADER:
-                if (ErtsInArea(val, stack_area, stack_area_sz)) {
+                if (ErtsInArea(EXPAND_POINTER(val), stack_area, stack_area_sz)) {
                     stack[i] = offset_ptr(val, stack_offset);
                 }
 

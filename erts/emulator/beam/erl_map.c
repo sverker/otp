@@ -2799,7 +2799,7 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
  */
 #ifdef INCLUDE_YCF_TRANSFORMED_ONLY_FUNCTIONS
 static Eterm hashmap_keys(Process* p, Eterm node) {
-    Eterm stack_default_wstack[16];
+    UWord stack_default_wstack[16];
     ErtsWStack stack;
     hashmap_head_t* root;
     Eterm *hp;
@@ -2842,7 +2842,7 @@ static Eterm hashmap_keys(Process* p, Eterm node) {
  */
 #ifdef INCLUDE_YCF_TRANSFORMED_ONLY_FUNCTIONS
 static Eterm hashmap_values(Process* p, Eterm node) {
-    Eterm stack_default_wstack[16];
+    UWord stack_default_wstack[16];
     ErtsWStack stack;
     hashmap_head_t* root;
     Eterm *hp;

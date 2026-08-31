@@ -87,7 +87,7 @@ typedef struct
 {
     erts_mtx_t lock;
     ErtsMonitor* root;
-    Uint refc;
+    UWord refc;
     size_t user_data_sz;
 } ErtsResourceMonitors;
 

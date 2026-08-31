@@ -3741,7 +3741,7 @@ BIF_RETTYPE erts_ycf_trap_driver(Process* p,
                                  erts_ycf_destroy_trap_state_fun_t ycf_destroy_fun,
                                  erts_ycf_yielding_fun_t ycf_yielding_fun) {
     const long reds = iterations_per_red * ERTS_BIF_REDS_LEFT(p);
-    long nr_of_reductions = DBG_RANDOM_REDS(reds, (Uint)&p);
+    long nr_of_reductions = DBG_RANDOM_REDS(reds, (UWord)&p);
     const long init_reds = nr_of_reductions;
     if (is_internal_magic_ref(bif_args[0])) {
         erts_ycf_trap_driver_state_holder *state_holder;

@@ -2890,11 +2890,7 @@ static void rollback_opened_resource_types(void)
     }
 }
 
-#ifdef ARCH_64
-#  define ERTS_RESOURCE_DYING_FLAG (((Uint) 1) << 63)
-#else
-#  define ERTS_RESOURCE_DYING_FLAG (((Uint) 1) << 31)
-#endif
+#define ERTS_RESOURCE_DYING_FLAG (((UWord) 1) << (sizeof(UWord)*8 - 1))
 #define ERTS_RESOURCE_REFC_MASK (~ERTS_RESOURCE_DYING_FLAG)
 
 static ERTS_INLINE void

@@ -481,7 +481,7 @@ dump_sub_bitstring(fmtfn_t to, void *to_arg, Uint br_flags, BinRef *br,
                    "Yc" PTR_FMT ":" PTR_FMT ":" PTR_FMT "\n",
                    binary, BYTE_OFFSET(offset), BYTE_SIZE(size));
     } else {
-        Eterm br_term = (Eterm)br | br_flags;
+        Eterm br_term = COMPRESS_POINTER(br) | br_flags;
 
         erts_print(to, to_arg,
                    "Ys" PTR_FMT ":" PTR_FMT ":" PTR_FMT "\n",
@@ -536,7 +536,7 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
 
     while (x != OUR_NIL) {
 	if (is_CP(x)) {
-	    next = (Eterm *) x;
+            next = (Eterm *) EXPAND_POINTER(x);
 	} else if (is_list(x)) {
 	    ptr = list_val(x);
             if (erts_is_literal(x, ptr)) {
@@ -551,7 +551,7 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
 		    ptr[1] = make_small(0);
 		}
 		x = ptr[0];
-		ptr[0] = (Eterm) next;
+                ptr[0] = COMPRESS_POINTER(next);
 		next = ptr + 1;
 		continue;
 	    }
@@ -583,7 +583,7 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
 			ptr[0] = OUR_NIL;
 		    } else {
 			x = ptr[arity];
-			ptr[0] = (Eterm) next;
+                        ptr[0] = COMPRESS_POINTER(next);
 			next = ptr + arity - 1;
 			continue;
 		    }
@@ -609,7 +609,7 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
                     ERTS_GET_BITSTRING_REF(x, br_flags, br, base, offset, size);
 
                     if (br) {
-                        if (erts_is_literal(br_flags | (Eterm)br, (Eterm*)br)) {
+                        if (erts_is_literal(br_flags | COMPRESS_POINTER(br), (Eterm*)br)) {
                             mark_literal((Eterm*)br);
                         }
 
@@ -653,7 +653,7 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
                         *ptr = OUR_NIL;
                         x = fmp->keys;
                         if (map_size) {
-                            fmp->keys = (Eterm) next;
+                            fmp->keys = COMPRESS_POINTER(next);
                             next = &values[map_size-1];
                         }
                         continue;
@@ -692,7 +692,7 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
                         }
                         erts_putc(to, to_arg, '\n');
                         x = nodes[0];
-                        nodes[0] = (Eterm) next;
+                        nodes[0] = COMPRESS_POINTER(next);
                         next = &nodes[sz-1];
                         continue;
                     }

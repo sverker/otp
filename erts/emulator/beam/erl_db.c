@@ -2164,7 +2164,7 @@ ets_insert_2_list_continuation(Process* p,
     long init_reds;
     BIF_RETTYPE ret;
 
-    reds = DBG_RANDOM_REDS(reds, (Uint)ctx);
+    reds = DBG_RANDOM_REDS(reds, (UWord)ctx);
     init_reds = reds;
 
     ERTS_LC_ASSERT(ctx->status != ETS_INSERT_2_LIST_GLOBAL
@@ -2263,7 +2263,7 @@ static BIF_RETTYPE ets_insert_2_list_driver(Process* p,
         long reds = ITERATIONS_PER_RED * ERTS_BIF_REDS_LEFT(p);
         long init_reds;
 
-        reds = DBG_RANDOM_REDS(reds, (Uint)p);
+        reds = DBG_RANDOM_REDS(reds, (UWord)p);
         init_reds = reds;
 
         ictx.continuation_state = NULL;

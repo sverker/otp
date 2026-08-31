@@ -96,7 +96,7 @@ ErlSubBits *erts_bs_start_match_3(Process *p, Eterm bin)
 
     erl_sub_bits_init(sb,
                       ERL_SUB_BITS_FLAGS_MATCH_CONTEXT,
-                      br ? ((Eterm)br | br_flags) : bin,
+                      br ? (COMPRESS_POINTER(br) | br_flags) : bin,
                       base,
                       offset,
                       size);
@@ -2659,7 +2659,7 @@ Eterm erts_build_sub_bitstring(Eterm **hp,
 
         erl_sub_bits_init(sb,
                           flags,
-                          ((Eterm)br) | br_flags,
+                          COMPRESS_POINTER(br) | br_flags,
                           base,
                           offset,
                           size);
