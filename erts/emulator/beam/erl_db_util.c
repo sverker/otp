@@ -3198,7 +3198,6 @@ void db_free_dmc_err_info(DMCErrInfo *ei){
 */
 Eterm db_add_counter(Eterm** hpp, Eterm counter, Eterm incr)
 {
-    DeclareTmpHeapNoproc(big_tmp,2);
     Eterm res;
     Sint ires;
     Eterm arg1;
@@ -3216,7 +3215,7 @@ Eterm db_add_counter(Eterm** hpp, Eterm counter, Eterm incr)
 	}
     }
     else {
-	UseTmpHeapNoproc(2);
+        DeclareUseTmpHeapNoProc(big_tmp,2);
 	switch(NUMBER_CODE(counter, incr)) {
 	case SMALL_BIG:
 	    arg1 = small_to_big(signed_val(counter), big_tmp);
@@ -3231,14 +3230,14 @@ Eterm db_add_counter(Eterm** hpp, Eterm counter, Eterm incr)
 	    arg2 = counter;
 	    break;
 	default:
-	    UnUseTmpHeapNoproc(2);
+            UnDeclareTmpHeapNoProc(big_tmp);
 	    return THE_NON_VALUE;
 	}
 	res = big_plus(arg1, arg2, *hpp);
 	if (is_big(res)) {
 	    *hpp += BIG_NEED_SIZE(big_size(res));
 	}
-	UnUseTmpHeapNoproc(2);
+        UnDeclareTmpHeapNoProc(big_tmp);
 	return res;
     }
 }

@@ -1551,16 +1551,13 @@ insert_offheap(ErlOffHeap *oh, int type, Eterm id)
 		if (insert_bin) {
 #if HALFWORD_HEAP
                     UWord val = (UWord) u.mref->mb;
-                    DeclareTmpHeapNoproc(id_heap,BIG_UINT_HEAP_SIZE*2); /* extra place allocated */
+                    DeclareUseTmpHeapNoProc(id_heap,BIG_UINT_HEAP_SIZE*2); /* extra place allocated */
 #else
                     Eterm id_heap[BIG_UINT_HEAP_SIZE];
 #endif
 		    Uint *hp = &id_heap[0];
 		    InsertedBin *nib;
 #if HALFWORD_HEAP
-                    int actual_need = BIG_UWORD_HEAP_SIZE(val);
-                    ASSERT(actual_need <= (BIG_UINT_HEAP_SIZE*2));
-                    UseTmpHeapNoproc(actual_need);
                     a.id = erts_bld_uword(&hp, NULL, (UWord) val);
 #else
 		    a.id = erts_bld_uint(&hp, NULL, (Uint) u.mref->mb);
@@ -1574,7 +1571,7 @@ insert_offheap(ErlOffHeap *oh, int type, Eterm id)
 		    nib->next = inserted_bins;
 		    inserted_bins = nib;
 #if HALFWORD_HEAP
-                    UnUseTmpHeapNoproc(actual_need);
+                    UnDeclareTmpHeapNoProc(id_heap);
 #endif
 		}
 	    }
@@ -1782,15 +1779,14 @@ static void
 insert_bif_timer(Eterm receiver, Eterm msg, ErlHeapFragment *bp, void *arg)
 {
     if (bp) {
-	DeclareTmpHeapNoproc(heap,3);
+        DeclareUseTmpHeapNoProc(heap,3);
 
-	UseTmpHeapNoproc(3);
 	insert_offheap(&bp->off_heap,
 		       TIMER_REF,
 		       (is_internal_pid(receiver)
 			? receiver
 			: TUPLE2(&heap[0], AM_process, receiver)));
-	UnUseTmpHeapNoproc(3);
+        UnDeclareTmpHeapNoProc(heap);
     }
 }
 
@@ -2035,7 +2031,7 @@ setup_reference_table(void)
     DistEntry *dep;
     HashInfo hi;
     int i, max;
-    DeclareTmpHeapNoproc(heap,3);
+    DeclareUseTmpHeapNoProc(heap,3);
 
     inserted_bins = NULL;
 
@@ -2066,7 +2062,6 @@ setup_reference_table(void)
                                 insert_thr_prgr_delete_dist_entry,
                                 NULL);
 
-    UseTmpHeapNoproc(3);
     insert_node(erts_this_node,
 		SYSTEM_REF,
 		TUPLE2(&heap[0], AM_system, am_undefined));
@@ -2075,7 +2070,7 @@ setup_reference_table(void)
                       SYSTEM_REF,
                       TUPLE2(&heap[0], AM_system, am_undefined),
                       erts_this_node->creation);
-    UnUseTmpHeapNoproc(3);
+    UnDeclareTmpHeapNoProc(heap);
 
     max = erts_ptab_max(&erts_proc);
     /* Insert all processes */

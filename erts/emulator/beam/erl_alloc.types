@@ -285,10 +285,8 @@ type	RELEASE_LAREA	SHORT_LIVED	SYSTEM		release_literal_area
 type	SIG_DATA	SHORT_LIVED	PROCESSES	signal_data
 type	SIG_YIELD_DATA	SHORT_LIVED	PROCESSES	signal_yield_data
 type	DIST_DEMONITOR	SHORT_LIVED	PROCESSES	dist_demonitor
-type	CML_CLEANUP	SHORT_LIVED	SYSTEM		connection_ml_cleanup
 type	ML_YIELD_STATE	SHORT_LIVED	SYSTEM		monitor_link_yield_state
 type	ML_DIST		STANDARD	SYSTEM		monitor_link_dist
-type	PF3_ARGS	SHORT_LIVED	PROCESSES	process_flag_3_arguments
 type	TRACE_INFO_REQ	SHORT_LIVED	PROCESSES	trace_info_proc_request
 type	SETUP_CONN_ARG	SHORT_LIVED	PROCESSES	setup_connection_argument
 type    LIST_TRAP       SHORT_LIVED     PROCESSES       list_bif_trap_state
@@ -360,6 +358,8 @@ type	AINFO_REQ	STANDARD_LOW	SYSTEM		alloc_info_request
 type	SCHED_WTIME_REQ	STANDARD_LOW	SYSTEM		sched_wall_time_request
 type	GC_INFO_REQ	STANDARD_LOW	SYSTEM		gc_info_request
 type	PORT_DATA_HEAP	STANDARD_LOW	SYSTEM		port_data_heap
+type	PF3_ARGS	STANDARD_LOW	PROCESSES	process_flag_3_arguments
+type	CML_CLEANUP	STANDARD_LOW	SYSTEM		connection_ml_cleanup
 
 +else # "fullword"
 
@@ -377,6 +377,8 @@ type	AINFO_REQ	SHORT_LIVED	SYSTEM		alloc_info_request
 type	SCHED_WTIME_REQ	SHORT_LIVED	SYSTEM		sched_wall_time_request
 type	GC_INFO_REQ	SHORT_LIVED	SYSTEM		gc_info_request
 type	PORT_DATA_HEAP	STANDARD	SYSTEM		port_data_heap
+type	PF3_ARGS	SHORT_LIVED	PROCESSES	process_flag_3_arguments
+type	CML_CLEANUP	SHORT_LIVED	SYSTEM		connection_ml_cleanup
 
 +endif
 

@@ -1466,9 +1466,11 @@ erts_dsig_send_link(ErtsDSigSendContext *ctx, Eterm local, Eterm remote)
 int
 erts_dsig_send_unlink(ErtsDSigSendContext *ctx, Eterm local, Eterm remote, Uint64 id)
 {
-    Eterm big_heap[ERTS_MAX_UINT64_HEAP_SIZE];
+    DeclareUseTmpHeap(big_heap, ERTS_MAX_UINT64_HEAP_SIZE, ctx->c_p);
     Eterm unlink_id;    
     Eterm ctl;
+    int ret;
+
     if (IS_USMALL(0, id))
         unlink_id = make_small(id);
     else {
@@ -1477,15 +1479,19 @@ erts_dsig_send_unlink(ErtsDSigSendContext *ctx, Eterm local, Eterm remote, Uint6
     }
     ctl = TUPLE4(&ctx->ctl_heap[0], make_small(DOP_UNLINK_ID),
                  unlink_id, local, remote);
-    return dsig_send_ctl(ctx, ctl);
+    ret = dsig_send_ctl(ctx, ctl);
+
+    UnDeclareTmpHeap(big_heap, ctx->c_p);
+    return ret;
 }
 
 int
 erts_dsig_send_unlink_ack(ErtsDSigSendContext *ctx, Eterm local, Eterm remote, Uint64 id)
 {
-    Eterm big_heap[ERTS_MAX_UINT64_HEAP_SIZE];
+    DeclareUseTmpHeap(big_heap, ERTS_MAX_UINT64_HEAP_SIZE, ctx->c_p);
     Eterm unlink_id;
     Eterm ctl;
+    Eterm ret;
 
     if (IS_USMALL(0, id))
         unlink_id = make_small(id);
@@ -1495,7 +1501,10 @@ erts_dsig_send_unlink_ack(ErtsDSigSendContext *ctx, Eterm local, Eterm remote, U
     }
     ctl = TUPLE4(&ctx->ctl_heap[0], make_small(DOP_UNLINK_ID_ACK),
                  unlink_id, local, remote);
-    return dsig_send_ctl(ctx, ctl);
+    ret = dsig_send_ctl(ctx, ctl);
+
+    UnDeclareTmpHeap(big_heap, ctx->c_p);
+    return ret;
 }
 
 
@@ -1855,7 +1864,7 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
                           ref, from, gl, mfa, opts);
     }
     else {
-        DeclareTmpHeap(tmp_heap, 8, sender);
+        DeclareUseTmpHeap(tmp_heap, 8, sender);
         Eterm node = ctx->dep ? ctx->dep->sysname : ctx->node;
         Eterm msg;
         Eterm token;
@@ -1866,7 +1875,6 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
          * will become an actual message). For more info see
          * handling of seq-trace token in erl_create_process().
          */
-        UseTmpHeap(8, sender);
         seq_trace_update_serial(sender);
 	token = SEQ_TRACE_TOKEN(sender);
         msg = TUPLE6(&tmp_heap[0], am_spawn_request,
@@ -1879,7 +1887,7 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
         
         ctx->ctl = TUPLE7(&ctx->ctl_heap[0], make_small(DOP_SPAWN_REQUEST_TT),
                           ref, from, gl, mfa, opts, token);
-        UnUseTmpHeap(8, sender);
+        UnDeclareTmpHeap(tmp_heap, sender);
     }
     ctx->msg = alist;
     return erts_dsig_send(ctx);
@@ -2041,8 +2049,8 @@ int erts_net_message(Port *prt,
     Eterm *tuple;
     Eterm reason;
     Process* rp;
-    DeclareTmpHeapNoproc(ctl_default,DIST_CTL_DEFAULT_SIZE);
-    Eterm* ctl = ctl_default;
+    DeclareTmpHeapNoProc(ctl_default,DIST_CTL_DEFAULT_SIZE);
+    Eterm* ctl;
     ErtsHeapFactory factory;
     Sint type;
     Eterm token;
@@ -2052,21 +2060,17 @@ int erts_net_message(Port *prt,
     ErlDrvSizeT orig_len = len;
 #endif
 
-    UseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
-
     ERTS_CHK_NO_PROC_LOCKS;
 
     ERTS_LC_ASSERT(!prt || erts_lc_is_port_locked(prt));
 
     if (!erts_is_alive) {
-	UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
 	return 0;
     }
 
     ASSERT(hlen == 0);
 
     if (len == 0) {  /* HANDLE TICK !!! */
-	UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
 	return 0;
     }
 
@@ -2078,6 +2082,9 @@ int erts_net_message(Port *prt,
     ede.data = &ede_data;
 
     res = erts_prepare_dist_ext(&ede, buf, len, bin, dep, conn_id, dep->cache);
+
+    UseTmpHeapNoProc(ctl_default);
+    ctl = ctl_default;
 
     switch (res) {
     case ERTS_PREP_DIST_EXT_CLOSED:
@@ -3168,7 +3175,7 @@ int erts_net_message(Port *prt,
             erts_free(ERTS_ALC_T_DCTRL_BUF, (void *) ctl);
         }
     }
-    UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
+    UnDeclareTmpHeapNoProc(ctl_default);
     ERTS_CHK_NO_PROC_LOCKS;
     return 0;
  invalid_message:
@@ -3189,7 +3196,7 @@ decode_error:
         free_message_buffer(ede_hfrag);
     }
 data_error:
-    UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
+    UnDeclareTmpHeapNoProc(ctl_default);
     erts_kill_dist_connection(dep, conn_id);
     ERTS_CHK_NO_PROC_LOCKS;
     return -1;

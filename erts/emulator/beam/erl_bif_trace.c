@@ -350,8 +350,6 @@ trace_pattern(Process* p, ErtsTraceSession *session,
     erts_staging_trace_session = session;
     finish_bp.current = -1;
 
-    UseTmpHeap(3,p);
-
     p->fvalue = am_badopt;
     is_global = 0;
     for(l = flaglist; is_list(l); l = CDR(list_val(l))) {
@@ -3562,6 +3560,7 @@ system_monitor(Process *p, ErtsTraceSession *session,
 {
     Eterm return_term;
     bool system_blocked = false;
+    DeclareUseTmpHeap(fake_tuple, 3, p);
 
     if (is_not_list(list) && is_not_nil(list)) goto error;
     else {
@@ -3620,7 +3619,6 @@ system_monitor(Process *p, ErtsTraceSession *session,
 	for ( ; is_list(list); list = CDR(list_val(list))) {
             Eterm t = CAR(list_val(list));
             Eterm *tp;
-            Eterm fake_tuple[3];
 
             if (!is_tuple_arity(t,2)) {
                 if (is_atom(t)) {
@@ -3692,6 +3690,8 @@ system_monitor(Process *p, ErtsTraceSession *session,
         update_sysmon_globals(session, &prev);
 
         erts_thr_progress_unblock();
+
+        UnDeclareTmpHeap(fake_tuple,p);
 	BIF_RET(return_term);
     }
 
@@ -3700,7 +3700,7 @@ system_monitor(Process *p, ErtsTraceSession *session,
     if (system_blocked) {
 	erts_thr_progress_unblock();
     }
-
+    UnDeclareTmpHeap(fake_tuple,p);
     BIF_ERROR(p, BADARG);
 }
 

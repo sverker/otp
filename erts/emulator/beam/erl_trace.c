@@ -976,7 +976,7 @@ seq_trace_output_generic(Eterm token, Eterm msg, Uint type,
     ErtsTracer seq_tracer;
     int seq_tracer_flags = 0;
 #define LOCAL_HEAP_SIZE (64)
-    DeclareTmpHeapNoproc(local_heap,LOCAL_HEAP_SIZE);
+    DeclareTmpHeapNoProc(local_heap,LOCAL_HEAP_SIZE);
 
     seq_tracer = erts_get_system_seq_tracer();
 
@@ -1004,7 +1004,7 @@ seq_trace_output_generic(Eterm token, Eterm msg, Uint type,
 	return;			/* To avoid warning */
     }
 
-    UseTmpHeapNoproc(LOCAL_HEAP_SIZE);
+    UseTmpHeapNoProc(local_heap);
 
     hp = local_heap;
     label = SEQ_TRACE_T_LABEL(token);
@@ -1024,7 +1024,7 @@ seq_trace_output_generic(Eterm token, Eterm msg, Uint type,
                            label, NULL, TRACE_FUN_DEFAULT, am_seq_trace, mess,
                            THE_NON_VALUE, am_true);
 
-    UnUseTmpHeapNoproc(LOCAL_HEAP_SIZE);
+    UnDeclareTmpHeapNoProc(local_heap);
 #undef LOCAL_HEAP_SIZE
 }
 

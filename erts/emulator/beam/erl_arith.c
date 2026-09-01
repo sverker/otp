@@ -752,8 +752,7 @@ erts_mixed_times(Process* p, Eterm arg1, Eterm arg2)
 		    } else if (arg2 == SMALL_ONE) {
 			return(arg1);
 		    } else {
-                        DeclareTmpHeap(big_res,3,p);
-                        UseTmpHeap(3,p);
+                        DeclareUseTmpHeap(big_res,3,p);
 
 			/*
 			 * The following code is optimized for the case that
@@ -782,7 +781,7 @@ erts_mixed_times(Process* p, Eterm arg1, Eterm arg2)
 				*hp = big_res[2];
 			    }
 			}
-                        UnUseTmpHeap(3,p);
+                        UnDeclareTmpHeap(big_res,p);
                         return res;
 		    }
 		default:

@@ -1374,10 +1374,9 @@ static BIF_RETTYPE do_update_element(Process *p, DbTable *tb,
     int cret = DB_ERROR_BADITEM;
     Eterm list;
     Eterm iter;
-    DeclareTmpHeap(cell,2,p);
+    DeclareUseTmpHeap(cell,2,p);
     DbUpdateHandle handle;
 
-    UseTmpHeap(2,p);
     if (!(tb->common.status & (DB_SET | DB_ORDERED_SET | DB_CA_ORDERED_SET))) {
 	p->fvalue = EXI_TAB_TYPE;
 	cret = DB_ERROR_BADPARAM;
@@ -1439,7 +1438,7 @@ finalize:
     tb->common.meth->db_finalize_dbterm(cret, &handle);
 
 bail_out:
-    UnUseTmpHeap(2,p);
+    UnDeclareTmpHeap(cell,p);
     db_unlock(tb, LCK_WRITE_REC);
 
     switch (cret) {
@@ -1501,7 +1500,7 @@ do_update_counter(Process *p, DbTable* tb,
     Eterm* ret_list_currp = NULL;
     Eterm* ret_list_prevp = NULL;
     Eterm iter;
-    DeclareTmpHeap(cell, 5, p);
+    DeclareUseTmpHeap(cell, 5, p);
     Eterm *tuple = cell+2;
     DbUpdateHandle handle;
     Uint halloc_size = 0; /* overestimated heap usage */
@@ -1511,7 +1510,6 @@ do_update_counter(Process *p, DbTable* tb,
     Uint largest_big_arity = 0;
     ERTS_UNDEF(ret, THE_NON_VALUE);
 
-    UseTmpHeap(5, p);
     if (!(tb->common.status & (DB_SET | DB_ORDERED_SET | DB_CA_ORDERED_SET))) {
         p->fvalue = EXI_TAB_TYPE;
         cret = DB_ERROR_BADPARAM;
@@ -1678,8 +1676,8 @@ finalize:
     tb->common.meth->db_finalize_dbterm(cret, &handle);
 
 bail_out:
-    UnUseTmpHeap(5, p);
     db_unlock(tb, LCK_WRITE_REC);
+    UnDeclareTmpHeap(cell, p);
 
     switch (cret) {
     case DB_ERROR_NONE:
@@ -3144,7 +3142,6 @@ BIF_RETTYPE ets_give_away_3(BIF_ALIST_3)
     send_ets_transfer_message(BIF_P, to_proc, &to_locks,
                               tb, BIF_ARG_3);
     erts_proc_unlock(to_proc, to_locks);
-    UnUseTmpHeap(5,BIF_P);
     BIF_RET(am_true);
 
  fail:
@@ -3154,28 +3151,41 @@ BIF_RETTYPE ets_give_away_3(BIF_ALIST_3)
     return db_bif_fail(BIF_P, freason, BIF_ets_give_away_3, NULL);
 }
 
+static BIF_RETTYPE ets_setopts(Process* c_p, DbTable* tb, Eterm opt_list);
+
 BIF_RETTYPE ets_setopts_2(BIF_ALIST_2)
 {
     DbTable* tb = NULL;
-    Eterm* tp;
-    Eterm opt;
-    Eterm heir = THE_NON_VALUE;
-    Eterm heir_data = THE_NON_VALUE;
-    Uint32 protection = 0;
-    DeclareTmpHeap(fakelist,2,BIF_P);
-    Eterm tail;
-    bool do_update_heir = false;
 
     DB_BIF_GET_TABLE(tb, DB_WRITE, LCK_WRITE, BIF_ets_setopts_2);
     if (tb == NULL) {
         BIF_ERROR(BIF_P, BADARG | EXF_HAS_EXT_INFO);
     }
 
-    UseTmpHeap(2,BIF_P);
-    for (tail = is_tuple(BIF_ARG_2) ? CONS(fakelist, BIF_ARG_2, NIL) : BIF_ARG_2;	
-	  is_list(tail);
-	  tail = CDR(list_val(tail))) {
+    {
+        DeclareUseTmpHeap(fakelist,2,BIF_P);
+        Eterm opt_list;
+        BIF_RETTYPE ret;
 
+        opt_list = (is_tuple(BIF_ARG_2) ? CONS(fakelist, BIF_ARG_2, NIL) : BIF_ARG_2);
+        ret = ets_setopts(BIF_P, tb, opt_list);
+        UnDeclareTmpHeap(fakelist, BIF_P);
+        return ret;
+    }
+}
+
+static BIF_RETTYPE ets_setopts(Process* c_p, DbTable* tb, Eterm opt_list)
+{
+    Eterm* tp;
+    Eterm opt;
+    Eterm heir = THE_NON_VALUE;
+    Eterm heir_data = THE_NON_VALUE;
+    Uint32 protection = 0;
+    Eterm tail;
+    bool do_update_heir = false;
+    BIF_RETTYPE ret;
+
+    for (tail = opt_list; is_list(tail); tail = CDR(list_val(tail))) {
 	opt = CAR(list_val(tail));
 	if (!is_tuple(opt) || (tp = tuple_val(opt), arityval(tp[0]) < 2)) { 
 	    goto badarg;
@@ -3215,12 +3225,12 @@ BIF_RETTYPE ets_setopts_2(BIF_ALIST_2)
     if (tail != NIL)
         goto badarg;
 
-    if (tb->common.owner != BIF_P->common.id)
+    if (tb->common.owner != c_p->common.id)
 	goto badarg;
 
     if (do_update_heir) {
 	free_heir_data(tb);
-	set_heir(BIF_P, tb, heir, heir_data);
+        set_heir(c_p, tb, heir, heir_data);
     }
     if (protection) {
 	tb->common.status &= ~(DB_PRIVATE|DB_PROTECTED|DB_PUBLIC);
@@ -3228,15 +3238,14 @@ BIF_RETTYPE ets_setopts_2(BIF_ALIST_2)
     }
 
     db_unlock (tb,LCK_WRITE);
-    UnUseTmpHeap(2,BIF_P);
     BIF_RET(am_true);
 
 badarg:
-    UnUseTmpHeap(2,BIF_P);
     if (tb != NULL) {
 	db_unlock(tb,LCK_WRITE);
     }
-    BIF_ERROR(BIF_P, BADARG);
+    ERTS_BIF_PREP_ERROR(ret, c_p, BADARG);
+    return ret;
 }
 
 /* 
@@ -3784,19 +3793,20 @@ BIF_RETTYPE ets_match_2(BIF_ALIST_2)
     DbTable* tb;
     Eterm ms;
     DeclareTmpHeap(buff,8,BIF_P);
-    Eterm *hp = buff;
+    Eterm *hp;
     Eterm res;
 
     DB_BIF_GET_TABLE(tb, DB_READ, LCK_READ, BIF_ets_match_2);
 
-    UseTmpHeap(8,BIF_P);
+    UseTmpHeap(buff,BIF_P);
+    hp = buff;
     ms = CONS(hp, am_DollarDollar, NIL);
     hp += 2;
     ms = TUPLE3(hp, BIF_ARG_2, NIL, ms); 
     hp += 4;
     ms = CONS(hp, ms, NIL);
     res = ets_select2(BIF_P, tb, BIF_ARG_1, ms);
-    UnUseTmpHeap(8,BIF_P);
+    UnDeclareTmpHeap(buff, BIF_P);
     return res;
 }
 
@@ -3806,7 +3816,7 @@ BIF_RETTYPE ets_match_3(BIF_ALIST_3)
     Eterm ms;
     Sint chunk_size;
     DeclareTmpHeap(buff,8,BIF_P);
-    Eterm *hp = buff;
+    Eterm *hp;
     Eterm res;
 
     DB_BIF_GET_TABLE(tb, DB_READ, LCK_READ, BIF_ets_match_3);
@@ -3817,14 +3827,15 @@ BIF_RETTYPE ets_match_3(BIF_ALIST_3)
         BIF_ERROR(BIF_P, BADARG);
     }
 
-    UseTmpHeap(8,BIF_P);
+    UseTmpHeap(buff,BIF_P);
+    hp = buff;
     ms = CONS(hp, am_DollarDollar, NIL);
     hp += 2;
     ms = TUPLE3(hp, BIF_ARG_2, NIL, ms); 
     hp += 4;
     ms = CONS(hp, ms, NIL);
     res = ets_select3(BIF_P, tb, BIF_ARG_1, ms, chunk_size);
-    UnUseTmpHeap(8,BIF_P);
+    UnDeclareTmpHeap(buff,BIF_P);
     return res;
 }
 
@@ -4356,19 +4367,20 @@ BIF_RETTYPE ets_match_object_2(BIF_ALIST_2)
     DbTable* tb;
     Eterm ms;
     DeclareTmpHeap(buff,8,BIF_P);
-    Eterm *hp = buff;
+    Eterm *hp;
     Eterm res;
 
     DB_BIF_GET_TABLE(tb, DB_READ, LCK_READ, BIF_ets_match_object_2);
 
-    UseTmpHeap(8,BIF_P);
+    UseTmpHeap(buff,BIF_P);
+    hp = buff;
     ms = CONS(hp, am_DollarUnderscore, NIL);
     hp += 2;
     ms = TUPLE3(hp, BIF_ARG_2, NIL, ms); 
     hp += 4;
     ms = CONS(hp, ms, NIL);
     res = ets_select2(BIF_P, tb, BIF_ARG_1, ms);
-    UnUseTmpHeap(8,BIF_P);
+    UnDeclareTmpHeap(buff,BIF_P);
     return res;
 }
 
@@ -4381,7 +4393,7 @@ BIF_RETTYPE ets_match_object_3(BIF_ALIST_3)
     Sint chunk_size;
     Eterm ms;
     DeclareTmpHeap(buff,8,BIF_P);
-    Eterm *hp = buff;
+    Eterm *hp;
     Eterm res;
 
     DB_BIF_GET_TABLE(tb, DB_READ, LCK_READ, BIF_ets_match_object_3);
@@ -4392,14 +4404,15 @@ BIF_RETTYPE ets_match_object_3(BIF_ALIST_3)
         BIF_ERROR(BIF_P, BADARG);
     }
 
-    UseTmpHeap(8,BIF_P);
+    UseTmpHeap(buff,BIF_P);
+    hp = buff;
     ms = CONS(hp, am_DollarUnderscore, NIL);
     hp += 2;
     ms = TUPLE3(hp, BIF_ARG_2, NIL, ms); 
     hp += 4;
     ms = CONS(hp, ms, NIL);
     res = ets_select3(BIF_P, tb, BIF_ARG_1, ms, chunk_size);
-    UnUseTmpHeap(8,BIF_P);
+    UnDeclareTmpHeap(buff,BIF_P);
     return res;
 }
 

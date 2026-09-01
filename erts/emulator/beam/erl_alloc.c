@@ -2393,14 +2393,13 @@ erts_memory(fmtfn_t *print_to_p, void *print_to_arg, void *proc, Eterm earg)
         uintps[length++] = &size.low;
 #endif
     }
+    else if (is_nil(earg)) {
+        return NIL;
+    }
     else {
-	DeclareTmpHeapNoproc(tmp_heap,2);
+        DeclareUseTmpHeapNoProc(tmp_heap,2);
 	Eterm wanted_list;
 
-	if (is_nil(earg))
-	    return NIL;
-
-	UseTmpHeapNoproc(2);
 	if (is_not_atom(earg))
 	    wanted_list = earg;
 	else {
@@ -2483,12 +2482,12 @@ erts_memory(fmtfn_t *print_to_p, void *print_to_arg, void *proc, Eterm earg)
                 break;
 #endif
 	    default:
-		UnUseTmpHeapNoproc(2);
+                UnDeclareTmpHeapNoProc(tmp_heap);
 		return am_badarg;
 	    }
 	    wanted_list = CDR(list_val(wanted_list));
 	}
-	UnUseTmpHeapNoproc(2);
+        UnDeclareTmpHeapNoProc(tmp_heap);
 	if (is_not_nil(wanted_list))
 	    return am_badarg;
     }

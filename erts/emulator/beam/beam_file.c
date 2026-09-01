@@ -462,6 +462,7 @@ load_error:
 }
 
 static int parse_line_chunk(BeamFile *beam, IFF_Chunk *chunk) {
+    BeginTmpHeapUseNoProc;
     BeamFile_LineTable *lines;
     BeamReader reader;
 
@@ -559,7 +560,7 @@ static int parse_line_chunk(BeamFile *beam, IFF_Chunk *chunk) {
     /* Add the implicit "module_name.erl" entry, followed by the rest of the
      * name table. */
     {
-        Eterm default_name_buf[MAX_ATOM_CHARACTERS * 2];
+        DeclareUseTmpHeapNoProc(default_name_buf, MAX_ATOM_CHARACTERS * 2);
         Eterm *name_heap = default_name_buf;
         Eterm name, suffix;
         Eterm *hp;
@@ -619,9 +620,11 @@ static int parse_line_chunk(BeamFile *beam, IFF_Chunk *chunk) {
         }
     }
 
+    EndTmpHeapUseNoProc;
     return 1;
 
 load_error:
+    EndTmpHeapUseNoProc;
     return 0;
 }
 
@@ -1109,6 +1112,7 @@ static int record_compare(const struct erl_record_field *a, const struct erl_rec
 }
 
 static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
+    BeginTmpHeapUseNoProc;
     Sint32 record_count;
     Sint32 total_field_count;
     BeamOpAllocator op_allocator;
@@ -1116,6 +1120,7 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
     BeamOp *op = NULL;
     BeamFile_RecordTable *rec = &beam->record;
     struct erl_record_field *fields = NULL;
+    DeclareUseTmpHeapNoProc(tmp_cons, 2);
 
     LoadAssert(beamreader_read_i32(p_reader, &record_count));
     LoadAssert(beamreader_read_i32(p_reader, &total_field_count));
@@ -1152,7 +1157,6 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
         Eterm value_tuple;
         Eterm is_exported;
         Eterm *hp;
-        Eterm tmp_cons[2];
         Uint32 hash;
         Uint hash_tuple_size;
         Eterm tagged_hash;
@@ -1344,6 +1348,7 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
     beamcodereader_close(op_reader);
     beamopallocator_dtor(&op_allocator);
 
+    EndTmpHeapUseNoProc;
     return 1;
 
  error:
@@ -1364,6 +1369,7 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
     }
 
 load_error:
+    EndTmpHeapUseNoProc;
     return 0;
 }
 
