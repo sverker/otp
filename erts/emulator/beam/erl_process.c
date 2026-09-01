@@ -6057,6 +6057,10 @@ init_scheduler_data(ErtsSchedulerData* esdp, int num,
         runq->scheduler = esdp;
     }
 
+#if !HEAP_ON_C_STACK
+    esdp->tmp_heap_top = esdp->tmp_heap;
+#endif
+
     init_scheduler_registers(esdp);
 
     esdp->dirty_shadow_process = shadow_proc;

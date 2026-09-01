@@ -696,7 +696,7 @@ struct ErtsSchedulerData_ {
     ErtsThrPrgrData thr_progress_data;
 #if !HEAP_ON_C_STACK
     Eterm tmp_heap[TMP_HEAP_SIZE];
-    int num_tmp_heap_used;
+    Eterm* tmp_heap_top;
     Eterm beam_emu_tmp_heap[BEAM_EMU_TMP_HEAP_SIZE];
     Eterm erl_arith_tmp_heap[ERL_ARITH_TMP_HEAP_SIZE];
 #endif
