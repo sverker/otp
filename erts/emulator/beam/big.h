@@ -85,7 +85,7 @@ typedef Uint  dsize_t;	 /* Vector size type */
  * a Uint64 argument. Therefore, we must test the size of the argument
  * to ensure that the cast does not discard the high-order 32 bits.
  */
-#if defined(ARCH_32)
+#if ERTS_SIZEOF_ETERM == 4
 #  define _IS_SSMALL32(x) (((Uint32) ((((x)) >> (SMALL_BITS-1)) + 1)) < 2)
 #else
 #  define _IS_SSMALL32(x) (1)
@@ -105,7 +105,7 @@ typedef Uint  dsize_t;	 /* Vector size type */
 #define BIG_UWORD_HEAP_SIZE(UW) BIG_UINT_HEAP_SIZE
 #endif
 
-#if defined(ARCH_32) || HALFWORD_HEAP
+#if ERTS_SIZEOF_ETERM == 4
 
 #define ERTS_UINT64_BIG_HEAP_SIZE__(X) \
   ((X) >= (((Uint64) 1) << 32) ? (1 + 2) : (1 + 1))
@@ -119,7 +119,7 @@ typedef Uint  dsize_t;	 /* Vector size type */
 #define ERTS_MAX_UINT64_HEAP_SIZE (1 + 2)
 #define ERTS_UINT64_ARRAY_TO_BIG_MAX_HEAP_SZ(LEN) (2*(LEN)+1)
 
-#else
+#elif ERTS_SIZEOF_ETERM == 8
 
 #define ERTS_SINT64_HEAP_SIZE(X)				\
   (IS_SSMALL((X)) ? 0 : (1 + 1))
