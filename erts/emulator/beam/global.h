@@ -1742,6 +1742,9 @@ int erts_beam_jump_table(void);
      Type VariableName[1]
 #define DeclareTmpHeapNoProc(VariableName,Size) \
      Eterm VariableName[Size]
+
+#define DeclareUseTmpHeap(VariableName, Size, Process) \
+     Eterm VariableName[Size]
 #define DeclareUseTmpHeapNoProc(VariableName,Size) \
      Eterm VariableName[Size]
 #define UseTmpHeap(Size,Proc) /* Nothing */
