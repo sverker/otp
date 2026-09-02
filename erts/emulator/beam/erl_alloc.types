@@ -349,6 +349,10 @@ type	DEBUG	        SHORT_LIVED	SYSTEM          debugging
 
 type	DDLL_PROCESS	STANDARD_LOW	SYSTEM		ddll_processes
 type	MONITOR_EXT	STANDARD_LOW	PROCESSES	monitor_extended
+type	MONITOR		STANDARD_LOW	PROCESSES	monitor
+type	MONITOR_TAG	STANDARD_LOW	PROCESSES	monitor_tag
+type	MONITOR_SUSPEND	STANDARD_LOW	PROCESSES	monitor_suspend
+type	ALIAS		STANDARD_LOW	PROCESSES	alias
 type	LINK_EXT	STANDARD_LOW	PROCESSES	link_extended
 +ifnot beamasm
 type	CODE		LONG_LIVED_LOW	CODE		code
@@ -369,6 +373,10 @@ type	MISC_AUX_WORK	STANDARD_LOW	SYSTEM		misc_aux_work
 
 type	DDLL_PROCESS	STANDARD	SYSTEM		ddll_processes
 type	MONITOR_EXT	STANDARD	PROCESSES	monitor_extended
+type	MONITOR		FIXED_SIZE	PROCESSES	monitor
+type	MONITOR_TAG	STANDARD	PROCESSES	monitor_tag
+type	MONITOR_SUSPEND	STANDARD	PROCESSES	monitor_suspend
+type	ALIAS		STANDARD	PROCESSES	alias
 type	LINK_EXT	STANDARD	PROCESSES	link_extended
 +ifnot beamasm
 type	CODE		LONG_LIVED	CODE		code
@@ -392,10 +400,6 @@ type	LITERAL_REF	SHORT_LIVED	CODE		literal_area_ref
 type	PURGE_DATA	SHORT_LIVED	CODE		purge_data
 
 type	NFUNC_TRAP_WRAPPER	STANDARD	PROCESSES	nfunc_trap_wrapper
-type	MONITOR		FIXED_SIZE	PROCESSES	monitor
-type	MONITOR_TAG	STANDARD	PROCESSES	monitor_tag
-type	ALIAS		STANDARD	PROCESSES	alias
-type	MONITOR_SUSPEND	STANDARD	PROCESSES	monitor_suspend
 type	LINK		FIXED_SIZE	PROCESSES	link
 type    MSACC           DRIVER          SYSTEM          microstate_accounting
 type	SYS_CHECK_REQ	SHORT_LIVED	SYSTEM		system_check_request

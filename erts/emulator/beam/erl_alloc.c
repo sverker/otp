@@ -661,8 +661,10 @@ erts_alloc_init(int *argc, char **argv, ErtsAllocInitOpts *eaiop)
 
     fix_type_sizes[ERTS_ALC_FIX_TYPE_IX(ERTS_ALC_T_PROC)]
 	= sizeof(Process);
+#if !HALFWORD_HEAP
     fix_type_sizes[ERTS_ALC_FIX_TYPE_IX(ERTS_ALC_T_MONITOR)]
 	= sizeof(ErtsMonitorDataHeap);
+#endif
     fix_type_sizes[ERTS_ALC_FIX_TYPE_IX(ERTS_ALC_T_LINK)]
 	= sizeof(ErtsILink);
     fix_type_sizes[ERTS_ALC_FIX_TYPE_IX(ERTS_ALC_T_DRV_SEL_D_STATE)]
@@ -2591,10 +2593,12 @@ erts_memory(fmtfn_t *print_to_p, void *print_to_arg, void *proc, Eterm earg)
 		       &size.processes_used,
 		       fi,
 		       ERTS_ALC_T_PROC);
+#if !HALFWORD_HEAP
 	add_fix_values(&size.processes,
 		       &size.processes_used,
 		       fi,
 		       ERTS_ALC_T_MONITOR);
+#endif
 	add_fix_values(&size.processes,
 		       &size.processes_used,
 		       fi,
