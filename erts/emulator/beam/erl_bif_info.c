@@ -1006,7 +1006,7 @@ pi_arg2ix(Eterm arg, Eterm *extrap)
     }
 }
 
-static Eterm pi_1_keys[] = {
+static const Eterm pi_1_keys[] = {
     am_registered_name,
     am_current_function,
     am_initial_call,
@@ -1029,12 +1029,11 @@ static Eterm pi_1_keys[] = {
 #define ERTS_PI_1_NO_OF_KEYS (sizeof(pi_1_keys)/sizeof(Eterm))
 
 static Eterm pi_1_keys_list;
-static Eterm pi_1_keys_list_heap[2*ERTS_PI_1_NO_OF_KEYS];
 
 static void
 process_info_init(void)
 {
-    Eterm *hp = &pi_1_keys_list_heap[0];
+    Eterm *hp = erts_global_literal_allocate(2*ERTS_PI_1_NO_OF_KEYS, NULL);
     int i;
 
     pi_1_keys_list = NIL;
@@ -1044,15 +1043,18 @@ process_info_init(void)
 	hp += 2;
     }
 
+    erts_global_literal_register(&pi_1_keys_list);
+
 #ifdef DEBUG
     { /* Make sure the process_info argument mappings are consistent */
+        DeclareUseTmpHeapNoProc(heap, 3);
 	int ix;
 	for (ix = 0; ix < ERTS_PI_ARGS; ix++) {
-            Eterm heap[3];
             Eterm *hp = &heap[0];
 	    ASSERT(pi_arg2ix(pi_ix2arg(&hp, ix, am_ok), NULL) == ix);
             ASSERT(hp <= &heap[3]);
 	}
+        UnDeclareTmpHeapNoProc(heap);
     }
 #endif
 

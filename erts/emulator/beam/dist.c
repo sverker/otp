@@ -2914,7 +2914,6 @@ int erts_net_message(Port *prt,
 	break;
 
     case DOP_SPAWN_REQUEST_TT: {
-        Eterm tmp_heap[2];
         ErlSpawnOpts so;
         int code, opts_error;
         Eterm pid, error, ref, from, gl, mfa, opts, token, args;
@@ -2978,7 +2977,7 @@ int erts_net_message(Port *prt,
                  * See erl_create_process() for why we do this
                  * serial trickery...
                  */
-                Eterm tmp_heap[7];
+                DeclareUseTmpHeapNoProc(tmp_heap, 7);
                 Eterm seq_msg;
                 Eterm serial;
                 Uint serial_num;
@@ -2998,6 +2997,7 @@ int erts_net_message(Port *prt,
                 seq_msg = TUPLE4(&tmp_heap[0],
                                  am_spawn_reply, ref, am_error, error);
                 seq_trace_output(token, seq_msg, SEQ_TRACE_SEND, from, NULL);
+                UnDeclareTmpHeapNoProc(tmp_heap);
             }
             code = erts_dsig_prepare(&ctx, dep, NULL, 0,
                                      ERTS_DSP_NO_LOCK, 1, 1, 0);
@@ -3027,12 +3027,16 @@ int erts_net_message(Port *prt,
         so.token = token;
         so.opts = opts;
 
-        args = CONS(&tmp_heap[0], mfa, NIL);
-        pid = erl_create_process(NULL,
-                                 am_erts_internal,
-                                 am_dist_spawn_init,
-                                 args,
-                                 &so);
+        {
+            DeclareUseTmpHeapNoProc(tmp_heap, 2);
+            args = CONS(&tmp_heap[0], mfa, NIL);
+            pid = erl_create_process(NULL,
+                                     am_erts_internal,
+                                     am_dist_spawn_init,
+                                     args,
+                                     &so);
+            UnDeclareTmpHeapNoProc(tmp_heap);
+        }
         if (is_non_value(pid)) {
             if (so.error_code == SYSTEM_LIMIT)
                 error = am_system_limit;
@@ -5113,7 +5117,6 @@ BIF_RETTYPE setnode_2(BIF_ALIST_2)
 int
 erts_is_this_node_alive(void)
 {
-    Eterm tmp_heap[3];
     Eterm dyn_name_key, dyn_name_value;
 
     /*
@@ -5128,8 +5131,12 @@ erts_is_this_node_alive(void)
      * A persistent term with key '{erts_internal, dynamic_node_name}' has been
      * set if dynamic node name has been enabled.
      */
-    dyn_name_key = TUPLE2(&tmp_heap[0], am_erts_internal, am_dynamic_node_name);
-    dyn_name_value = erts_persistent_term_get(dyn_name_key);
+    {
+        DeclareUseTmpHeapNoProc(tmp_heap, 3);
+        dyn_name_key = TUPLE2(&tmp_heap[0], am_erts_internal, am_dynamic_node_name);
+        dyn_name_value = erts_persistent_term_get(dyn_name_key);
+        UnDeclareTmpHeapNoProc(tmp_heap);
+    }
     if (is_value(dyn_name_value) && dyn_name_value != am_false) {
         return !0;
     }
@@ -6309,29 +6316,39 @@ nodes(Process *c_p, Eterm node_types, Eterm options)
     int node_type = 0;
     int connection_id = 0;
     int xinfo = 0;
-    Eterm tmp_heap[2]; /* For one cons-cell */
     DistEntry *dep;
-    Eterm arg_list;
 
-    if (is_atom(node_types))
-        arg_list = CONS(&tmp_heap[0], node_types, NIL);
-    else
-        arg_list = node_types;
+    if (is_not_nil(node_types)) {
+        Eterm fake_cons[2];
+        Eterm* cons_ptr;
 
-    while (is_list(arg_list)) {
-      switch(CAR(list_val(arg_list))) {
-      case am_visible:   visible = 1;                                 break;
-      case am_hidden:    hidden = 1;                                  break;
-      case am_known:     visible = hidden = not_connected = this = 1; break;
-      case am_this:      this = 1;                                    break;
-      case am_connected: visible = hidden = 1;                        break;
-      default:           goto badarg;                                 break;
-      }
-      arg_list = CDR(list_val(arg_list));
-    }
+        if (is_atom(node_types)) {
+            CAR(fake_cons) = node_types;
+            CDR(fake_cons) = NIL;
+            cons_ptr = fake_cons;
+        } else if (is_list(node_types)) {
+            cons_ptr = list_val(node_types);
+        } else {
+            goto badarg;
+        }
 
-    if (is_not_nil(arg_list)) {
-	goto badarg;
+        for (;;) {
+            switch(CAR(cons_ptr)) {
+              case am_visible:   visible = 1;                                 break;
+              case am_hidden:    hidden = 1;                                  break;
+              case am_known:     visible = hidden = not_connected = this = 1; break;
+              case am_this:      this = 1;                                    break;
+              case am_connected: visible = hidden = 1;                        break;
+              default:           goto badarg;                                 break;
+            }
+            if (is_nil(CDR(cons_ptr))) {
+                break;
+            }
+            if (is_not_list(CDR(cons_ptr))) {
+                goto badarg;
+            }
+            cons_ptr = list_val(CDR(cons_ptr));
+        }
     }
 
     if (is_value(options)) {
@@ -6950,6 +6967,8 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
     ErtsNodesMonitorData def_buf[100];
     ErtsNodesMonitorData *nmdp = &def_buf[0];
     ErtsNodesMonitorContext ctxt;
+#define TMP_HEAP_SZ ERTS_MON_NODES_MAX_INFO_SZ__(3/* max info elements */)
+    DeclareUseTmpHeap(tmp_heap, TMP_HEAP_SZ, c_p);
 
     ASSERT(is_immed(what));
     ASSERT(is_immed(node));
@@ -6990,7 +7009,6 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
 
     for (i = 0; i < no; i++) {
         ErtsHeapFactory hfact;
-        Eterm tmp_heap[ERTS_MON_NODES_MAX_INFO_SZ__(3/* max info elements */)];
         Eterm *hp, msg;
         Uint hsz;
 
@@ -7024,7 +7042,7 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
          */
         erts_factory_tmp_init(&hfact,
                               &tmp_heap[0],
-                              sizeof(tmp_heap)/sizeof(Uint),
+                              TMP_HEAP_SZ,
                               ERTS_ALC_T_TMP);
         hsz = 0;
 
@@ -7130,6 +7148,7 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
         erts_factory_close(&hfact);
     }
 
+    UnDeclareTmpHeap(tmp_heap, c_p);
     if (nmdp != &def_buf[0])
         erts_free(ERTS_ALC_T_TMP, nmdp);
 }

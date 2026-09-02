@@ -3504,7 +3504,7 @@ erts_request_alloc_info(struct process *c_p,
 			int internal)
 {
     ErtsAllocInfoReq *air = aireq_alloc();
-    Eterm req_ai[ERTS_ALC_INFO_A_END] = {0};
+    bool req_ai[ERTS_ALC_INFO_A_END] = {false};
     Eterm alist;
     int airix = 0, ai;
 
@@ -3548,7 +3548,7 @@ erts_request_alloc_info(struct process *c_p,
 	    if (req_ai[ai])
 		return 0;
 	    air->allocs[airix++] = ai;
-	    req_ai[ai] = 1;
+            req_ai[ai] = true;
 	    saved = 1;
 	}
 
