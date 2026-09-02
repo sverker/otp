@@ -1760,7 +1760,7 @@ static void
 insert_ets_table(DbTable *tab, void *unused)
 {
     ErlOffHeap off_heap;
-    Eterm heap[ERTS_MAGIC_REF_THING_SIZE];
+    DeclareUseTmpHeapNoProc(heap, ERTS_MAGIC_REF_THING_SIZE);
     struct insert_offheap2_arg a;
     a.type = ETS_REF;
     if (tab->common.status & DB_NAMED_TABLE)
@@ -1773,6 +1773,7 @@ insert_ets_table(DbTable *tab, void *unused)
     erts_db_foreach_offheap(tab, insert_offheap2, (void *) &a);
     if (is_not_atom(a.id))
         erts_cleanup_offheap(&off_heap);
+    UnDeclareTmpHeapNoProc(heap);
 }
 
 static void
@@ -1817,21 +1818,23 @@ insert_delayed_delete_node(void *state,
 			   ErtsMonotonicTime timeout_pos,
 			   void *vnp)
 {
-    Eterm heap[3];
+    DeclareUseTmpHeapNoProc(heap, 3);
     insert_node((ErlNode *) vnp,
 		SYSTEM_REF,
 		TUPLE2(&heap[0], AM_system, AM_delayed_delete_timer));
+    UnDeclareTmpHeapNoProc(heap);
 }
 
 static void
 insert_thr_prgr_delete_dist_entry(void *arg, ErtsThrPrgrVal thr_prgr, void *vdep)
 {
     DistEntry *dep = vdep;
-    Eterm heap[3];
+    DeclareUseTmpHeapNoProc(heap, 3);
     insert_dist_entry(dep,
 		      SYSTEM_REF,
 		      TUPLE2(&heap[0], AM_system, AM_thread_progress_delete_timer),
 		      0);
+    UnDeclareTmpHeapNoProc(heap);
 }
 
 static void
@@ -1840,11 +1843,12 @@ insert_delayed_delete_dist_entry(void *state,
 				 void *vdep)
 {
     DistEntry *dep = vdep;
-    Eterm heap[3];
+    DeclareUseTmpHeapNoProc(heap, 3);
     insert_dist_entry(dep,
 		      SYSTEM_REF,
 		      TUPLE2(&heap[0], AM_system, AM_delayed_delete_timer),
 		      0);
+    UnDeclareTmpHeapNoProc(heap);
 }
 
 static void
@@ -1990,17 +1994,19 @@ clear_dist_suspended_procs(DistEntry *dep)
 static void
 insert_persistent_term(ErlOffHeap *ohp, void *arg)
 {
-    Eterm heap[3];
+    DeclareUseTmpHeapNoProc(heap, 3);
     insert_offheap(ohp, SYSTEM_REF,
                    TUPLE2(&heap[0], AM_system, AM_persistent_term));
+    UnDeclareTmpHeapNoProc(heap);
 }
 
 static void
 insert_ets_offheap_thr_prgr(ErlOffHeap *ohp, void *arg)
 {
-    Eterm heap[3];
+    DeclareUseTmpHeapNoProc(heap, 3);
     insert_offheap(ohp, ETS_REF,
                    TUPLE2(&heap[0], AM_system, AM_ets));
+    UnDeclareTmpHeapNoProc(heap);
 }
 
 #ifdef ERL_NODE_BOOKKEEP

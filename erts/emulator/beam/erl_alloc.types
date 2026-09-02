@@ -154,7 +154,6 @@ type	MODULE_TABLE	LONG_LIVED	CODE		module_tab
 type	TAINT		LONG_LIVED	CODE		taint_list
 type	MODULE_REFS	STANDARD	CODE		module_refs
 type	NC_TMP		TEMPORARY	SYSTEM		nc_tmp
-type	NC_STD		STANDARD	SYSTEM		nc_std
 type	TMP		TEMPORARY	SYSTEM		tmp
 type	UNDEF		SYSTEM		SYSTEM		undefined
 type	DCACHE		STANDARD	SYSTEM		dcache
@@ -285,9 +284,7 @@ type	THR_PRGR_IDATA	LONG_LIVED	SYSTEM		thr_prgr_internal_data
 type	THR_PRGR_DATA	LONG_LIVED	SYSTEM		thr_prgr_data
 type	T_THR_PRGR_DATA	SHORT_LIVED	SYSTEM		temp_thr_prgr_data
 type	RELEASE_LAREA	SHORT_LIVED	SYSTEM		release_literal_area
-type	SIG_DATA	SHORT_LIVED	PROCESSES	signal_data
 type	SIG_YIELD_DATA	SHORT_LIVED	PROCESSES	signal_yield_data
-type	DIST_DEMONITOR	SHORT_LIVED	PROCESSES	dist_demonitor
 type	ML_YIELD_STATE	SHORT_LIVED	SYSTEM		monitor_link_yield_state
 type	ML_DIST		STANDARD	SYSTEM		monitor_link_dist
 type	TRACE_INFO_REQ	SHORT_LIVED	PROCESSES	trace_info_proc_request
@@ -369,6 +366,9 @@ type	PF3_ARGS	STANDARD_LOW	PROCESSES	process_flag_3_arguments
 type	CML_CLEANUP	STANDARD_LOW	SYSTEM		connection_ml_cleanup
 type	MISC_AUX_WORK	STANDARD_LOW	SYSTEM		misc_aux_work
 type    MSACC           STANDARD_LOW    SYSTEM          microstate_accounting
+type	NC_STD		STANDARD_LOW	SYSTEM		nc_std
+type	SIG_DATA	STANDARD_LOW	PROCESSES	signal_data
+type	DIST_DEMONITOR	STANDARD_LOW	PROCESSES	dist_demonitor
 
 +else # "fullword"
 
@@ -394,6 +394,9 @@ type	PF3_ARGS	SHORT_LIVED	PROCESSES	process_flag_3_arguments
 type	CML_CLEANUP	SHORT_LIVED	SYSTEM		connection_ml_cleanup
 type	MISC_AUX_WORK	SHORT_LIVED	SYSTEM		misc_aux_work
 type    MSACC           DRIVER          SYSTEM          microstate_accounting
+type	NC_STD		STANDARD	SYSTEM		nc_std
+type	SIG_DATA	SHORT_LIVED	PROCESSES	signal_data
+type	DIST_DEMONITOR	SHORT_LIVED	PROCESSES	dist_demonitor
 
 +endif
 
