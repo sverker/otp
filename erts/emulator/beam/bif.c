@@ -994,7 +994,6 @@ BIF_RETTYPE spawn_link_3(BIF_ALIST_3)
 {
     ErlSpawnOpts so;
     Eterm pid;
-    BeginTmpHeapUse(BIF_P);
     DeclareUseTmpHeap(tmp_heap, 2, BIF_P);
 
     ERTS_SET_DEFAULT_SPAWN_OPTS(&so);
@@ -1004,7 +1003,7 @@ BIF_RETTYPE spawn_link_3(BIF_ALIST_3)
 
     pid = erl_create_process(BIF_P, BIF_ARG_1, BIF_ARG_2, BIF_ARG_3, &so);
 
-    EndTmpHeapUse(BIF_P);
+    UnDeclareTmpHeap(tmp_heap, BIF_P);
 
     if (is_non_value(pid)) {
 	BIF_ERROR(BIF_P, so.error_code);
