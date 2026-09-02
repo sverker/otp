@@ -189,7 +189,11 @@ type	DB_TABLES	LONG_LIVED	ETS		db_tabs
 type    DB_NTAB_ENT	STANDARD	ETS		db_named_table_entry
 type	DB_TMP		TEMPORARY	ETS		db_tmp
 type	DB_MC_STK	TEMPORARY	ETS		db_mc_stack
++if halfword
+type	DB_MS_RUN_HEAP	STANDARD_LOW	ETS		db_match_spec_run_heap
++else
 type	DB_MS_RUN_HEAP	SHORT_LIVED	ETS		db_match_spec_run_heap
++endif
 type	DB_MS_CMPL_HEAP	TEMPORARY	ETS		db_match_spec_cmpl_heap
 type	DB_SEG		ETS		ETS		db_segment
 type	DB_STK		ETS		ETS		db_stack
@@ -267,7 +271,6 @@ type	SIGQ_BUFFERS	FIXED_SIZE	PROCESSES	process_signal_queue_buffers
 
 type	THR_Q_EL	STANDARD   	SYSTEM		thr_q_element
 type	THR_Q_EL_SL	FIXED_SIZE	SYSTEM		sl_thr_q_element
-type	MISC_AUX_WORK	SHORT_LIVED	SYSTEM		misc_aux_work
 type	THR_Q		STANDARD	SYSTEM		thr_queue
 type	THR_Q_SL	SHORT_LIVED	SYSTEM		short_lived_thr_queue
 type	THR_Q_LL	LONG_LIVED	SYSTEM		long_lived_thr_queue
@@ -360,6 +363,7 @@ type	GC_INFO_REQ	STANDARD_LOW	SYSTEM		gc_info_request
 type	PORT_DATA_HEAP	STANDARD_LOW	SYSTEM		port_data_heap
 type	PF3_ARGS	STANDARD_LOW	PROCESSES	process_flag_3_arguments
 type	CML_CLEANUP	STANDARD_LOW	SYSTEM		connection_ml_cleanup
+type	MISC_AUX_WORK	STANDARD_LOW	SYSTEM		misc_aux_work
 
 +else # "fullword"
 
@@ -379,6 +383,7 @@ type	GC_INFO_REQ	SHORT_LIVED	SYSTEM		gc_info_request
 type	PORT_DATA_HEAP	STANDARD	SYSTEM		port_data_heap
 type	PF3_ARGS	SHORT_LIVED	PROCESSES	process_flag_3_arguments
 type	CML_CLEANUP	SHORT_LIVED	SYSTEM		connection_ml_cleanup
+type	MISC_AUX_WORK	SHORT_LIVED	SYSTEM		misc_aux_work
 
 +endif
 

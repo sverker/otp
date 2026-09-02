@@ -3930,7 +3930,7 @@ int enif_monitor_process(ErlNifEnv* env, void* obj, const ErlNifPid* target_pid,
                          ErlNifMonitor* monitor)
 {
     ErtsResource* rsrc = DATA_TO_RESOURCE(obj);
-    Eterm tmp[ERTS_REF_THING_SIZE];
+    DeclareTmpHeapNoProc(tmp_ref_heap, ERTS_REF_THING_SIZE);
     Eterm ref;
     ErtsResourceMonitors *rm;
     ErtsMonitorData *mdp;
@@ -3950,7 +3950,8 @@ int enif_monitor_process(ErlNifEnv* env, void* obj, const ErlNifPid* target_pid,
     if (target_pid->pid == am_undefined)
         return 1;
 
-    ref = erts_make_ref_in_buffer(tmp);
+    UseTmpHeapNoProc(tmp_ref_heap);
+    ref = erts_make_ref_in_buffer(tmp_ref_heap);
 
     mdp = erts_monitor_create(ERTS_MON_TYPE_RESOURCE, ref,
                               (UWord) rsrc, target_pid->pid,
@@ -3975,13 +3976,14 @@ int enif_monitor_process(ErlNifEnv* env, void* obj, const ErlNifPid* target_pid,
         ASSERT(erts_refc_read(&bin->binary.intern.refc, 1) != 0);
         erts_mtx_unlock(&rm->lock);
         erts_monitor_release_both(mdp);
-
+        UnDeclareTmpHeapNoProc(tmp_ref_heap);
         return 1;
     }
 
     if (monitor)
         erts_ref_to_driver_monitor(ref,monitor);
 
+    UnDeclareTmpHeapNoProc(tmp_ref_heap);
     return 0;
 }
 

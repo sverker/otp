@@ -107,7 +107,9 @@ typedef struct {
         } catree;
     } u;
     Eterm* old_tpl;
-#ifdef DEBUG
+#if !HEAP_ON_C_STACK
+    Eterm old_tpl_dflt[1]; // not to be used
+#elif defined(DEBUG)
     Eterm old_tpl_dflt[2];
 #else
     Eterm old_tpl_dflt[8];

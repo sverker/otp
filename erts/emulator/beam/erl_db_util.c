@@ -3345,7 +3345,7 @@ both_size_set:
          */
         ASSERT(!handle->tb->common.compress);
         ASSERT(!handle->old_tpl);
-        if (nbytes > sizeof(handle->old_tpl_dflt)) {
+        if (!HEAP_ON_C_STACK || nbytes > sizeof(handle->old_tpl_dflt)) {
             handle->old_tpl = erts_alloc(ERTS_ALC_T_TMP, nbytes);
         } else {
             handle->old_tpl = handle->old_tpl_dflt;
@@ -4498,8 +4498,9 @@ dmc_map(DMCContext *context, DMCHeap *heap, DMC_STACK_TYPE(UWord) *text,
             /* If all keys were constant we just want to emit the key tuple.
                Since do_emit_constant expects tuples to be wrapped in 1 arity
                tuples we need give do_emit_constant {keys} */
-            Eterm wrapTuple[2] = {make_arityval(1), m->keys};
-            do_emit_constant(context, text, make_tuple(wrapTuple));
+            DeclareUseTmpHeapNoProc(wrapTuple,2);
+            do_emit_constant(context, text, TUPLE1(wrapTuple, m->keys));
+            UnDeclareTmpHeapNoProc(wrapTuple);
         }
 
         DMC_PUSH2(*text, matchMkFlatMap, nelems);

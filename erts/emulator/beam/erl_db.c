@@ -4422,7 +4422,8 @@ BIF_RETTYPE ets_match_object_3(BIF_ALIST_3)
 
 BIF_RETTYPE ets_info_1(BIF_ALIST_1)
 {
-    static Eterm fields[] = {am_protection, am_keypos, am_type, am_named_table,
+    static const Eterm fields[] = {
+                             am_protection, am_keypos, am_type, am_named_table,
                              am_node, am_size, am_name, am_heir, am_owner, am_memory, am_compressed,
                              am_write_concurrency,
                              am_read_concurrency,
@@ -5361,7 +5362,7 @@ static void set_heir(Process* me, DbTable* tb, Eterm heir, Eterm heir_data)
     }
 
     if (is_value(heir_data) && !is_immed(heir_data)) {
-        Eterm tmp[2];
+        DeclareUseTmpHeap(wrap_tpl_heap, 2, me);
 	Eterm wrap_tpl;
 	int size;
 	DbTerm* dbterm;
@@ -5369,7 +5370,7 @@ static void set_heir(Process* me, DbTable* tb, Eterm heir, Eterm heir_data)
 	ErlOffHeap tmp_offheap;
 
 	/* Make a dummy 1-tuple around data to use DbTerm */
-	wrap_tpl = TUPLE1(tmp,heir_data);
+        wrap_tpl = TUPLE1(wrap_tpl_heap, heir_data);
 	size = size_object(wrap_tpl);
 	dbterm = erts_db_alloc(ERTS_ALC_T_DB_HEIR_DATA, (DbTable *)tb,
                                ERTS_SIZEOF_DBTERM(size));
@@ -5379,6 +5380,7 @@ static void set_heir(Process* me, DbTable* tb, Eterm heir, Eterm heir_data)
 	copy_struct(wrap_tpl, size, &top, &tmp_offheap);
 	dbterm->first_oh = tmp_offheap.first;
 	heir_data = make_boxed((Eterm*)dbterm);
+        UnDeclareTmpHeap(wrap_tpl_heap, me);
     }
     tb->common.heir_data = heir_data;
 }

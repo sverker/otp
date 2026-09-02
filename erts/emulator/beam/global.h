@@ -1694,8 +1694,6 @@ int erts_beam_jump_table(void);
 #    define DeclareTmpHeap(V,S,P) DeclareTmpHeapNoProc(V,S)
 #    define DeclareTmpHeapNoProc(VariableName,Size) \
        Eterm* VariableName = (Eterm*)(((UWord)(Size) << 1) | 1)
-#    define DeclareTypedTmpHeap(Type,VariableName,Process) \
-      Type * const VariableName = (Type *) ((Process)->scheduler_data->tmp_heap_top)
 
 #    define DeclareUseTmpHeap(VariableName, Size, Process) \
        DeclareUseTmpHeapSched(VariableName, Size, (Process)->scheduler_data)
@@ -1738,8 +1736,6 @@ int erts_beam_jump_table(void);
 #define EndTmpHeapUseNoProc (void)dummy__tmp_heap__variable
 #define DeclareTmpHeap(VariableName,Size,Process) \
      Eterm VariableName[Size]
-#define DeclareTypedTmpHeap(Type,VariableName,Process)	\
-     Type VariableName[1]
 #define DeclareTmpHeapNoProc(VariableName,Size) \
      Eterm VariableName[Size]
 
