@@ -1684,11 +1684,11 @@ int erts_beam_jump_table(void);
        } while (0)
 #  else
 #    define BeginTmpHeapUse(Process) BeginTmpHeapUseSched((Process)->scheduler_data)
-#    define BeginTmpHeapUseNoProc BeginTmpHeapUseSched(erts_get_scheduler_data())
+#    define BeginTmpHeapUseNoProc() BeginTmpHeapUseSched(erts_get_scheduler_data())
 #    define BeginTmpHeapUseSched(Sched) Eterm* const saved__tmp_heap_top = ((Sched)->tmp_heap_top)
 
 #    define EndTmpHeapUse(Process) EndTmpHeapUseSched((Process)->scheduler_data)
-#    define EndTmpHeapUseNoProc EndTmpHeapUseSched(erts_get_scheduler_data())
+#    define EndTmpHeapUseNoProc() EndTmpHeapUseSched(erts_get_scheduler_data())
 #    define EndTmpHeapUseSched(Sched) ((Sched)->tmp_heap_top) = saved__tmp_heap_top
 
 #    define DeclareTmpHeap(V,S,P) DeclareTmpHeapNoProc(V,S)
@@ -1732,8 +1732,8 @@ int erts_beam_jump_table(void);
 
 #else // HEAP_ON_C_STACK
 
-#define BeginTmpHeapUseNoProc int dummy__tmp_heap__variable
-#define EndTmpHeapUseNoProc (void)dummy__tmp_heap__variable
+#define BeginTmpHeapUseNoProc() int dummy__tmp_heap__variable
+#define EndTmpHeapUseNoProc() (void)dummy__tmp_heap__variable
 #define DeclareTmpHeap(VariableName,Size,Process) \
      Eterm VariableName[Size]
 #define DeclareTmpHeapNoProc(VariableName,Size) \

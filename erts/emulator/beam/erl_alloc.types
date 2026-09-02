@@ -246,7 +246,6 @@ type	MISC_AUX_WORK_Q	LONG_LIVED	SYSTEM		misc_aux_work_q
 type	CODE_IX_LOCK_Q  SHORT_LIVED	SYSTEM		code_ix_lock_q
 type    BUSY_CALLER_TAB	SHORT_LIVED	SYSTEM		busy_caller_table
 type    BUSY_CALLER	SHORT_LIVED	SYSTEM		busy_caller
-type	PROC_SYS_TSK	SHORT_LIVED	PROCESSES	proc_sys_task
 type	PROC_SYS_TSK_QS	SHORT_LIVED	PROCESSES	proc_sys_task_queues
 type    NEW_TIME_OFFSET	SHORT_LIVED	SYSTEM		new_time_offset
 type	IOB_REQ		SHORT_LIVED	SYSTEM		io_bytes_request
@@ -369,6 +368,7 @@ type    MSACC           STANDARD_LOW    SYSTEM          microstate_accounting
 type	NC_STD		STANDARD_LOW	SYSTEM		nc_std
 type	SIG_DATA	STANDARD_LOW	PROCESSES	signal_data
 type	DIST_DEMONITOR	STANDARD_LOW	PROCESSES	dist_demonitor
+type	PROC_SYS_TSK	STANDARD_LOW	PROCESSES	proc_sys_task
 
 +else # "fullword"
 
@@ -397,6 +397,7 @@ type    MSACC           DRIVER          SYSTEM          microstate_accounting
 type	NC_STD		STANDARD	SYSTEM		nc_std
 type	SIG_DATA	SHORT_LIVED	PROCESSES	signal_data
 type	DIST_DEMONITOR	SHORT_LIVED	PROCESSES	dist_demonitor
+type	PROC_SYS_TSK	SHORT_LIVED	PROCESSES	proc_sys_task
 
 +endif
 

@@ -462,7 +462,7 @@ load_error:
 }
 
 static int parse_line_chunk(BeamFile *beam, IFF_Chunk *chunk) {
-    BeginTmpHeapUseNoProc;
+    BeginTmpHeapUseNoProc();
     BeamFile_LineTable *lines;
     BeamReader reader;
 
@@ -620,11 +620,11 @@ static int parse_line_chunk(BeamFile *beam, IFF_Chunk *chunk) {
         }
     }
 
-    EndTmpHeapUseNoProc;
+    EndTmpHeapUseNoProc();
     return 1;
 
 load_error:
-    EndTmpHeapUseNoProc;
+    EndTmpHeapUseNoProc();
     return 0;
 }
 
@@ -1112,7 +1112,7 @@ static int record_compare(const struct erl_record_field *a, const struct erl_rec
 }
 
 static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
-    BeginTmpHeapUseNoProc;
+    BeginTmpHeapUseNoProc();
     Sint32 record_count;
     Sint32 total_field_count;
     BeamOpAllocator op_allocator;
@@ -1348,7 +1348,7 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
     beamcodereader_close(op_reader);
     beamopallocator_dtor(&op_allocator);
 
-    EndTmpHeapUseNoProc;
+    EndTmpHeapUseNoProc();
     return 1;
 
  error:
@@ -1369,7 +1369,7 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
     }
 
 load_error:
-    EndTmpHeapUseNoProc;
+    EndTmpHeapUseNoProc();
     return 0;
 }
 
