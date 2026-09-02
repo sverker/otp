@@ -4001,7 +4001,7 @@ int enif_demonitor_process(ErlNifEnv* env, void* obj, const ErlNifMonitor* monit
 #endif
     ErtsResourceMonitors *rm;
     ErtsMonitor *mon;
-    Eterm ref_heap[ERTS_REF_THING_SIZE];
+    DeclareUseTmpHeapNoProc(ref_heap, ERTS_REF_THING_SIZE);
     Eterm ref;
 
     ASSERT(bin->magic_binary.destructor == NIF_RESOURCE_DTOR);
@@ -4016,6 +4016,8 @@ int enif_demonitor_process(ErlNifEnv* env, void* obj, const ErlNifMonitor* monit
     if (mon)
         erts_monitor_tree_delete(&rm->root, mon);
     erts_mtx_unlock(&rm->lock);
+
+    UnDeclareTmpHeapNoProc(ref_heap);
 
     if (!mon)
         return 1;

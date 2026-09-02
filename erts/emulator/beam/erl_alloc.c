@@ -456,6 +456,10 @@ set_default_ets_alloc_opts(struct au_init *ip)
     ip->init.util.mmbcs 	= 32*1024; /* Main carrier size */
 #endif
     ip->init.util.ts 		= ERTS_ALC_MTA_ETS;
+#if HALFWORD_HEAP
+    ip->init.util.force         = 1;
+    ip->init.util.low_mem       = 1;
+#endif
     ip->init.util.acul		= ERTS_ALC_DEFAULT_ACUL;
 }
 

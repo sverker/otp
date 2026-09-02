@@ -368,6 +368,7 @@ type	PORT_DATA_HEAP	STANDARD_LOW	SYSTEM		port_data_heap
 type	PF3_ARGS	STANDARD_LOW	PROCESSES	process_flag_3_arguments
 type	CML_CLEANUP	STANDARD_LOW	SYSTEM		connection_ml_cleanup
 type	MISC_AUX_WORK	STANDARD_LOW	SYSTEM		misc_aux_work
+type    MSACC           STANDARD_LOW    SYSTEM          microstate_accounting
 
 +else # "fullword"
 
@@ -392,6 +393,7 @@ type	PORT_DATA_HEAP	STANDARD	SYSTEM		port_data_heap
 type	PF3_ARGS	SHORT_LIVED	PROCESSES	process_flag_3_arguments
 type	CML_CLEANUP	SHORT_LIVED	SYSTEM		connection_ml_cleanup
 type	MISC_AUX_WORK	SHORT_LIVED	SYSTEM		misc_aux_work
+type    MSACC           DRIVER          SYSTEM          microstate_accounting
 
 +endif
 
@@ -401,7 +403,6 @@ type	PURGE_DATA	SHORT_LIVED	CODE		purge_data
 
 type	NFUNC_TRAP_WRAPPER	STANDARD	PROCESSES	nfunc_trap_wrapper
 type	LINK		FIXED_SIZE	PROCESSES	link
-type    MSACC           DRIVER          SYSTEM          microstate_accounting
 type	SYS_CHECK_REQ	SHORT_LIVED	SYSTEM		system_check_request
 type	ATOMICS		STANDARD	SYSTEM		erl_bif_atomics
 type	COUNTERS	STANDARD	SYSTEM		erl_bif_counters
