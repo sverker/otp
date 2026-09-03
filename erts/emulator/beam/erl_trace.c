@@ -2123,7 +2123,7 @@ trace_port_session_receive(Port *t_p, ErtsTracerRef *ref,
         /* We can use a stack heap here, as the nif is called in the
            context of a port */
         enum { LOCAL_HEAP_SIZE = 3 + 3 + 3 + MAX(heap_bits_size(ERL_ONHEAP_BITS_LIMIT), ERL_REFC_BITS_SIZE) };
-        Eterm local_heap[LOCAL_HEAP_SIZE];
+        DeclareUseTmpHeapNoProc(local_heap, LOCAL_HEAP_SIZE);
 
         Eterm *hp, data, *orig_hp = NULL;
         Binary *bptr = NULL;
@@ -2214,6 +2214,8 @@ trace_port_session_receive(Port *t_p, ErtsTracerRef *ref,
 
         if (orig_hp)
             erts_free(ERTS_ALC_T_TMP, orig_hp);
+
+        UnDeclareTmpHeapNoProc(local_heap);
     }
 }
 
@@ -2265,7 +2267,7 @@ void trace_port_send_binary(Port *t_p, Eterm to, Eterm what, char *bin, Sint sz)
 
             Eterm msg;
             Binary* bptr = NULL;
-            Eterm local_heap[3 + 3 + MAX(heap_bits_size(ERL_ONHEAP_BITS_LIMIT), ERL_REFC_BITS_SIZE)];
+            DeclareUseTmpHeapNoProc(local_heap, 3 + 3 + MAX(heap_bits_size(ERL_ONHEAP_BITS_LIMIT), ERL_REFC_BITS_SIZE));
             Eterm *hp;
 
             hp = local_heap;
@@ -2282,6 +2284,7 @@ void trace_port_send_binary(Port *t_p, Eterm to, Eterm what, char *bin, Sint sz)
             if (bptr)
                 erts_bin_release(bptr);
 
+            UnDeclareTmpHeapNoProc(local_heap);
         }
     }
     ERTS_ASSERT_TRACER_REFS(&t_p->common);
@@ -3097,7 +3100,6 @@ erts_term_to_tracer(Eterm prefix, Eterm t)
     }
     else if (!is_nil(t)) {
         Eterm module = am_erl_tracer, state = THE_NON_VALUE;
-        Eterm hp[2];
         if (is_tuple(t)) {
             Eterm *tp = tuple_val(t);
             if (prefix != THE_NON_VALUE) {
@@ -3118,7 +3120,11 @@ erts_term_to_tracer(Eterm prefix, Eterm t)
             state = t;
         if (state == THE_NON_VALUE)
             return THE_NON_VALUE;
-        erts_tracer_update(&tracer, CONS(hp, module, state));
+        {
+            DeclareUseTmpHeapNoProc(hp, 2);
+            erts_tracer_update(&tracer, CONS(hp, module, state));
+            UnDeclareTmpHeapNoProc(hp);
+        }
     }
     if (!lookup_tracer_nif(tracer)) {
         ASSERT(ERTS_TRACER_MODULE(tracer) != am_erl_tracer);
