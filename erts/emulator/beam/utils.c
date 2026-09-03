@@ -2349,13 +2349,11 @@ tailrecur_ne:
 
     {
 	FloatDef f1, f2;
-	Eterm big;
 	Eterm aw = a;
 	Eterm bw = b;
 #define MAX_LOSSLESS_FLOAT ((double)((1LL << 53) - 2))
 #define MIN_LOSSLESS_FLOAT ((double)(((1LL << 53) - 2)*-1))
 #define BIG_ARITY_FLOAT_MAX (1024 / D_EXP) /* arity of max float as a bignum */
-	Eterm big_buf[BIG_NEED_SIZE(BIG_ARITY_FLOAT_MAX)];
 
 	b_tag = tag_val_def(bw);
 
@@ -2424,8 +2422,11 @@ tailrecur_ne:
 		    j = erts_float_comp(f1.fd, f2.fd);
 		}
 	    } else {
-		big = double_to_big(f2.fd, big_buf, sizeof(big_buf)/sizeof(Eterm));
+                const Uint big_buf_sz = BIG_NEED_SIZE(BIG_ARITY_FLOAT_MAX);
+                DeclareUseTmpHeapNoProc(big_buf, big_buf_sz);
+                Eterm big = double_to_big(f2.fd, big_buf, big_buf_sz);
 		j = big_comp(aw, big);
+                UnDeclareTmpHeapNoProc(big_buf);
 	    }
 	    if (_NUMBER_CODE(a_tag, b_tag) == FLOAT_BIG) {
 		j = -j;
