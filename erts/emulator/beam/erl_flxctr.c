@@ -196,7 +196,7 @@ create_decentralized_ctr_array(ErtsAlcType_t alloc_type, Uint nr_of_counters) {
         (&bytes[bytes_to_next_cacheline_border -
                 (int)offsetof(ErtsFlxCtrDecentralizedCtrArray, array)]);
     ASSERT(((UWord)array->array) % ERTS_CACHE_LINE_SIZE == 0);
-    ASSERT(((UWord)array - (Uint)block_start) <= ERTS_CACHE_LINE_SIZE);
+    ASSERT(((UWord)array - (UWord)block_start) <= ERTS_CACHE_LINE_SIZE);
     /* Initialize fields */
     erts_atomic_init_nob(&array->snapshot_status, ERTS_FLXCTR_SNAPSHOT_ONGOING);
     for (sched = 0; sched < ERTS_FLXCTR_DECENTRALIZED_NO_SLOTS; sched++) {

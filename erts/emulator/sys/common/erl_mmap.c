@@ -65,7 +65,7 @@ int erts_mem_guard(void *p, UWord size, int readable, int writable) {
     int flags = 0;
 
     /* Check that the ptr is aligned at page boundary */
-    ASSERT((Uint)p % sys_page_size == 0);
+    ASSERT((UWord)p % sys_page_size == 0);
     
     if (writable) {
         flags |= PROT_WRITE;
