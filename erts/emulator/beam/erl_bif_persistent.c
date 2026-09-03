@@ -423,7 +423,7 @@ BIF_RETTYPE persistent_term_erase_1(BIF_ALIST_1)
 #ifdef DEBUG
     (void)ITERATIONS_PER_RED;
     iterations_until_trap = max_iterations =
-        GET_SMALL_RANDOM_INT(ERTS_BIF_REDS_LEFT(BIF_P) + (Uint)&ctx);
+        GET_SMALL_RANDOM_INT(ERTS_BIF_REDS_LEFT(BIF_P) + (UWord)&ctx);
 #else
     iterations_until_trap = max_iterations =
         ITERATIONS_PER_RED * ERTS_BIF_REDS_LEFT(BIF_P);
@@ -655,7 +655,7 @@ static Eterm put_common(Process* c_p, Eterm key, Eterm term, Eterm new)
 #ifdef DEBUG
     (void)ITERATIONS_PER_RED;
     iterations_until_trap = max_iterations =
-        GET_SMALL_RANDOM_INT(ERTS_BIF_REDS_LEFT(c_p) + (Uint)&ctx);
+        GET_SMALL_RANDOM_INT(ERTS_BIF_REDS_LEFT(c_p) + (UWord)&ctx);
 #else
     iterations_until_trap = max_iterations =
         ITERATIONS_PER_RED * ERTS_BIF_REDS_LEFT(c_p);

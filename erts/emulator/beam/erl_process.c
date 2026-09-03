@@ -9455,7 +9455,7 @@ erts_resume_processes(ErtsProcList *list)
     while (plp) {
 	Process *proc;
 	ErtsProcList *fplp;
-	ASSERT(is_internal_pid(plp->u.pid) || is_CP((Eterm)plp->u.p));
+        ASSERT(is_internal_pid(plp->u.pid) || !((UWord)plp->u.p & 3));
         if (is_internal_pid(plp->u.pid))
             proc = erts_pid2proc(NULL, 0, plp->u.pid, ERTS_PROC_LOCK_STATUS);
         else {

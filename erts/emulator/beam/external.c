@@ -5476,7 +5476,7 @@ dec_term_atom_common:
     /* Now that no more errors can occur, the stack can be destroyed safely. */
     PSTACK_DESTROY(map_array);
 
-    ASSERT((Eterm*)*dbg_resultp != NULL);
+    ASSERT(*dbg_resultp != COMPRESSED_NULL);
 
     if (ctx) {
         ctx->state = B2TDone;

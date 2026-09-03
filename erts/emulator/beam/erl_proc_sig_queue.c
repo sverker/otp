@@ -8217,7 +8217,7 @@ handle_cla(Process *c_p,
 	    {
 		int i;
 		for (i = 1; i < ERL_MESSAGE_REF_ARRAY_SZ; i++) {
-		    ASSERT(!ErtsInArea(msg->m[i], literals, lit_bsize));
+                    ASSERT(!ErtsInArea(EXPAND_POINTER(msg->m[i]), literals, lit_bsize));
 		}
 	    }
 #endif

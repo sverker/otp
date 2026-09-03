@@ -1262,7 +1262,7 @@ do_call_trace(Process* c_p, ErtsCodeInfo* info, Eterm* reg,
             }
 
             ASSERT(c_p->htop <= E && E <= c_p->hend);
-            ASSERT(is_CP((Eterm)(&info->mfa.module)));
+            ASSERT(is_CP(COMPRESS_POINTER(&info->mfa.module)));
             ASSERT(IS_TRACER_VALID(tracer));
 
             c_p->stop = E;

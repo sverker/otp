@@ -1413,7 +1413,7 @@ _ET_DECLARE_CHECKED(struct erl_node_*,external_ref_node,Eterm)
 
 #define ENULL		0
 
-#define _is_legal_cp(x)	 (((Uint)(x) & _CPMASK) == 0)
+#define _is_legal_cp(x)	 (((UWord)(x) & _CPMASK) == 0)
 #define _unchecked_make_cp(x)	((Eterm) COMPRESS_POINTER(x))
 _ET_DECLARE_CHECKED(Eterm,make_cp,ErtsCodePtr)
 #define make_cp(x)	_ET_APPLY(make_cp,(x))
