@@ -47,10 +47,8 @@ extern UWord erts_halfword_start_addr;
 #  if ERTS_GLB_INLINE_INCL_FUNC_DEF
 ERTS_GLB_INLINE Eterm COMPRESS_POINTER_impl(UWord word)
 {
-    //const UWord ret = !word ? word : word - erts_halfword_start_addr;
-
     const UWord ret = word - erts_halfword_start_addr;
-    ERTS_ASSERT(ret && !(ret & CHECK_POINTER_MASK));
+    ERTS_ASSERT(!(ret & CHECK_POINTER_MASK));
     return (Eterm)ret;
 }
 ERTS_GLB_INLINE UWord EXPAND_POINTER(Eterm term)

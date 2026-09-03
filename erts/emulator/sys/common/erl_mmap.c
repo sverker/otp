@@ -2389,10 +2389,13 @@ erts_mmap_init(ErtsMemMapper* mm, ErtsMMapInit *init)
 
 #if HALFWORD_HEAP
         if (mm == &erts_dflt_mmapper) {
-            // Set halfword start address to the very bottom that is reserved
-            // for free descriptors. This will ensure no Eterm is placed
-            // at offset 0 which is sometimes used as a NULL value.
+            // Set halfword "low" 4GB area to start at the very bottom of the
+            // supercarrier and skip that very first page.
+            // This will cause SEGV crash if EXPAND_POINTER(0) is accessed,
+            // instead of trashing the supercarrier free descriptors
+            // that would otherwise be located there.
             erts_halfword_start_addr = (UWord) start;
+            start += ERTS_PAGEALIGNED_SIZE;
         }
 #endif
 	mm->sa.bot = start;
