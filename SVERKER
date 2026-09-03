@@ -1,0 +1,4 @@
+> bin/x86_64-pc-linux-gnu/erlexec -emu_args_exit +S1
+
+> bin/x86_64-pc-linux-gnu/beam.debug.emu -S1 -- -root /home/uabseri/src/otp4 -bindir /home/uabseri/src/otp4/bin/x86_64-unknown-linux-gnu -progname erl -- -home /home/uabseri -- --
+
