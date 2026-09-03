@@ -344,6 +344,8 @@ set_default_literal_alloc_opts(struct au_init *ip)
 
 #if HALFWORD_HEAP
     ERTS_CT_ASSERT(HAVE_ERTS_MSEG);
+    ip->init.util.force         = 1;
+    ip->init.util.low_mem       = 1;
     ip->init.util.mseg_alloc   = &erts_alcu_literal_32_mseg_alloc;
     ip->init.util.mseg_realloc = &erts_alcu_literal_32_mseg_realloc;
     ip->init.util.mseg_dealloc = &erts_alcu_literal_32_mseg_dealloc;
