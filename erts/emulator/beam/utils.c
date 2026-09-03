@@ -850,8 +850,8 @@ static void do_send_logger_message(ErtsHeapFactory *factory,
                   am_time, time);
         pid = NIL;
     } else {
-        Eterm keys[] = { am_error_logger, ERTS_MAKE_AM("gl"), am_pid, am_time };
-        Eterm values[] = { md, gl, pid, time };
+        const Eterm keys[] = { am_error_logger, ERTS_MAKE_AM("gl"), am_pid, am_time };
+        const Eterm values[] = { md, gl, pid, time };
         md = erts_map_from_ks_and_vs(factory, keys, values, 4);
     }
     hp = erts_produce_heap(factory, 6, 0);
