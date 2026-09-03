@@ -1821,7 +1821,6 @@ resume_from_trap:
         ASSERT(!(p->flags & F_DISABLE_GC));
     }
     PSTACK_DESTROY(s);
-    UnUseTmpHeap(2,p);
     BUMP_REDS(p, (initial_reds - reds) / MAP_MERGE_LOOP_FACTOR);
     return res;
 
@@ -1848,7 +1847,6 @@ trap:  /* Yield */
     BUMP_ALL_REDS(p);
     ERTS_BIF_PREP_TRAP1(trap_ret, &hashmap_merge_trap_export,
                         p, ctx->trap_bin);
-    UnUseTmpHeap(2,p);
     return trap_ret;
 }
 
@@ -2789,7 +2787,6 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
 
     } while(!ESTACK_ISEMPTY(*sp));
 
-    UnUseTmpHeapNoproc(1);
     return res;
 }
 
@@ -3023,7 +3020,6 @@ unroll:
 	erts_validate_and_sort_flatmap(mp);
 
 	DESTROY_WSTACK(wstack);
-        UnUseTmpHeapNoproc(2);
 	return make_flatmap(mp);
     }
 
@@ -3181,7 +3177,6 @@ unroll:
     HRelease(p, hp_end, hp);
 not_found:
     DESTROY_ESTACK(stack);
-    UnUseTmpHeapNoproc(2);
     return res;
 }
 

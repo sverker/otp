@@ -1271,7 +1271,6 @@ erts_call_trace(Process* p, ErtsCodeInfo *info, Binary *match_spec,
     if (!ref) {
         /* Meta trace */
         if (pam_result == am_false) {
-            UnUseTmpHeap(ERL_SUB_BITS_SIZE,p);
             ERTS_TRACER_CLEAR(&pre_ms_tracer);
             return return_flags;
         }
@@ -1288,12 +1287,10 @@ erts_call_trace(Process* p, ErtsCodeInfo *info, Binary *match_spec,
         /* Non-meta trace */
         if (tracee_flags & F_TRACE_SILENT) {
             erts_match_set_release_result_trace(p, pam_result);
-            UnUseTmpHeap(ERL_SUB_BITS_SIZE,p);
             ERTS_TRACER_CLEAR(&pre_ms_tracer);
             return 0;
         }
         if (pam_result == am_false) {
-            UnUseTmpHeap(ERL_SUB_BITS_SIZE,p);
             ERTS_TRACER_CLEAR(&pre_ms_tracer);
             return return_flags;
         }
