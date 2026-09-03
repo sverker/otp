@@ -600,7 +600,7 @@ erts_bld_tuple(Uint **hpp, Uint *szp, Uint arity, ...)
 }
 
 
-Eterm erts_bld_tuplev(Uint **hpp, Uint *szp, Uint arity, Eterm terms[])
+Eterm erts_bld_tuplev(Uint **hpp, Uint *szp, Uint arity, const Eterm terms[])
 {
     Eterm res = THE_NON_VALUE;
     /*
@@ -651,7 +651,7 @@ erts_bld_string_n(Uint **hpp, Uint *szp, const char *str, Sint len)
 }
 
 Eterm
-erts_bld_list(Uint **hpp, Uint *szp, Sint length, Eterm terms[])
+erts_bld_list(Uint **hpp, Uint *szp, Sint length, const Eterm terms[])
 {
     Eterm list = THE_NON_VALUE;
     if (szp)
@@ -670,7 +670,7 @@ erts_bld_list(Uint **hpp, Uint *szp, Sint length, Eterm terms[])
 
 Eterm
 erts_bld_2tup_list(Uint **hpp, Uint *szp,
-		   Sint length, Eterm terms1[], Uint terms2[])
+                   Sint length, const Eterm terms1[], const Eterm terms2[])
 {
     Eterm res = THE_NON_VALUE;
     if (szp)
@@ -689,7 +689,8 @@ erts_bld_2tup_list(Uint **hpp, Uint *szp,
 
 Eterm
 erts_bld_atom_uword_2tup_list(Uint **hpp, Uint *szp,
-                              Sint length, Eterm atoms[], UWord uints[])
+                              Sint length, const Eterm atoms[],
+                              const UWord uints[])
 {
     Sint i;
     Eterm res = THE_NON_VALUE;
@@ -724,7 +725,9 @@ erts_bld_atom_uword_2tup_list(Uint **hpp, Uint *szp,
 
 Eterm
 erts_bld_atom_2uint_3tup_list(Uint **hpp, Uint *szp, Sint length,
-			      Eterm atoms[], Uint uints1[], Uint uints2[])
+                              const Eterm atoms[],
+                              const Uint uints1[],
+                              const Uint uints2[])
 {
     Sint i;
     Eterm res = THE_NON_VALUE;
