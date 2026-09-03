@@ -7084,6 +7084,10 @@ erts_alcu_init(AlcUInit_t *init)
     allocator_char_str[ERTS_ALC_A_SHORT_LIVED] = "S";
     allocator_char_str[ERTS_ALC_A_STANDARD] = "D";
     allocator_char_str[ERTS_ALC_A_LONG_LIVED] = "L";
+#if HALFWORD_HEAP
+    allocator_char_str[ERTS_ALC_A_STANDARD_LOW] = "d";
+    allocator_char_str[ERTS_ALC_A_LONG_LIVED_LOW] = "l";
+#endif
     allocator_char_str[ERTS_ALC_A_EHEAP] = "H";
     allocator_char_str[ERTS_ALC_A_ETS] = "E";
     allocator_char_str[ERTS_ALC_A_FIXED_SIZE] = "F";
