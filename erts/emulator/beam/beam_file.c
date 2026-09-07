@@ -2187,7 +2187,7 @@ BeamCodeReader *beamfile_get_code(BeamFile *beam, BeamOpAllocator *op_alloc) {
 
 /* Converts TAG_i to untagged smalls (TAG_i), bignums (TAG_q with literal), or
  * TAG_o if the result can't fit into a bignum. */
-static int marshal_integer(BeamCodeReader *code_reader, TaggedNumber *value) {
+static bool marshal_integer(BeamCodeReader *code_reader, TaggedNumber *value) {
     ASSERT(value->tag == TAG_i);
 
     if (value->size == 0) {
@@ -2196,9 +2196,9 @@ static int marshal_integer(BeamCodeReader *code_reader, TaggedNumber *value) {
          * transformation engine far more complicated so we'll tag them when
          * emitting instructions instead. */
         ASSERT(IS_SSMALL(value->word_value));
-        return 1;
+        return true;
     } else {
-        Eterm default_res_buf[128/sizeof(Eterm)];
+        DeclareUseTmpHeapNoSched(default_res_buf, 128 / sizeof(Eterm));
         byte default_conv_buf[128];
         byte* conv_buf;
         Eterm* res_buf;
@@ -2207,6 +2207,7 @@ static int marshal_integer(BeamCodeReader *code_reader, TaggedNumber *value) {
         int size, is_negative;
         const byte *source;
         int i;
+        int ret;
 
         source = value->ptr_value;
         size = value->size;
@@ -2246,15 +2247,8 @@ static int marshal_integer(BeamCodeReader *code_reader, TaggedNumber *value) {
             if (conv_buf[size - 1] == 0) {
                 /* Number's not normalized; the file is most likely corrupt. */
 
-                if (conv_buf != default_conv_buf) {
-                    erts_free(ERTS_ALC_T_LOADER_TMP, conv_buf);
-                }
-
-                if (res_buf != default_res_buf) {
-                    erts_free(ERTS_ALC_T_LOADER_TMP, res_buf);
-                }
-
-                return 0;
+                ret = false;
+                goto done;
             }
         }
 
@@ -2274,7 +2268,8 @@ static int marshal_integer(BeamCodeReader *code_reader, TaggedNumber *value) {
             /* Result doesn't fit into a bignum. */
             value->tag = TAG_o;
         }
-
+        ret = true;
+done:
         if (conv_buf != default_conv_buf) {
             erts_free(ERTS_ALC_T_LOADER_TMP, conv_buf);
         }
@@ -2282,8 +2277,8 @@ static int marshal_integer(BeamCodeReader *code_reader, TaggedNumber *value) {
         if (res_buf != default_res_buf) {
             erts_free(ERTS_ALC_T_LOADER_TMP, res_buf);
         }
-
-        return 1;
+        UnDeclareTmpHeapNoSched(default_res_buf);
+        return ret;
     }
 }
 
