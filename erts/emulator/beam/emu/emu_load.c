@@ -880,7 +880,7 @@ int beam_load_emit_op(LoaderState *stp, BeamOp *tmp_op) {
     /* The size of the loaded func_info instruction is needed by both the nif
      * functionality and line instructions. */
     enum {
-        FUNC_INFO_SZ = sizeof(ErtsCodeInfo) / sizeof(Eterm)
+        FUNC_INFO_SZ = sizeof(ErtsCodeInfo) / sizeof(BeamInstr)
     };
 
     const char *sign;
