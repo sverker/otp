@@ -1713,10 +1713,41 @@ int erts_beam_jump_table(void);
          (Sched)->tmp_heap_top += size; \
        } while (0)
 
+#    define DeclareUseTmpHeapNoSched(VariableName,Size) \
+       Eterm * const VariableName = erts_alloc_stack_tmp_heap(Size)
+
 #    define UnDeclareTmpHeap(V,P) UnDeclareTmpHeapSched(V,(P)->scheduler_data)
 #    define UnDeclareTmpHeapNoProc(V) UnDeclareTmpHeapSched(V,erts_get_scheduler_data())
 #    define UnDeclareTmpHeapSched(VariableName,Sched) \
        (Sched)->tmp_heap_top = VariableName;
+#    define UnDeclareTmpHeapNoSched(V) \
+       erts_free_stack_tmp_heap(V)
+
+
+ERTS_GLB_INLINE Eterm* erts_alloc_stack_tmp_heap(Uint size);
+ERTS_GLB_INLINE void erts_free_stack_tmp_heap(Eterm *heap);
+
+#    if ERTS_GLB_INLINE_INCL_FUNC_DEF
+ERTS_GLB_INLINE Eterm* erts_alloc_stack_tmp_heap(Uint size)
+{
+    ErtsSchedulerData* sched = erts_get_scheduler_data();
+    if (sched) {
+        sched->tmp_heap_top += size;
+        return sched->tmp_heap_top - size;
+    } else {
+         return erts_alloc(ERTS_ALC_T_TMP, size * sizeof(Eterm));
+    }
+}
+ERTS_GLB_INLINE void erts_free_stack_tmp_heap(Eterm *tmp_heap)
+{
+    ErtsSchedulerData* sched = erts_get_scheduler_data();
+    if (sched) {
+        sched->tmp_heap_top = tmp_heap;
+    } else {
+        erts_free(ERTS_ALC_T_TMP, tmp_heap);
+    }
+}
+#    endif
 #  endif
 
 #else // HEAP_ON_C_STACK
@@ -1732,11 +1763,15 @@ int erts_beam_jump_table(void);
      Eterm VariableName[Size]
 #define DeclareUseTmpHeapNoProc(VariableName,Size) \
      Eterm VariableName[Size]
+
+#define DeclareUseTmpHeapNoSched(VariableName,Size) \
+     Eterm VariableName[Size]
+
 #define UseTmpHeap(Size,Proc) /* Nothing */
 #define UseTmpHeapNoProc(Size) /* Nothing */
 #define UnDeclareTmpHeap(VariableName,Proc) /*Nothing*/
 #define UnDeclareTmpHeapNoProc(VariableName) /*Nothing*/
-
+#define UnDeclareTmpHeapNoSched(Variablename) /*Nothing*/
 #endif  // HEAP_ON_C_STACK
 
 ERTS_GLB_INLINE void dtrace_pid_str(Eterm pid, char *process_buf);

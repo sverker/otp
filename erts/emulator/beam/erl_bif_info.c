@@ -1047,14 +1047,14 @@ process_info_init(void)
 
 #ifdef DEBUG
     { /* Make sure the process_info argument mappings are consistent */
-        Eterm* const heap = erts_alloc(ERTS_ALC_T_TMP, 3*sizeof(Eterm));
+        DeclareUseTmpHeapNoSched(heap, 3);
 	int ix;
 	for (ix = 0; ix < ERTS_PI_ARGS; ix++) {
             Eterm *hp = &heap[0];
 	    ASSERT(pi_arg2ix(pi_ix2arg(&hp, ix, am_ok), NULL) == ix);
             ASSERT(hp <= &heap[3]);
 	}
-        erts_free(ERTS_ALC_T_TMP, heap);
+        UnDeclareTmpHeapNoSched(heap);
     }
 #endif
 
