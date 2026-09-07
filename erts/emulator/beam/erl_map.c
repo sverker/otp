@@ -2663,7 +2663,7 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
     Eterm *nhp = NULL;
     Uint32 ix, cix, bp, hval;
     Uint slot, n;
-    Eterm fake;
+    DeclareUseTmpHeapNoProc(fake, 1);
 
     res = CONS(hp, key, value); hp += 2;
 
@@ -2702,8 +2702,8 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
             }
 	    case TAG_PRIMARY_HEADER:
 		/* subnodes, fake it */
-		fake = node;
-		node  = make_boxed(&fake);
+                fake[0] = node;
+                node  = make_boxed(fake);
                 ERTS_FALLTHROUGH();
 	    case TAG_PRIMARY_BOXED:
 		ptr = boxed_val(node);
@@ -2787,6 +2787,7 @@ Eterm erts_hashmap_insert_up(Eterm *hp, Eterm key, Eterm value,
 
     } while(!ESTACK_ISEMPTY(*sp));
 
+    UnDeclareTmpHeapNoProc(fake);
     return res;
 }
 
