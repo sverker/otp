@@ -1019,7 +1019,7 @@ do {								\
 #define LIST_SHARED_UNPROCESSED ((Eterm) 0)
 #define LIST_SHARED_PROCESSED	((Eterm) 1)
 
-#define HEAP_ELEM_TO_BE_FILLED	_unchecked_make_list(NULL)
+#define HEAP_ELEM_TO_BE_FILLED	_unchecked_make_list(EXPANDED_NULL)
 
 
 /*
@@ -1855,7 +1855,7 @@ Uint copy_shared_perform_x(Eterm obj, Uint size, erts_shcopy_t *info,
 all_clean:
     for (e = 0; ; e += SHTABLE_INCR) {
 	ptr = SHTABLE_REV(t, e);
-	if (ptr == NULL)
+        if (ptr == EXPANDED_NULL)
 	    break;
 	VERBOSE(DEBUG_SHCOPY, ("[copy] restoring shared: %x\n", ptr));
 	/* entry was a list */
