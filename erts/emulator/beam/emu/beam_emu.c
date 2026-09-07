@@ -103,7 +103,7 @@
 #endif
 
 #define SET_I(ip) \
-   ASSERT(VALID_INSTR(* (Eterm *)(ip))); \
+   ASSERT(VALID_INSTR(* (BeamInstr*)(ip))); \
    I = (ip)
 
 /*
