@@ -308,7 +308,7 @@
 
 
 /* Calculate q, r  A = Bq+R when, assume A1 >= B */
-#if (SIZEOF_VOID_P == 8)
+#if (ERTS_SIZEOF_ETERM == 8)
 #define QUOT_LIM 0x7FFFFFFFFFFFFFFF
 #else
 #define QUOT_LIM 0x7FFFFFFF
@@ -4122,11 +4122,11 @@ static const double lg2_lookup[36-1] = {
  * one digit away just to be on the safer side (some corner cases).
  */
 static const byte digits_per_sint_lookup[36-1] = {
-#if (SIZEOF_VOID_P == 4)
+#if (ERTS_SIZEOF_ETERM == 4)
     /* Wo.Alpha formula: Table [Trunc[31 / log[2,n]]-1, {n, 2, 36}] */
     30, 18, 14, 12, 10, 10, 9, 8, 8, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5,
     5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4
-#elif (SIZEOF_VOID_P == 8)
+#elif (ERTS_SIZEOF_ETERM == 8)
     /* Wo.Alpha formula: Table [Trunc[63 / log[2,n]]-1, {n, 2, 36}] */
     62, 38, 30, 26, 23, 21, 20, 18, 17, 17, 16, 16, 15, 15, 14, 14, 14, 13, 13,
     13, 13, 12, 12, 12, 12, 12, 12, 11, 11, 11, 11, 11, 11, 11, 11
@@ -4139,11 +4139,11 @@ static const byte digits_per_sint_lookup[36-1] = {
  * How many digits can fit into Erlang Small (SMALL_BITS-1) counting sign bit
  */
 static const byte digits_per_small_lookup[36-1] = {
-#if (SIZEOF_VOID_P == 4)
+#if (ERTS_SIZEOF_ETERM == 4)
     /* Wo.Alpha formula: Table [Trunc[27 / log[2,n]]-1, {n, 2, 36}] */
     27, 17, 13, 11, 10, 9, 9, 8, 8, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5,
     5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5
-#elif (SIZEOF_VOID_P == 8)
+#elif (ERTS_SIZEOF_ETERM == 8)
     /* Wo.Alpha formula: Table [Trunc[59 / log[2,n]]-1, {n, 2, 36}] */
     59, 37, 29, 25, 22, 21, 19, 18, 17, 17, 16, 15, 15, 15, 14, 14, 14, 13, 13,
     13, 13, 13, 12, 12, 12, 12, 12, 12, 12, 11, 11, 11, 11, 11, 11
