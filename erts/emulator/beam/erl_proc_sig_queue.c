@@ -2840,8 +2840,9 @@ erts_proc_sig_send_monitor_down(ErtsPTabElementCommon *sender, Eterm from,
         }
     }
     else {
+        DeclareUseTmpHeapNoProc(heap, 3);
         ErtsMonitorData *mdp = erts_monitor_to_data(mon);
-        Eterm from_tag, monitored, from_type, heap[3];
+        Eterm from_tag, monitored, from_type;
 
         if (ERTS_ML_GET_TYPE(mon) == ERTS_MON_TYPE_SUSPEND) {
             /*
@@ -2889,6 +2890,7 @@ erts_proc_sig_send_monitor_down(ErtsPTabElementCommon *sender, Eterm from,
                              to, ERTS_SIG_Q_OP_MONITOR_DOWN,
                              reason, NULL, NULL, mdp->ref, NIL,
                              0, 0, 0, 0);
+        UnDeclareTmpHeapNoProc(heap);
     }
 
     erts_monitor_release(mon);
