@@ -9467,6 +9467,7 @@ printf "%s\n" "yes" >&6; }
 
 EOF
                  INTERNAL_WORD_SIZE=32
+                 CFLAGS="$CFLAGS -Wno-address-of-packed-member"
 
         else
                 as_fn_error $? "no; halfword emulator not supported on this architecture" "$LINENO" 5

@@ -883,6 +883,7 @@ if test "$enable_halfword_emulator" = "yes"; then
 
 EOF
                  INTERNAL_WORD_SIZE=32
+                 CFLAGS="$CFLAGS -Wno-address-of-packed-member"
 
         else
                 AC_MSG_ERROR(no; halfword emulator not supported on this architecture)

@@ -869,7 +869,7 @@ typedef struct {
     Uint32 num[ERTS_REF_NUMBERS];
     Uint32 marker;
 #endif
-} ErtsMRefThing;
+} __attribute__((packed)) ErtsMRefThing;
 
 /*
  * Ordinary ref layout on a 64-bit little endian machine:
@@ -985,7 +985,7 @@ typedef struct {
     Eterm header;
     struct magic_binary *mb;
     struct erl_off_heap_header* next;
-} ErtsMRefThing;
+} __attribute__((packed)) ErtsMRefThing;
 
 
 #define write_ref_thing(Hp, R0, R1, R2)					\
@@ -1202,7 +1202,7 @@ typedef struct external_thing_ {
 	Uint32              ui32[2];
         Uint                ui[8 / sizeof(Uint)];
     } data;
-} ExternalThing;
+} __attribute__((packed)) ExternalThing;
 
 #define EXTERNAL_THING_HEAD_SIZE (offsetof(ExternalThing,data) / sizeof(Uint))
 

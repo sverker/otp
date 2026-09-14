@@ -80,7 +80,7 @@ struct erl_off_heap_header {
     UWord opaque;
 
     struct erl_off_heap_header* next;
-};
+} __attribute__((packed));
 
 #define OH_OVERHEAD(oh, size) do { \
     (oh)->overhead += size;        \

@@ -79,7 +79,7 @@ typedef struct erl_sub_bits {
     /* Tagged pointer to BinRef or ErlHeapBits, the latter is valid iff this is
      * a match context. */
     Eterm orig;
-} ErlSubBits;
+} __attribute__((packed)) ErlSubBits;
 
 #define ERL_SUB_BITS_FLAGS_MATCH_CONTEXT                                      \
     ERL_SUB_BITS_FLAG_MUTABLE
@@ -136,7 +136,7 @@ typedef struct bin_ref {
     Eterm thing_word;           /* Subtag BIN_REF_SUBTAG. */
     Binary *val;                /* Pointer to Binary structure. */
     struct erl_off_heap_header *next;
-} BinRef;
+} __attribute__((packed)) BinRef;
 
 #define HEADER_BIN_REF _make_header(ERL_BIN_REF_SIZE-1,_TAG_HEADER_BIN_REF)
 

@@ -2103,6 +2103,7 @@ void erts_move_multi_frags(Eterm** hpp, ErlOffHeap* off_heap, ErlHeapFragment* f
                 /* Tag the `orig` field as a literal. It's the last field
                  * inside the thing structure so we can handle it by pretending
                  * it's not part of the thing. */
+                ASSERT(thing_arityval(gval)*sizeof(Eterm) == offsetof(ErlSubBits,orig));
                 hp += thing_arityval(gval) - 1;
             } else if (header_is_thing(gval)) {
                 hp += thing_arityval(gval);
