@@ -981,7 +981,7 @@ typedef struct {
     Uint32 num[ERTS_PID_REF_NUMBERS];
 } ErtsPRefThing;
 
-typedef struct __attribute__((packed)) {
+typedef struct HALFWORD_PACKED() {
     Eterm header;
     struct magic_binary *mb;
     struct erl_off_heap_header* next;
@@ -1184,7 +1184,7 @@ _ET_DECLARE_CHECKED(struct erl_node_*,internal_ref_node,Eterm)
  *
  */
 
-typedef struct external_thing_ {
+typedef struct HALFWORD_PACKED() external_thing_ {
     /*                                 ----+                        */
     Eterm                   header;     /* |                        */
     struct erl_node_*       node;       /*  > External thing head   */
@@ -1206,7 +1206,7 @@ typedef struct external_thing_ {
 	Uint32              ui32[2];
         Uint                ui[8 / sizeof(Uint)];
     } data;
-} __attribute__((packed)) ExternalThing;
+} ExternalThing;
 
 #define EXTERNAL_THING_HEAD_SIZE (offsetof(ExternalThing,data) / sizeof(Uint))
 

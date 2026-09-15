@@ -438,6 +438,8 @@ typedef int          Sint;
 #  error Found no appropriate type to use for 'Eterm', 'Uint' and 'Sint'
 #endif
 
+#  define HALFWORD_PACKED() __attribute__((packed))
+
 # if SIZEOF_VOID_P == SIZEOF_LONG
 typedef unsigned long UWord;
 typedef long          SWord;
@@ -508,6 +510,8 @@ typedef long long          Sint  erts_align_attribute(sizeof(long long));
 #else
 #error Found no appropriate type to use for 'Eterm', 'Uint' and 'Sint'
 #endif
+
+#  define HALFWORD_PACKED()
 
 typedef Uint UWord;
 typedef Sint SWord;

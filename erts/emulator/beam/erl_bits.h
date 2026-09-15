@@ -57,7 +57,7 @@
 
 /* This structure represents either the term form of an off-heap bitstring, or
  * a bitstring match context. */
-typedef struct erl_sub_bits {
+typedef struct HALFWORD_PACKED() erl_sub_bits {
     /* Subtag SUB_BITS_SUBTAG. */
     Eterm thing_word;
 
@@ -79,7 +79,7 @@ typedef struct erl_sub_bits {
     /* Tagged pointer to BinRef or ErlHeapBits, the latter is valid iff this is
      * a match context. */
     Eterm orig;
-} __attribute__((packed)) ErlSubBits;
+} ErlSubBits;
 
 #define ERL_SUB_BITS_FLAGS_MATCH_CONTEXT                                      \
     ERL_SUB_BITS_FLAG_MUTABLE
@@ -132,7 +132,7 @@ erl_sub_bits_update_moved(ErlSubBits *sb, Eterm orig);
 /** @brief A handle to an off-heap binary. While terms internally, these can
  * only be referred to by sub-bitstrings, and should never be exposed to the
  * user. */
-typedef struct __attribute__((packed)) bin_ref {
+typedef struct HALFWORD_PACKED() bin_ref {
     Eterm thing_word;           /* Subtag BIN_REF_SUBTAG. */
     Binary *val;                /* Pointer to Binary structure. */
     struct erl_off_heap_header *next;
