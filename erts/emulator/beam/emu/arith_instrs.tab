@@ -497,9 +497,8 @@ shift.execute(Fail, Dst) {
             }
             hp = HeapFragOnlyAlloc(c_p, big_need_size);
             {
-                DeclareTmpHeap(tmp_big, 2, c_p);
+                DeclareUseTmpHeap(tmp_big, 2, c_p);
                 if (is_small(Op1)) {
-                    UseTmpHeap(tmp_big, c_p);
                     Op1 = small_to_big(signed_val(Op1), tmp_big);
                 }
                 Op1 = big_lshift(Op1, shift_left_count, hp);
