@@ -109,6 +109,7 @@
 
 static void SVERK_DISPATCH(const char* label, const BeamInstr* I, Eterm* reg)
 {
+#if 0
     static FILE* sverkout = NULL;
     int arity = (int) (I[-1]);
 
@@ -126,6 +127,7 @@ static void SVERK_DISPATCH(const char* label, const BeamInstr* I, Eterm* reg)
         }
     }
     erts_fprintf(sverkout, ")\n");
+#endif
 }
 
 
