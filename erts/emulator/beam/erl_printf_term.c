@@ -609,15 +609,15 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount) {
 
                 ERTS_GET_BITSTRING(obj, bytep, offset, size);
 
-                if (bytesize > 50) {
-                    bytesize = 50;
-                    trunc = true;
-                }
-
                 bytep += BYTE_OFFSET(offset);
                 bitoffs = BIT_OFFSET(offset);
                 bytesize = BYTE_SIZE(size);
                 bitsize = TAIL_BITS(size);
+
+                if (bytesize > 50) {
+                    bytesize = 50;
+                    trunc = true;
+                }
 
 		if (bitsize || !bytesize
 		    || !is_printable_ascii(bytep, bytesize, bitoffs)) {
