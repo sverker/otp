@@ -2349,6 +2349,9 @@ BIF_RETTYPE ets_insert_2(BIF_ALIST_2)
     DbTableMethod* meth;
     SWord consumed_reds = 0;
     CHECK_TABLES();
+
+    erts_fprintf(stderr, "ets:insert(%T, %T)\n", BIF_ARG_1,BIF_ARG_2);
+
     if (BIF_ARG_2 == NIL) {
         /* Check that the table exists */
         DB_BIF_GET_TABLE(tb, DB_WRITE, LCK_WRITE_REC, BIF_ets_insert_2);
@@ -2396,6 +2399,8 @@ BIF_RETTYPE ets_insert_new_2(BIF_ALIST_2)
     db_lock_kind_t kind;
     SWord consumed_reds = 0;
     CHECK_TABLES();
+
+    erts_fprintf(stderr, "ets:insert_new(%T, %T)\n", BIF_ARG_1,BIF_ARG_2);
 
     if (BIF_ARG_2 == NIL) {
         /* Check that the table exists */
@@ -2893,10 +2898,12 @@ BIF_RETTYPE ets_lookup_2(BIF_ALIST_2)
 
     switch (cret) {
     case DB_ERROR_NONE:
+        erts_fprintf(stderr, "ets:lookup(%T, %T) -> %T\n", BIF_ARG_1,BIF_ARG_2,ret);
 	BIF_RET(ret);
     case DB_ERROR_SYSRES:
 	BIF_ERROR(BIF_P, SYSTEM_LIMIT);
     default:
+        erts_fprintf(stderr, "ets:lookup(%T, %T) -> badarg\n", BIF_ARG_1,BIF_ARG_2);
 	BIF_ERROR(BIF_P, BADARG);
     }
 
