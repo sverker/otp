@@ -154,6 +154,8 @@ AH(NeedStack, NeedHeap, Live) {
 DISPATCH() {
     BeamInstr dis_next;
 
+    SVERK_DISPATCH("DISPATCH", I, reg);
+
     dis_next = *I;
     CHECK_ARGS(I);
 
@@ -181,6 +183,9 @@ DISPATCH_EXPORT(Export) {
     DTRACE_GLOBAL_CALL_FROM_EXPORT(c_p, ep);
 
     SET_I(ep->dispatch.addresses[erts_active_code_ix()]);
+
+    SVERK_DISPATCH("DISPATCH_EXPORT", I, reg);
+
     CHECK_ARGS(I);
     dis_next = *I;
 
@@ -200,6 +205,8 @@ DISPATCH_FUN(I) {
     BeamInstr dis_next;
 
     SET_I($I);
+
+    SVERK_DISPATCH("DISPATCH_FUN", I, reg);
 
     dis_next = *I;
     CHECK_ARGS(I);

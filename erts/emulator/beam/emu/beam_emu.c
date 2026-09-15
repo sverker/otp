@@ -106,6 +106,29 @@
    ASSERT(VALID_INSTR(* (BeamInstr*)(ip))); \
    I = (ip)
 
+
+static void SVERK_DISPATCH(const char* label, const BeamInstr* I, Eterm* reg)
+{
+    static FILE* sverkout = NULL;
+    int arity = (int) (I[-1]);
+
+    if (!sverkout) {
+        sverkout = fopen("SVERKER.log", "w");
+    }
+
+    erts_fprintf(sverkout, "%s %T:%T/%d (", label, I[-3], I[-2], arity);
+
+    if (arity > 0) {
+        const char* delim = "";
+        for (int ix = 0; ix < arity; ix++) {
+            erts_fprintf(sverkout, "%s%T", delim, reg[ix]);
+            delim = ", ";
+        }
+    }
+    erts_fprintf(sverkout, ")\n");
+}
+
+
 /*
  * Register target (X or Y register).
  */
