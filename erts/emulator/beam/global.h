@@ -1708,6 +1708,7 @@ int erts_beam_jump_table(void);
          ASSERT((UWord)VariableName & 1); \
          VariableName = (Sched)->tmp_heap_top; \
          (Sched)->tmp_heap_top += size; \
+         ASSERT(!((UWord)VariableName & 1)); \
        } while (0)
 
 #    define DeclareUseTmpHeapNoSched(VariableName,Size) \
@@ -1716,7 +1717,10 @@ int erts_beam_jump_table(void);
 #    define UnDeclareTmpHeap(V,P) UnDeclareTmpHeapSched(V,(P)->scheduler_data)
 #    define UnDeclareTmpHeapNoProc(V) UnDeclareTmpHeapSched(V,erts_get_scheduler_data())
 #    define UnDeclareTmpHeapSched(VariableName,Sched) \
-       (Sched)->tmp_heap_top = VariableName;
+       do { \
+           ASSERT(!((UWord)VariableName & 1)); \
+           (Sched)->tmp_heap_top = VariableName; \
+       } while (0)
 #    define UnDeclareTmpHeapNoSched(V) \
        erts_free_stack_tmp_heap(V)
 
