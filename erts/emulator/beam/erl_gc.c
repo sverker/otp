@@ -261,8 +261,10 @@ erts_init_gc(void)
     ERTS_CT_ASSERT(offsetof(BinRef,thing_word) == offsetof(struct erl_off_heap_header,thing_word));
     ERTS_CT_ASSERT(offsetof(BinRef,thing_word) == offsetof(ErlFunThing,thing_word));
     ERTS_CT_ASSERT(offsetof(BinRef,thing_word) == offsetof(ExternalThing,header));
+    ERTS_CT_ASSERT(offsetof(BinRef,thing_word) == offsetof(ErtsMRefThing,header));
     ERTS_CT_ASSERT(offsetof(BinRef,next) == offsetof(struct erl_off_heap_header,next));
     ERTS_CT_ASSERT(offsetof(BinRef,next) == offsetof(ExternalThing,next));
+    ERTS_CT_ASSERT(offsetof(BinRef,next) == offsetof(ErtsMRefThing,next));
 
     erts_test_long_gc_sleep = 0;
 

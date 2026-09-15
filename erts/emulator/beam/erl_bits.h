@@ -132,11 +132,11 @@ erl_sub_bits_update_moved(ErlSubBits *sb, Eterm orig);
 /** @brief A handle to an off-heap binary. While terms internally, these can
  * only be referred to by sub-bitstrings, and should never be exposed to the
  * user. */
-typedef struct bin_ref {
+typedef struct __attribute__((packed)) bin_ref {
     Eterm thing_word;           /* Subtag BIN_REF_SUBTAG. */
     Binary *val;                /* Pointer to Binary structure. */
     struct erl_off_heap_header *next;
-} __attribute__((packed)) BinRef;
+} BinRef;
 
 #define HEADER_BIN_REF _make_header(ERL_BIN_REF_SIZE-1,_TAG_HEADER_BIN_REF)
 

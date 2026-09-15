@@ -981,11 +981,14 @@ typedef struct {
     Uint32 num[ERTS_PID_REF_NUMBERS];
 } ErtsPRefThing;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     Eterm header;
-    // One halfword padding here makes header distingt from pid refs
     struct magic_binary *mb;
     struct erl_off_heap_header* next;
+#if HALFWORD_HEAP
+    // One extra halfword to make 'header' differ from pid ref
+    Eterm __padding__;
+#endif
 } ErtsMRefThing;
 
 
