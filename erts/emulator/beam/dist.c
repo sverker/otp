@@ -6968,7 +6968,7 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
     ErtsNodesMonitorData *nmdp = &def_buf[0];
     ErtsNodesMonitorContext ctxt;
 #define TMP_HEAP_SZ ERTS_MON_NODES_MAX_INFO_SZ__(3/* max info elements */)
-    DeclareUseTmpHeap(tmp_heap, TMP_HEAP_SZ, c_p);
+    DeclareUseTmpHeapNoProc(tmp_heap, TMP_HEAP_SZ);
 
     ASSERT(is_immed(what));
     ASSERT(is_immed(node));
@@ -7148,7 +7148,7 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
         erts_factory_close(&hfact);
     }
 
-    UnDeclareTmpHeap(tmp_heap, c_p);
+    UnDeclareTmpHeapNoProc(tmp_heap);
     if (nmdp != &def_buf[0])
         erts_free(ERTS_ALC_T_TMP, nmdp);
 }
