@@ -1121,6 +1121,10 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
     BeamFile_RecordTable *rec = &beam->record;
     struct erl_record_field *fields = NULL;
     DeclareUseTmpHeapNoProc(tmp_cons, 2);
+#if ERTS_SIZEOF_ETERM == 4
+    DeclareUseTmpHeapNoProc(tmp_big, BIG_UINT_HEAP_SIZE);
+#endif
+
 
     LoadAssert(beamreader_read_i32(p_reader, &record_count));
     LoadAssert(beamreader_read_i32(p_reader, &total_field_count));
@@ -1160,9 +1164,6 @@ static int parse_record_chunk_data(BeamFile *beam, BeamReader *p_reader) {
         Uint32 hash;
         Uint hash_tuple_size;
         Eterm tagged_hash;
-#if ERTS_SIZEOF_ETERM == 4
-        Eterm tmp_big[BIG_UINT_HEAP_SIZE];
-#endif
 
         if (!beamcodereader_next(op_reader, &op)) {
             goto error;
