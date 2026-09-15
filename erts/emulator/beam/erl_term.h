@@ -869,7 +869,7 @@ typedef struct {
     Uint32 num[ERTS_REF_NUMBERS];
     Uint32 marker;
 #endif
-} __attribute__((packed)) ErtsMRefThing;
+} ErtsMRefThing;
 
 /*
  * Ordinary ref layout on a 64-bit little endian machine:
@@ -983,9 +983,10 @@ typedef struct {
 
 typedef struct {
     Eterm header;
+    // One halfword padding here makes header distingt from pid refs
     struct magic_binary *mb;
     struct erl_off_heap_header* next;
-} __attribute__((packed)) ErtsMRefThing;
+} ErtsMRefThing;
 
 
 #define write_ref_thing(Hp, R0, R1, R2)					\
