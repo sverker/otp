@@ -605,12 +605,19 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount) {
                 UWord size, offset, bytesize;
                 byte* bytep;
                 byte octet;
+                bool trunc = false;
 
                 ERTS_GET_BITSTRING(obj, bytep, offset, size);
+
                 bytep += BYTE_OFFSET(offset);
                 bitoffs = BIT_OFFSET(offset);
                 bytesize = BYTE_SIZE(size);
                 bitsize = TAIL_BITS(size);
+
+                if (bytesize > 50) {
+                    bytesize = 50;
+                    trunc = true;
+                }
 
 		if (bitsize || !bytesize
 		    || !is_printable_ascii(bytep, bytesize, bitoffs)) {
@@ -631,6 +638,9 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount) {
                         if ((*dcount)-- <= 0)
                             goto L_done;
 		    }
+                    if (trunc) {
+                        PRINT_STRING(res, fn, arg, "...");
+                    }
 		    if (bitsize) {
 			Uint bits = bitoffs + bitsize;
 			octet = bytep[0];
@@ -667,6 +677,9 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount) {
                         if ((*dcount)-- <= 0)
                             goto L_done;
 		    }
+                    if (trunc) {
+                        PRINT_STRING(res, fn, arg, "...");
+                    }
 		    PRINT_STRING(res, fn, arg, "\">>");
 		}
 	    }
