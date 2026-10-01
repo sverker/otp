@@ -13035,6 +13035,8 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
         int code;
         Eterm *tp;
 
+        alloc_ctl_heap(&ctx);
+
         ASSERT(is_tuple_arity(so->mfa, 3));
         tp = tuple_val(so->mfa);
         ASSERT(is_atom(tp[1]));
@@ -13133,6 +13135,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
         }
     
         erts_proc_unlock(p, locks & ERTS_PROC_LOCK_MAIN);
+        free_ctl_heap(&ctx);
     }
 
     res = p->common.id;
@@ -13589,6 +13592,8 @@ erts_proc_exit_handle_dist_monitor(ErtsMonitor *mon, void *vctxt, Sint reds)
     ErtsHeapFactory factory;
     Sint reds_consumed = 0;
 
+    alloc_ctl_heap(&ctx);
+
     ASSERT(c_p->flags & F_DISABLE_GC);
     ASSERT(erts_monitor_is_target(mon)
            && ERTS_ML_GET_TYPE(mon) == ERTS_MON_TYPE_DIST_PROC);
@@ -13665,6 +13670,9 @@ erts_proc_exit_handle_dist_monitor(ErtsMonitor *mon, void *vctxt, Sint reds)
         erts_monitor_release(mon);
     else
         erts_monitor_release_both(mdp);
+
+    free_ctl_heap(&ctx);
+
     return reds_consumed;
 }
 
@@ -13733,6 +13741,8 @@ proc_exit_handle_pend_spawn_monitors(ErtsMonitor *mon, void *vctxt, Sint reds)
     /* Send exit signal... */
     dep = external_pid_dist_entry(mon->other.item);
 
+    alloc_ctl_heap(&ctx);
+
     code = erts_dsig_prepare(&ctx, dep, c_p, ERTS_PROC_LOCK_MAIN,
                              ERTS_DSP_NO_LOCK, 0, 0, 0);
 
@@ -13782,6 +13792,8 @@ proc_exit_handle_pend_spawn_monitors(ErtsMonitor *mon, void *vctxt, Sint reds)
         break;
     }
 
+    free_ctl_heap(&ctx);
+
 done:
     
     if (mdp)
@@ -13798,6 +13810,8 @@ erts_proc_exit_dist_demonitor(Process *c_p, DistEntry *dep, Uint32 conn_id,
 {
     ErtsDSigSendContext ctx;
     int code;
+
+    alloc_ctl_heap(&ctx);
 
     ASSERT(is_internal_ref(ref));
     ASSERT(is_atom(watched) || is_external_pid(watched));
@@ -13817,6 +13831,7 @@ erts_proc_exit_dist_demonitor(Process *c_p, DistEntry *dep, Uint32 conn_id,
     default:
         break;
     }
+    free_ctl_heap(&ctx);
 }
 
 int
@@ -13861,15 +13876,21 @@ erts_proc_exit_handle_monitor(ErtsMonitor *mon, void *vctxt, Sint reds)
             /* Target of a dist port monitor is never inserted... */
             ERTS_INTERNAL_ERROR("Unexpected dist port monitor");
             break;
-        case ERTS_MON_TYPE_DIST_PROC: {
-            ErtsMonLnkDist *dist;
-            DistEntry *dep;
-            ErtsDSigSendContext ctx;
-            int code;
-            Eterm watcher;
-            Eterm watched;
+        case ERTS_MON_TYPE_DIST_PROC:
+            if (is_not_immed(reason)) {
+                erts_monitor_tree_insert(&ctxt->dist_monitors, mon);
+                return 1;
+            }
+            else {
+                ErtsMonLnkDist *dist;
+                DistEntry *dep;
+                ErtsDSigSendContext ctx;
+                int code;
+                Eterm watcher;
+                Eterm watched;
 
-            if (is_immed(reason)) {
+                alloc_ctl_heap(&ctx);
+
                 mdp = erts_monitor_to_data(mon);
 
                 if (mon->flags & ERTS_ML_FLG_NAME)
@@ -13902,12 +13923,11 @@ erts_proc_exit_handle_monitor(ErtsMonitor *mon, void *vctxt, Sint reds)
                 }
                 if (!erts_monitor_dist_delete(&mdp->origin))
                     mdp = NULL;
-            } else {
-                erts_monitor_tree_insert(&ctxt->dist_monitors, mon);
-                return 1;
+
+                free_ctl_heap(&ctx);
             }
             break;
-        }
+
         default:
             ERTS_INTERNAL_ERROR("Invalid target monitor type");
             break;
@@ -14018,6 +14038,8 @@ erts_proc_exit_handle_dist_link(ErtsLink *lnk, void *vctxt, Sint reds)
     ErtsHeapFactory factory;
     Sint reds_consumed = 0;
 
+    alloc_ctl_heap(&ctx);
+
     ASSERT(c_p->flags & F_DISABLE_GC);
     ASSERT(ERTS_ML_GET_TYPE(lnk) == ERTS_LNK_TYPE_DIST_PROC);
     ASSERT(ctxt->dist_state == NIL);
@@ -14086,6 +14108,9 @@ erts_proc_exit_handle_dist_link(ErtsLink *lnk, void *vctxt, Sint reds)
         erts_link_release_both(&elnk->ld);
     else if (lnk)
         erts_link_release(lnk);
+
+    free_ctl_heap(&ctx);
+
     return reds_consumed;
 }
 
@@ -14124,11 +14149,7 @@ erts_proc_exit_handle_link(ErtsLink *lnk, void *vctxt, Sint reds)
         break;
     }
     case ERTS_LNK_TYPE_DIST_PROC: {
-        DistEntry *dep;
-        ErtsMonLnkDist *dist;
         ErtsLink *dlnk;
-        ErtsDSigSendContext ctx;
-        int code;
 
         dlnk = erts_link_to_other(lnk, &elnk);
         if (elnk->unlinking) {
@@ -14138,6 +14159,13 @@ erts_proc_exit_handle_link(ErtsLink *lnk, void *vctxt, Sint reds)
         }
 
         if (is_immed(reason)) {
+            DistEntry *dep;
+            ErtsMonLnkDist *dist;
+            ErtsDSigSendContext ctx;
+            int code;
+
+            alloc_ctl_heap(&ctx);
+
             dist = elnk->dist;
 
             ASSERT(is_external_pid(lnk->other.item));
@@ -14164,6 +14192,7 @@ erts_proc_exit_handle_link(ErtsLink *lnk, void *vctxt, Sint reds)
             default:
                 break;
             }
+            free_ctl_heap(&ctx);
         } else {
             erts_link_tree_insert(&ctxt->dist_links, lnk);
             return 1;

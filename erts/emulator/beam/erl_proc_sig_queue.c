@@ -2770,7 +2770,11 @@ reply_dist_unlink_ack(Process *c_p, ErtsSigDistUnlinkOp *sdulnk)
          */
         if (dep != erts_this_dist_entry && sdulnk->nodename == dep->sysname) {
             ErtsDSigSendContext ctx;
-            int code = erts_dsig_prepare(&ctx, dep, NULL, 0,
+            int code;
+
+            alloc_ctl_heap(&ctx);
+
+            code = erts_dsig_prepare(&ctx, dep, NULL, 0,
                                          ERTS_DSP_NO_LOCK, 1, 1, 0);
             switch (code) {
             case ERTS_DSIG_PREP_CONNECTED:
@@ -2786,6 +2790,7 @@ reply_dist_unlink_ack(Process *c_p, ErtsSigDistUnlinkOp *sdulnk)
             default:
                 break;
             }
+            free_ctl_heap(&ctx);
         }
     }
 
@@ -5820,7 +5825,11 @@ handle_dist_spawn_reply(Process *c_p, ErtsSigRecvTracing *tracing,
 
         if (dep != erts_this_dist_entry && dist->nodename == dep->sysname) {
             ErtsDSigSendContext ctx;
-            int code = erts_dsig_prepare(&ctx, dep, NULL, 0,
+            int code;
+
+            alloc_ctl_heap(&ctx);
+
+            code = erts_dsig_prepare(&ctx, dep, NULL, 0,
                                          ERTS_DSP_NO_LOCK, 1, 1, 0);
             switch (code) {
             case ERTS_DSIG_PREP_CONNECTED:
@@ -5837,6 +5846,7 @@ handle_dist_spawn_reply(Process *c_p, ErtsSigRecvTracing *tracing,
             default:
                 break;
             }
+            free_ctl_heap(&ctx);
         }
         /* delete monitor structure... */
         adjust_monitor = 0;

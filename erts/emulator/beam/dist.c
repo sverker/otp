@@ -1430,7 +1430,7 @@ Eterm erts_dsend_export_trap_context(Process* p, ErtsDSigSendContext* ctx)
 #if !HALFWORD_HEAP
     dst->ctx.ctl = make_tuple(dst->ctx.ctl_heap);
 #else
-    /* Must put control tuple in low mem */
+    /* Must put control tuple in low non-tmp mem */
     sys_memcpy(hp, ctx->ctl_heap,  ctl_size*sizeof(Eterm));
     dst->ctx.ctl = make_tuple(hp);
     hp += ctl_size;
@@ -2280,11 +2280,14 @@ int erts_net_message(Port *prt,
             erts_link_release_both(ldp);
         }
 
+        alloc_ctl_heap(&ctx);
+
         code = erts_dsig_prepare(&ctx, dep, NULL, 0, ERTS_DSP_NO_LOCK, 1, 1, 0);
         if (code == ERTS_DSIG_PREP_CONNECTED && ctx.connection_id == conn_id) {
             code = erts_dsig_send_exit(&ctx, to, from, am_noproc);
             ASSERT(code == ERTS_DSIG_SEND_OK);
         }
+        free_ctl_heap(&ctx);
 
 	break;
     }
@@ -2417,12 +2420,14 @@ int erts_net_message(Port *prt,
             erts_monitor_release_both(mdp);
 
         }
+        alloc_ctl_heap(&ctx);
 
         code = erts_dsig_prepare(&ctx, dep, NULL, 0, ERTS_DSP_NO_LOCK, 1, 1, 0);
         if (code == ERTS_DSIG_PREP_CONNECTED && ctx.connection_id == conn_id) {
             code = erts_dsig_send_m_exit(&ctx, watcher, watched, ref, am_noproc);
             ASSERT(code == ERTS_DSIG_SEND_OK);
         }
+        free_ctl_heap(&ctx);
 
         break;
     }
@@ -3000,6 +3005,9 @@ int erts_net_message(Port *prt,
                 seq_trace_output(token, seq_msg, SEQ_TRACE_SEND, from, NULL);
                 UnDeclareTmpHeapNoProc(tmp_heap);
             }
+
+            alloc_ctl_heap(&ctx);
+
             code = erts_dsig_prepare(&ctx, dep, NULL, 0,
                                      ERTS_DSP_NO_LOCK, 1, 1, 0);
             if (code == ERTS_DSIG_PREP_CONNECTED
@@ -3012,6 +3020,8 @@ int erts_net_message(Port *prt,
                                                   token);
                 ASSERT(code == ERTS_DSIG_SEND_OK);
             }
+            free_ctl_heap(&ctx);
+
             break;
         }
 
@@ -3132,10 +3142,13 @@ int erts_net_message(Port *prt,
         if (!erts_proc_sig_send_dist_spawn_reply(dep->sysname, ref,
                                                  parent, lnk, result,
                                                  token)) {
-            ErtsDSigSendContext ctx;
             int code;
             
             if (monitor) {
+                ErtsDSigSendContext ctx;
+
+                alloc_ctl_heap(&ctx);
+
                 code = erts_dsig_prepare(&ctx, dep, NULL, 0,
                                          ERTS_DSP_NO_LOCK, 1, 1, 0);
                 if (code == ERTS_DSIG_PREP_CONNECTED
@@ -3144,6 +3157,7 @@ int erts_net_message(Port *prt,
                                                     result, ref);
                     ASSERT(code == ERTS_DSIG_SEND_OK);
                 }
+                free_ctl_heap(&ctx);
             }
 
             if (lnk) {
@@ -5889,6 +5903,8 @@ BIF_RETTYPE erts_internal_dist_spawn_request_4(BIF_ALIST_4)
     int code;
     Uint32 monitor_oflags = 0, monitor_opts_oflags = 0;
 
+    alloc_ctl_heap(&ctx);
+
     add_monitor = 0;
     add_link = 0;
     ok_result = THE_NON_VALUE;
@@ -6229,7 +6245,8 @@ BIF_RETTYPE erts_internal_dist_spawn_request_4(BIF_ALIST_4)
     }
     
 do_return:
-    
+    free_ctl_heap(&ctx);
+
     if (dep)
         erts_deref_dist_entry(dep);
 
@@ -6614,6 +6631,8 @@ monitor_node(Process* p, Eterm Node, Eterm Bool, Eterm Options)
 
     case am_true: {
         ErtsDSigSendContext ctx;
+
+        alloc_ctl_heap(&ctx);
         ctx.node = Node;
 
         dep = erts_find_or_insert_dist_entry(Node);
@@ -6626,6 +6645,7 @@ monitor_node(Process* p, Eterm Node, Eterm Bool, Eterm Options)
         case ERTS_DSIG_PREP_NOT_ALIVE:
 	case ERTS_DSIG_PREP_NOT_CONNECTED:
 	    /* Trap to either send 'nodedown' or do passive connection attempt */
+            free_ctl_heap(&ctx);
             goto do_trap;
 	case ERTS_DSIG_PREP_PENDING:
 	    if (!async_connect) {
@@ -6634,6 +6654,7 @@ monitor_node(Process* p, Eterm Node, Eterm Bool, Eterm Options)
 		 * to ensure passive connection attempt
 		 */
 		erts_de_runlock(dep);
+                free_ctl_heap(&ctx);
 		goto do_trap;
 	    }
 	    ERTS_FALLTHROUGH();
@@ -6686,7 +6707,7 @@ monitor_node(Process* p, Eterm Node, Eterm Bool, Eterm Options)
         }
 
         erts_de_runlock(dep);
-
+        free_ctl_heap(&ctx);
         break;
     }
 

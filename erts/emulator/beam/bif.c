@@ -317,6 +317,8 @@ static BIF_RETTYPE link_opt(Process *c_p, Eterm other, Eterm opts)
         ASSERT(eq(elnk->ld.proc.other.item, other));
         ASSERT(elnk->ld.dist.other.item == c_p->common.id);
 
+        alloc_ctl_heap(&ctx);
+
         code = erts_dsig_prepare(&ctx, dep, c_p,
                                  ERTS_PROC_LOCK_MAIN,
                                  ERTS_DSP_RLOCK, 0, 1, 1);
@@ -369,8 +371,10 @@ static BIF_RETTYPE link_opt(Process *c_p, Eterm other, Eterm opts)
             erts_de_runlock(dep);
 
             code = erts_dsig_send_link(&ctx, c_p->common.id, other);
-            if (code == ERTS_DSIG_SEND_YIELD)
+            if (code == ERTS_DSIG_SEND_YIELD) {
+                free_ctl_heap(&ctx);
                 ERTS_BIF_YIELD_RETURN(c_p, am_true);
+            }
             ASSERT(code == ERTS_DSIG_SEND_OK);
             break;
         }
@@ -389,6 +393,8 @@ static BIF_RETTYPE link_opt(Process *c_p, Eterm other, Eterm opts)
             erts_link_release(rlnk);
 
         elnk->unlinking = 0;
+
+        free_ctl_heap(&ctx);
 
         goto done;
     }
@@ -542,6 +548,8 @@ demonitor(Process *c_p, Eterm ref, Eterm *multip)
            return am_false;
        }
 
+       alloc_ctl_heap(&ctx);
+
        code = erts_dsig_prepare(&ctx, dep, c_p, ERTS_PROC_LOCK_MAIN,
                                 ERTS_DSP_RLOCK, 0, 1, 0);
 
@@ -586,6 +594,8 @@ demonitor(Process *c_p, Eterm ref, Eterm *multip)
            erts_monitor_release(&mdp->u.target);
 
        erts_monitor_release(mon);
+       free_ctl_heap(&ctx);
+
        return code == ERTS_DSIG_SEND_YIELD ? am_yield : am_true;
    }
 
@@ -835,6 +845,8 @@ static BIF_RETTYPE monitor(Process *c_p, Eterm type, Eterm target,
             mdp->origin.flags |= add_oflags;
             erts_monitor_tree_insert(&ERTS_P_MONITORS(c_p), &mdp->origin);
 
+            alloc_ctl_heap(&ctx);
+
             code = erts_dsig_prepare(&ctx, dep,
                                      c_p, ERTS_PROC_LOCK_MAIN,
                                      ERTS_DSP_RLOCK, 0, 1, 1);
@@ -863,6 +875,8 @@ static BIF_RETTYPE monitor(Process *c_p, Eterm type, Eterm target,
                 code = ERTS_DSIG_SEND_OK;
                 break;
             }
+
+            free_ctl_heap(&ctx);
 
             if (byname)
                 erts_deref_dist_entry(dep);
@@ -1302,6 +1316,7 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
         Uint64 unlink_id;
 	int code;
 	ErtsDSigSendContext ctx;
+        BIF_RETTYPE retval;
 
 	dep = external_pid_dist_entry(BIF_ARG_1);
 	if (dep == erts_this_dist_entry)
@@ -1323,12 +1338,15 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
         unlink_id = erts_proc_sig_new_unlink_id(&BIF_P->common);
         elnk->unlinking = unlink_id;
 
+        alloc_ctl_heap(&ctx);
+
 	code = erts_dsig_prepare(&ctx, dep, BIF_P, ERTS_PROC_LOCK_MAIN,
 				 ERTS_DSP_NO_LOCK, 0, 1, 0);
 	switch (code) {
 	case ERTS_DSIG_PREP_NOT_ALIVE:
-	case ERTS_DSIG_PREP_NOT_CONNECTED:
-	    BIF_RET(am_true);
+        case ERTS_DSIG_PREP_NOT_CONNECTED:
+            ERTS_BIF_PREP_RET(retval, am_true);
+            break;
 	case ERTS_DSIG_PREP_PENDING:
 	case ERTS_DSIG_PREP_CONNECTED:
             /*
@@ -1338,16 +1356,20 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
             if (elnk->dist->connection_id == ctx.connection_id) {
                 code = erts_dsig_send_unlink(&ctx, BIF_P->common.id, BIF_ARG_1,
                                              unlink_id);
-                if (code == ERTS_DSIG_SEND_YIELD)
-                    ERTS_BIF_YIELD_RETURN(BIF_P, am_true);
+                if (code == ERTS_DSIG_SEND_YIELD) {
+                    ERTS_BIF_PREP_YIELD_RETURN(retval, BIF_P, am_true);
+                    break;
+                }
             }
+            ERTS_BIF_PREP_RET(retval, am_true);
             break;
 	default:
 	    ASSERT(! "Invalid dsig prepare result");
-	    BIF_ERROR(BIF_P, EXC_INTERNAL_ERROR);
+            ERTS_BIF_PREP_ERROR(retval, BIF_P, EXC_INTERNAL_ERROR);
 	}
+        free_ctl_heap(&ctx);
 
-        BIF_RET(am_true);
+        return retval;
     }
 
     if (is_external_port(BIF_ARG_1)
@@ -1812,6 +1834,7 @@ static BIF_RETTYPE send_exit_signal_bif(Process *c_p, Eterm id, Eterm reason,
              int code;
              ErtsDSigSendContext ctx;
 
+             alloc_ctl_heap(&ctx);
              code = erts_dsig_prepare(&ctx, dep, c_p, ERTS_PROC_LOCK_MAIN,
                                       ERTS_DSP_NO_LOCK, 0, 0, 1);
 
@@ -1855,6 +1878,7 @@ static BIF_RETTYPE send_exit_signal_bif(Process *c_p, Eterm id, Eterm reason,
                  ERTS_BIF_PREP_ERROR(ret_val, c_p, EXC_INTERNAL_ERROR);
                  break;
              }
+             free_ctl_heap(&ctx);
          }
      }
      else if (is_external_port(id)) {
@@ -2391,6 +2415,8 @@ static Sint remote_send(Process *p, DistEntry *dep,
     ErtsDSigSendContext ctx;
     ASSERT(is_atom(to) || is_external_pid(to) || is_external_ref(to));
 
+    alloc_ctl_heap(&ctx);
+
     code = erts_dsig_prepare(&ctx, dep, p, ERTS_PROC_LOCK_MAIN,
 			     ERTS_DSP_NO_LOCK,
 			     !suspend, 0, connect);
@@ -2454,6 +2480,8 @@ static Sint remote_send(Process *p, DistEntry *dep,
 	if (ERTS_PROC_GET_SAVED_CALLS_BUF(p))
 	    save_calls(p, &exp_send);
     }
+
+    free_ctl_heap(&ctx);
 
     return res;
 }
@@ -4998,26 +5026,37 @@ BIF_RETTYPE erts_internal_group_leader_2(BIF_ALIST_2)
 	DistEntry *dep;
 	int code;
 	ErtsDSigSendContext ctx;
+        BIF_RETTYPE retval;
+
 	dep = external_pid_dist_entry(BIF_ARG_2);
 	ERTS_ASSERT(dep);
 	if(dep == erts_this_dist_entry)
 	    BIF_ERROR(BIF_P, BADARG);
+
+        alloc_ctl_heap(&ctx);
 
 	code = erts_dsig_prepare(&ctx, dep, BIF_P, ERTS_PROC_LOCK_MAIN,
 				 ERTS_DSP_NO_LOCK, 0, 1, 1);
 	switch (code) {
 	case ERTS_DSIG_PREP_NOT_ALIVE:
 	case ERTS_DSIG_PREP_NOT_CONNECTED:
-	    BIF_RET(am_true);
-	case ERTS_DSIG_PREP_PENDING:
+            ERTS_BIF_PREP_RET(retval, am_true);
+            break;
+        case ERTS_DSIG_PREP_PENDING:
 	case ERTS_DSIG_PREP_CONNECTED:
 	    code = erts_dsig_send_group_leader(&ctx, BIF_ARG_1, BIF_ARG_2);
-	    if (code == ERTS_DSIG_SEND_YIELD)
-		ERTS_BIF_YIELD_RETURN(BIF_P, am_true);
-	    BIF_RET(am_true);
+            if (code == ERTS_DSIG_SEND_YIELD) {
+                ERTS_BIF_PREP_YIELD_RETURN(retval, BIF_P, am_true);
+            } else {
+                ERTS_BIF_PREP_RET(retval, am_true);
+            }
+            break;
 	default:
 	    ERTS_ASSERT(! "Invalid dsig prepare result");
 	}
+        free_ctl_heap(&ctx);
+
+        return retval;
     }
 
     BIF_RET(am_badarg);

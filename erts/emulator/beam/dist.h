@@ -374,7 +374,11 @@ typedef struct erts_dsig_send_context {
     Eterm ctl;
     Eterm msg;
     Eterm from;
+#if HALFWORD_HEAP
+    Eterm *ctl_heap;
+#else
     Eterm ctl_heap[8]; /* 7-tuple (SPAWN_REQUEST_TT) */
+#endif
     Eterm return_term;
 
     DistEntry *dep;
@@ -400,6 +404,14 @@ typedef struct erts_dsig_send_context {
     }u;
 
 } ErtsDSigSendContext;
+
+#if HALFWORD_HEAP
+#  define alloc_ctl_heap(CTX) (CTX)->ctl_heap = erts_alloc(ERTS_ALC_T_TMP, sizeof(Eterm)*8)
+#  define free_ctl_heap(CTX) erts_free(ERTS_ALC_T_TMP, (CTX)->ctl_heap)
+#else
+#  define alloc_ctl_heap(CTX) (void)0
+#  define free_ctl_heap(CTX) (void)0
+#endif
 
 typedef struct dist_sequences DistSeqNode;
 
