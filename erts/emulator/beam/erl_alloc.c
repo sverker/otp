@@ -97,6 +97,8 @@ static Uint install_debug_functions(void);
 #endif
 #endif
 
+size_t eheap_max_size = 0;
+
 static int lock_all_physical_memory = 0;
 
 ErtsAllocatorFunctions_t ERTS_WRITE_UNLIKELY(erts_allctrs[ERTS_ALC_A_MAX+1]);
