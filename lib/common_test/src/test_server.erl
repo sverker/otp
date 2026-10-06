@@ -2915,7 +2915,8 @@ read_std(Port, Exec, Out) ->
 run_on_shielded_node(Fun, CArgs) when is_function(Fun), is_list(CArgs) ->
     Nr = erlang:unique_integer([positive]),
     Name = "shielded_node-" ++ integer_to_list(Nr),
-    Node = case start_node(Name, slave, [{args, "-hidden " ++ CArgs}]) of
+    Node = case start_node(Name, slave, [{erl, [{prog, "/home/uabseri/src/otp4/cerl_debug_rr"}]},
+                                         {args, "-hidden " ++ CArgs}]) of
 	       {ok, N} -> N;
 	       Err -> fail({failed_to_start_shielded_node, Err})
 	   end,

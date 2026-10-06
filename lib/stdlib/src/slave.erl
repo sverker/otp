@@ -369,6 +369,7 @@ wait_for_slave(Parent, Host, Name, Node, Args, LinkTo, Prog) ->
     Waiter = register_unique_name(0),
     case mk_cmd(Host, Name, Args, Waiter, Prog) of
 	{ok, Cmd} ->
+            io:format("SVERKER: slave calling open_port with Cmd = ~p\n", [Cmd]),
 	    open_port({spawn, Cmd}, [stream]),
 	    receive
 		{SlavePid, slave_started} ->
