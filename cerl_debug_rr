@@ -1,4 +1,0 @@
-#!/bin/sh
-
-exec $ERL_TOP/bin/cerl -debug -rr $@
-
