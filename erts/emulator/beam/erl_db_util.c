@@ -2396,6 +2396,9 @@ restart:
 	    ++ep;
 	    break;
 	case matchEqBin:
+#if HALFWORD_HEAP
+        case matchEqRef:
+#endif
 	    t = (Eterm) *pc++;
 	    if (!EQ(t,*ep))
 		FAIL();
@@ -2409,6 +2412,7 @@ restart:
 	    pc += sizeof(double) / sizeof(*pc);
 	    ++ep;
 	    break;
+#if !HALFWORD_HEAP
 	case matchEqRef: {
 	    Eterm* epc = (Eterm*)pc;
 	    if (!is_ref(*ep))
@@ -2421,6 +2425,7 @@ restart:
 	    ++ep;
 	    break;
 	}
+#endif
 	case matchEqBig:
 	    if (!is_big(*ep))
 		FAIL();
@@ -4147,10 +4152,9 @@ static DMCRet dmc_one_term(DMCContext *context,
             break;
 	case (_TAG_HEADER_REF >> _TAG_PRIMARY_SIZE):
 	{
-	    Eterm* ref_val = internal_ref_val(c);
-	    DMC_PUSH(*text, matchEqRef);
 #if HALFWORD_HEAP
-            {
+            DMC_PUSH2(*text, matchEqRef, dmc_private_copy(context, c));
+            /*{
                 union {
                     UWord u;
                     Uint t[2];
@@ -4162,8 +4166,11 @@ static DMCRet dmc_one_term(DMCContext *context,
                 fiddle.t[0] = ref_val[2];
                 fiddle.t[1] = ref_val[3];
                 DMC_PUSH(*text, fiddle.u);
-            }
+            }*/
 #else
+            Eterm* ref_val = internal_ref_val(c);
+            DMC_PUSH(*text, matchEqRef);
+
 	    n = thing_arityval(ref_val[0]);
 	    for (i = 0; i <= n; ++i) {
 		DMC_PUSH(*text, ref_val[i]);
@@ -6373,8 +6380,13 @@ void db_match_dis(Binary *bp)
 	    ++t;
 	    erts_printf("EqBin\t%p (%T)\n", t, p);
 	    break;
-	case matchEqRef:
-	    ++t;
+        case matchEqRef:
+            ++t;
+#if HALFWORD_HEAP
+            p = (Eterm) *t;
+            ++t;
+            erts_printf("EqRef\t%p (%T)\n", t, p);
+#else
 	    {
 		Uint32 *num;
 		int ri;
@@ -6407,6 +6419,7 @@ void db_match_dis(Binary *bp)
 		}
 	    }
 	    erts_printf("}\n");
+#endif
 	    break;
 	case matchEqBig:
 	    ++t;
