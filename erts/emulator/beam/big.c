@@ -2236,50 +2236,29 @@ static int I_lg(ErtsDigit* x, dsize_t xl)
     return sz - 1;
 }
 
-/*
-** Create bigint on heap if necessary. Like the previously existing
-** make_small_or_big(), except for a HAlloc() instead of an
-** ArithAlloc().
-** NOTE: Only use erts_make_integer(), when order of heap fragments is
-**       guaranteed to be correct.
-*/
-Eterm
-erts_make_integer(Uint x, Process *p)
-{
-    Eterm* hp;
-    if (IS_USMALL(0,x))
-	return make_small(x);
-    else {
-	hp = HAlloc(p, BIG_UINT_HEAP_SIZE);
-	return uint_to_big(x,hp);
-    }
-}
-
-Eterm
-erts_make_integer_fact(Uint x, ErtsHeapFactory *hf)
-{
-    Eterm* hp;
-    if (IS_USMALL(0,x))
-	return make_small(x);
-    else {
-	hp = erts_produce_heap(hf, BIG_UINT_HEAP_SIZE, 0);
-	return uint_to_big(x, hp);
-    }
-}
-
-#if HALFWORD_HEAP
 Eterm
 erts_make_uword(UWord x, Process *p)
 {
     Eterm* hp;
     if (IS_USMALL(0,x))
-        return make_small(x);
+	return make_small(x);
     else {
         hp = HAlloc(p, BIG_UWORD_HEAP_SIZE(x));
         return uword_to_big(x,hp);
     }
 }
-#endif
+
+Eterm
+erts_make_uword_fact(UWord x, ErtsHeapFactory *hf)
+{
+    Eterm* hp;
+    if (IS_USMALL(0,x))
+	return make_small(x);
+    else {
+        hp = erts_produce_heap(hf, BIG_UWORD_HEAP_SIZE(x), 0);
+        return uword_to_big(x, hp);
+    }
+}
 
 /*
 ** convert Uint to bigint

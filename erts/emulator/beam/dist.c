@@ -6920,7 +6920,7 @@ erts_monitor_nodes(Process *c_p, Eterm on, Eterm options)
         }
     }
 
-    return erts_make_integer(old_value, c_p);
+    return erts_make_uword(old_value, c_p);
 }
 
 void

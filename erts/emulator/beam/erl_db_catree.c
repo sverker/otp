@@ -2301,7 +2301,7 @@ static Eterm db_delete_all_objects_get_nitems_from_holder_catree(Process* p,
 {
     Binary* bin = erts_magic_ref2bin(mref);
     DbCATreeNrOfItemsDeletedWb* data = ERTS_MAGIC_BIN_DATA(bin);
-    return erts_make_integer(data->nr_of_deleted_items, p);
+    return erts_make_uword(data->nr_of_deleted_items, p);
 }
 
 static SWord db_delete_all_objects_catree(Process* p,

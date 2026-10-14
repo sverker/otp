@@ -527,7 +527,7 @@ erts_debug_interpreter_size_0(BIF_ALIST_0)
             high = a;
         }
     }
-    return erts_make_integer(high - low, BIF_P);
+    return erts_make_uword(high - low, BIF_P);
 #else
     return make_small(0);
 #endif
@@ -1303,7 +1303,7 @@ dirty_test(Process *c_p, Eterm type, Eterm arg1, Eterm arg2, ErtsCodePtr I)
 	    ERTS_BIF_PREP_RET(ret, am_ok);
 	else {
 	    Eterm argv[3];
-	    Eterm eint = erts_make_integer((Uint) (n - 2), c_p);
+            Eterm eint = erts_make_uword((Uint) (n - 2), c_p);
 	    if (n % 4 != 0)
 		next_type = type;
 	    else {

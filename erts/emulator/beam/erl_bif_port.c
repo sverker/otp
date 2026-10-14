@@ -1565,7 +1565,7 @@ BIF_RETTYPE decode_packet_3(BIF_ALIST_3)
         Eterm* hp = HAlloc(BIF_P, 3);
         Eterm required_size = (packet_sz == 0) ?
             am_undefined :
-            erts_make_integer(packet_sz, BIF_P);
+            erts_make_uword(packet_sz, BIF_P);
         res = TUPLE2(hp, am_more, required_size);
     } else {
         /* We got a whole packet, parse it */

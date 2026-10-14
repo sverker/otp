@@ -2200,7 +2200,7 @@ trace_info_func_epilogue(Process* p,
 	break;
     case am_call_count:
 	if (got & FUNC_TRACE_COUNT_TRACE) {
-	    retval = erts_make_integer(call_count, p);
+            retval = erts_make_uword(call_count, p);
 	}
 	break;
     case am_call_time:
@@ -2232,7 +2232,7 @@ trace_info_func_epilogue(Process* p,
 		match_spec_meta = NIL;
 	}
 	if (got & FUNC_TRACE_COUNT_TRACE) {
-            call_count_term = erts_make_integer(call_count, p);
+            call_count_term = erts_make_uword(call_count, p);
 	}
 	if (!(got & FUNC_TRACE_TIME_TRACE)) {
             call_time = am_false;

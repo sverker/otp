@@ -1829,8 +1829,8 @@ static Eterm do_match_single_result(Process *p, Eterm subject, BinaryFindContext
     Eterm *hp;
     Eterm ret;
 
-    erlen = erts_make_integer((Uint)(ff->len), p);
-    ret = erts_make_integer(ff->pos, p);
+    erlen = erts_make_uword((Uint)(ff->len), p);
+    ret = erts_make_uword(ff->pos, p);
     hp = HAlloc(p, 3);
     ret = TUPLE2(hp, ret, erlen);
 
@@ -1877,8 +1877,8 @@ static Eterm do_match_global_result(Process *p, Eterm subject, BinaryFindContext
 		ctx->reds = reds;
 		return THE_NON_VALUE;
 	    }
-	    fad[i].epos = erts_make_integer(fad[i].pos, p);
-	    fad[i].elen = erts_make_integer(fad[i].len, p);
+            fad[i].epos = erts_make_uword(fad[i].pos, p);
+            fad[i].elen = erts_make_uword(fad[i].len, p);
 	}
 	fa->end_pos = 1;
 	fa->head = fa->tail;
@@ -2295,8 +2295,8 @@ continue_longest_common(Process *p,
                       p,
                       binaries,
                       make_small(binary_index),
-                      erts_make_integer(smallest_size, p),
-                      erts_make_integer(position, p));
+                      erts_make_uword(smallest_size, p),
+                      erts_make_uword(position, p));
         }
 
         ASSERT(position < smallest_size);
@@ -2359,7 +2359,7 @@ continue_longest_common(Process *p,
 
     ASSERT(position == smallest_size);
     BUMP_REDS(p, (save_reds - reds) / COMMON_LOOP_FACTOR);
-    BIF_RET(erts_make_integer(BYTE_OFFSET(position), p));
+    BIF_RET(erts_make_uword(BYTE_OFFSET(position), p));
 }
 
 static BIF_RETTYPE
@@ -2400,7 +2400,7 @@ start_longest_common(Process *p, Eterm list, int direction)
 
     /* Weed out trivial cases as they complicate the main loop. */
     if (smallest_size == 0 || binary_count == 1) {
-        return erts_make_integer(smallest_size / 8, p);
+        return erts_make_uword(smallest_size / 8, p);
     }
 
     hp = HAlloc(p, binary_count + 1);
@@ -2621,7 +2621,7 @@ static BIF_RETTYPE do_binary_copy(Process *p, Eterm bin, Eterm en)
                         p,
                         bin,
                         result,
-                        erts_make_integer(cbs.copied_bits, p));
+                        erts_make_uword(cbs.copied_bits, p));
     }
 
     ASSERT(cbs.copied_bits == cbs.target_size);
@@ -2675,7 +2675,7 @@ static BIF_RETTYPE binary_copy_trap(BIF_ALIST_3)
                     BIF_P,
                     BIF_ARG_1,
                     BIF_ARG_2,
-                    erts_make_integer(cbs.copied_bits, BIF_P));
+                    erts_make_uword(cbs.copied_bits, BIF_P));
 }
 
 BIF_RETTYPE binary_copy_1(BIF_ALIST_1)
@@ -2923,7 +2923,7 @@ static BIF_RETTYPE do_decode_unsigned(Process *p, Eterm uns, Eterm endianess)
 		    }
 		}
 	}
-	res = erts_make_integer(u,p);
+        res = erts_make_uword(u,p);
 	BIF_RET(res);
     } else {
 	/* Assume big, as we stripped away all zeroes from the MSB part of the binary */

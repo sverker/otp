@@ -3529,16 +3529,16 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
         BIF_RET(make_small(atom_table_size()));
     }
     else if (ERTS_IS_ATOM_STR("module_limit",BIF_ARG_1)) {
-        BIF_RET(erts_make_integer(erts_module_table_limit(), BIF_P));
+        BIF_RET(erts_make_uword(erts_module_table_limit(), BIF_P));
     }
     else if (ERTS_IS_ATOM_STR("module_count",BIF_ARG_1)) {
-        BIF_RET(erts_make_integer(module_code_size(erts_active_code_ix()), BIF_P));
+        BIF_RET(erts_make_uword(module_code_size(erts_active_code_ix()), BIF_P));
     }
     else if (ERTS_IS_ATOM_STR("export_limit",BIF_ARG_1)) {
-        BIF_RET(erts_make_integer(erts_export_table_limit(), BIF_P));
+        BIF_RET(erts_make_uword(erts_export_table_limit(), BIF_P));
     }
     else if (ERTS_IS_ATOM_STR("export_count",BIF_ARG_1)) {
-        BIF_RET(erts_make_integer(export_list_size(erts_active_code_ix()), BIF_P));
+        BIF_RET(erts_make_uword(export_list_size(erts_active_code_ix()), BIF_P));
     }
     else if (ERTS_IS_ATOM_STR("tolerant_timeofday",BIF_ARG_1)) {
 	if (erts_has_time_correction()
@@ -3555,10 +3555,10 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
 #if defined(ARCH_64) && !HALFWORD_HEAP
 	DECL_AM(range);
 	BIF_RET(AM_range);
-#else /* ARCH_32 */
+#else
 	DECL_AM(range_bitmask);
 	BIF_RET(AM_range_bitmask);
-#endif /* ARCH_32 */
+#endif
 #else  /* ! ERTS_HAVE_IS_IN_LITERAL_RANGE */
 	DECL_AM(tag);
 	BIF_RET(AM_tag);
@@ -4243,7 +4243,7 @@ BIF_RETTYPE statistics_1(BIF_ALIST_1)
 	BIF_TRAP2(gather_msacc_res_trap, BIF_P, res, threads);
 #endif
     } else if (BIF_ARG_1 == am_context_switches) {
-	Eterm cs = erts_make_integer(erts_get_total_context_switches(), BIF_P);
+        Eterm cs = erts_make_uword(erts_get_total_context_switches(), BIF_P);
 	hp = HAlloc(BIF_P, 3);
 	res = TUPLE2(hp, cs, SMALL_ZERO);
 	BIF_RET(res);
@@ -4383,7 +4383,7 @@ BIF_RETTYPE erts_debug_get_internal_state_1(BIF_ALIST_1)
 		res = erts_ptab_test_next_id(&erts_port, 0, 0);
 	    if (res < 0)
 		BIF_RET(am_false);
-	    BIF_RET(erts_make_integer(res, BIF_P));
+            BIF_RET(erts_make_uword(res, BIF_P));
 	}
 	else if (ERTS_IS_ATOM_STR("DbTable_words", BIF_ARG_1)) {
 	    /* Used by ets_SUITE (stdlib) */
@@ -4454,7 +4454,7 @@ BIF_RETTYPE erts_debug_get_internal_state_1(BIF_ALIST_1)
 	    erts_proc_unlock(BIF_P, ERTS_PROC_LOCK_MAIN);
 	    n = erts_debug_nbalance();
 	    erts_proc_lock(BIF_P, ERTS_PROC_LOCK_MAIN);
-	    BIF_RET(erts_make_integer(n, BIF_P));
+            BIF_RET(erts_make_uword(n, BIF_P));
 	}
 	else if (ERTS_IS_ATOM_STR("available_internal_state", BIF_ARG_1)) {
 	    BIF_RET(am_true);
@@ -5133,7 +5133,7 @@ BIF_RETTYPE erts_debug_set_internal_state_2(BIF_ALIST_2)
 		    res = erts_ptab_test_next_id(&erts_port, 1, next);
 		if (res < 0)
 		    BIF_RET(am_false);
-		BIF_RET(erts_make_integer(res, BIF_P));
+                BIF_RET(erts_make_uword(res, BIF_P));
 	    }
 	}
 	else if (ERTS_IS_ATOM_STR("force_gc", BIF_ARG_1)) {

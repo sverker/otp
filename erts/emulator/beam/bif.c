@@ -5433,11 +5433,11 @@ BIF_RETTYPE phash_2(BIF_ALIST_2)
 	 * XXX In this case, there will still be a ArithAlloc() in erts_mixed_plus().
 	 */
 	BIF_RET(erts_mixed_plus(BIF_P,
-				erts_make_integer(hash, BIF_P),
+                                erts_make_uword(hash, BIF_P),
 				make_small(1)));
     }
 
-    BIF_RET(erts_make_integer(final_hash, BIF_P));
+    BIF_RET(erts_make_uword(final_hash, BIF_P));
 }
 
 BIF_RETTYPE phash2_1(BIF_ALIST_1)

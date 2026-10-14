@@ -4517,10 +4517,10 @@ BIF_RETTYPE ets_info_1(BIF_ALIST_1)
     }
     for (i = 0; i < sizeof(fields)/sizeof(Eterm); i++) {
         if (is_ctrs_read_result_set && am_size == fields[i]) {
-            results[i] = erts_make_integer(size, BIF_P);
+            results[i] = erts_make_uword(size, BIF_P);
         } else if (is_ctrs_read_result_set && am_memory == fields[i]) {
             Sint words = (Sint) ((memory + sizeof(Sint) - 1) / sizeof(Sint));
-            results[i] = erts_make_integer(words, BIF_P);
+            results[i] = erts_make_uword(words, BIF_P);
         } else {
             ErtsHeapFactory hf;
             erts_factory_proc_init(&hf, BIF_P);
@@ -4565,7 +4565,7 @@ BIF_RETTYPE ets_info_2(BIF_ALIST_2)
             res = erts_flxctr_get_snapshot_result_after_trap(BIF_ARG_1,
                                                              ERTS_DB_TABLE_NITEMS_COUNTER_ID);
         }
-        BIF_RET(erts_make_integer(res, BIF_P));
+        BIF_RET(erts_make_uword(res, BIF_P));
     }
 
     if (BIF_ARG_2 == am_binary)
@@ -4589,11 +4589,11 @@ BIF_RETTYPE ets_info_2(BIF_ALIST_2)
             db_unlock(tb, LCK_READ);
             BIF_TRAP2(BIF_TRAP_EXPORT(BIF_ets_info_2), BIF_P, BIF_ARG_1, BIF_ARG_2);
         } else if (BIF_ARG_2 == am_size) {
-            ret = erts_make_integer(res.result[ERTS_DB_TABLE_NITEMS_COUNTER_ID], BIF_P);
+            ret = erts_make_uword(res.result[ERTS_DB_TABLE_NITEMS_COUNTER_ID], BIF_P);
         } else { /* BIF_ARG_2 == am_memory */
             Sint r = res.result[ERTS_DB_TABLE_MEM_COUNTER_ID];
             r = (Sint) ((r + sizeof(Sint) - 1) / sizeof(Sint));
-            ret = erts_make_integer(r, BIF_P);
+            ret = erts_make_uword(r, BIF_P);
         }
     } else {
         ErtsHeapFactory hf;
@@ -5496,7 +5496,7 @@ static Eterm table_info(ErtsHeapFactory *hf, DbTable* tb, Eterm What)
 
     if (What == am_size) {
         Uint size = (Uint) (DB_GET_APPROX_NITEMS(tb));
-        ret = erts_make_integer_fact(size, hf);
+        ret = erts_make_uword_fact(size, hf);
     } else if (What == am_type) {
 	if (tb->common.status & DB_SET)  {
 	    ret = am_set;
@@ -5515,7 +5515,7 @@ static Eterm table_info(ErtsHeapFactory *hf, DbTable* tb, Eterm What)
 			      + sizeof(Uint)
 			      - 1)
 			     / sizeof(Uint));
-	ret = erts_make_integer_fact(words, hf);
+        ret = erts_make_uword_fact(words, hf);
     } else if (What == am_owner) {
 	ret = tb->common.owner;
     } else if (What == am_heir) {
@@ -5535,7 +5535,7 @@ static Eterm table_info(ErtsHeapFactory *hf, DbTable* tb, Eterm What)
             ret   = make_tuple(hp);
             *hp++ = make_arityval(2);
             *hp++ = am_debug_hash_fixed_number_of_locks;
-            *hp++ = erts_make_integer_fact(tb->hash.nlocks, hf);
+            *hp++ = erts_make_uword_fact(tb->hash.nlocks, hf);
         } else if ((tb->common.status & DB_FINE_LOCKED) &&
                    (tb->common.status & DB_FINE_LOCKED_AUTO)) {
             ret = am_auto;

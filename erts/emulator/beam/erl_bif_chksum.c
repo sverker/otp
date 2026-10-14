@@ -301,7 +301,7 @@ crc32_1(BIF_ALIST_1)
     if (err != 0) {
 	BIF_ERROR(BIF_P, BADARG);
     }
-    res_sum = erts_make_integer(chksum,BIF_P);
+    res_sum = erts_make_uword(chksum,BIF_P);
     if (rest != NIL) {
 	BUMP_ALL_REDS(BIF_P);
 	BIF_TRAP2(BIF_TRAP_EXPORT(BIF_crc32_2), BIF_P, res_sum, rest);
@@ -328,7 +328,7 @@ crc32_2(BIF_ALIST_2)
     if (err != 0) {
 	BIF_ERROR(BIF_P, BADARG);
     }
-    res_sum = erts_make_integer(chksum,BIF_P);
+    res_sum = erts_make_uword(chksum,BIF_P);
     if (rest != NIL) {
 	BUMP_ALL_REDS(BIF_P);
 	BIF_TRAP2(BIF_TRAP_EXPORT(BIF_crc32_2), BIF_P, res_sum, rest);
@@ -362,7 +362,7 @@ crc32_combine_3(BIF_ALIST_3)
 
     res = (Uint32) crc32_combine(chksum1,chksum2,length);
 
-    res_sum = erts_make_integer(res,BIF_P);
+    res_sum = erts_make_uword(res,BIF_P);
     BIF_RET(res_sum);
 }
 
@@ -381,7 +381,7 @@ adler32_1(BIF_ALIST_1)
     if (err != 0) {
 	BIF_ERROR(BIF_P, BADARG);
     }
-    res_sum = erts_make_integer(chksum,BIF_P);
+    res_sum = erts_make_uword(chksum,BIF_P);
     if (rest != NIL) {
 	BUMP_ALL_REDS(BIF_P);
 	BIF_TRAP2(BIF_TRAP_EXPORT(BIF_adler32_2), BIF_P, res_sum, rest);
@@ -408,7 +408,7 @@ adler32_2(BIF_ALIST_2)
     if (err != 0) {
 	BIF_ERROR(BIF_P, BADARG);
     }
-    res_sum = erts_make_integer(chksum,BIF_P);
+    res_sum = erts_make_uword(chksum,BIF_P);
     if (rest != NIL) {
 	BUMP_ALL_REDS(BIF_P);
 	BIF_TRAP2(BIF_TRAP_EXPORT(BIF_adler32_2), BIF_P, res_sum, rest);
@@ -446,7 +446,7 @@ adler32_combine_3(BIF_ALIST_3)
 	res = (Uint32) adler32_combine(chksum1,chksum2,length);
     }
 
-    res_sum = erts_make_integer(res,BIF_P);
+    res_sum = erts_make_uword(res,BIF_P);
     BIF_RET(res_sum);
 }
 

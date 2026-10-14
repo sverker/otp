@@ -810,7 +810,7 @@ static BIF_RETTYPE build_utf8_return(Process *p, Eterm bin, Uint pos,
         BIF_TRAP4(&characters_to_utf8_trap_exp,
                   p,
                   bin,
-                  erts_make_integer(pos, p),
+                  erts_make_uword(pos, p),
                   rest_term,
                   latin1);
     } else {
@@ -1764,8 +1764,8 @@ static BIF_RETTYPE do_bif_utf8_to_list(Process *p,
 	num_resulting_chars += numchar;
 	num_bytes_to_process = endpos - bytes;
 	if (state == ERTS_UTF8_ANALYZE_MORE) {
-	    Eterm epos = erts_make_integer(num_bytes_to_process,p);
-	    Eterm enumchar = erts_make_integer(num_resulting_chars,p);
+            Eterm epos = erts_make_uword(num_bytes_to_process,p);
+            Eterm enumchar = erts_make_uword(num_resulting_chars,p);
 	    erts_free_aligned_binary_bytes(temp_alloc);
 	    BUMP_ALL_REDS(p);
 	    BIF_TRAP3(&characters_to_list_trap_3_exp, p, orig_bin, epos,
@@ -1790,11 +1790,11 @@ static BIF_RETTYPE do_bif_utf8_to_list(Process *p,
 	
 	if (num_built != num_resulting_chars) { /* work left to do */
 	    Eterm newnum_resulting_chars = 
-		erts_make_integer(num_resulting_chars - num_built,p);
+                erts_make_uword(num_resulting_chars - num_built,p);
 	    Eterm newnum_bytes_to_process = 
-		erts_make_integer(num_bytes_to_process - num_eaten,p);
+                erts_make_uword(num_bytes_to_process - num_eaten,p);
 	    Eterm newnum_processed_bytes = 
-		erts_make_integer(num_processed_bytes + num_eaten,p);
+                erts_make_uword(num_processed_bytes + num_eaten,p);
 	    Eterm traptuple;
 	    hp = HAlloc(p,7);
 	    traptuple = TUPLE6(hp,orig_bin,newnum_processed_bytes,

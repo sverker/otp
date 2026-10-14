@@ -1082,7 +1082,7 @@ static Eterm seq_trace_fake(Process *p, Eterm arg1);
 BIF_RETTYPE db_get_trace_control_word(Process *p)
 {
     Uint32 tcw = (Uint32) erts_atomic32_read_acqb(&trace_control_word);
-    BIF_RET(erts_make_integer((Uint) tcw, p));
+    BIF_RET(erts_make_uword((Uint) tcw, p));
 }
 
 BIF_RETTYPE db_get_trace_control_word_0(BIF_ALIST_0)
@@ -1101,7 +1101,7 @@ BIF_RETTYPE db_set_trace_control_word(Process *p, Eterm new)
 
     old_tcw = (Uint32) erts_atomic32_xchg_relb(&trace_control_word,
 						   (erts_aint32_t) val);
-    BIF_RET(erts_make_integer((Uint) old_tcw, p));
+    BIF_RET(erts_make_uword((Uint) old_tcw, p));
 }
 
 BIF_RETTYPE db_set_trace_control_word_1(BIF_ALIST_1)

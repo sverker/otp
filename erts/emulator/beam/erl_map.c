@@ -4105,7 +4105,7 @@ BIF_RETTYPE erts_internal_map_next_3(BIF_ALIST_3) {
                 path = make_big(hp);
             } else {
                 /* The Uint could be too large for a small */
-                path = erts_make_integer(curr_path, BIF_P);
+                path = erts_make_uword(curr_path, BIF_P);
             }
 
             if (type == iterator) {

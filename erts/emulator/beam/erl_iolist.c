@@ -997,7 +997,7 @@ static int iolist_size_accumulate(IOListSizeState *sp, Process *c_p)
         return 1;
     }
 
-    sp->accumulator = erts_make_integer(size_in_bytes, c_p);
+    sp->accumulator = erts_make_uword(size_in_bytes, c_p);
     return 1;
 }
 
