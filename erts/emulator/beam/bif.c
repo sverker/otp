@@ -3221,7 +3221,8 @@ BIF_RETTYPE delete_element_2(BIF_ALIST_3)
 BIF_RETTYPE atom_to_list_1(BIF_ALIST_1)
 {
     Atom* ap;
-    Uint num_chars, num_built, num_eaten;
+    UWord num_chars;
+    UWord num_built, num_eaten;
     const byte* err_pos;
     Eterm res;
     int ares;
@@ -3762,7 +3763,7 @@ BIF_RETTYPE list_to_float_1(BIF_ALIST_1)
 BIF_RETTYPE binary_to_float_1(BIF_ALIST_1)
 {
     if (is_bitstring(BIF_ARG_1)) {
-        Uint offset, size;
+        UWord offset, size;
         byte *base;
 
         ERTS_GET_BITSTRING(BIF_ARG_1, base, offset, size);
@@ -4229,7 +4230,7 @@ BIF_RETTYPE display_string_2(BIF_ALIST_2)
     Process* p = BIF_P;
     Eterm string = BIF_ARG_2;
     Sint written;
-    Sint len;
+    SWord len;
     const byte *temp_alloc = NULL, *str;
     int res;
 
@@ -4270,10 +4271,10 @@ BIF_RETTYPE display_string_2(BIF_ALIST_2)
         if (res != 0 || written != len)
             erts_exit(ERTS_ERROR_EXIT, "%s:%d: Internal error (%d)\n", __FILE__, __LINE__, res);
     } else if (is_bitstring(string)) {
-        /* The cast to Uint* is safe since the length of any binary expressed
-         * in bytes cannot exceed ERTS_SINT_MAX. */
+        /* The cast to UWord* is safe since the length of any binary expressed
+         * in bytes cannot exceed ERTS_SWORD_MAX. */
         str = erts_get_aligned_binary_bytes(string,
-                                            (Uint*)&len,
+                                            (UWord*)&len,
                                             &temp_alloc);
         if (str == NULL) {
             BIF_ERROR(p, BADARG);

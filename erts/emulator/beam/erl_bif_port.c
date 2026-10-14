@@ -1267,7 +1267,7 @@ struct packet_callback_args
     int string_as_bin; /* return strings as binaries (http_bin): */
     const byte *aligned_ptr;
     Eterm orig;
-    Uint bin_sz;
+    UWord bin_sz;
 };
 
 #define in_area(ptr,start,nbytes) \

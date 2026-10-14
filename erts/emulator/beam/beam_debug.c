@@ -101,20 +101,20 @@ BIF_RETTYPE
 erts_debug_unaligned_bitstring_2(BIF_ALIST_2)
 {
     Eterm bitstring;
-    Uint offset;
+    UWord offset;
 
     byte *source_bytes;
-    Uint source_offset;
-    Uint source_size;
+    UWord source_offset;
+    UWord source_size;
 
     byte *target_bytes;
-    Eterm target_size;
+    UWord target_size;
 
     Eterm *hp;
     Eterm refc_binary;
     ErlSubBits *sb;
 
-    Uint inner_offset, inner_size;
+    UWord inner_offset, inner_size;
     Eterm br_flags;
     BinRef *br;
     const byte *base;

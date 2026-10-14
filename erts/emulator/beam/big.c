@@ -4164,7 +4164,7 @@ static const Sint largest_power_of_base_lookup[36-1] = {
 #endif
 };
 
-static Eterm chars_to_integer(const byte *bytes, Uint size, const Uint base)
+static Eterm chars_to_integer(const byte *bytes, UWord size, const Uint base)
 {
     Sint i = 0;
     int neg = 0;
@@ -4236,7 +4236,7 @@ static Eterm chars_to_integer(const byte *bytes, Uint size, const Uint base)
 BIF_RETTYPE erts_internal_binary_to_integer_2(BIF_ALIST_2)
 {
     const byte *temp_alloc = NULL, *bytes;
-    Uint size;
+    UWord size;
     Uint base;
     Eterm res;
 

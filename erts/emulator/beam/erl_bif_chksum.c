@@ -68,7 +68,7 @@ static Eterm do_chksum(ChksumFun sumfun, Process *p, Eterm ioterm, int left,
     } else if (is_bitstring(ioterm)) {
         Eterm res_term = NIL;
         const byte *temp_alloc = NULL, *bytes;
-        Uint size;
+        UWord size;
 
         /* As we've already checked that this is a bitstring, this can only
          * fail when we've got a non-binary. */
@@ -493,7 +493,7 @@ md5_1(BIF_ALIST_1)
 static BIF_RETTYPE
 md5_2(BIF_ALIST_2)
 {
-    Uint offset, size;
+    UWord offset, size;
     erts_md5_state context;
     byte *bytes;
     Eterm rest;
@@ -555,7 +555,7 @@ md5_update_2(BIF_ALIST_2)
     Eterm rest;
     Eterm bin;
     int res, err;
-    Uint size;
+    UWord size;
     Sint32 reds;
 
     bytes = erts_get_aligned_binary_bytes(BIF_ARG_1, &size, &temp_alloc);
@@ -592,7 +592,7 @@ md5_final_1(BIF_ALIST_1)
     const byte *temp_alloc = NULL, *context;
     erts_md5_state ctx_copy;
     byte* result;
-    Uint size;
+    UWord size;
     Eterm bin;
 
     context = erts_get_aligned_binary_bytes(BIF_ARG_1, &size, &temp_alloc);

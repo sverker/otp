@@ -1477,38 +1477,38 @@ void erts_init_unicode(void);
 Sint erts_unicode_set_loop_limit(Sint limit);
 
 void erts_native_filename_put(Eterm ioterm, int encoding, byte *p) ;
-Sint erts_native_filename_need(Eterm ioterm, int encoding);
+SWord erts_native_filename_need(Eterm ioterm, int encoding);
 void erts_copy_utf8_to_utf16_little(byte *target,
                                     const byte *bytes,
-                                    Uint num_chars);
-int erts_analyze_utf8(const byte *source, Uint size,
-                      const byte **err_pos, Uint *num_chars, int *left);
-int erts_analyze_utf8_x(const byte *source, Uint size,
-			const byte **err_pos, Uint *num_chars, int *left,
-			Sint *num_latin1_chars, Uint max_chars);
+                                    UWord num_chars);
+int erts_analyze_utf8(const byte *source, UWord size,
+                      const byte **err_pos, UWord *num_chars, int *left);
+int erts_analyze_utf8_x(const byte *source, UWord size,
+                        const byte **err_pos, UWord *num_chars, int *left,
+                        SWord *num_latin1_chars, UWord max_chars);
 char *erts_convert_filename_to_native(Eterm name, char *statbuf, 
 				      size_t statbuf_size, 
 				      ErtsAlcType_t alloc_type, 
 				      int allow_empty, int allow_atom,
-				      Sint *used /* out */);
+                                      SWord *used /* out */);
 char *erts_convert_filename_to_encoding(Eterm name, char *statbuf,
 					size_t statbuf_size,
 					ErtsAlcType_t alloc_type,
 					int allow_empty, int allow_atom,
 					int encoding,
-					Sint *used /* out */,
-					Uint extra);
-char *erts_convert_filename_to_wchar(const byte* bytes, Uint size,
+                                        SWord *used /* out */,
+                                        UWord extra);
+char *erts_convert_filename_to_wchar(const byte* bytes, UWord size,
                                      char *statbuf, size_t statbuf_size,
-                                     ErtsAlcType_t alloc_type, Sint* used,
-                                     Uint extra_wchars);
+                                     ErtsAlcType_t alloc_type, SWord* used,
+                                     UWord extra_wchars);
 Eterm erts_convert_native_to_filename(Process *p, size_t size, byte *bytes);
-Eterm erts_utf8_to_list(Process *p, Uint num, const byte *bytes, Uint sz, Uint left,
-			Uint *num_built, Uint *num_eaten, Eterm tail);
+Eterm erts_utf8_to_list(Process *p, UWord num, const byte *bytes, UWord sz, UWord left,
+                        UWord *num_built, UWord *num_eaten, Eterm tail);
 Eterm
-erts_make_list_from_utf8_buf(Eterm **hpp, Uint num,
-                             const byte *bytes, Uint sz,
-                             Uint *num_built, Uint *num_eaten,
+erts_make_list_from_utf8_buf(Eterm **hpp, UWord num,
+                             const byte *bytes, UWord sz,
+                             UWord *num_built, UWord *num_eaten,
                              Eterm tail);
 int erts_utf8_to_latin1(byte* dest, const byte* source, int slen);
 #define ERTS_UTF8_OK 0

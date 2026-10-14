@@ -4300,7 +4300,7 @@ erts_port_control(Process* c_p,
 
     if (is_bitstring(data)) {
         ERTS_DECLARE_DUMMY(Eterm br_flags);
-        Uint offset;
+        UWord offset;
 
         ERTS_PIN_BITSTRING(data, br_flags, br, basep, offset, size);
 

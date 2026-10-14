@@ -171,7 +171,7 @@ erts_internal_beamfile_chunk_2(BIF_ALIST_2)
 
     const byte *temp_alloc = NULL, *start;
     Eterm binary;
-    Uint size;
+    UWord size;
     Eterm res;
 
     res = am_undefined;
@@ -206,7 +206,7 @@ erts_internal_beamfile_module_md5_1(BIF_ALIST_1)
 {
     const byte *temp_alloc = NULL, *bytes;
     BeamFile beam;
-    Uint size;
+    UWord size;
     Eterm res;
 
     bytes = erts_get_aligned_binary_bytes(BIF_ARG_1, &size, &temp_alloc);
@@ -232,7 +232,7 @@ BIF_RETTYPE
 erts_internal_prepare_loading_2(BIF_ALIST_2)
 {
     const byte *temp_alloc = NULL, *code;
-    Uint size;
+    UWord size;
     Binary* magic;
     Eterm reason;
     Eterm* hp;

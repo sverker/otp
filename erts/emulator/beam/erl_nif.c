@@ -1345,7 +1345,7 @@ int enif_inspect_binary(ErlNifEnv* env, Eterm bin_term, ErlNifBinary* bin)
     if (is_bitstring(bin_term)) {
         ERTS_DECLARE_DUMMY(Eterm br_flags);
         ERTS_DECLARE_DUMMY(BinRef *br);
-        Uint offset, size;
+        UWord offset, size;
         byte *base;
 
         ERTS_PIN_BITSTRING(bin_term, br_flags, br, base, offset, size);
@@ -1759,7 +1759,7 @@ Eterm enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin)
 Eterm enif_make_sub_binary(ErlNifEnv* env, ERL_NIF_TERM bin_term,
                            size_t pos, size_t size)
 {
-    Uint source_offset, source_size;
+    UWord source_offset, source_size;
     byte *base;
     Eterm br_flags;
     BinRef *br;
@@ -2259,14 +2259,14 @@ ERL_NIF_TERM enif_make_string_len(ErlNifEnv *env, const char *string,
         return erts_bld_string_n(&hp, NULL, string, len);
     } else if (encoding == ERL_NIF_UTF8) {
         const byte *err_pos;
-        Uint num_chars;
-        Uint num_built; /* characters */
-        Uint num_eaten; /* bytes */
-        if (erts_analyze_utf8((byte *)string, (Uint)len, &err_pos, &num_chars, NULL) != ERTS_UTF8_OK) {
+        UWord num_chars;
+        UWord num_built; /* characters */
+        UWord num_eaten; /* bytes */
+        if (erts_analyze_utf8((byte *)string, (UWord)len, &err_pos, &num_chars, NULL) != ERTS_UTF8_OK) {
             return enif_make_badarg(env);
         }
         hp = alloc_heap(env, num_chars * 2);
-        return erts_make_list_from_utf8_buf(&hp, num_chars, (byte *)string, (Uint)len, &num_built, &num_eaten, NIL);
+        return erts_make_list_from_utf8_buf(&hp, num_chars, (byte *)string, (UWord)len, &num_built, &num_eaten, NIL);
     }
     return enif_make_badarg(env);
 }
@@ -4126,7 +4126,7 @@ static int examine_iovec_term(Eterm list, UWord max_length, iovec_slice_t *resul
         ERTS_DECLARE_DUMMY(byte *base);
         Eterm binary;
         Eterm *cell;
-        Uint offset, size;
+        UWord offset, size;
         BinRef *br;
 
         cell = list_val(lookahead);
@@ -4175,8 +4175,8 @@ static int examine_iovec_term(Eterm list, UWord max_length, iovec_slice_t *resul
 static void marshal_iovec_binary(Eterm binary, ErlNifBinary *copy_buffer,
                                  UWord *copy_offset, ErlNifBinary *result) {
     ERTS_DECLARE_DUMMY(Eterm br_flags);
-    ERTS_DECLARE_DUMMY(Uint size);
-    Uint offset;
+    ERTS_DECLARE_DUMMY(UWord size);
+    UWord offset;
     byte *base;
     BinRef *br;
 

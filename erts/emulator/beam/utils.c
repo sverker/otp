@@ -1197,9 +1197,9 @@ tailrecur_ne:
             case HEAP_BITS_SUBTAG:
             case SUB_BITS_SUBTAG:
                 {
-                    Uint a_offset, a_size;
+                    UWord a_offset, a_size;
                     byte* a_base;
-                    Uint b_offset, b_size;
+                    UWord b_offset, b_size;
                     byte* b_base;
 
                     if (!is_bitstring(b)) {
@@ -2316,9 +2316,9 @@ tailrecur_ne:
 		    a_tag = BITSTRING_DEF;
 		    goto mixed_types;
 		} else {
-                    Uint a_offset, a_size;
+                    UWord a_offset, a_size;
                     byte *a_base;
-                    Uint b_offset, b_size;
+                    UWord b_offset, b_size;
                     byte *b_base;
                     int cmp;
 

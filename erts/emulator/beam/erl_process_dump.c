@@ -459,7 +459,7 @@ print_function_from_pc(fmtfn_t to, void *to_arg, ErtsCodePtr x)
 
 static void
 dump_sub_bitstring(fmtfn_t to, void *to_arg, Uint br_flags, BinRef *br,
-                   const byte *base, Uint offset, Uint size) {
+                   const byte *base, UWord offset, UWord size) {
     Binary *binary = br->val;
     int encode_as_binref;
 
@@ -611,7 +611,7 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
 		    erts_print(to, to_arg, "B%T\n", x);
 		    *ptr = OUR_NIL;
 		} else if (is_bitstring_header(hdr)) {
-                    Uint offset, size;
+                    UWord offset, size;
                     Eterm br_flags;
                     byte *base;
                     BinRef *br;
@@ -963,7 +963,7 @@ dump_module_literals(fmtfn_t to, void *to_arg, ErtsLiteralArea* lit_area)
                 erts_print(to, to_arg, "B%T\n", term);
             } else if (is_bitstring_header(w)) {
                 ERTS_DECLARE_DUMMY(Eterm br_flags);
-                Uint offset, size;
+                UWord offset, size;
                 byte *base;
                 BinRef *br;
 

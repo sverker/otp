@@ -1345,7 +1345,7 @@ BIF_RETTYPE erts_debug_dist_ext_to_term_2(BIF_ALIST_2)
     ErtsDistExternal ede;
     ErtsDistExternalData ede_data;
     Eterm *tp;
-    Uint offset, size;
+    UWord offset, size;
     byte *base;
     Uint arity;
     int i;
@@ -1743,11 +1743,11 @@ static uLongf binary2term_uncomp_size(const byte* data, Sint size)
 
 static ERTS_INLINE int
 binary2term_prepare(ErtsBinary2TermState *state,
-                    const byte *data, Sint data_size,
+                    const byte *data, SWord data_size,
                     B2TContext** ctxp, Process* p)
 {
     const byte *bytes = data;
-    Sint size = data_size;
+    SWord size = data_size;
 
     state->exttmp = 0;
 
@@ -1971,7 +1971,7 @@ static BIF_RETTYPE binary_to_term_int(Process* p, Eterm bin, B2TContext *ctx)
         switch (ctx->state) {
         case B2TPrepare: {
             const byte *bytes;
-            Uint bin_size;
+            UWord bin_size;
 
             bytes = erts_get_aligned_binary_bytes_extra(bin,
                                                         &bin_size,
@@ -2395,19 +2395,19 @@ static int ttb_context_destructor(Binary *context_bin)
     return 1;
 }
 
-Uint
+size_t
 erts_ttb_iov_size(int use_termv, Sint vlen, Uint fragments)
 {
-    Uint sz;
+    size_t sz;
     ASSERT(vlen > 0);
     ASSERT(fragments > 0);
     sz = sizeof(SysIOVec)*vlen;
     sz += sizeof(ErlDrvBinary *)*vlen;
     if (use_termv)
-        sz += sizeof(Eterm)*vlen;
+        sz += ERTS_ALC_WORD_ALIGN_SIZE(sizeof(Eterm)*vlen);
     sz += sizeof(ErlIOVec *)*fragments;
     sz += sizeof(ErlIOVec)*fragments;
-    ASSERT(sz % sizeof(void*) == 0);
+    ASSERT(sz % sizeof(void *) == 0);
     return sz;
 }
 
@@ -2429,7 +2429,7 @@ erts_ttb_iov_init(TTBEncodeContext *ctx, int use_termv, char *ptr,
         ctx->termv = NULL;
     else {
         ctx->termv = (Eterm *) ptr;
-        ptr += sizeof(Eterm)*vlen;
+        ptr += ERTS_ALC_WORD_ALIGN_SIZE(sizeof(Eterm)*vlen);
     }
     
     ctx->fragment_eiovs = (ErlIOVec *) ptr;
@@ -2559,7 +2559,7 @@ static Eterm erts_term_to_binary_int(Process* p, Sint bif_ix, Eterm Term, Eterm 
 		context->s.ec.result_bin = result_bin;
                 context->s.ec.iovec = iovec;
                 if (vlen >= 0) {
-                    Uint sz = erts_ttb_iov_size(!0, vlen, fragments);
+                    size_t sz = erts_ttb_iov_size(!0, vlen, fragments);
                     char *ptr = (char *) erts_alloc(ERTS_ALC_T_T2B_VEC, sz);
                     erts_ttb_iov_init(&context->s.ec, !0, ptr, vlen,
                                       fragments, fragment_size);
@@ -3869,8 +3869,8 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
             {
                 ERTS_DECLARE_DUMMY(Eterm br_flags);
                 int encoding, copy_payload;
-                Uint offset, size;
-                Uint wire_size;
+                UWord offset, size;
+                UWord wire_size;
                 BinRef *br;
                 byte *base;
 
@@ -5804,8 +5804,8 @@ encode_size_struct_int(TTBSizeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj,
 	case BITSTRING_DEF: {
             ERTS_DECLARE_DUMMY(Eterm br_flags);
             int encoding, copy_payload;
-            Uint offset, size;
-            Uint wire_size;
+            UWord offset, size;
+            UWord wire_size;
             byte *base;
             BinRef *br;
 

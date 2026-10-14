@@ -4777,11 +4777,11 @@ BIF_RETTYPE erts_debug_get_internal_state_1(BIF_ALIST_1)
 	    else if (ERTS_IS_ATOM_STR("binary_info", tp[1])) {
 		Eterm bin = tp[2];
 		if (is_bitstring(bin)) {
-                    ERTS_DECLARE_DUMMY(Uint offset);
+                    ERTS_DECLARE_DUMMY(UWord offset);
                     ERTS_DECLARE_DUMMY(byte *base);
                     ERTS_DECLARE_DUMMY(Eterm br_flags);
                     BinRef *br;
-                    Uint size;
+                    UWord size;
 
                     ERTS_GET_BITSTRING_REF(bin, br_flags, br, base, offset, size);
 
@@ -4794,17 +4794,17 @@ BIF_RETTYPE erts_debug_get_internal_state_1(BIF_ALIST_1)
 
                         heap_size = 3 + 5;
 
-                        (void) erts_bld_uint(NULL, &heap_size, refc_binary->orig_size);
-                        (void) erts_bld_uint(NULL, &heap_size, NBYTES(size));
+                        (void) erts_bld_uword(NULL, &heap_size, refc_binary->orig_size);
+                        (void) erts_bld_uword(NULL, &heap_size, NBYTES(size));
                         hp = HAlloc(BIF_P, heap_size);
 
                         /* Info about the Binary* object */
-                        SzTerm = erts_bld_uint(&hp, NULL, refc_binary->orig_size);
+                        SzTerm = erts_bld_uword(&hp, NULL, refc_binary->orig_size);
                         BinInfoTerm = TUPLE2(hp, am_binary, SzTerm);
                         hp += 3;
 
                         /* Info about the binary itself */
-                        SzTerm = erts_bld_uint(&hp, NULL, NBYTES(size));
+                        SzTerm = erts_bld_uword(&hp, NULL, NBYTES(size));
                         BIF_RET(TUPLE4(hp, AM_refc_binary, SzTerm,
                                        BinInfoTerm,
                                        make_small(refc_binary->intern.flags)));

@@ -573,7 +573,7 @@ static int parse_line_chunk(BeamFile *beam, IFF_Chunk *chunk) {
         lines->names[0] = beamfile_add_literal(beam, name, 1);
 
         for (i = 1; i < name_count; i++) {
-            Uint num_chars, num_built, num_eaten;
+            UWord num_chars, num_built, num_eaten;
             const byte *name_data, *err_pos;
             Sint16 name_length;
             Eterm *hp;

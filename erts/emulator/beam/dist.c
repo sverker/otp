@@ -1196,7 +1196,7 @@ alloc_dist_obufs(byte **extp, TTBEncodeContext *ctx,
     int ix;
     ErtsDistOutputBuf *obuf;
     char *ptr;
-    Uint iov_sz, obsz;
+    size_t iov_sz, obsz;
     Binary *bin;
     Uint fragment_size;
 
@@ -4417,7 +4417,7 @@ dist_ctrl_put_data_2(BIF_ALIST_2)
     if (is_bitstring(BIF_ARG_2)) {
         ERTS_DECLARE_DUMMY(Eterm br_flags);
         const byte *data, *temp_alloc = NULL;
-        Uint offset, size;
+        UWord offset, size;
         BinRef *br;
 
         ERTS_PIN_BITSTRING(BIF_ARG_2, br_flags, br, data, offset, size);

@@ -114,8 +114,9 @@
 static Uint32
 hash_binary_bytes(Eterm bin, Uint32 hash)
 {
-    Uint bitoffs, bitsize, bytesize, i;
-    Uint offset, size;
+    Uint bitoffs, bitsize;
+    UWord bytesize, i;
+    UWord offset, size;
     byte* ptr;
 
     ERTS_GET_BITSTRING(bin, ptr, offset, size);
@@ -1260,7 +1261,7 @@ make_hash2_helper(Eterm term_param, const int can_trap, Eterm* state_mref_write_
 #define BYTE_BITS 8
                 ErtsMakeHash2Context_SUB_BINARY_SUBTAG ctx = {0};
                 Uint32 con = HCONST_13 + hash;
-                Uint offset, size;
+                UWord offset, size;
                 SWord iters_for_bin;
 
                 ERTS_GET_BITSTRING(term, ctx.bptr, offset, size);
@@ -1993,7 +1994,7 @@ make_internal_hash(Eterm term, erts_ihash_t salt)
             case HEAP_BITS_SUBTAG:
             case SUB_BITS_SUBTAG:
             {
-                Uint offset, size;
+                UWord offset, size;
                 const byte *data;
 
                 ERTS_GET_BITSTRING(term, data, offset, size);
