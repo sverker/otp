@@ -1153,7 +1153,7 @@ run_when_enough_resources(Fun) ->
                    _ ->
                        15
                end,
-    case {total_memory(), erlang:system_info(wordsize)} of
+    case {total_memory(), erlang:system_info({wordsize,external})} of
         {Mem, 8} when is_integer(Mem) andalso Mem >= DemandGb ->
             Fun();
         {Mem, WordSize} ->
