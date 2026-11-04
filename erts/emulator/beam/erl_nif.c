@@ -2890,11 +2890,7 @@ static void rollback_opened_resource_types(void)
     }
 }
 
-#ifdef ARCH_64
-#  define ERTS_RESOURCE_DYING_FLAG (((Uint) 1) << 63)
-#else
-#  define ERTS_RESOURCE_DYING_FLAG (((Uint) 1) << 31)
-#endif
+#define ERTS_RESOURCE_DYING_FLAG (((UWord) 1) << (sizeof(UWord)*8 - 1))
 #define ERTS_RESOURCE_REFC_MASK (~ERTS_RESOURCE_DYING_FLAG)
 
 static ERTS_INLINE void
@@ -3978,7 +3974,7 @@ int enif_monitor_process(ErlNifEnv* env, void* obj, const ErlNifPid* target_pid,
     ref = erts_make_ref_in_buffer(tmp);
 
     mdp = erts_monitor_create(ERTS_MON_TYPE_RESOURCE, ref,
-                              (Eterm) rsrc, target_pid->pid,
+                              (UWord) rsrc, target_pid->pid,
                               NIL, THE_NON_VALUE);
     erts_mtx_lock(&rm->lock);
     ASSERT(!rmon_is_dying(rm));
@@ -4909,7 +4905,7 @@ Eterm erts_load_nif(Process *c_p, ErtsCodePtr I, Eterm filename, Eterm args)
 #endif
 
             ERTS_CT_ASSERT(sizeof(stub->code) <=
-                    BEAM_NATIVE_MIN_FUNC_SZ * sizeof(Eterm));
+                    BEAM_NATIVE_MIN_FUNC_SZ * sizeof(UWord));
 
             stub->code_info_ptr = ci;
             stub->info = *ci;

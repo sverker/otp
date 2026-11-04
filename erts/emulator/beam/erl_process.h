@@ -1116,6 +1116,7 @@ struct process {
     union {
         struct process *real_proc;
         void *terminate;
+        Uint32 block_rla_ref;
         ErtsCodeMFA initial;	/* Initial module(0), function(1), arity(2),
                                    often used instead of pointer to funcinfo
                                    instruction. */
@@ -3030,9 +3031,9 @@ void erts_sched_finish_poke(ErtsSchedulerSleepInfo *, erts_aint32_t);
 ERTS_GLB_INLINE void erts_sched_poke(ErtsSchedulerSleepInfo *ssi);
 void erts_aux_thread_poke(void);
 ERTS_GLB_INLINE Uint32 erts_sched_local_random_hash_64_to_32_shift(Uint64 key);
-ERTS_GLB_INLINE Uint32 erts_sched_local_random(Uint additional_seed);
+ERTS_GLB_INLINE Uint32 erts_sched_local_random(UWord additional_seed);
 #ifdef DEBUG
-ERTS_GLB_INLINE float erts_sched_local_random_float(Uint additional_seed);
+ERTS_GLB_INLINE float erts_sched_local_random_float(UWord additional_seed);
 #endif
 
 #if ERTS_GLB_INLINE_INCL_FUNC_DEF
@@ -3071,7 +3072,7 @@ Uint32 erts_sched_local_random_hash_64_to_32_shift(Uint64 key)
  * of the scheduler and the additional_seed parameter.
  */
 ERTS_GLB_INLINE
-Uint32 erts_sched_local_random(Uint additional_seed)
+Uint32 erts_sched_local_random(UWord additional_seed)
 {
     extern erts_atomic_t erts_sched_local_random_nosched_state;
     ErtsSchedulerData *esdp = erts_get_scheduler_data();
@@ -3092,7 +3093,7 @@ Uint32 erts_sched_local_random(Uint additional_seed)
  * This function returns a random float between 0.0 and 1.0.
  */
 ERTS_GLB_INLINE
-float erts_sched_local_random_float(Uint additional_seed)
+float erts_sched_local_random_float(UWord additional_seed)
 {
     Uint32 rnd = erts_sched_local_random(additional_seed);
     return (float)(((double)rnd)/((double)ERTS_UINT32_MAX));

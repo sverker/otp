@@ -5715,17 +5715,25 @@ driver_deliver_term(Port *prt, Eterm to, ErlDrvTermData* data, int len)
 	    break;
 	case ERL_DRV_INT:  /* signed int argument */
 	    ERTS_DDT_CHK_ENOUGH_ARGS(1);
+#if HALFWORD_HEAP
+            erts_bld_sint64(NULL, &need, (Sint64)ptr[0]);
+#else
 	    /* check for bignum */
 	    if (!IS_SSMALL((Sint)ptr[0]))
 		need += BIG_UINT_HEAP_SIZE;  /* use small_to_big */
+#endif
 	    ptr++;
 	    depth++;
 	    break;
 	case ERL_DRV_UINT:  /* unsigned int argument */
 	    ERTS_DDT_CHK_ENOUGH_ARGS(1);
+#if HALFWORD_HEAP
+            erts_bld_uint64(NULL, &need, (Uint64)ptr[0]);
+#else
 	    /* check for bignum */
 	    if (!IS_USMALL(0, (Uint)ptr[0]))
 		need += BIG_UINT_HEAP_SIZE;  /* use small_to_big */
+#endif
 	    ptr++;
 	    depth++;
 	    break;
@@ -5904,8 +5912,9 @@ driver_deliver_term(Port *prt, Eterm to, ErlDrvTermData* data, int len)
 
         /* We allocate a temporary heap to be used to create
            the message that may be sent using tracing */
-        erts_factory_tmp_init(&factory, erts_alloc(ERTS_ALC_T_DRIVER, need*sizeof(Eterm)),
-                              need, ERTS_ALC_T_DRIVER);
+        erts_factory_tmp_init(&factory, erts_alloc(ERTS_ALC_T_SHORT_LIVED_TERM,
+                                                   need*sizeof(Eterm)),
+                              need, ERTS_ALC_T_SHORT_LIVED_TERM);
 
     } else {
         /* We force the creation of a heap fragment (rp == NULL) when send
@@ -5933,7 +5942,11 @@ driver_deliver_term(Port *prt, Eterm to, ErlDrvTermData* data, int len)
 	    ptr++;
 	    break;
 
-	case ERL_DRV_INT:  /* signed int argument */
+        case ERL_DRV_INT:  /* signed int argument */
+#if HALFWORD_HEAP
+            erts_reserve_heap(&factory, BIG_NEED_SIZE(2));
+            mess = erts_bld_sint64(&factory.hp, NULL, (Sint64)ptr[0]);
+#else
 	    erts_reserve_heap(&factory, BIG_UINT_HEAP_SIZE);
 	    if (IS_SSMALL((Sint)ptr[0]))
 		mess = make_small((Sint)ptr[0]);
@@ -5941,10 +5954,15 @@ driver_deliver_term(Port *prt, Eterm to, ErlDrvTermData* data, int len)
 		mess = small_to_big((Sint)ptr[0], factory.hp);
 		factory.hp += BIG_UINT_HEAP_SIZE;
 	    }
+#endif
 	    ptr++;
 	    break;
 
-	case ERL_DRV_UINT:  /* unsigned int argument */
+        case ERL_DRV_UINT:  /* unsigned int argument */
+#if HALFWORD_HEAP
+            erts_reserve_heap(&factory, BIG_NEED_FOR_BITS(64));
+            mess = erts_bld_uint64(&factory.hp, NULL, (Uint64)ptr[0]);
+#else
 	    erts_reserve_heap(&factory, BIG_UINT_HEAP_SIZE);
 	    if (IS_USMALL(0, (Uint)ptr[0]))
 		mess = make_small((Uint)ptr[0]);
@@ -5952,6 +5970,7 @@ driver_deliver_term(Port *prt, Eterm to, ErlDrvTermData* data, int len)
 		mess = uint_to_big((Uint)ptr[0], factory.hp);
 		factory.hp += BIG_UINT_HEAP_SIZE;
 	    }
+#endif
 	    ptr++;
 	    break;
 
@@ -6184,7 +6203,7 @@ driver_deliver_term(Port *prt, Eterm to, ErlDrvTermData* data, int len)
         trace_port_send(prt, to, mess, 0);
 
 	erts_factory_trim_and_close(&factory, &mess, 1);
-        erts_free(ERTS_ALC_T_DRIVER, factory.hp_start);
+        erts_free(ERTS_ALC_T_SHORT_LIVED_TERM, factory.hp_start);
         res = 0;
     }
     else {

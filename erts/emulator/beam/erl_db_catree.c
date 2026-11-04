@@ -767,7 +767,7 @@ void do_random_join(DbTableCATree* tb, Uint rand)
 }
 
 static ERTS_INLINE
-void do_random_join_with_low_probability(DbTableCATree* tb, Uint seed)
+void do_random_join_with_low_probability(DbTableCATree* tb, UWord seed)
 {
 #ifndef ERTS_DB_CA_TREE_NO_RANDOM_JOIN_WITH_LOW_PROBABILITY
     Uint32 rand = erts_sched_local_random(seed);
@@ -854,7 +854,7 @@ void runlock_base_node(DbTableCATreeNode *base_node, DbTableCATree* tb)
 {
     ASSERT(base_node->is_base_node);
     erts_rwmtx_runlock(&base_node->u.base.lock);
-    do_random_join_with_low_probability(tb, (Uint)base_node);
+    do_random_join_with_low_probability(tb, (UWord)base_node);
 }
 
 static ERTS_INLINE

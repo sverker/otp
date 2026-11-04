@@ -2132,15 +2132,19 @@ access_sched_local_btm(Process *c_p, Eterm pid,
     }
     else if (proc) {
         Eterm ref;
-        Eterm heap[ERTS_REF_THING_SIZE];
+        DeclareUseTmpHeapNoProc(tmp_heap, ERTS_REF_THING_SIZE);
+        Eterm ret;
+
         if (is_value(tref))
             ref = tref;
         else {
             write_ref_thing(&heap[0], trefn[0], trefn[1], trefn[2]);
             ref = make_internal_ref(&heap[0]);
         }
-        return send_async_info(proc, proc_locks,
-                               ref, cancel, time_left);
+        ret = send_async_info(proc, proc_locks,
+                              ref, cancel, time_left);
+        UnDeclareTmpHeapNoProc(tmp_heap);
+        return ret;
     }
 
     return am_ok;

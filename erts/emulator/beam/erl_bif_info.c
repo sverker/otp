@@ -100,7 +100,9 @@ static char erts_system_version[] = ("Erlang/OTP " ERLANG_OTP_RELEASE
 				     " [source]"
 #endif
 #endif	
-#if defined(ARCH_64)
+#if HALFWORD_HEAP
+                                     " [64-bit halfword]"
+#elif defined(ARCH_64)
 				     " [64-bit]"
 #elif defined(ARCH_32)
                                      " [32-bit]"
@@ -3546,7 +3548,7 @@ BIF_RETTYPE system_info_1(BIF_ALIST_1)
     }
     else if (ERTS_IS_ATOM_STR("literal_test",BIF_ARG_1)) {
 #ifdef ERTS_HAVE_IS_IN_LITERAL_RANGE
-#ifdef ARCH_64
+#if defined(ARCH_64) && !HALFWORD_HEAP
 	DECL_AM(range);
 	BIF_RET(AM_range);
 #else /* ARCH_32 */
@@ -5007,7 +5009,7 @@ test_multizero_timeout_in_timeout(void *vproc)
 static Eterm
 proc_sig_block(Process *c_p, void *arg, int *redsp, ErlHeapFragment **bpp)
 {
-    ErtsMonotonicTime time, timeout_time, ms = (ErtsMonotonicTime) (Sint) arg;
+    ErtsMonotonicTime time, timeout_time, ms = (ErtsMonotonicTime) (SWord) arg;
 
     if (redsp)
         *redsp = 1;
@@ -5470,7 +5472,7 @@ BIF_RETTYPE erts_debug_set_internal_state_2(BIF_ALIST_2)
                                                          tp[1],
                                                          0,
                                                          proc_sig_block,
-                                                         (void *) (Sint) wait_time);
+                                                         (void *) (SWord) wait_time);
                     if (is_non_value(res))
                         BIF_RET(am_false);
                     BIF_RET(am_true);

@@ -96,7 +96,7 @@ ErlSubBits *erts_bs_start_match_3(Process *p, Eterm bin)
 
     erl_sub_bits_init(sb,
                       ERL_SUB_BITS_FLAGS_MATCH_CONTEXT,
-                      br ? ((Eterm)br | br_flags) : bin,
+                      br ? (COMPRESS_POINTER(br) | br_flags) : bin,
                       base,
                       offset,
                       size);
@@ -250,7 +250,7 @@ erts_bs_get_integer_2(Process *p, Uint num_bits,
          * Simply shift whole bytes into the result.
          */
         switch (BYTE_OFFSET(n)) {
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
         case 7: w = (w << 8) | *bp++; ERTS_FALLTHROUGH();
         case 6: w = (w << 8) | *bp++; ERTS_FALLTHROUGH();
         case 5: w = (w << 8) | *bp++; ERTS_FALLTHROUGH();
@@ -360,7 +360,7 @@ erts_bs_get_integer_2(Process *p, Uint num_bits,
 
         ASSERT(1 <= bytes && bytes <= sizeof(Uint));
         switch (bytes) {
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
         case 8: w = (w << 8) | *MSB--; ERTS_FALLTHROUGH();
         case 7: w = (w << 8) | *MSB--; ERTS_FALLTHROUGH();
         case 6: w = (w << 8) | *MSB--; ERTS_FALLTHROUGH();
@@ -2664,7 +2664,7 @@ Eterm erts_build_sub_bitstring(Eterm **hp,
 
         erl_sub_bits_init(sb,
                           flags,
-                          ((Eterm)br) | br_flags,
+                          COMPRESS_POINTER(br) | br_flags,
                           base,
                           offset,
                           size);

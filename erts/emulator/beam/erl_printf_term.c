@@ -798,7 +798,7 @@ print_term(fmtfn_t fn, void* arg, Eterm obj, long *dcount) {
             break;
         default:
 	    PRINT_STRING(res, fn, arg, "<unknown:");
-	    PRINT_POINTER(res, fn, arg, wobj);
+            PRINT_POINTER(res, fn, arg, (UWord)wobj);
 	    PRINT_CHAR(res, fn, arg, '>');
 	    break;
 	}

@@ -477,7 +477,7 @@ struct ErtsProcSysTask_ {
     Eterm reply_tag;
     Eterm req_id;
     Uint req_id_sz;
-    Eterm arg[ERTS_MAX_PROC_SYS_TASK_ARGS];
+    UWord arg[ERTS_MAX_PROC_SYS_TASK_ARGS];
     ErlOffHeap off_heap;
     Eterm heap[];
 };
@@ -1194,15 +1194,45 @@ typedef struct {
 } ErtsSystemCheckReq;
 
 
+#if !HALFWORD_HEAP
 ERTS_SCHED_PREF_QUICK_ALLOC_IMPL(swtreq,
 				 ErtsSchedWallTimeReq,
 				 5,
 				 ERTS_ALC_T_SCHED_WTIME_REQ)
+#else
+static ERTS_INLINE ErtsSchedWallTimeReq *
+swtreq_alloc(void)
+{
+    return erts_alloc(ERTS_ALC_T_SCHED_WTIME_REQ,
+                      sizeof(ErtsSchedWallTimeReq));
+}
 
+static ERTS_INLINE void
+swtreq_free(ErtsSchedWallTimeReq *ptr)
+{
+    erts_free(ERTS_ALC_T_SCHED_WTIME_REQ, ptr);
+}
+#endif
+
+#if !HALFWORD_HEAP
 ERTS_SCHED_PREF_QUICK_ALLOC_IMPL(screq,
 				 ErtsSystemCheckReq,
 				 5,
 				 ERTS_ALC_T_SYS_CHECK_REQ)
+#else
+static ERTS_INLINE ErtsSystemCheckReq *
+screq_alloc(void)
+{
+    return erts_alloc(ERTS_ALC_T_SCHED_WTIME_REQ,
+                      sizeof(ErtsSystemCheckReq));
+}
+
+static ERTS_INLINE void
+screq_free(ErtsSystemCheckReq *ptr)
+{
+    erts_free(ERTS_ALC_T_SCHED_WTIME_REQ, ptr);
+}
+#endif
 
 
 static void
@@ -3176,7 +3206,7 @@ erts_aux_thread_poke(void)
 static void *
 aux_thread(void *vix)
 {
-    int ix = (int) (Sint) vix;
+    int ix = (int) (SWord) vix;
     int id = ix == 0 ? 1 : ix + 1 - erts_no_schedulers;
     ErtsAuxWorkData *awdp = &aligned_aux_work_data[id-1].data;
     ErtsSchedulerSleepInfo *ssi = ERTS_SCHED_SLEEP_INFO_IX(ix-1);
@@ -6316,8 +6346,10 @@ erts_init_scheduling(int no_schedulers, int no_schedulers_online, int no_poll_th
     }
 
     init_misc_aux_work();
+#if !HALFWORD_HEAP
     init_swtreq_alloc();
     init_screq_alloc();
+#endif
 
     erts_atomic32_init_nob(&debug_wait_completed_count, 0); /* debug only */
     debug_wait_completed_flags = 0;
@@ -8976,7 +9008,7 @@ erts_start_schedulers(void)
 	int id = ix == 0 ? 1 : ix + 1 - (int) erts_no_schedulers;
 	erts_snprintf(opts.name, sizeof(name), "erts_aux_%d", id);
 
-	res = ethr_thr_create(&tid, aux_thread, (void *) (Sint) ix, &opts);
+        res = ethr_thr_create(&tid, aux_thread, (void *) (SWord) ix, &opts);
 	if (res != 0)
 	    erts_exit(ERTS_ABORT_EXIT, "Failed to create aux thread %d, error = %d\n", res);
 	if (ix == 0)
@@ -9419,7 +9451,7 @@ erts_resume_processes(ErtsProcList *list)
     while (plp) {
 	Process *proc;
 	ErtsProcList *fplp;
-	ASSERT(is_internal_pid(plp->u.pid) || is_CP((Eterm)plp->u.p));
+        ASSERT(is_internal_pid(plp->u.pid) || !((UWord)plp->u.p & 3));
         if (is_internal_pid(plp->u.pid))
             proc = erts_pid2proc(NULL, 0, plp->u.pid, ERTS_PROC_LOCK_STATUS);
         else {
@@ -10864,7 +10896,7 @@ execute_sys_tasks(Process *c_p, erts_aint32_t *statep, int in_reds)
 	    else
 		fcalls = reds - CONTEXT_REDS;
 	    st_res = erts_check_process_code(c_p,
-					     st->arg[0],
+                                             (Eterm) st->arg[0],
 					     &cpc_reds,
 					     fcalls);
             reds -= cpc_reds;
@@ -10879,7 +10911,7 @@ execute_sys_tasks(Process *c_p, erts_aint32_t *statep, int in_reds)
 	    int fcalls;
             int cla_reds = 0;
 
-            if (st->arg[0] == am_true) {
+            if ((Eterm)st->arg[0] == am_true) {
                 /*
                  * Check if copy literal area GC is needed and only
                  * do GC if needed. This check is never requested unless
@@ -10940,7 +10972,7 @@ execute_sys_tasks(Process *c_p, erts_aint32_t *statep, int in_reds)
 
             ASSERT(!(c_p->sig_qs.flags & FS_FLUSHING_SIGS));
 
-            if (st->arg[0] == am_false) {
+            if ((Eterm)st->arg[0] == am_false) {
                 erts_proc_sig_queue_lock(c_p);
                 erts_proc_sig_fetch(c_p);
                 erts_proc_unlock(c_p, ERTS_PROC_LOCK_MSGQ);
@@ -11425,7 +11457,7 @@ request_system_task(Process *c_p, Eterm requester, Eterm target,
     case am_check_process_code:
 	if (c_p->common.id == requester)
 	    signal = !0;
-	if (is_not_atom(st->arg[0]))
+        if (is_not_atom((Eterm)st->arg[0]))
 	    goto badarg;
 	noproc_res = am_false;
 	st->type = ERTS_PSTT_CPC;
@@ -11551,10 +11583,10 @@ sched_sig_sys_task(Process *c_p, void *vst, int *redsp, ErlHeapFragment **bp)
 	    heap[1] = st->reply_tag;
 	    heap[2] = st->req_id;
 	    for (i = 0;
-		 i < ERTS_MAX_PROC_SYS_TASK_ARGS && is_value(st->arg[i]);
+                 i < ERTS_MAX_PROC_SYS_TASK_ARGS && is_value((Eterm)st->arg[i]);
 		 i++) {
 		arity++;
-		heap[3 + i] = st->arg[i];
+                heap[3 + i] = (Eterm)st->arg[i];
 	    }
 	    heap[0] = make_arityval(arity);
 	    (void) dispatch_system_task(c_p, fail_state, st,
@@ -11632,7 +11664,7 @@ erts_schedule_cla_gc(Process *c_p, Eterm to, Eterm req_id, int check)
 
 static int
 schedule_generic_sys_task(Eterm pid, ErtsProcSysTaskType type,
-                          int prio, Eterm arg0, Eterm arg1)
+                          int prio, UWord arg0, UWord arg1)
 {
     int res = 0;
     Process *rp = erts_proc_lookup_raw(pid);
@@ -11671,7 +11703,7 @@ void
 erts_schedule_ets_free_fixation(Eterm pid, DbFixation* fix)
 {
     schedule_generic_sys_task(pid, ERTS_PSTT_ETS_FREE_FIXATION,
-                              -1, (Eterm) fix, NIL);
+                              -1, (UWord) fix, NIL);
 }
 
 int
@@ -11685,13 +11717,7 @@ static void
 flush_dirty_trace_messages(void *vpid)
 {
     Process *proc;
-    Eterm pid;
-#ifdef ARCH_64
-    pid = (Eterm) vpid;
-#else
-    pid = *((Eterm *) vpid);
-    erts_free(ERTS_ALC_T_DIRTY_SL, vpid);
-#endif
+    Eterm pid = (Eterm)(UWord) vpid;
 
     proc = erts_pid2proc_opt(NULL, 0, pid, ERTS_PROC_LOCK_MAIN, 0);
     if (proc) {
@@ -11727,7 +11753,6 @@ erts_schedule_flush_trace_messages(Process *proc, int force_on_proc)
 	state = erts_atomic32_read_mb(&proc->state);
 	if (state & (ERTS_PSFLG_DIRTY_RUNNING
 		     | ERTS_PSFLG_DIRTY_RUNNING_SYS)) {
-	    void *vargp;
 
 	sched_flush_dirty:
 	    /*
@@ -11740,16 +11765,8 @@ erts_schedule_flush_trace_messages(Process *proc, int force_on_proc)
 	     * the flush on the first ordinary scheduler.
 	     */
 
-#ifdef ARCH_64
-	    vargp = (void *) pid;
-#else
-	    {
-		Eterm *argp = erts_alloc(ERTS_ALC_T_DIRTY_SL, sizeof(Eterm));
-		*argp = pid;
-		vargp = (void *) argp;
-	    }
-#endif
-	    erts_schedule_misc_aux_work(1, flush_dirty_trace_messages, vargp);
+            erts_schedule_misc_aux_work(1, flush_dirty_trace_messages,
+                                        (void*)(UWord) pid);
 	}
     }
 }
@@ -13393,7 +13410,7 @@ delete_process(Process* p)
     ErtsPSD *psd;
     struct saved_calls *scb;
     process_breakpoint_trace_t *pbt;
-    Uint32 block_rla_ref = (Uint32) (Uint) p->u.terminate;
+    Uint32 block_rla_ref = p->u.block_rla_ref;
 
     VERBOSE(DEBUG_PROCESSES, ("Removing process: %T\n",p->common.id));
     VERBOSE(DEBUG_SHCOPY, ("[pid=%T] delete process: %p %p %p %p\n", p->common.id,
@@ -14770,7 +14787,7 @@ restart:
     }
 
     /* block_rla_ref needed by delete_process() */
-    p->u.terminate = (void *) (Uint) trap_state->block_rla_ref;
+    p->u.block_rla_ref = trap_state->block_rla_ref;
     
     if (trap_state != &static_state)
         erts_free(ERTS_ALC_T_CONT_EXIT_TRAP, trap_state);
@@ -14982,7 +14999,7 @@ stack_element_dump(fmtfn_t to, void *to_arg, Eterm* sp, Uint yreg)
     }
 
     if (is_CP(x)) {
-        erts_print(to, to_arg, "Return addr %p (", (Eterm *) x);
+        erts_print(to, to_arg, "Return addr %p (", (void*)EXPAND_POINTER(x));
         print_function_from_pc(to, to_arg, cp_val(x));
         erts_print(to, to_arg, ")\n");
         yreg = 0;

@@ -291,7 +291,7 @@ typedef struct TTBEncodeContext_ {
     Binary *result_bin;
     byte *cptr;
     Sint vlen;
-    Uint size;
+    size_t size;
     byte *payload_ixp;
     byte *hopeful_ixp;
     SysIOVec* iov;

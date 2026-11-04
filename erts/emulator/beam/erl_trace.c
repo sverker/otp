@@ -2144,7 +2144,7 @@ trace_port_session_receive(Port *t_p, ErtsTracerRef *ref,
                 Sint sz = va_arg(args, Sint);
                 Eterm cmd;
                 arg = trace_port_tmp_binary(bin, sz, &bptr, &hp);
-#if defined(ARCH_32)
+#if ERTS_SIZEOF_ETERM == 4
                 if (!IS_USMALL(0, command)) {
                     *hp = make_pos_bignum_header(1);
                     BIG_DIGIT(hp, 0) = (Uint)command;
@@ -3427,7 +3427,7 @@ void erts_tracer_replace(ErtsPTabElementCommon *t_p,
 
 static void free_tracer(void *p)
 {
-    ErtsTracer tracer = (ErtsTracer)p;
+    ErtsTracer tracer = (ErtsTracer)(UWord)p;
 
     if (is_immed(ERTS_TRACER_STATE(tracer))) {
         erts_free(ERTS_ALC_T_HEAP_FRAG, ptr_val(tracer));
@@ -3506,7 +3506,7 @@ erts_tracer_update_impl(ErtsTracer *tracer, ErtsTracer new_tracer)
            without having to worry if it is free'd.
         */
         erts_schedule_thr_prgr_later_cleanup_op(
-            free_tracer, (void*)(*tracer), lop, size);
+            free_tracer, (void*)(UWord)(*tracer), lop, size);
     }
 
     if (is_list(new_tracer)) {

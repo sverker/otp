@@ -1930,14 +1930,14 @@ get_altact_msg_data(ErtsMessage *sig, void **attachedp,
             Uint low, high;
             low = unsigned_val(tp[++ix]);
             high = unsigned_val(tp[++ix]);
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
             ASSERT((((Uint) 1) << 32) > low);
             ASSERT((((Uint) 1) << 32) > high);
             attached = (void *) ((((Uint) high) << 32) | ((Uint) low));
-#else /* ARCH_32 */
+#else
             ASSERT((((Uint) 1) << 16) > low);
             ASSERT((((Uint) 1) << 16) > high);
-            attached = (void *) ((((Uint) high) << 16) | ((Uint) low));
+            attached = (void *) EXPAND_POINTER((((Uint) high) << 16) | ((Uint) low));
 #endif
             ASSERT(attached != NULL);
             break;
@@ -2255,12 +2255,13 @@ erts_proc_sig_send_altact_msg(Process *c_p, Eterm from, Eterm to, Eterm msg, Ete
         itpl[++ix] = token_copy;
     if (type == ERTS_SIG_Q_TYPE_HEAP_FRAG) {
         Uint low, high;
-#ifdef ARCH_64
-        low = ((UWord) hfrag) & ((UWord) 0xffffffff);
-        high = (((UWord) hfrag) >> 32) & ((UWord) 0xffffffff);
-#else /* ARCH_32 */
-        low = ((UWord) hfrag) & ((UWord) 0xffff);
-        high = (((UWord) hfrag) >> 16) & ((UWord) 0xffff);
+        Uint hfrag_uint = COMPRESS_POINTER(hfrag);
+#if ERTS_SIZEOF_ETERM == 8
+        low = hfrag_uint & ((Uint) 0xffffffff);
+        high = (hfrag_uint >> 32) & ((Uint) 0xffffffff);
+#else
+        low = hfrag_uint & ((Uint) 0xffff);
+        high = (hfrag_uint >> 16) & ((Uint) 0xffff);
 #endif
         itpl[++ix] = make_small(low);
         itpl[++ix] = make_small(high);
@@ -8013,7 +8014,7 @@ area_literal_size(Eterm* start, Eterm* end, char* lit_start, Uint lit_size)
         switch (primary_tag(val)) {
         case TAG_PRIMARY_BOXED:
         case TAG_PRIMARY_LIST:
-            if (ErtsInArea(val, lit_start, lit_size)) {
+            if (ErtsInArea(EXPAND_POINTER(val), lit_start, lit_size)) {
                 sz += size_object(val);
             }
             break;
@@ -8022,7 +8023,7 @@ area_literal_size(Eterm* start, Eterm* end, char* lit_start, Uint lit_size)
                 Eterm *new_p;
                 if (val == HEADER_SUB_BITS) {
                     ErlSubBits *sb = (ErlSubBits*) p;
-                    if (ErtsInArea(sb->orig, lit_start, lit_size)) {
+                    if (ErtsInArea(EXPAND_POINTER(sb->orig), lit_start, lit_size)) {
                         sz += size_object(sb->orig);
                     }
                 }
@@ -8048,7 +8049,7 @@ area_literal_copy(Eterm **hpp, ErlOffHeap *ohp,
         switch (primary_tag(val)) {
         case TAG_PRIMARY_BOXED:
         case TAG_PRIMARY_LIST:
-            if (ErtsInArea(val, lit_start, lit_size)) {
+            if (ErtsInArea(EXPAND_POINTER(val), lit_start, lit_size)) {
                 sz = size_object(val);
                 val = copy_struct(val, sz, hpp, ohp);
                 *p = val; 
@@ -8228,7 +8229,7 @@ handle_cla(Process *c_p,
 	    {
 		int i;
 		for (i = 1; i < ERL_MESSAGE_REF_ARRAY_SZ; i++) {
-		    ASSERT(!ErtsInArea(msg->m[i], literals, lit_bsize));
+                    ASSERT(!ErtsInArea(EXPAND_POINTER(msg->m[i]), literals, lit_bsize));
 		}
 	    }
 #endif

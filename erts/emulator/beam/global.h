@@ -87,7 +87,7 @@ typedef struct
 {
     erts_mtx_t lock;
     ErtsMonitor* root;
-    Uint refc;
+    UWord refc;
     size_t user_data_sz;
 } ErtsResourceMonitors;
 
@@ -277,7 +277,6 @@ extern Eterm erts_ddll_monitor_driver(Process *p,
 union erl_off_heap_ptr {
     struct erl_off_heap_header* hdr;
     BinRef *br;
-    struct erl_fun_ref* fref;
     struct external_thing_* ext;
     ErtsMRefThing *mref;
     Eterm* ep;
@@ -842,7 +841,7 @@ void erl_grow_equeue(ErtsEQueue*, Eterm* def_queue);
 #define EQUE_DEF_QUEUE(q) EQUE_CONCAT(q,_default_equeue)
 
 #define DECLARE_EQUEUE(q)				\
-    UWord EQUE_DEF_QUEUE(q)[DEF_EQUEUE_SIZE];     	\
+    Eterm EQUE_DEF_QUEUE(q)[DEF_EQUEUE_SIZE];     	\
     ErtsEQueue q = {					\
         EQUE_DEF_QUEUE(q), /* start */			\
         EQUE_DEF_QUEUE(q), /* front */			\

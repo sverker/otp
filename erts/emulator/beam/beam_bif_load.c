@@ -1227,7 +1227,7 @@ any_heap_ref_ptrs(Eterm* start, Eterm* end, char* mod_start, Uint mod_size)
 	switch (primary_tag(val)) {
 	case TAG_PRIMARY_BOXED:
 	case TAG_PRIMARY_LIST:
-	    if (ErtsInArea(val, mod_start, mod_size)) {
+            if (ErtsInArea(EXPAND_POINTER(val), mod_start, mod_size)) {
 		return 1;
 	    }
 	    break;
@@ -1247,7 +1247,7 @@ any_heap_refs(Eterm* start, Eterm* end, char* mod_start, Uint mod_size)
 	switch (primary_tag(val)) {
 	case TAG_PRIMARY_BOXED:
 	case TAG_PRIMARY_LIST:
-	    if (ErtsInArea(val, mod_start, mod_size)) {
+            if (ErtsInArea(EXPAND_POINTER(val), mod_start, mod_size)) {
 		return 1;
 	    }
 	    break;
@@ -1258,7 +1258,7 @@ any_heap_refs(Eterm* start, Eterm* end, char* mod_start, Uint mod_size)
                 if (val == HEADER_SUB_BITS) {
                     ErlSubBits *sb = (ErlSubBits*) p;
 
-                    if (ErtsInArea(sb->orig, mod_start, mod_size)) {
+                    if (ErtsInArea(EXPAND_POINTER(sb->orig), mod_start, mod_size)) {
                         return 1;
                     }
                 }

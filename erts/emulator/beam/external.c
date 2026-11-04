@@ -3264,11 +3264,13 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
     register Sint r = 0;
     int use_iov = 0;
     byte *lext_hash = NULL; /* initialize to avoid faulty warning... */
-
     /* The following variables are only used during encoding of
      * a map when the `deterministic` option is active. */
     Eterm* map_array = NULL;
     Eterm* next_map_element = NULL;
+#if HALFWORD_HEAP
+    UWord wobj;
+#endif
 
     if (ctx) {
 	WSTACK_CHANGE_ALLOCATOR(s, ERTS_ALC_T_SAVED_ESTACK);
@@ -3320,7 +3322,11 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 
  outer_loop:
     while (!WSTACK_ISEMPTY(s)) {
+#if HALFWORD_HEAP
+        obj = (Eterm) (wobj = WSTACK_POP(s));
+#else
 	obj = WSTACK_POP(s);
+#endif
 
 	switch (val = WSTACK_POP(s)) {
 	case ENC_TERM:
@@ -3349,7 +3355,11 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 	    break;
 	case ENC_PATCH_FUN_SIZE:
 	    {
+#if HALFWORD_HEAP
+                byte* size_p = (byte *) wobj;
+#else
                 byte* size_p = (byte *) obj;
+#endif
                 Sint32 fun_sz;
 
                 if (use_iov && !ErtsInArea(size_p, ctx->cptr, ep - ctx->cptr)) {
@@ -3506,13 +3516,21 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 	case ENC_LAST_ARRAY_ELEMENT:
 	    /* obj is the tuple */
 	    {
+#if HALFWORD_HEAP
+                Eterm* ptr = (Eterm *) wobj;
+#else
 		Eterm* ptr = (Eterm *) obj;
+#endif
 		obj = *ptr;
 	    }
 	    break;
 	default:		/* ENC_LAST_ARRAY_ELEMENT+1 and upwards */
 	    {
+#if HALFWORD_HEAP
+                Eterm* ptr = (Eterm *) wobj;
+#else
 		Eterm* ptr = (Eterm *) obj;
+#endif
 		obj = *ptr++;
 		WSTACK_PUSH2(s, val-1, (UWord)ptr);
 	    }
@@ -4118,7 +4136,7 @@ store_in_vec_aux(TTBEncodeContext *ctx,
 {
     ErlDrvBinary *dbin = Binary2ErlDrvBinary(bin);
     int vlen = ctx->vlen;
-    Uint iov_len;
+    size_t iov_len;
     ErlIOVec *feiovp;
 
 #ifdef DEBUG
@@ -4176,7 +4194,7 @@ store_in_vec_aux(TTBEncodeContext *ctx,
         ASSERT(iov_len);
         
         do {
-            Uint iov_len_left;
+            size_t iov_len_left;
                 
             if (iov_len <= MAX_SYSIOVEC_IOVLEN)
                 iov_len_left = 0;
@@ -4357,7 +4375,7 @@ dec_term(ErtsDistExternal *edep,
             case B2TDecodeList:
                 objp = next - 2;
                 while (n > 0) {
-                    objp[0] = (Eterm) next;
+                    objp[0] = COMPRESS_POINTER(next);
                     objp[1] = make_list(next);
                     next = objp;
                     objp -= 2;
@@ -4368,7 +4386,7 @@ dec_term(ErtsDistExternal *edep,
             case B2TDecodeTuple:
                 objp = next - 1;
                 while (n-- > 0) {
-                    objp[0] = (Eterm) next;
+                    objp[0] = COMPRESS_POINTER(next);
                     next = objp;
                     objp--;
                 }
@@ -4420,14 +4438,14 @@ dec_term(ErtsDistExternal *edep,
         }
         reds = ERTS_SWORD_MAX;
         next = objp;
-        *next = (Eterm) (UWord) NULL;
+        *next = COMPRESSED_NULL;
     }
     hp = factory->hp;
 
-    while (next != NULL) {
+    while (next != EXPANDED_NULL) {
 
 	objp = next;
-	next = (Eterm *) *objp;
+        next = (Eterm*) EXPAND_POINTER(*objp);
 
     continue_this_obj:
 
@@ -4437,7 +4455,7 @@ dec_term(ErtsDistExternal *edep,
 		Sint sn = get_int32(ep);
 
 		ep += 4;
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		*objp = make_small(sn);
 #else
 		if (IS_SSMALL(sn)) {
@@ -4570,7 +4588,7 @@ dec_term_atom_common:
 		reds -= n;
 	    }
 	    while (n-- > 0) {
-		objp[0] = (Eterm) next;
+                objp[0] = COMPRESS_POINTER(next);
 		next = objp;
 		objp--;
 	    }
@@ -4589,8 +4607,8 @@ dec_term_atom_common:
 	    *objp = make_list(hp);
             hp += 2 * (Uint) nu;
 	    objp = hp - 2;
-	    objp[0] = (Eterm) (objp+1);
-	    objp[1] = (Eterm) next;
+            objp[0] = COMPRESS_POINTER(objp+1);
+            objp[1] = COMPRESS_POINTER(next);
 	    next = objp;
 	    objp -= 2;
             nu--;
@@ -4604,7 +4622,7 @@ dec_term_atom_common:
 		reds -= nu;
 	    }
             while (nu > 0) {
-		objp[0] = (Eterm) next;
+                objp[0] = COMPRESS_POINTER(next);
 		objp[1] = make_list(next);
 		next = objp;
 		objp -= 2;
@@ -4727,7 +4745,7 @@ dec_term_atom_common:
 		    etp->header = make_external_port_header();
 		    etp->next = factory->off_heap->first;
 		    etp->node = node;
-#ifdef ARCH_64
+#if ERTS_SIZEOF_ETERM == 8
 		    etp->data.port.id = num;
 #else
 		    etp->data.port.low = (Uint32) (num & 0xffffffff);
@@ -4858,13 +4876,13 @@ dec_term_atom_common:
 		}
 		else {
 		    ExternalThing *etp = (ExternalThing *) hp;
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		    hp += EXTERNAL_THING_HEAD_SIZE + ref_words/2 + 1;
 #else
 		    hp += EXTERNAL_THING_HEAD_SIZE + ref_words;
 #endif
 
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		    etp->header = make_external_ref_header(ref_words/2 + 1);
 #else
 		    etp->header = make_external_ref_header(ref_words);
@@ -4875,7 +4893,7 @@ dec_term_atom_common:
 		    factory->off_heap->first = (struct erl_off_heap_header*)etp;
 		    *objp = make_external_ref(etp);
 		    ref_num = &(etp->data.ui32[0]);
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		    *(ref_num++) = ref_words /* 32-bit arity */;
 #endif
 
@@ -4885,7 +4903,7 @@ dec_term_atom_common:
                         ref_num[i] = get_int32(ep);
                         ep += 4;
                     }
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
                     if ((1 + ref_words) % 2)
                         ref_num[ref_words] = 0;
 #endif
@@ -5077,8 +5095,8 @@ dec_term_atom_common:
                     *objp          = make_flatmap(mp);
 
                     for (n = size; n; n--) {
-                        *vptr = (Eterm) next;
-                        *kptr = (Eterm) vptr;
+                        *vptr = COMPRESS_POINTER(next);
+                        *kptr = COMPRESS_POINTER(vptr);
                         next  = kptr;
                         vptr--;
                         kptr--;
@@ -5091,8 +5109,8 @@ dec_term_atom_common:
                     map->u.leaf_array = hp;
 
                     for (n = size; n; n--) {
-                        CDR(hp) = (Eterm) next;
-                        CAR(hp) = (Eterm) &CDR(hp);
+                        CDR(hp) = COMPRESS_POINTER(next);
+                        CAR(hp) = COMPRESS_POINTER(&CDR(hp));
                         next = &CAR(hp);
                         hp += 2;
                     }
@@ -5169,7 +5187,7 @@ dec_term_atom_common:
 
 		/* Environment */
 		for (i = num_free-1; i >= 0; i--) {
-		    funp->env[i] = (Eterm) next;
+                    funp->env[i] = COMPRESS_POINTER(next);
 		    next = funp->env + i;
 		}
 		break;
@@ -5266,7 +5284,7 @@ dec_term_atom_common:
                 Uint32 hash;
                 Uint hash_tuple_size;
                 Eterm tagged_hash;
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
                 Eterm *big_buf = hp;
                 *hp++ = NIL;
                 *hp++ = NIL;
@@ -5324,7 +5342,7 @@ dec_term_atom_common:
                 hash_tuple_size = defp->keys - &defp->hash - 1 + num_fields;
                 defp->hash = make_arityval(hash_tuple_size);
                 hash = make_hash2(make_tuple((Eterm *)&defp->hash));
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
                 tagged_hash = make_small(hash);
 #else
                 if (IS_USMALL(0, hash)) {
@@ -5371,7 +5389,7 @@ dec_term_atom_common:
                     for (Sint i = num_fields - 1; i >= 0; i--) {
                         int index = unsigned_val(order[i]);
                         ASSERT(index < num_fields);
-                        values[index] = (Eterm)next;
+                        values[index] = COMPRESS_POINTER(next);
                         next = &values[index];
                     }
                 }
@@ -5459,7 +5477,7 @@ dec_term_atom_common:
     /* Now that no more errors can occur, the stack can be destroyed safely. */
     PSTACK_DESTROY(map_array);
 
-    ASSERT((Eterm*)*dbg_resultp != NULL);
+    ASSERT(*dbg_resultp != COMPRESSED_NULL);
 
     if (ctx) {
         ctx->state = B2TDone;
@@ -6127,7 +6145,7 @@ init_done:
 	switch (tag) {
 	case INTEGER_EXT:
 	    SKIP(4);
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
 	    heap_size += BIG_UINT_HEAP_SIZE;
 #endif
 	    break;
@@ -6232,7 +6250,7 @@ init_done:
 		ep += 2;
 		atom_extra_skip += 4*id_words;
 		/* In case it is an external ref */
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
 		heap_size += EXTERNAL_THING_HEAD_SIZE + id_words/2 + 1;
 #else
 		heap_size += EXTERNAL_THING_HEAD_SIZE + id_words;
@@ -6308,7 +6326,7 @@ init_done:
                 if (n > 0) {
                     heap_size += 1 + n;
                 }
-#if defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 8
             } else if ((n >> 31) != 0) {
                 /* Avoid overflow by limiting the number of elements in
                  * a map to 2^31-1 (about 2 billions). */
@@ -6449,7 +6467,7 @@ init_done:
                 CHKSIZE(4);
                 n = get_uint32(ep); ep += 4;
                 heap_size += RECORD_INST_SIZE(n) + RECORD_DEF_SIZE(n);
-#if !defined(ARCH_64)
+#if ERTS_SIZEOF_ETERM == 4
                 heap_size += BIG_UINT_HEAP_SIZE;
 #endif
                 if (n > 0) {
