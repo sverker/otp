@@ -1467,9 +1467,11 @@ erts_dsig_send_link(ErtsDSigSendContext *ctx, Eterm local, Eterm remote)
 int
 erts_dsig_send_unlink(ErtsDSigSendContext *ctx, Eterm local, Eterm remote, Uint64 id)
 {
-    Eterm big_heap[ERTS_MAX_UINT64_HEAP_SIZE];
+    DeclareUseTmpHeapNoProc(big_heap, ERTS_MAX_UINT64_HEAP_SIZE);
     Eterm unlink_id;    
     Eterm ctl;
+    int ret;
+
     if (IS_USMALL(0, id))
         unlink_id = make_small(id);
     else {
@@ -1478,15 +1480,19 @@ erts_dsig_send_unlink(ErtsDSigSendContext *ctx, Eterm local, Eterm remote, Uint6
     }
     ctl = TUPLE4(&ctx->ctl_heap[0], make_small(DOP_UNLINK_ID),
                  unlink_id, local, remote);
-    return dsig_send_ctl(ctx, ctl);
+    ret = dsig_send_ctl(ctx, ctl);
+
+    UnDeclareTmpHeapNoProc(big_heap);
+    return ret;
 }
 
 int
 erts_dsig_send_unlink_ack(ErtsDSigSendContext *ctx, Eterm local, Eterm remote, Uint64 id)
 {
-    Eterm big_heap[ERTS_MAX_UINT64_HEAP_SIZE];
+    DeclareUseTmpHeapNoProc(big_heap, ERTS_MAX_UINT64_HEAP_SIZE);
     Eterm unlink_id;
     Eterm ctl;
+    Eterm ret;
 
     if (IS_USMALL(0, id))
         unlink_id = make_small(id);
@@ -1496,7 +1502,10 @@ erts_dsig_send_unlink_ack(ErtsDSigSendContext *ctx, Eterm local, Eterm remote, U
     }
     ctl = TUPLE4(&ctx->ctl_heap[0], make_small(DOP_UNLINK_ID_ACK),
                  unlink_id, local, remote);
-    return dsig_send_ctl(ctx, ctl);
+    ret = dsig_send_ctl(ctx, ctl);
+
+    UnDeclareTmpHeapNoProc(big_heap);
+    return ret;
 }
 
 
@@ -1856,7 +1865,7 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
                           ref, from, gl, mfa, opts);
     }
     else {
-        Eterm tmp_heap[8];
+        DeclareUseTmpHeap(tmp_heap, 8, sender);
         Eterm node = ctx->dep ? ctx->dep->sysname : ctx->node;
         Eterm msg;
         Eterm token;
@@ -1867,8 +1876,7 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
          * will become an actual message). For more info see
          * handling of seq-trace token in erl_create_process().
          */
-        
-	seq_trace_update_serial(sender);
+        seq_trace_update_serial(sender);
 	token = SEQ_TRACE_TOKEN(sender);
         msg = TUPLE6(&tmp_heap[0], am_spawn_request,
                      ref, from, gl, mfa, opts);
@@ -1880,6 +1888,7 @@ dsig_send_spawn_request(ErtsDSigSendContext *ctx, Eterm ref, Eterm from,
         
         ctx->ctl = TUPLE7(&ctx->ctl_heap[0], make_small(DOP_SPAWN_REQUEST_TT),
                           ref, from, gl, mfa, opts, token);
+        UnDeclareTmpHeap(tmp_heap, sender);
     }
     ctx->msg = alist;
     return erts_dsig_send(ctx);
@@ -2041,8 +2050,8 @@ int erts_net_message(Port *prt,
     Eterm *tuple;
     Eterm reason;
     Process* rp;
-    DeclareTmpHeapNoproc(ctl_default,DIST_CTL_DEFAULT_SIZE);
-    Eterm* ctl = ctl_default;
+    DeclareTmpHeapNoProc(ctl_default,DIST_CTL_DEFAULT_SIZE);
+    Eterm* ctl;
     ErtsHeapFactory factory;
     Sint type;
     Eterm token;
@@ -2052,21 +2061,17 @@ int erts_net_message(Port *prt,
     ErlDrvSizeT orig_len = len;
 #endif
 
-    UseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
-
     ERTS_CHK_NO_PROC_LOCKS;
 
     ERTS_LC_ASSERT(!prt || erts_lc_is_port_locked(prt));
 
     if (!erts_is_alive) {
-	UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
 	return 0;
     }
 
     ASSERT(hlen == 0);
 
     if (len == 0) {  /* HANDLE TICK !!! */
-	UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
 	return 0;
     }
 
@@ -2079,9 +2084,12 @@ int erts_net_message(Port *prt,
 
     res = erts_prepare_dist_ext(&ede, buf, len, bin, dep, conn_id, dep->cache);
 
+    UseTmpHeapNoProc(ctl_default);
+    ctl = ctl_default;
+
     switch (res) {
     case ERTS_PREP_DIST_EXT_CLOSED:
-        return 0; /* Connection not alive; ignore signal... */
+        goto done; /* Connection not alive; ignore signal... */
     case ERTS_PREP_DIST_EXT_FAILED:
 #ifdef ERTS_DIST_MSG_DBG
 	erts_fprintf(dbg_file, "DIST MSG DEBUG: erts_prepare_dist_ext() failed:\n");
@@ -2137,7 +2145,7 @@ int erts_net_message(Port *prt,
 
             if (ede.data->frag_id > 1) {
                 seq->cnt--;
-                return 0;
+                goto done;
             }
         }
 
@@ -2169,7 +2177,7 @@ int erts_net_message(Port *prt,
         /* Check if this was the last fragment */
         if (ede.data->frag_id > 1) {
             erts_de_runlock(dep);
-            return 0;
+            goto done;
         }
 
         /* Last fragment arrived, time to dispatch the signal */
@@ -2907,7 +2915,6 @@ int erts_net_message(Port *prt,
 	break;
 
     case DOP_SPAWN_REQUEST_TT: {
-        Eterm tmp_heap[2];
         ErlSpawnOpts so;
         int code, opts_error;
         Eterm pid, error, ref, from, gl, mfa, opts, token, args;
@@ -2971,7 +2978,7 @@ int erts_net_message(Port *prt,
                  * See erl_create_process() for why we do this
                  * serial trickery...
                  */
-                Eterm tmp_heap[7];
+                DeclareUseTmpHeapNoProc(tmp_heap, 7);
                 Eterm seq_msg;
                 Eterm serial;
                 Uint serial_num;
@@ -2991,6 +2998,7 @@ int erts_net_message(Port *prt,
                 seq_msg = TUPLE4(&tmp_heap[0],
                                  am_spawn_reply, ref, am_error, error);
                 seq_trace_output(token, seq_msg, SEQ_TRACE_SEND, from, NULL);
+                UnDeclareTmpHeapNoProc(tmp_heap);
             }
             code = erts_dsig_prepare(&ctx, dep, NULL, 0,
                                      ERTS_DSP_NO_LOCK, 1, 1, 0);
@@ -3020,12 +3028,16 @@ int erts_net_message(Port *prt,
         so.token = token;
         so.opts = opts;
 
-        args = CONS(&tmp_heap[0], mfa, NIL);
-        pid = erl_create_process(NULL,
-                                 am_erts_internal,
-                                 am_dist_spawn_init,
-                                 args,
-                                 &so);
+        {
+            DeclareUseTmpHeapNoProc(tmp_heap, 2);
+            args = CONS(&tmp_heap[0], mfa, NIL);
+            pid = erl_create_process(NULL,
+                                     am_erts_internal,
+                                     am_dist_spawn_init,
+                                     args,
+                                     &so);
+            UnDeclareTmpHeapNoProc(tmp_heap);
+        }
         if (is_non_value(pid)) {
             if (so.error_code == SYSTEM_LIMIT)
                 error = am_system_limit;
@@ -3168,10 +3180,13 @@ int erts_net_message(Port *prt,
             erts_free(ERTS_ALC_T_DCTRL_BUF, (void *) ctl);
         }
     }
-    UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
+
+done:
+    UnDeclareTmpHeapNoProc(ctl_default);
     ERTS_CHK_NO_PROC_LOCKS;
     return 0;
- invalid_message:
+
+invalid_message:
     {
 	erts_dsprintf_buf_t *dsbufp = erts_create_logger_dsbuf();
 	erts_dsprintf(dsbufp, "Invalid distribution message: %.200T", arg);
@@ -3189,7 +3204,7 @@ decode_error:
         free_message_buffer(ede_hfrag);
     }
 data_error:
-    UnUseTmpHeapNoproc(DIST_CTL_DEFAULT_SIZE);
+    UnDeclareTmpHeapNoProc(ctl_default);
     erts_kill_dist_connection(dep, conn_id);
     ERTS_CHK_NO_PROC_LOCKS;
     return -1;
@@ -5106,7 +5121,6 @@ BIF_RETTYPE setnode_2(BIF_ALIST_2)
 int
 erts_is_this_node_alive(void)
 {
-    Eterm tmp_heap[3];
     Eterm dyn_name_key, dyn_name_value;
 
     /*
@@ -5121,8 +5135,12 @@ erts_is_this_node_alive(void)
      * A persistent term with key '{erts_internal, dynamic_node_name}' has been
      * set if dynamic node name has been enabled.
      */
-    dyn_name_key = TUPLE2(&tmp_heap[0], am_erts_internal, am_dynamic_node_name);
-    dyn_name_value = erts_persistent_term_get(dyn_name_key);
+    {
+        DeclareUseTmpHeapNoProc(tmp_heap, 3);
+        dyn_name_key = TUPLE2(&tmp_heap[0], am_erts_internal, am_dynamic_node_name);
+        dyn_name_value = erts_persistent_term_get(dyn_name_key);
+        UnDeclareTmpHeapNoProc(tmp_heap);
+    }
     if (is_value(dyn_name_value) && dyn_name_value != am_false) {
         return !0;
     }
@@ -6302,29 +6320,39 @@ nodes(Process *c_p, Eterm node_types, Eterm options)
     int node_type = 0;
     int connection_id = 0;
     int xinfo = 0;
-    Eterm tmp_heap[2]; /* For one cons-cell */
     DistEntry *dep;
-    Eterm arg_list;
 
-    if (is_atom(node_types))
-        arg_list = CONS(&tmp_heap[0], node_types, NIL);
-    else
-        arg_list = node_types;
+    if (is_not_nil(node_types)) {
+        Eterm fake_cons[2];
+        Eterm* cons_ptr;
 
-    while (is_list(arg_list)) {
-      switch(CAR(list_val(arg_list))) {
-      case am_visible:   visible = 1;                                 break;
-      case am_hidden:    hidden = 1;                                  break;
-      case am_known:     visible = hidden = not_connected = this = 1; break;
-      case am_this:      this = 1;                                    break;
-      case am_connected: visible = hidden = 1;                        break;
-      default:           goto badarg;                                 break;
-      }
-      arg_list = CDR(list_val(arg_list));
-    }
+        if (is_atom(node_types)) {
+            CAR(fake_cons) = node_types;
+            CDR(fake_cons) = NIL;
+            cons_ptr = fake_cons;
+        } else if (is_list(node_types)) {
+            cons_ptr = list_val(node_types);
+        } else {
+            goto badarg;
+        }
 
-    if (is_not_nil(arg_list)) {
-	goto badarg;
+        for (;;) {
+            switch(CAR(cons_ptr)) {
+              case am_visible:   visible = 1;                                 break;
+              case am_hidden:    hidden = 1;                                  break;
+              case am_known:     visible = hidden = not_connected = this = 1; break;
+              case am_this:      this = 1;                                    break;
+              case am_connected: visible = hidden = 1;                        break;
+              default:           goto badarg;                                 break;
+            }
+            if (is_nil(CDR(cons_ptr))) {
+                break;
+            }
+            if (is_not_list(CDR(cons_ptr))) {
+                goto badarg;
+            }
+            cons_ptr = list_val(CDR(cons_ptr));
+        }
     }
 
     if (is_value(options)) {
@@ -6943,6 +6971,8 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
     ErtsNodesMonitorData def_buf[100];
     ErtsNodesMonitorData *nmdp = &def_buf[0];
     ErtsNodesMonitorContext ctxt;
+#define TMP_HEAP_SZ ERTS_MON_NODES_MAX_INFO_SZ__(3/* max info elements */)
+    DeclareUseTmpHeapNoProc(tmp_heap, TMP_HEAP_SZ);
 
     ASSERT(is_immed(what));
     ASSERT(is_immed(node));
@@ -6983,7 +7013,6 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
 
     for (i = 0; i < no; i++) {
         ErtsHeapFactory hfact;
-        Eterm tmp_heap[ERTS_MON_NODES_MAX_INFO_SZ__(3/* max info elements */)];
         Eterm *hp, msg;
         Uint hsz;
 
@@ -7017,7 +7046,7 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
          */
         erts_factory_tmp_init(&hfact,
                               &tmp_heap[0],
-                              sizeof(tmp_heap)/sizeof(Uint),
+                              TMP_HEAP_SZ,
                               ERTS_ALC_T_TMP);
         hsz = 0;
 
@@ -7123,6 +7152,7 @@ send_nodes_mon_msgs(Process *c_p, Eterm what, Eterm node,
         erts_factory_close(&hfact);
     }
 
+    UnDeclareTmpHeapNoProc(tmp_heap);
     if (nmdp != &def_buf[0])
         erts_free(ERTS_ALC_T_TMP, nmdp);
 }

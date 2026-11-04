@@ -3204,7 +3204,6 @@ void db_free_dmc_err_info(DMCErrInfo *ei){
 */
 Eterm db_add_counter(Eterm** hpp, Eterm counter, Eterm incr)
 {
-    DeclareTmpHeapNoproc(big_tmp,2);
     Eterm res;
     Sint ires;
     Eterm arg1;
@@ -3222,7 +3221,7 @@ Eterm db_add_counter(Eterm** hpp, Eterm counter, Eterm incr)
 	}
     }
     else {
-	UseTmpHeapNoproc(2);
+        DeclareUseTmpHeapNoProc(big_tmp,2);
 	switch(NUMBER_CODE(counter, incr)) {
 	case SMALL_BIG:
 	    arg1 = small_to_big(signed_val(counter), big_tmp);
@@ -3237,14 +3236,14 @@ Eterm db_add_counter(Eterm** hpp, Eterm counter, Eterm incr)
 	    arg2 = counter;
 	    break;
 	default:
-	    UnUseTmpHeapNoproc(2);
+            UnDeclareTmpHeapNoProc(big_tmp);
 	    return THE_NON_VALUE;
 	}
 	res = big_plus(arg1, arg2, *hpp);
 	if (is_big(res)) {
 	    *hpp += BIG_NEED_SIZE(big_size(res));
 	}
-	UnUseTmpHeapNoproc(2);
+        UnDeclareTmpHeapNoProc(big_tmp);
 	return res;
     }
 }
@@ -3352,7 +3351,7 @@ both_size_set:
          */
         ASSERT(!handle->tb->common.compress);
         ASSERT(!handle->old_tpl);
-        if (nbytes > sizeof(handle->old_tpl_dflt)) {
+        if (!HEAP_ON_C_STACK || nbytes > sizeof(handle->old_tpl_dflt)) {
             handle->old_tpl = erts_alloc(ERTS_ALC_T_TMP, nbytes);
         } else {
             handle->old_tpl = handle->old_tpl_dflt;
@@ -3841,10 +3840,10 @@ done:
 void db_cleanup_offheap_comp(DbTerm* obj)
 {
     union erl_off_heap_ptr u;
-    union erts_tmp_aligned_offheap tmp;
+    DeclareUseTmpHeapNoProc(tmp, sizeof(union erts_tmp_aligned_offheap) / sizeof(Eterm));
 
     for (u.hdr = obj->first_oh; u.hdr; u.hdr = u.hdr->next) {
-        erts_align_offheap(&u, &tmp);
+        erts_align_offheap(&u, (union erts_tmp_aligned_offheap*)tmp);
         switch (thing_subtag(u.hdr->thing_word)) {
         case BIN_REF_SUBTAG:
             erts_bin_release(u.br->val);
@@ -3859,6 +3858,7 @@ void db_cleanup_offheap_comp(DbTerm* obj)
             break;
         }
     }
+    UnDeclareTmpHeapNoProc(tmp);
 
 #ifdef DEBUG_CLONE
     if (obj->debug_clone != NULL) {
@@ -4505,8 +4505,9 @@ dmc_map(DMCContext *context, DMCHeap *heap, DMC_STACK_TYPE(UWord) *text,
             /* If all keys were constant we just want to emit the key tuple.
                Since do_emit_constant expects tuples to be wrapped in 1 arity
                tuples we need give do_emit_constant {keys} */
-            Eterm wrapTuple[2] = {make_arityval(1), m->keys};
-            do_emit_constant(context, text, make_tuple(wrapTuple));
+            DeclareUseTmpHeapNoProc(wrapTuple,2);
+            do_emit_constant(context, text, TUPLE1(wrapTuple, m->keys));
+            UnDeclareTmpHeapNoProc(wrapTuple);
         }
 
         DMC_PUSH2(*text, matchMkFlatMap, nelems);

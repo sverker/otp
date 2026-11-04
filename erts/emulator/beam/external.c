@@ -3572,9 +3572,8 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 		    put_int32(val, ep);
 		    ep += 4;
 		} else {
-		    DeclareTmpHeapNoproc(tmp_big,2);
+                    DeclareUseTmpHeapNoProc(tmp_big,2);
 		    Eterm big;
-		    UseTmpHeapNoproc(2);
 		    big = small_to_big(val, tmp_big);
 		    *ep++ = SMALL_BIG_EXT;
 		    n = big_bytes(big);
@@ -3583,7 +3582,7 @@ enc_term_int(TTBEncodeContext* ctx, ErtsAtomCacheMap *acmp, Eterm obj, byte* ep,
 		    ep += 1;
 		    *ep++ = big_sign(big);
 		    ep = big_to_bytes(big, ep);
-		    UnUseTmpHeapNoproc(2);
+                    UnDeclareTmpHeapNoProc(tmp_big);
 		}
 	    }
 	    break;
@@ -5584,11 +5583,10 @@ encode_small_size(ErtsAtomCacheMap *acmp, Eterm pid, Uint64 dflags)
         result = (Uint) 1 + 4;		/* INTEGER_EXT */
     else {
         int i;
-        DeclareTmpHeapNoproc(tmp_big,2);
-        UseTmpHeapNoproc(2);
+        DeclareUseTmpHeapNoProc(tmp_big,2);
         i = big_bytes(small_to_big(val, tmp_big));
         result = (Uint) 1 + 1 + 1 + i;	/* SMALL_BIG_EXT */
-        UnUseTmpHeapNoproc(2);
+        UnDeclareTmpHeapNoProc(tmp_big);
     }
     return result;
 }

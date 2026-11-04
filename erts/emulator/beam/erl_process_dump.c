@@ -533,15 +533,16 @@ dump_bin_ref(fmtfn_t to, void *to_arg, BinRef *br)
 static void
 heap_dump(fmtfn_t to, void *to_arg, Eterm x)
 {
-    DeclareTmpHeapNoproc(last,1);
-    Eterm* next = last;
+    DeclareTmpHeapNoProc(last,1);
+    Eterm* next;
     Eterm* ptr;
 
     if (is_immed(x) || is_CP(x)) {
 	return;
     }
-    UseTmpHeapNoproc(1);
+    UseTmpHeapNoProc(last);
     *last = OUR_NIL;
+    next = last;
 
     while (x != OUR_NIL) {
 	if (is_CP(x)) {
@@ -719,7 +720,7 @@ heap_dump(fmtfn_t to, void *to_arg, Eterm x)
 	*next = OUR_NIL;
 	next--;
     }
-    UnUseTmpHeapNoproc(1);
+    UnDeclareTmpHeapNoProc(last);
 }
 
 static void

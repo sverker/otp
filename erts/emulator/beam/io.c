@@ -2408,8 +2408,9 @@ set_port_connected(int bang_op,
         if (ERTS_IS_P_TRACED_FL(prt, F_TRACE_RECEIVE))
             trace_port_receive(prt, from, am_connect, connect);
         if (ERTS_IS_P_TRACED_FL(prt, F_TRACE_SEND)) {
-            Eterm hp[3];
+            DeclareUseTmpHeapNoProc(hp, 3);
             trace_port_send(prt, from, TUPLE2(hp, prt->common.id, am_connected), 1);
+            UnDeclareTmpHeapNoProc(hp);
         }
 
     }
@@ -3325,8 +3326,9 @@ deliver_result(Port *prt, Eterm sender, Eterm pid, Eterm res)
 	  : erts_pid2proc_opt(NULL, 0, pid, 0, ERTS_P2P_FLG_INC_REFC));
 
     if (prt && ERTS_IS_P_TRACED_FL(prt, F_TRACE_SEND)) {
-        Eterm hp[3];
+        DeclareUseTmpHeapNoProc(hp, 3);
         trace_port_send(prt, pid, TUPLE2(hp, sender, res), !!rp);
+        UnDeclareTmpHeapNoProc(hp);
     }
 
     if (rp) {
@@ -7032,14 +7034,15 @@ static int do_driver_monitor_process(Port *prt,
 				     ErlDrvTermData process,
 				     ErlDrvMonitor *monitor)
 {
-    Eterm buf[ERTS_REF_THING_SIZE];
+    DeclareTmpHeapNoProc(tmp_ref_heap, ERTS_REF_THING_SIZE);
     Eterm ref;
     ErtsMonitorData *mdp;
 
     if (!prt->drv_ptr->process_exit)
 	return -1;
 
-    ref = erts_make_ref_in_buffer(buf);
+    UseTmpHeapNoProc(tmp_ref_heap);
+    ref = erts_make_ref_in_buffer(tmp_ref_heap);
     mdp = erts_monitor_create(ERTS_MON_TYPE_PORT, ref,
                               prt->common.id, process, NIL,
                               THE_NON_VALUE);
@@ -7047,12 +7050,14 @@ static int do_driver_monitor_process(Port *prt,
     if (!erts_proc_sig_send_monitor(&prt->common, prt->common.id,
                                     &mdp->u.target, process)) {
         erts_monitor_release_both(mdp);
+        UnDeclareTmpHeapNoProc(tmp_ref_heap);
         return 1;
     }
 
     erts_monitor_tree_insert(&ERTS_P_MONITORS(prt), &mdp->origin);
 
     erts_ref_to_driver_monitor(ref,monitor);
+    UnDeclareTmpHeapNoProc(tmp_ref_heap);
     return 0;
 }
 
@@ -7083,13 +7088,15 @@ int driver_monitor_process(ErlDrvPort drvport,
 
 static int do_driver_demonitor_process(Port *prt, const ErlDrvMonitor *monitor)
 {
-    Eterm heap[ERTS_REF_THING_SIZE];
+    DeclareUseTmpHeapNoProc(heap, ERTS_REF_THING_SIZE);
     Eterm ref;
     ErtsMonitor *mon;
 
     ref = erts_driver_monitor_to_ref(heap, monitor);
 
     mon = erts_monitor_tree_lookup(ERTS_P_MONITORS(prt), ref);
+    UnDeclareTmpHeapNoProc(heap);
+
     if (!mon || !erts_monitor_is_origin(mon))
         return 1;
 
@@ -7124,11 +7131,13 @@ static ErlDrvTermData do_driver_get_monitored_process(Port *prt,const ErlDrvMoni
 {
     Eterm ref;
     ErtsMonitor *mon;
-    Eterm heap[ERTS_REF_THING_SIZE];
+    DeclareUseTmpHeapNoProc(heap, ERTS_REF_THING_SIZE);
 
     ref = erts_driver_monitor_to_ref(heap, monitor);
 
     mon = erts_monitor_tree_lookup(ERTS_P_MONITORS(prt), ref);
+    UnDeclareTmpHeapNoProc(heap);
+
     if (!mon || !erts_monitor_is_origin(mon))
 	return driver_term_nil;
 

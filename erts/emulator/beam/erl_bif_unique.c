@@ -526,9 +526,7 @@ bld_unique_integer_term(Eterm **hpp, Uint *szp,
     }
     else {
 	Eterm tmp, *tmp_hp, res;
-	DeclareTmpHeapNoproc(local_heap, 2*ERTS_MAX_UNIQUE_INT_HEAP_SIZE);
-
-	UseTmpHeapNoproc(2*ERTS_MAX_UNIQUE_INT_HEAP_SIZE);
+        DeclareUseTmpHeapNoProc(local_heap, 2*ERTS_MAX_UNIQUE_INT_HEAP_SIZE);
 
 	tmp_hp = local_heap;
 
@@ -556,7 +554,7 @@ bld_unique_integer_term(Eterm **hpp, Uint *szp,
 	    res = make_big(hp);
 	}
 
-	UnUseTmpHeapNoproc(2*ERTS_MAX_UNIQUE_INT_HEAP_SIZE);
+        UnDeclareTmpHeapNoProc(local_heap);
 
 	return res;
     }

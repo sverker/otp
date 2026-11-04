@@ -694,6 +694,12 @@ struct ErtsSchedulerData_ {
     void *match_pseudo_process; /* erl_db_util.c:db_prog_match() */
     Process *free_process;
     ErtsThrPrgrData thr_progress_data;
+#if !HEAP_ON_C_STACK
+    Eterm tmp_heap[TMP_HEAP_SIZE];
+    Eterm* tmp_heap_top;
+    Eterm beam_emu_tmp_heap[BEAM_EMU_TMP_HEAP_SIZE];
+    Eterm erl_arith_tmp_heap[ERL_ARITH_TMP_HEAP_SIZE];
+#endif
     ErtsSchedulerSleepInfo *ssi;
     Process *current_process;
     ErtsSchedType type;
@@ -2248,12 +2254,24 @@ int erts_debug_wait_completed(Process *c_p, int flags);
 Uint erts_process_memory(Process *c_p, int include_sigs_in_transit);
 
 #ifdef ERTS_DO_VERIFY_UNUSED_TEMP_ALLOC
+
+#  if !HEAP_ON_C_STACK
+#    define ERTS_ASSERT_UNUSED_SCHED_TMP_HEAP(Sched) \
+       ERTS_ASSERT((Sched)->tmp_heap_top == (Sched)->tmp_heap)
+#  else
+#    define ERTS_ASSERT_UNUSED_SCHED_TMP_HEAP(Sched) do {} while(0)
+#  endif
+
 #  define ERTS_VERIFY_UNUSED_TEMP_ALLOC(P)					\
 do {										\
     ErtsSchedulerData *esdp__ = erts_get_scheduler_data();			\
-    if (esdp__ && !ERTS_SCHEDULER_IS_DIRTY(esdp__))				\
-	esdp__->verify_unused_temp_alloc(					\
-	    esdp__->verify_unused_temp_alloc_data);				\
+    if (esdp__) {                                                               \
+        if (!ERTS_SCHEDULER_IS_DIRTY(esdp__)) {				        \
+            esdp__->verify_unused_temp_alloc(					\
+                esdp__->verify_unused_temp_alloc_data);				\
+        }                                                                       \
+        ERTS_ASSERT_UNUSED_SCHED_TMP_HEAP(esdp__);                              \
+    }                                                                           \
 } while (0)
 #else
 #  define ERTS_VERIFY_UNUSED_TEMP_ALLOC(ESDP)

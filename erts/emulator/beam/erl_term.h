@@ -29,6 +29,7 @@
 void erts_term_init(void);
 
 #if HALFWORD_HEAP
+#  define HEAP_ON_C_STACK 0
 #  if HALFWORD_ASSERT
 #    ifdef ET_DEBUG
 #      undef ET_DEBUG
@@ -65,6 +66,7 @@ ERTS_GLB_INLINE bool IS_LOW_POINTER(void* ptr)
 #  endif
 
 #else  // if !HALFWORD_HEAP
+#  define HEAP_ON_C_STACK 1
 #  define CHECK_POINTER_MASK 0x0UL
 #  define COMPRESS_POINTER(APointer) ((Eterm)(APointer))
 #  define EXPAND_POINTER(AnEterm) (AnEterm)

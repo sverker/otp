@@ -184,10 +184,11 @@ erts_bld_bin_list(Uint **hpp, Uint *szp, ErlOffHeap* oh, Eterm tail)
     union erl_off_heap_ptr u;
     Eterm res = tail;
     Eterm tuple;
-    union erts_tmp_aligned_offheap tmp;
+    DeclareUseTmpHeapNoProc(tmp, sizeof(union erts_tmp_aligned_offheap) / sizeof(Eterm));
+
 
     for (u.hdr = oh->first; u.hdr; u.hdr = u.hdr->next) {
-        erts_align_offheap(&u, &tmp);
+        erts_align_offheap(&u, (union erts_tmp_aligned_offheap*)tmp);
 	if (u.hdr->thing_word == HEADER_BIN_REF) {
 	    Eterm val = erts_bld_uword(hpp, szp, (UWord) u.br->val);
 	    Eterm orig_size = erts_bld_uint(hpp, szp, u.br->val->orig_size);
@@ -202,6 +203,7 @@ erts_bld_bin_list(Uint **hpp, Uint *szp, ErlOffHeap* oh, Eterm tail)
 	    }
 	}
     }
+    UnDeclareTmpHeapNoProc(tmp);
     return res;
 }
 
@@ -1007,7 +1009,7 @@ pi_arg2ix(Eterm arg, Eterm *extrap)
     }
 }
 
-static Eterm pi_1_keys[] = {
+static const Eterm pi_1_keys[] = {
     am_registered_name,
     am_current_function,
     am_initial_call,
@@ -1030,12 +1032,11 @@ static Eterm pi_1_keys[] = {
 #define ERTS_PI_1_NO_OF_KEYS (sizeof(pi_1_keys)/sizeof(Eterm))
 
 static Eterm pi_1_keys_list;
-static Eterm pi_1_keys_list_heap[2*ERTS_PI_1_NO_OF_KEYS];
 
 static void
 process_info_init(void)
 {
-    Eterm *hp = &pi_1_keys_list_heap[0];
+    Eterm *hp = erts_global_literal_allocate(2*ERTS_PI_1_NO_OF_KEYS, NULL);
     int i;
 
     pi_1_keys_list = NIL;
@@ -1045,15 +1046,18 @@ process_info_init(void)
 	hp += 2;
     }
 
+    erts_global_literal_register(&pi_1_keys_list);
+
 #ifdef DEBUG
     { /* Make sure the process_info argument mappings are consistent */
+        DeclareUseTmpHeapNoSched(heap, 3);
 	int ix;
 	for (ix = 0; ix < ERTS_PI_ARGS; ix++) {
-            Eterm heap[3];
             Eterm *hp = &heap[0];
 	    ASSERT(pi_arg2ix(pi_ix2arg(&hp, ix, am_ok), NULL) == ix);
             ASSERT(hp <= &heap[3]);
 	}
+        UnDeclareTmpHeapNoSched(heap);
     }
 #endif
 

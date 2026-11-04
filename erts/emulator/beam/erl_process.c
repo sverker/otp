@@ -6057,6 +6057,10 @@ init_scheduler_data(ErtsSchedulerData* esdp, int num,
         runq->scheduler = esdp;
     }
 
+#if !HEAP_ON_C_STACK
+    esdp->tmp_heap_top = esdp->tmp_heap;
+#endif
+
     init_scheduler_registers(esdp);
 
     esdp->dirty_shadow_process = shadow_proc;
@@ -11579,7 +11583,8 @@ sched_sig_sys_task(Process *c_p, void *vst, int *redsp, ErlHeapFragment **bp)
 	    notify_sys_task_executed(c_p, st, am_false, 1);
 	else if (fail_state & ERTS_PSFLG_DIRTY_RUNNING) {
 	    int i, arity = 2;
-	    Eterm heap[1 + 2 + ERTS_MAX_PROC_SYS_TASK_ARGS];
+            DeclareUseTmpHeapNoProc(heap, 1 + 2 + ERTS_MAX_PROC_SYS_TASK_ARGS);
+
 	    heap[1] = st->reply_tag;
 	    heap[2] = st->req_id;
 	    for (i = 0;
@@ -11593,6 +11598,7 @@ sched_sig_sys_task(Process *c_p, void *vst, int *redsp, ErlHeapFragment **bp)
 					c_p->common.id, make_tuple(&heap[0]));
 	    erts_cleanup_offheap(&st->off_heap);
 	    erts_free(ERTS_ALC_T_PROC_SYS_TSK, st);
+            UnDeclareTmpHeapNoProc(heap);
 	}
 	else {
 	    ERTS_INTERNAL_ERROR("Unknown failure schedule_process_sys_task()");
@@ -12469,7 +12475,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
     erts_aint32_t state = 0;
     erts_aint32_t prio = (erts_aint32_t) PRIORITY_NORMAL;
     ErtsProcLocks locks = ERTS_PROC_LOCKS_ALL;
-    Eterm node_token_heap[6];
+    DeclareUseTmpHeapNoSched(node_token_heap, 6);
     Eterm group_leader, parent_id, spawn_ref, token;
 #ifdef SHCOPY_SPAWN
     erts_shcopy_t info;
@@ -12799,7 +12805,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
         p->seq_trace_clock = 0;
     }
     else {
-        Eterm tmp_heap[9]; /* 8-tuple */
+        DeclareUseTmpHeapNoSched(tmp_heap, 9); /* 8-tuple */
         Eterm seq_msg;
         Uint token_sz;
         Eterm *hp;
@@ -12829,7 +12835,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 
         if (parent) {
             /* Simulate spawn_request message... */
-            Eterm tmp_heap2[4];
+            DeclareUseTmpHeapNoSched(tmp_heap2, 4);
             Eterm mfa;
             erts_proc_unlock(parent, ERTS_PROC_LOCK_STATUS|ERTS_PROC_LOCK_TRACE);
             mfa = TUPLE3(&tmp_heap2[0], mod, func, make_small(arity)) ;
@@ -12845,7 +12851,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
              * we don't inherit our parent's lastcnt. */
             p->seq_trace_clock = unsigned_val(SEQ_TRACE_T_SERIAL(token));
             p->seq_trace_lastcnt = p->seq_trace_clock;
-
+            UnDeclareTmpHeapNoSched(tmp_heap2);
         }
         else {
             /*
@@ -12886,6 +12892,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
             /* Restore serial for the argument list message... */
             SEQ_TRACE_T_SERIAL(token) = serial;
         }
+        UnDeclareTmpHeapNoSched(tmp_heap);
     }
 
     if (parent && (ERTS_IS_P_TRACED_FL(parent, F_TRACE_PROCS))) {
@@ -12996,7 +13003,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 
             if (have_seqtrace(token)) {
                 /* Simulate spawn reply message... */
-                Eterm tmp_heap[5];
+                DeclareUseTmpHeapNoSched(tmp_heap, 5);
                 Eterm seq_msg;
                 Uint serial;
 
@@ -13013,6 +13020,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
                 parent->seq_trace_clock = serial;
                 seq_trace_output(token, seq_msg, SEQ_TRACE_RECEIVE,
                                  parent_id, parent);
+                UnDeclareTmpHeapNoSched(tmp_heap);
             }
 
         }
@@ -13097,13 +13105,14 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
         }
 
         if (have_seqtrace(token)) {
-            Eterm tmp_heap[5];
+            DeclareUseTmpHeapNoSched(tmp_heap, 5);
             Eterm seq_msg;
             seq_trace_update_serial(p);
             seq_msg = TUPLE4(&tmp_heap[0], so->tag,
                              spawn_ref, am_ok, p->common.id);
             token = SEQ_TRACE_TOKEN(p);
             seq_trace_output(token, seq_msg, SEQ_TRACE_SEND, parent_id, p);
+            UnDeclareTmpHeapNoSched(tmp_heap);
         }
 
         code = erts_dsig_prepare(&ctx, so->dist_entry, NULL, 0,
@@ -13146,6 +13155,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
         DTRACE2(process_spawn, process_name, mfa_buf);
     }
 #endif
+    UnDeclareTmpHeapNoSched(node_token_heap);
     return res;
 
  error:
@@ -13153,6 +13163,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
     if (parent)
         erts_proc_unlock(parent, locks & ERTS_PROC_LOCKS_ALL_MINOR);
 
+    UnDeclareTmpHeapNoSched(node_token_heap);
     return res;
 }
 
