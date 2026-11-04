@@ -249,15 +249,6 @@ ERTS_ALC_INLINE
 void *erts_alloc(ErtsAlcType_t type, size_t size)
 {
     void *res;
-
-    if (ERTS_ALC_T2A(type) == ERTS_ALC_A_EHEAP) {
-        extern size_t eheap_max_size;
-        if (size > eheap_max_size) {
-            eheap_max_size = size;
-            erts_fprintf(stderr, "EHEAP alloc max: %beu\n", size);
-        }
-    }
-
     ERTS_MSACC_PUSH_AND_SET_STATE_X(ERTS_MSACC_STATE_ALLOC);
     res = (*erts_allctrs[ERTS_ALC_T2A(type)].alloc)(
             type,
